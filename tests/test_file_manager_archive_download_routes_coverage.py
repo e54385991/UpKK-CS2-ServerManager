@@ -65,7 +65,7 @@ async def test_inspect_archive_success_security_and_remote_failure(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_extract_archive_enqueues_normalized_options_and_conflicts(monkeypatch):
-    server = _access(monkeypatch, archives)
+    _access(monkeypatch, archives)
     lock = AsyncMock()
     enqueue = AsyncMock(return_value={"operation_id": "op-1"})
     monkeypatch.setattr(archives, "reject_stuck_lock_unless_active", lock)
@@ -155,7 +155,7 @@ async def test_archive_status_maps_hub_and_rejects_other_servers(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_url_download_success_validation_and_conflict(monkeypatch):
-    server = _access(monkeypatch, downloads)
+    _access(monkeypatch, downloads)
     validator = SimpleNamespace(
         validate_path_within_base=AsyncMock(return_value=(True, "")),
         disconnect=AsyncMock(),
@@ -230,7 +230,9 @@ async def test_url_download_rejects_bad_inputs_and_status(monkeypatch):
     monkeypatch.setattr(
         downloads.server_operation_hub,
         "get",
-        AsyncMock(side_effect=[{"operation_id": "dl-2", "server_id": 4, "status": "running"}, None]),
+        AsyncMock(
+            side_effect=[{"operation_id": "dl-2", "server_id": 4, "status": "running"}, None]
+        ),
     )
     result = await downloads.get_download_url_status(4, "dl-2", None, _user())
     assert result["status"] == "running"

@@ -117,7 +117,9 @@ async def test_setup_helpers_and_basic_saved_host_routes(monkeypatch):
     )
     assert deleted.success and deleted.message == "Deleted 2 initialized host(s)"
 
-    monkeypatch.setattr(setup, "resolve_initialized_server", AsyncMock(return_value=_ResolvedRecord(saved)))
+    monkeypatch.setattr(
+        setup, "resolve_initialized_server", AsyncMock(return_value=_ResolvedRecord(saved))
+    )
     assert (await setup._resolve_owned(_Db(), "7", 9)).host == "host.example"
     monkeypatch.setattr(setup, "resolve_initialized_server", AsyncMock(return_value=None))
     with pytest.raises(HTTPException) as missing:
@@ -138,7 +140,9 @@ async def test_setup_operation_views_current_stream_and_not_found_paths(monkeypa
     saved = _record()
     operation = _operation()
     monkeypatch.setattr(setup, "_resolve_owned", AsyncMock(return_value=saved))
-    monkeypatch.setattr(setup, "enqueue_initialized_host_ssh_test", AsyncMock(return_value=operation))
+    monkeypatch.setattr(
+        setup, "enqueue_initialized_host_ssh_test", AsyncMock(return_value=operation)
+    )
     started = await setup.start_initialized_host_operation(
         7, InitializedHostOperationRequest(action="test_ssh"), _Db(), SimpleNamespace(id=9)
     )
@@ -157,11 +161,17 @@ async def test_setup_operation_views_current_stream_and_not_found_paths(monkeypa
 
     hub = SimpleNamespace(get_current=AsyncMock(return_value=None))
     monkeypatch.setattr(setup, "server_operation_hub", hub)
-    assert await setup.get_current_initialized_host_operation(7, _Db(), SimpleNamespace(id=9)) is None
+    assert (
+        await setup.get_current_initialized_host_operation(7, _Db(), SimpleNamespace(id=9)) is None
+    )
     hub.get_current.return_value = {**operation, "server_id": -8}
-    assert await setup.get_current_initialized_host_operation(7, _Db(), SimpleNamespace(id=9)) is None
+    assert (
+        await setup.get_current_initialized_host_operation(7, _Db(), SimpleNamespace(id=9)) is None
+    )
     hub.get_current.return_value = operation
-    assert (await setup.get_current_initialized_host_operation(7, _Db(), SimpleNamespace(id=9))).operation_id
+    assert (
+        await setup.get_current_initialized_host_operation(7, _Db(), SimpleNamespace(id=9))
+    ).operation_id
 
     operation_id = UUID(operation["operation_id"])
     hub.get = AsyncMock(return_value=None)
@@ -172,7 +182,9 @@ async def test_setup_operation_views_current_stream_and_not_found_paths(monkeypa
     with pytest.raises(HTTPException):
         await setup.get_initialized_host_operation(7, operation_id, _Db(), SimpleNamespace(id=9))
     hub.get.return_value = operation
-    assert (await setup.get_initialized_host_operation(7, operation_id, _Db(), SimpleNamespace(id=9))).action == "test_ssh"
+    assert (
+        await setup.get_initialized_host_operation(7, operation_id, _Db(), SimpleNamespace(id=9))
+    ).action == "test_ssh"
 
     cancelled = {**operation, "status": "failed", "success": False, "message": "stopped"}
     hub.cancel = AsyncMock(return_value=cancelled)
@@ -230,7 +242,9 @@ async def test_setup_stream_delete_deploy_and_auto_setup_paths(monkeypatch):
         SimpleNamespace(),
     )
     assert deployed.server_id == 12 and deployed.operation.action == "deploy"
-    monkeypatch.setattr(setup, "enqueue_server_operation", AsyncMock(side_effect=ServerOperationConflict("busy")))
+    monkeypatch.setattr(
+        setup, "enqueue_server_operation", AsyncMock(side_effect=ServerOperationConflict("busy"))
+    )
     with pytest.raises(HTTPException) as deploy_conflict:
         await setup.deploy_from_initialized_host(
             7,
@@ -246,7 +260,9 @@ async def test_setup_stream_delete_deploy_and_auto_setup_paths(monkeypatch):
     monkeypatch.setattr(setup, "build_manual_setup_script", lambda **_kwargs: "#!/bin/sh")
     script = await setup.read_manual_setup_script(user, cs2_username="custom")
     assert script.password == "generated"
-    monkeypatch.setattr(setup, "validate_cs2_username", lambda _value: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(
+        setup, "validate_cs2_username", lambda _value: (_ for _ in ()).throw(ValueError("bad"))
+    )
     with pytest.raises(HTTPException) as script_error:
         await setup.read_manual_setup_script(user, cs2_username="bad")
     assert script_error.value.status_code == 422
@@ -261,15 +277,17 @@ async def test_setup_stream_delete_deploy_and_auto_setup_paths(monkeypatch):
     monkeypatch.setattr(
         setup,
         "auto_setup_server",
-        AsyncMock(return_value=SimpleNamespace(
-            success=True,
-            message="ok",
-            cs2_username="cs2server",
-            cs2_password="pw2",
-            game_directory="/cs2",
-            logs=None,
-            initialized_server_id="7",
-        )),
+        AsyncMock(
+            return_value=SimpleNamespace(
+                success=True,
+                message="ok",
+                cs2_username="cs2server",
+                cs2_password="pw2",
+                game_directory="/cs2",
+                logs=None,
+                initialized_server_id="7",
+            )
+        ),
     )
     auto = await setup.run_auto_setup(body, user, _Db())
     assert auto.success and auto.logs == []
@@ -304,10 +322,16 @@ async def test_initialized_host_worker_covers_success_and_failures(monkeypatch):
 
     connection = _Connection()
     monkeypatch.setattr(initialized_hosts.asyncssh, "connect", AsyncMock(return_value=connection))
-    monkeypatch.setattr(initialized_hosts, "_dispatch", AsyncMock(side_effect=lambda item, _factory: item))
-    await initialized_hosts.enqueue_initialized_host_ssh_test(initialized_server_id=7, actor_user_id=9)
+    monkeypatch.setattr(
+        initialized_hosts, "_dispatch", AsyncMock(side_effect=lambda item, _factory: item)
+    )
+    await initialized_hosts.enqueue_initialized_host_ssh_test(
+        initialized_server_id=7, actor_user_id=9
+    )
     assert hub.record["action"] == "test_initialized_ssh"
-    await initialized_hosts.run_initialized_host_ssh_test(operation_id="op", initialized_server_id=7)
+    await initialized_hosts.run_initialized_host_ssh_test(
+        operation_id="op", initialized_server_id=7
+    )
     assert hub.finished[-1][1]["success"] is True and connection.closed
 
     for error, expected in (
@@ -319,25 +343,45 @@ async def test_initialized_host_worker_covers_success_and_failures(monkeypatch):
     ):
         hub = _Hub(record)
         monkeypatch.setattr(initialized_hosts, "server_operation_hub", hub)
-        monkeypatch.setattr(initialized_hosts, "asyncssh", SimpleNamespace(
-            connect=AsyncMock(side_effect=error),
-            PermissionDenied=asyncssh.PermissionDenied,
-            Error=asyncssh.Error,
-        ))
-        await initialized_hosts.run_initialized_host_ssh_test(operation_id="op", initialized_server_id=7)
+        monkeypatch.setattr(
+            initialized_hosts,
+            "asyncssh",
+            SimpleNamespace(
+                connect=AsyncMock(side_effect=error),
+                PermissionDenied=asyncssh.PermissionDenied,
+                Error=asyncssh.Error,
+            ),
+        )
+        await initialized_hosts.run_initialized_host_ssh_test(
+            operation_id="op", initialized_server_id=7
+        )
         assert expected in hub.finished[-1][1]["message"]
 
     hub = _Hub(record)
     monkeypatch.setattr(initialized_hosts, "server_operation_hub", hub)
-    monkeypatch.setattr(initialized_hosts, "asyncssh", SimpleNamespace(
-        connect=AsyncMock(), PermissionDenied=asyncssh.PermissionDenied, Error=asyncssh.Error
-    ))
-    monkeypatch.setattr(initialized_hosts, "resolve_initialized_server", AsyncMock(return_value=None))
-    await initialized_hosts.run_initialized_host_ssh_test(operation_id="op", initialized_server_id=7)
+    monkeypatch.setattr(
+        initialized_hosts,
+        "asyncssh",
+        SimpleNamespace(
+            connect=AsyncMock(), PermissionDenied=asyncssh.PermissionDenied, Error=asyncssh.Error
+        ),
+    )
+    monkeypatch.setattr(
+        initialized_hosts, "resolve_initialized_server", AsyncMock(return_value=None)
+    )
+    await initialized_hosts.run_initialized_host_ssh_test(
+        operation_id="op", initialized_server_id=7
+    )
     assert "deleted" in hub.finished[-1][1]["message"]
 
     hub = _Hub(record)
     monkeypatch.setattr(initialized_hosts, "server_operation_hub", hub)
-    monkeypatch.setattr(initialized_hosts, "async_session_maker", lambda: _DbContext(_Db(SimpleNamespace(id=9, is_active=False))))
-    await initialized_hosts.run_initialized_host_ssh_test(operation_id="op", initialized_server_id=7)
+    monkeypatch.setattr(
+        initialized_hosts,
+        "async_session_maker",
+        lambda: _DbContext(_Db(SimpleNamespace(id=9, is_active=False))),
+    )
+    await initialized_hosts.run_initialized_host_ssh_test(
+        operation_id="op", initialized_server_id=7
+    )
     assert "no longer" in hub.finished[-1][1]["message"]

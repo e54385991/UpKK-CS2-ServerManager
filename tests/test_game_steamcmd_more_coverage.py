@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
-from services.ssh.game_steamcmd import GameSteamcmdMixin
 from services.ssh import game_steamcmd as steamcmd_module
+from services.ssh.game_steamcmd import GameSteamcmdMixin
 
 
 def _server(**overrides):
@@ -47,7 +47,10 @@ async def test_stop_session_manager_and_progress_variants(monkeypatch):
     manager.disconnect = AsyncMock()
     manager._stop_server_sessions_connected = AsyncMock(return_value=(True, []))
     manager._kill_stray_cs2_processes = AsyncMock()
-    assert await manager.stop_server(server) == (True, "Server is not running (no screen/tmux session found)")
+    assert await manager.stop_server(server) == (
+        True,
+        "Server is not running (no screen/tmux session found)",
+    )
     manager._stop_server_sessions_connected.return_value = (False, ["tmux", "screen"])
     assert (await manager.stop_server(server))[0] is False
     manager._stop_server_sessions_connected.side_effect = RuntimeError("stop crash")
@@ -75,25 +78,37 @@ async def test_start_session_and_streaming_fallbacks(monkeypatch):
     server = _server()
     manager = _Manager()
     progress = AsyncMock()
-    monkeypatch.setattr("services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False)
+    )
     manager._steamcmd_session_running = AsyncMock(return_value="tmux")
-    assert (await manager._start_steamcmd_session("cmd", server, "tmux", "name", "/tmp/e", progress))[0]
+    assert (
+        await manager._start_steamcmd_session("cmd", server, "tmux", "name", "/tmp/e", progress)
+    )[0]
 
     manager._steamcmd_session_running = AsyncMock(side_effect=[None, None])
     manager.execute_command = AsyncMock(return_value=(False, "", "failed"))
-    result = await manager._start_steamcmd_session("cmd", server, "tmux", "name", "/tmp/e", progress)
+    result = await manager._start_steamcmd_session(
+        "cmd", server, "tmux", "name", "/tmp/e", progress
+    )
     assert result == (False, "", "failed")
 
-    manager.execute_command = AsyncMock(side_effect=[(True, "", ""), (True, "", ""), (True, "", "")])
+    manager.execute_command = AsyncMock(
+        side_effect=[(True, "", ""), (True, "", ""), (True, "", "")]
+    )
     manager._steamcmd_session_running = AsyncMock(side_effect=[None, None])
     manager._read_steamcmd_exit_code = AsyncMock(return_value=2)
-    result = await manager._start_steamcmd_session("cmd", server, "tmux", "name", "/tmp/e", progress)
+    result = await manager._start_steamcmd_session(
+        "cmd", server, "tmux", "name", "/tmp/e", progress
+    )
     assert result[0] is False and "exited 2" in result[2]
 
     manager.execute_command = AsyncMock(side_effect=[(True, "", ""), (True, "", "")])
     manager._steamcmd_session_running = AsyncMock(side_effect=[None, None])
     manager._read_steamcmd_exit_code = AsyncMock(return_value=None)
-    result = await manager._start_steamcmd_session("cmd", server, "tmux", "name", "/tmp/e", progress)
+    result = await manager._start_steamcmd_session(
+        "cmd", server, "tmux", "name", "/tmp/e", progress
+    )
     assert result[0] is False and "did not start" in result[2]
 
     manager._steamcmd_session_manager = AsyncMock(return_value=None)
@@ -103,7 +118,9 @@ async def test_start_session_and_streaming_fallbacks(monkeypatch):
 
     manager._steamcmd_session_manager = AsyncMock(return_value="tmux")
     manager._start_steamcmd_session = AsyncMock(return_value=(False, "", "startup"))
-    assert (await manager._stream_steamcmd_with_heartbeat("cmd", server, progress, 10))[2] == "startup"
+    assert (await manager._stream_steamcmd_with_heartbeat("cmd", server, progress, 10))[
+        2
+    ] == "startup"
 
     manager._start_steamcmd_session = AsyncMock(return_value=(True, "", ""))
     manager._steamcmd_session_running = AsyncMock(return_value=None)
@@ -133,7 +150,9 @@ async def test_start_session_and_streaming_fallbacks(monkeypatch):
     result = await manager._stream_steamcmd_with_heartbeat("cmd", server, progress, 10)
     assert result[2] == "Command timeout"
 
-    monkeypatch.setattr("services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        "services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=True)
+    )
     manager._kill_steamcmd_processes = AsyncMock()
     monkeypatch.setattr(steamcmd_module.time, "monotonic", MockMonotonic([0, 1]))
     result = await manager._stream_steamcmd_with_heartbeat("cmd", server, progress, 10)
@@ -147,7 +166,9 @@ async def test_retry_helpers_completion_and_process_cleanup(monkeypatch):
     manager.STEAMCMD_RETRY_DELAY = 0
     send = AsyncMock()
     callback = AsyncMock()
-    monkeypatch.setattr("services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False)
+    )
     manager._steamcmd_session_running = AsyncMock(return_value="tmux")
     assert await manager._prepare_steamcmd_retry(server, 1, 2, send, callback)
     manager._steamcmd_session_running = AsyncMock(return_value=None)
@@ -155,12 +176,20 @@ async def test_retry_helpers_completion_and_process_cleanup(monkeypatch):
     manager._kill_steamcmd_processes = AsyncMock()
     monkeypatch.setattr(asyncio, "sleep", AsyncMock())
     assert await manager._prepare_steamcmd_retry(server, 1, 2, send, callback)
-    monkeypatch.setattr("services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        "services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=True)
+    )
     assert not await manager._prepare_steamcmd_retry(server, 1, 2, send, callback)
     assert await manager._prepare_steamcmd_retry(server, 0, 2, send, callback)
 
     manager._stream_steamcmd_with_heartbeat = AsyncMock(return_value=(True, "out", "err"))
-    assert await manager._run_steamcmd_attempt("cmd", server, send, 10) == (True, "out", "err", "", False)
+    assert await manager._run_steamcmd_attempt("cmd", server, send, 10) == (
+        True,
+        "out",
+        "err",
+        "",
+        False,
+    )
     manager._stream_steamcmd_with_heartbeat = AsyncMock(return_value=(False, "out", "fatal"))
     failed = await manager._run_steamcmd_attempt("cmd", server, send, 10)
     assert failed[0] is False and failed[4] is True
@@ -169,8 +198,12 @@ async def test_retry_helpers_completion_and_process_cleanup(monkeypatch):
     manager._stream_steamcmd_with_heartbeat = AsyncMock(side_effect=RuntimeError("boom"))
     assert "Unexpected" in (await manager._run_steamcmd_attempt("cmd", server, send, 10))[3]
 
-    assert (await manager._process_steamcmd_completion(0, 2, send, False, "", "bad", "bad", True, True))[0] is True
-    verified_false = await manager._process_steamcmd_completion(0, 2, send, True, "", "", "", False, False)
+    assert (
+        await manager._process_steamcmd_completion(0, 2, send, False, "", "bad", "bad", True, True)
+    )[0] is True
+    verified_false = await manager._process_steamcmd_completion(
+        0, 2, send, True, "", "", "", False, False
+    )
     assert verified_false[0] is None and verified_false[4] is True
     success = await manager._process_steamcmd_completion(1, 2, send, True, "", "", "", False, None)
     assert success[0] is True
@@ -196,9 +229,15 @@ async def test_stray_process_cleanup_and_retry_terminal_paths(monkeypatch):
     await manager._kill_stray_cs2_processes(server, AsyncMock())
 
     manager._prepare_steamcmd_retry = AsyncMock(return_value=True)
-    manager._run_steamcmd_attempt = AsyncMock(return_value=(False, "", "disk full", "disk full", False))
-    monkeypatch.setattr("services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False))
-    result = await manager._execute_steamcmd_with_retry("cmd", server, progress_callback=[], max_retries=1)
+    manager._run_steamcmd_attempt = AsyncMock(
+        return_value=(False, "", "disk full", "disk full", False)
+    )
+    monkeypatch.setattr(
+        "services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False)
+    )
+    result = await manager._execute_steamcmd_with_retry(
+        "cmd", server, progress_callback=[], max_retries=1
+    )
     assert not result[0]
 
     manager.execute_command = AsyncMock(side_effect=[(True, "12", ""), (True, "12", "")])
@@ -211,12 +250,19 @@ async def test_stray_process_cleanup_and_retry_terminal_paths(monkeypatch):
         await manager._run_steamcmd_attempt("cmd", server, [], 10)
 
     manager._run_steamcmd_attempt = AsyncMock(return_value=(False, "", "fatal", "fatal", False))
+
     async def broken_completion():
         raise RuntimeError("verification")
 
-    monkeypatch.setattr("services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False)
+    )
     result = await manager._execute_steamcmd_with_retry(
-        "cmd", server, progress_callback=AsyncMock(), max_retries=0, completion_check=broken_completion
+        "cmd",
+        server,
+        progress_callback=AsyncMock(),
+        max_retries=0,
+        completion_check=broken_completion,
     )
     assert not result[0]
 

@@ -312,7 +312,9 @@ async def test_host_apt_runner_covers_queue_connection_and_terminal_failures(mon
     monkeypatch.setattr(
         host,
         "ensure_steamcmd_packages",
-        AsyncMock(return_value=SimpleNamespace(success=False, message="apt failed", apt_mirror=None)),
+        AsyncMock(
+            return_value=SimpleNamespace(success=False, message="apt failed", apt_mirror=None)
+        ),
     )
     await host.run_apply_apt_mirror(operation_id="op-1", mirror="mirror")
     assert hub.finished[-1][1]["success"] is False
@@ -370,7 +372,7 @@ async def test_s3_restore_worker_covers_success_and_each_remote_stage(monkeypatc
     ):
         hub, _session = _install(monkeypatch, host)
         manager = _Manager()
-        monkeypatch.setattr(host, "SSHManager", lambda: manager)
+        monkeypatch.setattr(host, "SSHManager", lambda _manager=manager: _manager)
         if stage == "download":
             backup.download_backup = AsyncMock(return_value=result)
         elif stage == "backup":
@@ -401,7 +403,7 @@ async def test_s3_restore_worker_handles_inactive_and_exception_cleanup(monkeypa
     ):
         hub, _session = _install(monkeypatch, host)
         manager = SimpleNamespace(disconnect=AsyncMock())
-        monkeypatch.setattr(host, "SSHManager", lambda: manager)
+        monkeypatch.setattr(host, "SSHManager", lambda _manager=manager: _manager)
         monkeypatch.setattr(host, "require_server_access", AsyncMock(side_effect=error))
         await host.run_s3_restore(operation_id="op-1", object_key="archive.tar.gz")
         assert hub.finished[-1][1]["success"] is False

@@ -66,6 +66,7 @@ async def test_batch_capacity_bounded_operation_and_notifications(monkeypatch):
     called = []
     await common._reserve_batch_capacity(2, 3)
     assert common._pending_batch_counts[2] == 3
+
     async def callback():
         called.append(True)
 
@@ -82,16 +83,16 @@ async def test_batch_capacity_bounded_operation_and_notifications(monkeypatch):
 
     lock_factory = SimpleNamespace(get=lambda *_args, **_kwargs: _Lock(OperationBusyError("busy")))
     monkeypatch.setattr(common, "maintenance_lock_service", lock_factory)
-    await common._run_bounded_batch_operation(
-        4, 2, "batch", "test", AsyncMock(), acquire_lock=True
-    )
-    redis.set_batch_action_status.assert_awaited_once_with( "batch", 4, "failed", "busy")
+    await common._run_bounded_batch_operation(4, 2, "batch", "test", AsyncMock(), acquire_lock=True)
+    redis.set_batch_action_status.assert_awaited_once_with("batch", 4, "failed", "busy")
 
     notifier = SimpleNamespace(queue_notify=Mock())
     monkeypatch.setattr(common, "discord_notification_service", notifier)
     await common.send_discord_action_notification(None, "update", True, "done")
     await common.send_discord_action_notification(_server(), "unknown", True, "done")
-    await common.send_discord_action_notification(_server(), "update", False, "failed", details={"x": 1})
+    await common.send_discord_action_notification(
+        _server(), "update", False, "failed", details={"x": 1}
+    )
     notifier.queue_notify.assert_called_once()
     assert notifier.queue_notify.call_args.args[1] == common.EVENT_MANUAL_UPDATE
 
@@ -153,7 +154,9 @@ def _patch_operation_modules(monkeypatch, *, final=None, enqueue=None, command=F
         enqueue_mock.side_effect = enqueue
     monkeypatch.setattr(runner_module, function_name, enqueue_mock)
     hub_module = importlib.import_module("services.server_operation_hub")
-    hub = SimpleNamespace(wait_until_terminal=AsyncMock(return_value=final or {"success": True, "message": "ok"}))
+    hub = SimpleNamespace(
+        wait_until_terminal=AsyncMock(return_value=final or {"success": True, "message": "ok"})
+    )
     monkeypatch.setattr(hub_module, "server_operation_hub", hub)
     return enqueue_mock, hub
 
@@ -207,7 +210,9 @@ async def test_execute_single_server_plugins_covers_sequence_and_failures(monkey
     monkeypatch.setattr(runner_module, "enqueue_server_operation", enqueue)
     hub_module = importlib.import_module("services.server_operation_hub")
     hub = SimpleNamespace(
-        wait_until_terminal=AsyncMock(side_effect=[{"success": True, "message": "ok"}, {"success": True, "message": "ok"}])
+        wait_until_terminal=AsyncMock(
+            side_effect=[{"success": True, "message": "ok"}, {"success": True, "message": "ok"}]
+        )
     )
     monkeypatch.setattr(hub_module, "server_operation_hub", hub)
     await common.execute_single_server_plugins(
@@ -247,7 +252,9 @@ async def test_execute_single_server_command_covers_authorization_conflict_and_r
     monkeypatch.setattr(
         hub_module,
         "server_operation_hub",
-        SimpleNamespace(wait_until_terminal=AsyncMock(return_value={"success": False, "message": "bad"})),
+        SimpleNamespace(
+            wait_until_terminal=AsyncMock(return_value={"success": False, "message": "bad"})
+        ),
     )
     await common.execute_single_server_command(4, "status", 2, False, "cmd")
     assert redis.set_batch_action_status.await_args.args[-2:] == ("failed", "bad")

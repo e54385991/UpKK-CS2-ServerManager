@@ -157,7 +157,9 @@ async def test_maintenance_cpu_disk_deployment_and_confirmation_branches(monkeyp
         AsyncMock(side_effect=[{"free": 1}, None]),
     )
     assert (await maintenance.get_server_disk_space(3, False, db=db, current_user=user))["success"]
-    assert not (await maintenance.get_server_disk_space(3, False, db=db, current_user=user))["success"]
+    assert not (await maintenance.get_server_disk_space(3, False, db=db, current_user=user))[
+        "success"
+    ]
 
     ssh = _SSH(commands=[(True, "exists", "")])
     monkeypatch.setattr(maintenance, "SSHManager", lambda: ssh)
@@ -192,7 +194,9 @@ async def test_maintenance_health_and_reconnect_cover_auth_and_duration(monkeypa
     assert health["offline_duration_estimate"]["hours"] == 6
     assert health["last_ssh_success"]
 
-    monitor = SimpleNamespace(manual_reconnect=AsyncMock(side_effect=[(True, "restored"), (False, "still down")]))
+    monitor = SimpleNamespace(
+        manual_reconnect=AsyncMock(side_effect=[(True, "restored"), (False, "still down")])
+    )
     monkeypatch.setattr("services.ssh_health_monitor.ssh_health_monitor", monitor)
     good = await maintenance.manual_ssh_reconnect(3, db, user)
     bad = await maintenance.manual_ssh_reconnect(3, db, user)

@@ -172,7 +172,9 @@ async def test_a2s_threshold_restart_failure_and_blocked_paths(monkeypatch):
         "a2s_service",
         SimpleNamespace(check_server_health=AsyncMock(return_value=False)),
     )
-    monkeypatch.setattr(service, "_perform_guarded_restart", AsyncMock(return_value=(False, "start failed", server)))
+    monkeypatch.setattr(
+        service, "_perform_guarded_restart", AsyncMock(return_value=(False, "start failed", server))
+    )
     notifications = []
     monkeypatch.setattr(
         service,

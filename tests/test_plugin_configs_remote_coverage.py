@@ -6,7 +6,6 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import asyncssh
 import pytest
 from asyncssh.constants import FILEXFER_TYPE_DIRECTORY, FILEXFER_TYPE_REGULAR, FILEXFER_TYPE_SYMLINK
 
@@ -22,7 +21,9 @@ def _server(**overrides):
 
 class _Sftp:
     def __init__(self, attrs=None, entries=(), data=b"text"):
-        self.attrs = attrs or SimpleNamespace(type=FILEXFER_TYPE_DIRECTORY, size=0, mtime=1, permissions=0o644)
+        self.attrs = attrs or SimpleNamespace(
+            type=FILEXFER_TYPE_DIRECTORY, size=0, mtime=1, permissions=0o644
+        )
         self.entries = list(entries)
         self.data = data
         self.closed = False
@@ -96,7 +97,9 @@ class _ContextSftpConnection:
 def _manager(sftp, *, valid=True, connected=True, context=False):
     manager = SimpleNamespace()
     manager.conn = _ContextSftpConnection(sftp) if context else _AwaitableSftpConnection(sftp)
-    manager.validate_path_within_base = AsyncMock(return_value=(valid, "outside" if not valid else ""))
+    manager.validate_path_within_base = AsyncMock(
+        return_value=(valid, "outside" if not valid else "")
+    )
     return manager
 
 
@@ -136,15 +139,21 @@ async def test_sftp_source_inspection_browse_and_path_failures():
         await remote.inspect_source(_manager(unsupported), _server(), "cfg/a.cfg")
     with pytest.raises(remote.PluginConfigError, match="outside"):
         await remote.inspect_source(_manager(directory, valid=False), _server(), "../etc")
-    no_conn = SimpleNamespace(conn=None, validate_path_within_base=AsyncMock(return_value=(True, "")))
+    no_conn = SimpleNamespace(
+        conn=None, validate_path_within_base=AsyncMock(return_value=(True, ""))
+    )
     with pytest.raises(remote.PluginConfigError, match="not established"):
         await remote.inspect_source(no_conn, _server(), "cfg")
 
     entries = [
         SimpleNamespace(filename=".", attrs=SimpleNamespace(type=FILEXFER_TYPE_DIRECTORY, size=0)),
         SimpleNamespace(filename="link", attrs=SimpleNamespace(type=FILEXFER_TYPE_SYMLINK, size=0)),
-        SimpleNamespace(filename="folder", attrs=SimpleNamespace(type=FILEXFER_TYPE_DIRECTORY, size=0)),
-        SimpleNamespace(filename="b.cfg", attrs=SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=5)),
+        SimpleNamespace(
+            filename="folder", attrs=SimpleNamespace(type=FILEXFER_TYPE_DIRECTORY, size=0)
+        ),
+        SimpleNamespace(
+            filename="b.cfg", attrs=SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=5)
+        ),
         SimpleNamespace(filename="socket", attrs=SimpleNamespace(type=999, size=0)),
     ]
     browsed = await remote.browse_directory(_manager(_Sftp(entries=entries)), _server(), "cfg")
@@ -199,26 +208,42 @@ async def test_streaming_directory_scan_file_source_and_limits(monkeypatch):
     sftp = _Sftp()
     manager = _manager(sftp)
     manager.conn = _ScanConnection(process)
-    events = [event async for event in remote.iter_source_scan(manager, _server(), "cfg", "directory")]
-    assert events[0]["type"] == "progress" and events[1]["type"] == "file" and events[-1]["count"] == 1
+    events = [
+        event async for event in remote.iter_source_scan(manager, _server(), "cfg", "directory")
+    ]
+    assert (
+        events[0]["type"] == "progress" and events[1]["type"] == "file" and events[-1]["count"] == 1
+    )
     manager.conn = _ScanConnection(_Process([b"D\0cfg\0F\0demo.cfg\0" + b"12\0" + b"1.5\0"]))
     result = await remote.scan_source(manager, _server(), "cfg", "directory")
     assert result["count"] == 1 and len(result["files"]) == 1
 
-    file_sftp = _Sftp(SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=12, mtime=2, permissions=0o644))
+    file_sftp = _Sftp(
+        SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=12, mtime=2, permissions=0o644)
+    )
     file_manager = _manager(file_sftp)
-    file_events = [event async for event in remote.iter_source_scan(file_manager, _server(), "cfg/demo.cfg", "file")]
+    file_events = [
+        event
+        async for event in remote.iter_source_scan(file_manager, _server(), "cfg/demo.cfg", "file")
+    ]
     assert file_events[0]["file"]["name"] == "demo.cfg"
     with pytest.raises(remote.PluginConfigError, match="type changed"):
-        [event async for event in remote.iter_source_scan(_manager(_Sftp()), _server(), "cfg", "file")]
+        [
+            event
+            async for event in remote.iter_source_scan(_manager(_Sftp()), _server(), "cfg", "file")
+        ]
 
     bad_process = _Process([b"F\0bad.cfg\0bad\0" + b"1\0"], [b"stderr"], exit_status=1)
     bad_manager = _manager(_Sftp())
     bad_manager.conn = _ScanConnection(bad_process)
     with pytest.raises(remote.PluginConfigError, match="invalid file metadata"):
-        [event async for event in remote.iter_source_scan(bad_manager, _server(), "cfg", "directory")]
+        [
+            event
+            async for event in remote.iter_source_scan(bad_manager, _server(), "cfg", "directory")
+        ]
 
     timeout_process = _Process([])
+
     async def timeout_read(_size):
         raise asyncio.TimeoutError
 
@@ -226,35 +251,61 @@ async def test_streaming_directory_scan_file_source_and_limits(monkeypatch):
     timeout_manager = _manager(_Sftp())
     timeout_manager.conn = _ScanConnection(timeout_process)
     with pytest.raises(remote.PluginConfigError, match="timed out"):
-        [event async for event in remote.iter_source_scan(timeout_manager, _server(), "cfg", "directory")]
+        [
+            event
+            async for event in remote.iter_source_scan(
+                timeout_manager, _server(), "cfg", "directory"
+            )
+        ]
 
     monkeypatch.setattr(remote, "MAX_SOURCE_FILES", 0)
     truncated = _Process([b"F\0a.cfg\0" + b"1\0" + b"1\0"])
     truncated_manager = _manager(_Sftp())
     truncated_manager.conn = _ScanConnection(truncated)
-    events = [event async for event in remote.iter_source_scan(truncated_manager, _server(), "cfg", "directory")]
+    events = [
+        event
+        async for event in remote.iter_source_scan(truncated_manager, _server(), "cfg", "directory")
+    ]
     assert events[-1]["truncated"]
 
 
 @pytest.mark.asyncio
 async def test_read_write_and_process_cleanup_paths(monkeypatch):
     server = _server()
-    manager = _manager(_Sftp(SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=4, mtime=0, permissions=0o600), data=b"hello"), context=True)
+    manager = _manager(
+        _Sftp(
+            SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=4, mtime=0, permissions=0o600),
+            data=b"hello",
+        ),
+        context=True,
+    )
     assert await remote.read_text_file(manager, server, "cfg/a.cfg") == "hello"
-    too_large = _Sftp(SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=remote.MAX_CONFIG_BYTES + 1, mtime=0, permissions=0o600))
+    too_large = _Sftp(
+        SimpleNamespace(
+            type=FILEXFER_TYPE_REGULAR, size=remote.MAX_CONFIG_BYTES + 1, mtime=0, permissions=0o600
+        )
+    )
     with pytest.raises(remote.PluginConfigError, match="10 MiB"):
         await remote.read_text_file(_manager(too_large, context=True), server, "cfg/a.cfg")
-    binary = _Sftp(SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=1, mtime=0, permissions=0o600), data=b"a\0b")
+    binary = _Sftp(
+        SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=1, mtime=0, permissions=0o600),
+        data=b"a\0b",
+    )
     with pytest.raises(remote.PluginConfigError, match="Binary"):
         await remote.read_text_file(_manager(binary, context=True), server, "cfg/a.cfg")
-    invalid_utf8 = _Sftp(SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=1, mtime=0, permissions=0o600), data=b"\xff")
+    invalid_utf8 = _Sftp(
+        SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=1, mtime=0, permissions=0o600),
+        data=b"\xff",
+    )
     with pytest.raises(remote.PluginConfigError, match="UTF-8"):
         await remote.read_text_file(_manager(invalid_utf8, context=True), server, "cfg/a.cfg")
     manager.validate_path_within_base.return_value = (False, "bad path")
     with pytest.raises(remote.PluginConfigError, match="bad path"):
         await remote.read_text_file(manager, server, "cfg/a.cfg")
 
-    writable = _Sftp(SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=4, mtime=0, permissions=0o640))
+    writable = _Sftp(
+        SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=4, mtime=0, permissions=0o640)
+    )
     write_manager = _manager(writable, context=True)
     write_manager.execute_command = AsyncMock(return_value=(True, "", ""))
     await remote.atomic_write_text_file(write_manager, server, "cfg/a.cfg", "updated")
@@ -262,7 +313,9 @@ async def test_read_write_and_process_cleanup_paths(monkeypatch):
     write_manager.execute_command = AsyncMock(return_value=(False, "", "replace failed"))
     with pytest.raises(remote.PluginConfigError, match="replace failed"):
         await remote.atomic_write_text_file(write_manager, server, "cfg/a.cfg", "updated")
-    no_conn = SimpleNamespace(conn=None, validate_path_within_base=AsyncMock(return_value=(True, "")))
+    no_conn = SimpleNamespace(
+        conn=None, validate_path_within_base=AsyncMock(return_value=(True, ""))
+    )
     with pytest.raises(remote.PluginConfigError, match="not established"):
         await remote.atomic_write_text_file(no_conn, server, "cfg/a.cfg", "x")
 
@@ -277,15 +330,25 @@ async def test_archive_stream_and_scan_stop_error_paths(monkeypatch):
     manager.ARCHIVE_LISTING_STOP_TIMEOUT = 0.1
     assert await manager._read_archive_stderr(_Stream(["one", b"two", b""])) == "onetwo"
     seen = []
-    assert await manager._consume_archive_stdout(_Stream([b"one\n", b"two"]), lambda line: seen.append(line)) is None
+    assert (
+        await manager._consume_archive_stdout(
+            _Stream([b"one\n", b"two"]), lambda line: seen.append(line)
+        )
+        is None
+    )
     assert seen == ["one", "two"]
     manager.ARCHIVE_MAX_ENTRIES = 1
     monkeypatch.setattr(manager, "ARCHIVE_MAX_ENTRIES", 1)
     assert await manager._consume_archive_stdout(_Stream([b"one\ntwo\n"]), lambda _line: None)
-    assert await manager._consume_archive_stdout(_Stream([b"a" * (manager.ARCHIVE_LISTING_MAX_LINE_BYTES + 1)]), lambda _line: None)
+    assert await manager._consume_archive_stdout(
+        _Stream([b"a" * (manager.ARCHIVE_LISTING_MAX_LINE_BYTES + 1)]), lambda _line: None
+    )
     assert await manager._consume_archive_stdout(_Stream([b"\xff\n"]), lambda _line: None)
     manager.conn = None
-    assert await manager._stream_archive_listing("cmd", lambda _line: None) == (False, "Not connected")
+    assert await manager._stream_archive_listing("cmd", lambda _line: None) == (
+        False,
+        "Not connected",
+    )
 
     process = _Process([])
     process.wait = AsyncMock(side_effect=[asyncio.TimeoutError(), None])

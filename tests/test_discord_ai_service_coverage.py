@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from modules.models import AIConversation, AIMessage, AIRun, AIToolRun
+from modules.models import AIConversation, AIMessage, AIRun
 from services.ai_tools import canonical_arguments
 
 discord_ai = import_module("services.discord_ai_service")
@@ -129,28 +129,50 @@ def test_reference_phrases_and_server_resolution_cover_normalization_and_ambigui
     second = _server(server_id=2, name="Bravo 2")
     assert discord_ai.resolve_discord_agent_server("alpha", [first, second]) is first
     assert discord_ai.resolve_discord_agent_server("alpha bravo", [first, second]) is None
-    assert discord_ai.resolve_discord_agent_server("alpha", [SimpleNamespace(id=None, name="Alpha")]) is None
+    assert (
+        discord_ai.resolve_discord_agent_server("alpha", [SimpleNamespace(id=None, name="Alpha")])
+        is None
+    )
 
 
 @pytest.mark.asyncio
 async def test_available_server_ids_filter_owner_provider_and_policy(monkeypatch):
-    assert await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[]) == frozenset()
+    assert (
+        await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[])
+        == frozenset()
+    )
     db = _Db({(discord_ai.User, 1): None})
     monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
-    assert await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[1]) == frozenset()
+    assert (
+        await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[1])
+        == frozenset()
+    )
 
     owner = _owner(active=False)
     db = _Db({(discord_ai.User, 1): owner})
     monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
-    assert await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[1]) == frozenset()
+    assert (
+        await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[1])
+        == frozenset()
+    )
 
     owner = _owner()
     db = _Db({(discord_ai.User, 1): owner})
     monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
-    monkeypatch.setattr(discord_ai, "get_effective_provider", AsyncMock(side_effect=discord_ai.AIConfigurationError("bad")))
-    assert await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[1]) == frozenset()
+    monkeypatch.setattr(
+        discord_ai,
+        "get_effective_provider",
+        AsyncMock(side_effect=discord_ai.AIConfigurationError("bad")),
+    )
+    assert (
+        await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[1])
+        == frozenset()
+    )
     monkeypatch.setattr(discord_ai, "get_effective_provider", AsyncMock(return_value=None))
-    assert await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[1]) == frozenset()
+    assert (
+        await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[1])
+        == frozenset()
+    )
 
     db = _Db(
         {(discord_ai.User, 1): owner},
@@ -158,9 +180,19 @@ async def test_available_server_ids_filter_owner_provider_and_policy(monkeypatch
     )
     monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
     monkeypatch.setattr(discord_ai, "get_effective_provider", AsyncMock(return_value=object()))
-    policies = {1: SimpleNamespace(enabled=True), 2: SimpleNamespace(enabled=False), 3: SimpleNamespace(enabled=True)}
-    monkeypatch.setattr(discord_ai, "get_effective_agent_policy", AsyncMock(side_effect=lambda _db, sid: policies[sid]))
-    assert await discord_ai.available_discord_agent_server_ids(owner_user_id=1, server_ids=[1, 2, 3]) == frozenset({1, 3})
+    policies = {
+        1: SimpleNamespace(enabled=True),
+        2: SimpleNamespace(enabled=False),
+        3: SimpleNamespace(enabled=True),
+    }
+    monkeypatch.setattr(
+        discord_ai,
+        "get_effective_agent_policy",
+        AsyncMock(side_effect=lambda _db, sid: policies[sid]),
+    )
+    assert await discord_ai.available_discord_agent_server_ids(
+        owner_user_id=1, server_ids=[1, 2, 3]
+    ) == frozenset({1, 3})
 
 
 @pytest.mark.asyncio
@@ -178,16 +210,22 @@ async def test_reset_and_latest_conversation_use_discord_scope(monkeypatch):
 
     latest = SimpleNamespace(id="latest")
     db.results = [_Result(scalar=latest)]
-    assert await discord_ai._latest_conversation(
-        db, owner_user_id=7, server_id=1, actor_user_id="a", guild_id="g", channel_id="c"
-    ) is latest
+    assert (
+        await discord_ai._latest_conversation(
+            db, owner_user_id=7, server_id=1, actor_user_id="a", guild_id="g", channel_id="c"
+        )
+        is latest
+    )
 
 
 @pytest.mark.asyncio
 async def test_ask_discord_agent_validates_owner_provider_and_active_run(monkeypatch):
     owner = _owner()
     server = _server()
-    db = _Db({(discord_ai.User, 7): owner, (discord_ai.Server, 1): server}, [_Result(scalar=None), _Result(scalar=0)])
+    db = _Db(
+        {(discord_ai.User, 7): owner, (discord_ai.Server, 1): server},
+        [_Result(scalar=None), _Result(scalar=0)],
+    )
     monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
     monkeypatch.setattr(discord_ai, "require_agent_capabilities", AsyncMock())
     monkeypatch.setattr(discord_ai, "get_effective_provider", AsyncMock(return_value=object()))
@@ -195,7 +233,12 @@ async def test_ask_discord_agent_validates_owner_provider_and_active_run(monkeyp
     monkeypatch.setattr(discord_ai, "process_ai_run", process)
     monkeypatch.setattr(discord_ai, "get_current_time", lambda: datetime.now(timezone.utc))
     run_id = await discord_ai.ask_discord_agent(
-        owner_user_id=7, server_id=1, actor_user_id="actor", guild_id="guild", channel_id="channel", prompt="  restart  "
+        owner_user_id=7,
+        server_id=1,
+        actor_user_id="actor",
+        guild_id="guild",
+        channel_id="channel",
+        prompt="  restart  ",
     )
     assert run_id
     assert process.await_args.args == (run_id,)
@@ -210,21 +253,38 @@ async def test_ask_discord_agent_validates_owner_provider_and_active_run(monkeyp
     monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
     with pytest.raises(discord_ai.DiscordAIError, match="active run"):
         await discord_ai.ask_discord_agent(
-            owner_user_id=7, server_id=1, actor_user_id="actor", guild_id="guild", channel_id="channel", prompt="again"
+            owner_user_id=7,
+            server_id=1,
+            actor_user_id="actor",
+            guild_id="guild",
+            channel_id="channel",
+            prompt="again",
         )
 
     db = _Db({(discord_ai.User, 7): None, (discord_ai.Server, 1): server})
     monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
     with pytest.raises(discord_ai.DiscordAIError, match="unavailable"):
         await discord_ai.ask_discord_agent(
-            owner_user_id=7, server_id=1, actor_user_id="actor", guild_id="guild", channel_id="channel", prompt="x"
+            owner_user_id=7,
+            server_id=1,
+            actor_user_id="actor",
+            guild_id="guild",
+            channel_id="channel",
+            prompt="x",
         )
 
-    db = _Db({(discord_ai.User, 7): owner, (discord_ai.Server, 1): SimpleNamespace(id=1, user_id=9)})
+    db = _Db(
+        {(discord_ai.User, 7): owner, (discord_ai.Server, 1): SimpleNamespace(id=1, user_id=9)}
+    )
     monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
     with pytest.raises(discord_ai.DiscordAIError, match="unavailable"):
         await discord_ai.ask_discord_agent(
-            owner_user_id=7, server_id=1, actor_user_id="actor", guild_id="guild", channel_id="channel", prompt="x"
+            owner_user_id=7,
+            server_id=1,
+            actor_user_id="actor",
+            guild_id="guild",
+            channel_id="channel",
+            prompt="x",
         )
 
     db = _Db({(discord_ai.User, 7): owner, (discord_ai.Server, 1): server}, [_Result(scalar=None)])
@@ -232,7 +292,12 @@ async def test_ask_discord_agent_validates_owner_provider_and_active_run(monkeyp
     monkeypatch.setattr(discord_ai, "get_effective_provider", AsyncMock(return_value=None))
     with pytest.raises(discord_ai.DiscordAIError, match="No AI provider"):
         await discord_ai.ask_discord_agent(
-            owner_user_id=7, server_id=1, actor_user_id="actor", guild_id="guild", channel_id="channel", prompt="x"
+            owner_user_id=7,
+            server_id=1,
+            actor_user_id="actor",
+            guild_id="guild",
+            channel_id="channel",
+            prompt="x",
         )
 
 
@@ -241,7 +306,9 @@ async def test_discord_run_snapshot_redacts_and_reports_pending_tool(monkeypatch
     run = _run(status="running", error="err")
     message = SimpleNamespace(content="token=secret@example.com")
     tool = _tool()
-    progress = SimpleNamespace(tool_name="inspect_server", status="running", progress_snapshot={"n": 1})
+    progress = SimpleNamespace(
+        tool_name="inspect_server", status="running", progress_snapshot={"n": 1}
+    )
     db = _Db(
         {(discord_ai.AIRun, "run-1"): run},
         [_Result(scalar=message), _Result(scalar=tool), _Result(scalar=progress)],
@@ -265,9 +332,10 @@ async def test_discord_run_snapshot_redacts_and_reports_pending_tool(monkeypatch
 
 @pytest.mark.asyncio
 async def test_approve_discord_tool_rejects_stale_or_unauthorized_states(monkeypatch):
-    owner = _owner()
     server = _server()
-    conversation = SimpleNamespace(external_actor_id="actor-1", discord_guild_id="guild", discord_channel_id="channel")
+    conversation = SimpleNamespace(
+        external_actor_id="actor-1", discord_guild_id="guild", discord_channel_id="channel"
+    )
     base_run = _run()
     base_tool = _tool()
     fixed_now = datetime.now(timezone.utc)
@@ -278,20 +346,37 @@ async def test_approve_discord_tool_rejects_stale_or_unauthorized_states(monkeyp
     async def invoke(db, actor_user_id="actor-1", **kwargs):
         monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
         return await discord_ai.approve_discord_tool(
-            run_id="run-1", tool_run_id="tool-1", actor_user_id=actor_user_id, actor_role_ids=set(),
-            guild_id="guild", channel_id="channel", **kwargs
+            run_id="run-1",
+            tool_run_id="tool-1",
+            actor_user_id=actor_user_id,
+            actor_role_ids=set(),
+            guild_id="guild",
+            channel_id="channel",
+            **kwargs,
         )
 
     for gets, message in [
         ({}, "no longer pending"),
         ({(discord_ai.AIRun, "run-1"): base_run}, "no longer pending"),
-        ({(discord_ai.AIRun, "run-1"): base_run, (discord_ai.AIToolRun, "tool-1"): _tool(run_id="other")}, "no longer pending"),
+        (
+            {
+                (discord_ai.AIRun, "run-1"): base_run,
+                (discord_ai.AIToolRun, "tool-1"): _tool(run_id="other"),
+            },
+            "no longer pending",
+        ),
     ]:
         with pytest.raises(discord_ai.DiscordAIError, match=message):
             await invoke(_Db(gets))
 
     def db_for(run=base_run, tool=base_tool, conv=conversation):
-        return _Db({(discord_ai.AIRun, "run-1"): run, (discord_ai.AIToolRun, "tool-1"): tool, (discord_ai.AIConversation, "conversation-1"): conv})
+        return _Db(
+            {
+                (discord_ai.AIRun, "run-1"): run,
+                (discord_ai.AIToolRun, "tool-1"): tool,
+                (discord_ai.AIConversation, "conversation-1"): conv,
+            }
+        )
 
     with pytest.raises(discord_ai.DiscordAIError, match="original"):
         await invoke(db_for(), actor_user_id="actor-2")
@@ -307,7 +392,9 @@ async def test_approve_discord_tool_rejects_stale_or_unauthorized_states(monkeyp
     monkeypatch.setattr(discord_ai, "authorized_bindings", AsyncMock(return_value=[]))
     with pytest.raises(discord_ai.DiscordAIError, match="revoked"):
         await invoke(db_for())
-    monkeypatch.setattr(discord_ai, "authorized_bindings", AsyncMock(return_value=[(object(), server)]))
+    monkeypatch.setattr(
+        discord_ai, "authorized_bindings", AsyncMock(return_value=[(object(), server)])
+    )
     with pytest.raises(discord_ai.DiscordAIError, match="no longer available"):
         await invoke(db_for(tool=_tool(tool_name="missing_tool")))
 
@@ -316,19 +403,34 @@ async def test_approve_discord_tool_rejects_stale_or_unauthorized_states(monkeyp
 async def test_approve_discord_tool_queues_and_processes_valid_request(monkeypatch):
     run = _run()
     tool = _tool()
-    conversation = SimpleNamespace(external_actor_id="actor-1", discord_guild_id="guild", discord_channel_id="channel")
-    db = _Db({(discord_ai.AIRun, "run-1"): run, (discord_ai.AIToolRun, "tool-1"): tool, (discord_ai.AIConversation, "conversation-1"): conversation})
+    conversation = SimpleNamespace(
+        external_actor_id="actor-1", discord_guild_id="guild", discord_channel_id="channel"
+    )
+    db = _Db(
+        {
+            (discord_ai.AIRun, "run-1"): run,
+            (discord_ai.AIToolRun, "tool-1"): tool,
+            (discord_ai.AIConversation, "conversation-1"): conversation,
+        }
+    )
     monkeypatch.setattr(discord_ai, "async_session_maker", _Factory(db))
     monkeypatch.setattr(discord_ai, "get_current_time", lambda: datetime.now(timezone.utc))
-    monkeypatch.setattr(discord_ai, "authorized_bindings", AsyncMock(return_value=[(object(), _server())]))
+    monkeypatch.setattr(
+        discord_ai, "authorized_bindings", AsyncMock(return_value=[(object(), _server())])
+    )
     require = AsyncMock()
     monkeypatch.setattr(discord_ai, "require_agent_capabilities", require)
     process = AsyncMock()
     monkeypatch.setattr(discord_ai, "process_ai_run", process)
     await discord_ai.approve_discord_tool(
-        run_id="run-1", tool_run_id="tool-1", actor_user_id="actor-1", actor_role_ids={"role"},
-        actor_is_channel_manager=True, actor_is_server_administrator=True,
-        guild_id="guild", channel_id="channel"
+        run_id="run-1",
+        tool_run_id="tool-1",
+        actor_user_id="actor-1",
+        actor_role_ids={"role"},
+        actor_is_channel_manager=True,
+        actor_is_server_administrator=True,
+        guild_id="guild",
+        channel_id="channel",
     )
     assert tool.status == "queued"
     assert tool.approved_by == 7

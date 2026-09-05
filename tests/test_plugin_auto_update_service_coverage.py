@@ -170,7 +170,13 @@ async def test_latest_release_metamod_and_install_item_paths(monkeypatch):
     service = module.PluginAutoUpdateService()
     user = SimpleNamespace(has_github_token=False, github_token=None)
     item = _item()
-    release = {"id": 4, "tag_name": "v2", "draft": False, "prerelease": False, "assets": [{"name": "demo-v2-linux.zip"}]}
+    release = {
+        "id": 4,
+        "tag_name": "v2",
+        "draft": False,
+        "prerelease": False,
+        "assets": [{"name": "demo-v2-linux.zip"}],
+    }
     monkeypatch.setattr(module.http_helper, "get", AsyncMock(return_value=(True, release, None)))
     ok, latest, error = await service._latest_github_release(item, user)
     assert ok and latest["version"] == "v2" and not error
@@ -204,7 +210,11 @@ async def test_latest_release_metamod_and_install_item_paths(monkeypatch):
 
     db = _Db()
     monkeypatch.setattr(module, "async_session_maker", lambda: db)
-    monkeypatch.setattr(module, "install_github_plugin", AsyncMock(return_value=SimpleNamespace(success=True, message="ok")))
+    monkeypatch.setattr(
+        module,
+        "install_github_plugin",
+        AsyncMock(return_value=SimpleNamespace(success=True, message="ok")),
+    )
     result = await service._install_item(_server(), user, _item(), latest)
     assert result == (True, "ok")
 
@@ -217,8 +227,21 @@ async def test_upgrade_plan_post_commands_and_framework_records(monkeypatch):
     item = _item()
     db = _Db(server=server, item=item, user=user)
     monkeypatch.setattr(module, "async_session_maker", lambda: db)
-    monkeypatch.setattr("services.linux_runtime_service.detect_linux_runtime_profile", AsyncMock(return_value={"reason": "x"}))
-    monkeypatch.setattr(service, "_latest_github_release", AsyncMock(return_value=(True, {"release_id": "new", "version": "v2", "asset": {"name": "demo-v2-linux.zip"}}, "")))
+    monkeypatch.setattr(
+        "services.linux_runtime_service.detect_linux_runtime_profile",
+        AsyncMock(return_value={"reason": "x"}),
+    )
+    monkeypatch.setattr(
+        service,
+        "_latest_github_release",
+        AsyncMock(
+            return_value=(
+                True,
+                {"release_id": "new", "version": "v2", "asset": {"name": "demo-v2-linux.zip"}},
+                "",
+            )
+        ),
+    )
     plan = await service.build_plugin_upgrade_plan(7, 11)
     assert plan["no_op"] is False and plan["config_exclusions"]
     db.item = None
@@ -229,21 +252,37 @@ async def test_upgrade_plan_post_commands_and_framework_records(monkeypatch):
     command_db = _Db(rows=[command])
     monkeypatch.setattr(module, "async_session_maker", lambda: command_db)
     service._redis_status_retry_after = float("inf")
-    monkeypatch.setattr(module, "execute_custom_commands", AsyncMock(return_value={"success": True, "message": "ok", "results": ["ok"]}))
+    monkeypatch.setattr(
+        module,
+        "execute_custom_commands",
+        AsyncMock(return_value={"success": True, "message": "ok", "results": ["ok"]}),
+    )
     monkeypatch.setattr(module, "format_custom_command_log", lambda *_args: "log")
     result = await service._execute_post_update_commands(server, [1, 2, "bad"])
     assert not result["success"] and len(result["results"]) == 2
     command_db.rows = [command]
-    monkeypatch.setattr(module, "execute_custom_commands", AsyncMock(side_effect=RuntimeError("boom")))
+    monkeypatch.setattr(
+        module, "execute_custom_commands", AsyncMock(side_effect=RuntimeError("boom"))
+    )
     result = await service._execute_post_update_commands(server, [1])
     assert not result["success"] and "boom" in result["results"][0]["message"]
     assert service._normalize_command_ids([1, "1", 0, "x", None, 2]) == [1, 2]
 
     upsert = AsyncMock()
     monkeypatch.setattr(module, "upsert_managed_plugin", upsert)
-    monkeypatch.setattr(module.plugin_auto_update_service, "_latest_metamod", AsyncMock(return_value=(False, None, "offline")))
+    monkeypatch.setattr(
+        module.plugin_auto_update_service,
+        "_latest_metamod",
+        AsyncMock(return_value=(False, None, "offline")),
+    )
     await module.record_framework_installation(server, user, "metamod")
     assert upsert.await_args.kwargs["installed_version"] == "unknown"
-    monkeypatch.setattr(module.plugin_auto_update_service, "_latest_github_release", AsyncMock(return_value=(False, None, "offline")))
-    await module.record_known_github_installation(server, user, "https://github.com/acme/demo/", "Demo", "demo-*.zip")
+    monkeypatch.setattr(
+        module.plugin_auto_update_service,
+        "_latest_github_release",
+        AsyncMock(return_value=(False, None, "offline")),
+    )
+    await module.record_known_github_installation(
+        server, user, "https://github.com/acme/demo/", "Demo", "demo-*.zip"
+    )
     assert upsert.await_count == 2

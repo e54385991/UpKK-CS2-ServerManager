@@ -26,6 +26,7 @@ def _patch_batch(monkeypatch, valid=(1, 2)):
     monkeypatch.setattr(batch, "authorized_server_ids", AsyncMock(return_value=list(valid)))
     monkeypatch.setattr(batch, "_reserve_batch_capacity", AsyncMock())
     monkeypatch.setattr(batch, "_store_task", Mock())
+
     def discard_task(coroutine):
         coroutine.close()
         return SimpleNamespace()
@@ -41,7 +42,9 @@ async def test_batch_action_plugins_and_command_endpoints_queue_and_audit(monkey
     _patch_batch(monkeypatch)
     user = _user()
     request = SimpleNamespace(server_ids=[1, 2], action="start")
-    result = await batch.batch_server_actions(request, db=None, current_user=user, http_request=object())
+    result = await batch.batch_server_actions(
+        request, db=None, current_user=user, http_request=object()
+    )
     assert result.batch_id == "batch-id"
     assert result.server_count == 2
     assert "start" in result.message

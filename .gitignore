@@ -151,3 +151,4 @@ logs/
 
 # Runtime secrets and persistent application data
 data/
+*.rdb

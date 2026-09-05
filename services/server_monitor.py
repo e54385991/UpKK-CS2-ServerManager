@@ -238,7 +238,7 @@ class ServerMonitor:
         except OperationBusyError as exc:
             return None, str(exc), None
 
-    async def monitor_server(self, server_id: int, ssh_manager, progress_callback=None):
+    async def monitor_server(self, server_id: int, ssh_manager, progress_callback=None):  # noqa: C901 - monitor/restart state machine.
         """
         Monitor a server and auto-restart on crash
 

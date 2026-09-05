@@ -197,7 +197,12 @@ async def test_installation_archive_formats_custom_path_and_tracking(monkeypatch
     monkeypatch.setattr(installation, "SSHManager", _InstallSSH)
     for suffix in (".tar.gz", ".tgz", ".tar", ".7z", ".bin"):
         result = await installation.install_github_plugin(
-            3, _request(download_url=f"https://github.com/acme/plugin/releases/download/v1/plugin{suffix}"), db, user
+            3,
+            _request(
+                download_url=f"https://github.com/acme/plugin/releases/download/v1/plugin{suffix}"
+            ),
+            db,
+            user,
         )
         assert result.success is True
 
@@ -213,7 +218,9 @@ async def test_installation_archive_formats_custom_path_and_tracking(monkeypatch
 
     monkeypatch.setattr(installation, "SSHManager", _CustomPathSSH)
     monkeypatch.setattr("services.plugins.tracking.upsert_managed_plugin", AsyncMock())
-    monkeypatch.setattr("services.plugins.tracking.canonical_repo_url", lambda value: value.rstrip("/"))
+    monkeypatch.setattr(
+        "services.plugins.tracking.canonical_repo_url", lambda value: value.rstrip("/")
+    )
     monkeypatch.setattr("services.plugins.tracking.derive_asset_glob", lambda *_a: "*.zip")
     result = await installation.install_github_plugin(
         3,
@@ -278,6 +285,7 @@ async def test_installation_secure_gateway_digest_and_upload_failures(monkeypatc
     assert "digest changed" in result.message
 
     archive.write_bytes(b"archive")
+
     class _UploadFailure(_SecureSSH):
         async def upload_file_with_progress(self, *_args, **_kwargs):
             return False, "disk full"
@@ -495,33 +503,53 @@ async def test_diagnostic_recommendation_latest_restore_and_restart(monkeypatch)
         "services.server_monitor.server_monitor.get_restart_info",
         lambda _id: {"restart_count": 0, "can_restart": True, "max_restarts": 3},
     )
-    recommendation = await diagnostics.get_diagnostic_recommendation(SimpleNamespace(), SimpleNamespace(), 3)
+    recommendation = await diagnostics.get_diagnostic_recommendation(
+        SimpleNamespace(), SimpleNamespace(), 3
+    )
     assert recommendation["recommended"] is False
     monkeypatch.setattr(
         "services.server_monitor.server_monitor.get_restart_info",
         lambda _id: {"restart_count": 3, "can_restart": False, "max_restarts": 3},
     )
-    recommendation = await diagnostics.get_diagnostic_recommendation(SimpleNamespace(), SimpleNamespace(), 3)
+    recommendation = await diagnostics.get_diagnostic_recommendation(
+        SimpleNamespace(), SimpleNamespace(), 3
+    )
     assert recommendation["reason"] == "restart_loop_protection"
 
-    step = SimpleNamespace(sequence=1, phase="p", candidate_keys=[], healthy=True, evidence={})
     entry = SimpleNamespace(
-        candidate_key="x", source_relative_path="a", quarantine_relative_path=".upkk/q/a",
-        is_quarantined=True, is_culprit=True, restored_at=None,
+        candidate_key="x",
+        source_relative_path="a",
+        quarantine_relative_path=".upkk/q/a",
+        is_quarantined=True,
+        is_culprit=True,
+        restored_at=None,
     )
     run = SimpleNamespace(
-        id="d" * 36, server_id=3, requested_by=7, scope="both", status="running",
-        plan_hash="h", culprit_keys=["x"], start_attempts=1, error=None,
-        created_at=None, completed_at=None, original_server_running=True,
+        id="d" * 36,
+        server_id=3,
+        requested_by=7,
+        scope="both",
+        status="running",
+        plan_hash="h",
+        culprit_keys=["x"],
+        start_attempts=1,
+        error=None,
+        created_at=None,
+        completed_at=None,
+        original_server_running=True,
     )
 
     class _RestoreDb(_DiagnosticDb):
         def __init__(self):
             super().__init__()
-            self.responses = iter([
-                _DbResult(scalar=run), _DbResult([entry]),
-                _DbResult([]), _DbResult([]),
-            ])
+            self.responses = iter(
+                [
+                    _DbResult(scalar=run),
+                    _DbResult([entry]),
+                    _DbResult([]),
+                    _DbResult([]),
+                ]
+            )
 
         async def execute(self, _statement):
             return next(self.responses)
@@ -566,9 +594,7 @@ async def test_diagnostic_recommendation_latest_restore_and_restart(monkeypatch)
 
     monkeypatch.setattr(diagnostics, "authorized_server", AsyncMock(return_value=server))
     with pytest.raises(LookupError):
-        await diagnostics.get_latest_diagnostic_run(
-            _DiagnosticDb([]), SimpleNamespace(id=7), 3
-        )
+        await diagnostics.get_latest_diagnostic_run(_DiagnosticDb([]), SimpleNamespace(id=7), 3)
 
 
 @pytest.mark.asyncio
@@ -576,7 +602,11 @@ async def test_execute_diagnostic_plan_rejects_stale_and_empty_plans(monkeypatch
     server = SimpleNamespace(id=3, user_id=7)
     monkeypatch.setattr(diagnostics.maintenance_lock_service, "get", lambda *_a, **_k: _NoopLock())
     monkeypatch.setattr(diagnostics, "authorized_server", AsyncMock(return_value=server))
-    monkeypatch.setattr(diagnostics, "build_diagnostic_plan", AsyncMock(return_value={"plan_hash": "good", "candidates": []}))
+    monkeypatch.setattr(
+        diagnostics,
+        "build_diagnostic_plan",
+        AsyncMock(return_value={"plan_hash": "good", "candidates": []}),
+    )
     with pytest.raises(ValueError, match="changed"):
         await diagnostics.execute_diagnostic_plan(
             _DiagnosticDb(), SimpleNamespace(id=7), 3, "both", "bad"

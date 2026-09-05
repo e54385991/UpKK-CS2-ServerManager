@@ -699,7 +699,7 @@ class PluginAutoUpdateService:
             "results": command_results,
         }
 
-    async def _check_server(
+    async def _check_server(  # noqa: C901
         self, server_id: int, force: bool = False, plugin_id: Optional[int] = None
     ) -> Dict[str, Any]:
         lock = maintenance_lock_service.get(

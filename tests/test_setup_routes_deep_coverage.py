@@ -132,9 +132,7 @@ async def test_auto_setup_success_and_all_ssh_error_mappings(monkeypatch):
     monkeypatch.setattr(setup, "_configure_setup_user", AsyncMock())
     monkeypatch.setattr(setup, "_persist_setup_configuration", AsyncMock(return_value="redis-key"))
     monkeypatch.setattr(setup, "send_setup_progress", AsyncMock())
-    result = await setup.auto_setup_server(
-        _request(session_id="sid"), SimpleNamespace(id=7), _Db()
-    )
+    result = await setup.auto_setup_server(_request(session_id="sid"), SimpleNamespace(id=7), _Db())
     assert result.success and result.initialized_server_id == "redis-key"
     assert connection.closed and connection.waited
 
@@ -152,7 +150,9 @@ async def test_auto_setup_success_and_all_ssh_error_mappings(monkeypatch):
         assert conn.closed is False
 
     monkeypatch.setattr(setup.asyncssh, "connect", AsyncMock(return_value=_Conn()))
-    monkeypatch.setattr(setup, "_detect_setup_host", AsyncMock(side_effect=HTTPException(422, "bad")))
+    monkeypatch.setattr(
+        setup, "_detect_setup_host", AsyncMock(side_effect=HTTPException(422, "bad"))
+    )
     with pytest.raises(HTTPException) as exc_info:
         await setup.auto_setup_server(_request(), SimpleNamespace(id=7), _Db())
     assert exc_info.value.status_code == 422

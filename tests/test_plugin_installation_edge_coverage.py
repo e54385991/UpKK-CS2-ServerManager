@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from modules import GitHubPluginInstallRequest, GitHubPluginInstallResponse
+from modules import GitHubPluginInstallRequest
 from services import plugin_installation as installation
 
 
@@ -62,9 +62,23 @@ class _ScriptedSSH:
         if command.startswith("test -d /srv/cs2/cs2/game/csgo"):
             return (False, "", "") if self.mode == "missing-cs2" else (True, "exists", "")
         if "echo 'addons_found'" in command:
-            return (True, "", "") if self.mode in {"no-addons", "subdir", "custom", "custom-error", "allowed-missing", "allowed-copy-error"} else (True, "addons_found", "")
+            return (
+                (True, "", "")
+                if self.mode
+                in {
+                    "no-addons",
+                    "subdir",
+                    "custom",
+                    "custom-error",
+                    "allowed-missing",
+                    "allowed-copy-error",
+                }
+                else (True, "addons_found", "")
+            )
         if command.startswith("curl "):
-            return (False, "", "download failed") if self.mode == "download-error" else (True, "", "")
+            return (
+                (False, "", "download failed") if self.mode == "download-error" else (True, "", "")
+            )
         if command.startswith("stat "):
             if self.mode == "invalid-size":
                 return False, "", "stat failed"
@@ -88,9 +102,15 @@ class _ScriptedSSH:
         if "test -d" in command and "addons" in command:
             return (False, "", "") if self.mode == "allowed-missing" else (True, "", "")
         if command.startswith("cp -a --no-dereference"):
-            return (False, "", "stage failed") if self.mode == "allowed-copy-error" else (True, "", "")
+            return (
+                (False, "", "stage failed") if self.mode == "allowed-copy-error" else (True, "", "")
+            )
         if command.startswith("command -v rsync"):
-            return (True, "", "") if self.mode in {"no-rsync", "custom", "custom-error"} else (True, "/usr/bin/rsync", "")
+            return (
+                (True, "", "")
+                if self.mode in {"no-rsync", "custom", "custom-error"}
+                else (True, "/usr/bin/rsync", "")
+            )
         if "-type f" in command and "wc -l" in command:
             value = self.count_values[min(self.count_index, len(self.count_values) - 1)]
             self.count_index += 1
@@ -98,9 +118,17 @@ class _ScriptedSSH:
         if command.startswith("sh -c") and "source-files.txt" in command:
             return (False, "", "backup failed") if self.mode == "backup-error" else (True, "", "")
         if command.startswith("sh -c") and "manifest.tsv" in command:
-            return (False, "", "rollback failed") if self.mode in {"rollback-error", "copy-rollback-error"} else (True, "", "")
+            return (
+                (False, "", "rollback failed")
+                if self.mode in {"rollback-error", "copy-rollback-error"}
+                else (True, "", "")
+            )
         if "rsync -av" in command or "tar --exclude" in command or command.startswith("cp -r"):
-            return (False, "", "copy failed") if self.mode in {"copy-error", "custom-error", "copy-rollback-error"} else (True, "", "")
+            return (
+                (False, "", "copy failed")
+                if self.mode in {"copy-error", "custom-error", "copy-rollback-error"}
+                else (True, "", "")
+            )
         return True, "", ""
 
 
@@ -111,7 +139,9 @@ async def test_panel_proxy_download_success_and_failures(monkeypatch, tmp_path: 
     user = SimpleNamespace(id=7)
     monkeypatch.setattr(installation, "get_server_for_user", AsyncMock(return_value=server))
     monkeypatch.setattr(installation, "send_deployment_update", AsyncMock())
-    monkeypatch.setattr(installation, "discord_notification_service", SimpleNamespace(queue_notify=Mock()))
+    monkeypatch.setattr(
+        installation, "discord_notification_service", SimpleNamespace(queue_notify=Mock())
+    )
     _ScriptedSSH.mode = "ok"
 
     async def download(_url, path, **kwargs):
@@ -183,7 +213,10 @@ async def test_direct_download_archive_and_structure_failures(monkeypatch):
     assert "source prefix" in (await run("prefix-error", source_prefix="payload")).message
     assert "No addons" in (await run("no-addons")).message
     assert "Invalid custom" in (await run("custom", custom_install_path="../escape")).message
-    assert "Approved archive mapping" in (await run("allowed-missing", allowed_roots=["addons"])).message
+    assert (
+        "Approved archive mapping"
+        in (await run("allowed-missing", allowed_roots=["addons"])).message
+    )
     assert "stage approved" in (await run("allowed-copy-error", allowed_roots=["addons"])).message
 
 
@@ -200,11 +233,15 @@ async def test_custom_subdirectory_copy_rollback_and_notifications(monkeypatch):
         monkeypatch.setattr(installation, "SSHManager", lambda: _ScriptedSSH())
         return await installation.install_github_plugin(3, _request(**kwargs), db, user)
 
-    custom = await run("custom", custom_install_path="addons/custom", exclude_files=["cfg/x"], exclude_dirs=["cfg"])
+    custom = await run(
+        "custom", custom_install_path="addons/custom", exclude_files=["cfg/x"], exclude_dirs=["cfg"]
+    )
     assert custom.success and custom.installed_files == 2
     subdir = await run("subdir")
     assert subdir.success
-    failed = await run("custom-error", custom_install_path="addons/custom", installation_plan_hash="b" * 64)
+    failed = await run(
+        "custom-error", custom_install_path="addons/custom", installation_plan_hash="b" * 64
+    )
     assert not failed.success and "copy failed" in failed.message and "restored" in failed.message
     failed = await run("copy-rollback-error", installation_plan_hash="c" * 64)
     assert not failed.success and "Rollback failed" in failed.message
@@ -227,7 +264,9 @@ async def test_secure_remote_digest_and_retry_exception_paths(monkeypatch, tmp_p
     _ScriptedSSH.mode = "ok"
     _ScriptedSSH.digest = "b" * 64
     monkeypatch.setattr(installation, "SSHManager", lambda: _ScriptedSSH())
-    result = await installation.install_github_plugin(3, _request(expected_archive_sha256=digest), db, user)
+    result = await installation.install_github_plugin(
+        3, _request(expected_archive_sha256=digest), db, user
+    )
     assert not result.success and "digest changed" in result.message
     _ScriptedSSH.digest = "a" * 64
 
@@ -238,11 +277,15 @@ async def test_secure_remote_digest_and_retry_exception_paths(monkeypatch, tmp_p
         AsyncMock(side_effect=PermissionError("denied")),
     )
     with pytest.raises(PermissionError):
-        await installation.install_github_plugin_with_retry(3, _request(), db, user, ai_progress=error_progress)
+        await installation.install_github_plugin_with_retry(
+            3, _request(), db, user, ai_progress=error_progress
+        )
     monkeypatch.setattr(
         installation,
         "install_github_plugin",
         AsyncMock(side_effect=RuntimeError("temporary")),
     )
-    result = await installation.install_github_plugin_with_retry(3, _request(), db, user, max_retries=0, ai_progress=error_progress)
+    result = await installation.install_github_plugin_with_retry(
+        3, _request(), db, user, max_retries=0, ai_progress=error_progress
+    )
     assert not result.success and "temporary" in result.message

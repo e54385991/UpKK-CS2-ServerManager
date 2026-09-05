@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import asyncssh
 import pytest
@@ -120,17 +120,24 @@ async def test_sources_list_delete_restore_existing_and_create_edge_paths(monkey
             4, plugin_configs.SourceCreateRequest(path="custom/plugin.cfg"), db, SimpleNamespace()
         )
 
-    monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(side_effect=HTTPException(502, "offline")))
+    monkeypatch.setattr(
+        plugin_configs, "_connect", AsyncMock(side_effect=HTTPException(502, "offline"))
+    )
     with pytest.raises(HTTPException) as exc_info:
         await plugin_configs.create_source(
             4, plugin_configs.SourceCreateRequest(path="custom/other.cfg"), _Db(), SimpleNamespace()
         )
     assert exc_info.value.status_code == 502
     monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
-    monkeypatch.setattr(plugin_configs, "inspect_source", AsyncMock(side_effect=asyncssh.Error(1, "remote")))
+    monkeypatch.setattr(
+        plugin_configs, "inspect_source", AsyncMock(side_effect=asyncssh.Error(1, "remote"))
+    )
     with pytest.raises(HTTPException) as exc_info:
         await plugin_configs.create_source(
-            4, plugin_configs.SourceCreateRequest(path="custom/remote.cfg"), _Db(), SimpleNamespace()
+            4,
+            plugin_configs.SourceCreateRequest(path="custom/remote.cfg"),
+            _Db(),
+            SimpleNamespace(),
         )
     assert exc_info.value.status_code == 502
     manager.disconnect.assert_awaited()
@@ -145,7 +152,9 @@ async def test_sources_list_delete_restore_existing_and_create_edge_paths(monkey
     assert exc_info.value.status_code == 409 and db.rollbacks == 1
 
     monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
-    monkeypatch.setattr(plugin_configs, "inspect_source", AsyncMock(side_effect=PluginConfigError("bad")))
+    monkeypatch.setattr(
+        plugin_configs, "inspect_source", AsyncMock(side_effect=PluginConfigError("bad"))
+    )
     with pytest.raises(HTTPException) as exc_info:
         await plugin_configs.create_source(
             4, plugin_configs.SourceCreateRequest(path="custom/bad.cfg"), _Db(), SimpleNamespace()
@@ -171,19 +180,24 @@ async def test_browse_scan_and_file_routes_cover_remote_errors(monkeypatch):
     )
     assert response["items"] == [{"name": "a"}]
 
-    monkeypatch.setattr(plugin_configs, "browse_directory", AsyncMock(side_effect=asyncssh.Error(1, "bad")))
+    monkeypatch.setattr(
+        plugin_configs, "browse_directory", AsyncMock(side_effect=asyncssh.Error(1, "bad"))
+    )
     with pytest.raises(HTTPException) as exc_info:
         await plugin_configs.browse_source_path(
             4, path="cs2/game/csgo/cfg", db=_Db(), current_user=SimpleNamespace()
         )
     assert exc_info.value.status_code == 502
-    monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(side_effect=PluginConfigError("no ssh")))
+    monkeypatch.setattr(
+        plugin_configs, "_connect", AsyncMock(side_effect=PluginConfigError("no ssh"))
+    )
     with pytest.raises(PluginConfigError):
         await plugin_configs.browse_source_path(
             4, path="cs2/game/csgo/cfg", db=_Db(), current_user=SimpleNamespace()
         )
 
     monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
+
     async def scan_events(*_args):
         yield {"type": "file", "file": {"name": "a.cfg"}}
 
@@ -202,6 +216,7 @@ async def test_browse_scan_and_file_routes_cover_remote_errors(monkeypatch):
         RuntimeError("unexpected"),
     ]
     for exception in exceptions:
+
         async def failing_scan(*_args, error=exception):
             if error is not None:
                 raise error
@@ -213,11 +228,17 @@ async def test_browse_scan_and_file_routes_cover_remote_errors(monkeypatch):
         assert lines[0]["type"] == "start" and lines[-1]["type"] == "error"
 
     monkeypatch.setattr(plugin_configs, "read_text_file", AsyncMock(return_value="enabled 1\n"))
-    file_response = await plugin_configs.get_config_file(4, 8, "cs2/game/csgo/cfg/a.cfg", _Db(), SimpleNamespace())
+    file_response = await plugin_configs.get_config_file(
+        4, 8, "cs2/game/csgo/cfg/a.cfg", _Db(), SimpleNamespace()
+    )
     assert file_response["revision"] == content_revision("enabled 1\n")
-    monkeypatch.setattr(plugin_configs, "read_text_file", AsyncMock(side_effect=asyncssh.Error(1, "read")))
+    monkeypatch.setattr(
+        plugin_configs, "read_text_file", AsyncMock(side_effect=asyncssh.Error(1, "read"))
+    )
     with pytest.raises(HTTPException) as exc_info:
-        await plugin_configs.get_config_file(4, 8, "cs2/game/csgo/cfg/a.cfg", _Db(), SimpleNamespace())
+        await plugin_configs.get_config_file(
+            4, 8, "cs2/game/csgo/cfg/a.cfg", _Db(), SimpleNamespace()
+        )
     assert exc_info.value.status_code == 502
 
 
@@ -230,7 +251,9 @@ async def test_config_file_validation_and_visual_raw_save_paths(monkeypatch):
         await plugin_configs.get_config_file(4, 8, "../outside.cfg", _Db(), SimpleNamespace())
     assert exc_info.value.status_code == 422
     with pytest.raises(HTTPException) as exc_info:
-        await plugin_configs.get_config_file(4, 8, "cs2/game/csgo/cfg/file.dll", _Db(), SimpleNamespace())
+        await plugin_configs.get_config_file(
+            4, 8, "cs2/game/csgo/cfg/file.dll", _Db(), SimpleNamespace()
+        )
     assert exc_info.value.status_code == 415
 
     manager = SimpleNamespace(disconnect=AsyncMock())
@@ -238,7 +261,9 @@ async def test_config_file_validation_and_visual_raw_save_paths(monkeypatch):
     monkeypatch.setattr(plugin_configs, "read_text_file", AsyncMock(return_value="enabled 1\n"))
     atomic = AsyncMock()
     monkeypatch.setattr(plugin_configs, "atomic_write_text_file", atomic)
-    monkeypatch.setattr(plugin_configs, "maintenance_lock_service", SimpleNamespace(get=lambda *_a, **_k: _Lock()))
+    monkeypatch.setattr(
+        plugin_configs, "maintenance_lock_service", SimpleNamespace(get=lambda *_a, **_k: _Lock())
+    )
     current = "enabled 1\n"
     request = plugin_configs.ConfigSaveRequest(
         path="cs2/game/csgo/cfg/a.cfg",
@@ -264,7 +289,9 @@ async def test_config_file_validation_and_visual_raw_save_paths(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         await plugin_configs.save_config_file(4, 8, request, _Db(), SimpleNamespace())
     assert exc_info.value.status_code == 422
-    monkeypatch.setattr(plugin_configs, "atomic_write_text_file", AsyncMock(side_effect=OSError("write")))
+    monkeypatch.setattr(
+        plugin_configs, "atomic_write_text_file", AsyncMock(side_effect=OSError("write"))
+    )
     request.path = "cs2/game/csgo/cfg/a.cfg"
     request.content = "enabled 2\n"
     with pytest.raises(HTTPException) as exc_info:

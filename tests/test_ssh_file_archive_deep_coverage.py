@@ -20,7 +20,7 @@ def _manager():
 def test_archive_member_normalization_and_tar_decoding_edges():
     cls = SSHManager
     assert cls._normalize_archive_member("./addons/") == ("addons", None)
-    assert cls._normalize_archive_member("addons\\server.cfg") [1]
+    assert cls._normalize_archive_member("addons\\server.cfg")[1]
     assert cls._normalize_archive_member("addons\\server.cfg", allow_backslash_separators=True) == (
         "addons/server.cfg",
         None,
@@ -30,14 +30,14 @@ def test_archive_member_normalization_and_tar_decoding_edges():
         assert path is None and error
     assert cls._normalize_archive_member(".") == (None, None)
     assert cls._normalize_archive_member(".\\", allow_backslash_separators=True) == (None, None)
-    assert cls._decode_tar_listing_name(r'a\n\101\\') == ("a\nA\\", None)
+    assert cls._decode_tar_listing_name(r"a\n\101\\") == ("a\nA\\", None)
     for value in ("a\\", r"a\9", r"a\777"):
         assert cls._decode_tar_listing_name(value)[1]
     assert cls._decode_tar_listing_name(r"\377")[1]
     good = '-rw-r--r-- 0/0 1 2026-01-01 00:00:00 "cfg/server.cfg"'
     assert cls._parse_tar_c_verbose_listing_line(good) == (("cfg/server.cfg", False), None)
     assert cls._parse_tar_c_verbose_listing_line(good.replace("-rw", "lrw"))[1]
-    for line in ("short", '-rw-r--r-- 0/0 1 2026-01-01 00:00:00 cfg'):
+    for line in ("short", "-rw-r--r-- 0/0 1 2026-01-01 00:00:00 cfg"):
         assert cls._parse_tar_c_verbose_listing_line(line)[1]
 
 
@@ -108,10 +108,15 @@ async def test_archive_remote_path_validation_covers_missing_symlinks_and_io(mon
     regular = SimpleNamespace(type=1)
     manager.conn = SimpleNamespace(
         start_sftp_client=lambda: _SftpContext(
-            _Sftp(target=regular, realpaths={"/srv/cs2": "/srv/cs2", "/srv/cs2/file.zip": "/srv/cs2/file.zip"})
+            _Sftp(
+                target=regular,
+                realpaths={"/srv/cs2": "/srv/cs2", "/srv/cs2/file.zip": "/srv/cs2/file.zip"},
+            )
         )
     )
-    assert await manager.validate_path_within_base("/srv/cs2", "/srv/cs2/file.zip", server, require_regular=True) == (
+    assert await manager.validate_path_within_base(
+        "/srv/cs2", "/srv/cs2/file.zip", server, require_regular=True
+    ) == (
         True,
         "",
     )
@@ -119,7 +124,9 @@ async def test_archive_remote_path_validation_covers_missing_symlinks_and_io(mon
         False,
         "Path is outside the server directory",
     )
-    assert await manager.validate_path_within_base("/srv/cs2", "/srv/cs2/new/file.zip", server, allow_missing=True) == (
+    assert await manager.validate_path_within_base(
+        "/srv/cs2", "/srv/cs2/new/file.zip", server, allow_missing=True
+    ) == (
         True,
         "",
     )
@@ -132,13 +139,24 @@ async def test_archive_remote_path_validation_covers_missing_symlinks_and_io(mon
 
     outside = SimpleNamespace(
         start_sftp_client=lambda: _SftpContext(
-            _Sftp(target=regular, realpaths={"/srv/cs2": "/srv/cs2", "/srv/cs2/file.zip": "/outside/file.zip"})
+            _Sftp(
+                target=regular,
+                realpaths={"/srv/cs2": "/srv/cs2", "/srv/cs2/file.zip": "/outside/file.zip"},
+            )
         )
     )
     manager.conn = outside
-    assert "outside" in (await manager.validate_path_within_base("/srv/cs2", "/srv/cs2/file.zip", server))[1]
-    manager.conn = SimpleNamespace(start_sftp_client=lambda: _SftpContext(_Sftp(base=SimpleNamespace(type=1))))
-    assert "not a directory" in (await manager.validate_path_within_base("/srv/cs2", "/srv/cs2/file.zip", server))[1]
+    assert (
+        "outside"
+        in (await manager.validate_path_within_base("/srv/cs2", "/srv/cs2/file.zip", server))[1]
+    )
+    manager.conn = SimpleNamespace(
+        start_sftp_client=lambda: _SftpContext(_Sftp(base=SimpleNamespace(type=1)))
+    )
+    assert (
+        "not a directory"
+        in (await manager.validate_path_within_base("/srv/cs2", "/srv/cs2/file.zip", server))[1]
+    )
 
     manager.conn = None
     manager.connect = AsyncMock(return_value=(False, "offline"))
@@ -160,7 +178,10 @@ async def test_archive_inspection_dispatch_and_stream_failure_paths(monkeypatch)
     assert await manager.inspect_archive("/srv/cs2/a.zip", server) == (False, {}, "bad path")
 
     manager.conn = None
-    assert await manager._stream_archive_listing("x", lambda _line: None) == (False, "Not connected")
+    assert await manager._stream_archive_listing("x", lambda _line: None) == (
+        False,
+        "Not connected",
+    )
 
     class _Proc:
         class _Err:

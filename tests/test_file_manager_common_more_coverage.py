@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -112,7 +111,9 @@ async def test_download_authentication_covers_ticket_bearer_and_user_states(monk
         assert caught.value.status_code == 401
 
     for payload in ({}, {"sub": "bad"}):
-        monkeypatch.setattr(common.jwt, "decode", lambda *_args, payload=payload, **_kwargs: payload)
+        monkeypatch.setattr(
+            common.jwt, "decode", lambda *_args, payload=payload, **_kwargs: payload
+        )
         with pytest.raises(HTTPException) as caught:
             await common.get_current_active_user_for_download(
                 4, "/srv/cs2/a.zip", ticket=None, authorization="Bearer token", db=_Db(active)
@@ -132,13 +133,13 @@ async def test_download_authentication_covers_ticket_bearer_and_user_states(monk
 
     monkeypatch.setattr(common.jwt, "decode", lambda *_args, **_kwargs: {"sub": "7"})
     with pytest.raises(HTTPException) as caught:
-            await common.get_current_active_user_for_download(
-                4, "/srv/cs2/a.zip", ticket=None, authorization="Bearer token", db=_Db(None)
+        await common.get_current_active_user_for_download(
+            4, "/srv/cs2/a.zip", ticket=None, authorization="Bearer token", db=_Db(None)
         )
     assert caught.value.status_code == 401
     with pytest.raises(HTTPException) as caught:
-            await common.get_current_active_user_for_download(
-                4, "/srv/cs2/a.zip", ticket=None, authorization="Bearer token", db=_Db(inactive)
+        await common.get_current_active_user_for_download(
+            4, "/srv/cs2/a.zip", ticket=None, authorization="Bearer token", db=_Db(inactive)
         )
     assert caught.value.status_code == 400
     with pytest.raises(HTTPException) as caught:
@@ -189,9 +190,13 @@ def test_github_error_mapping_and_archive_url_parsing_cover_all_statuses():
     assert "invalid" in str(common._github_artifact_http_error(401, "token", metadata=True)).lower()
     assert "configure" in str(common._github_artifact_http_error(403, None, metadata=False)).lower()
     assert "not found" in str(common._github_artifact_http_error(404, None, metadata=True)).lower()
-    assert "expired" in str(common._github_artifact_http_error(410, "token", metadata=False)).lower()
+    assert (
+        "expired" in str(common._github_artifact_http_error(410, "token", metadata=False)).lower()
+    )
     assert "500" in str(common._github_artifact_http_error(500, None, metadata=False))
-    assert common._parse_github_actions_artifact_url("https://github.com/a/b/actions/runs/1/artifacts/2") == (
+    assert common._parse_github_actions_artifact_url(
+        "https://github.com/a/b/actions/runs/1/artifacts/2"
+    ) == (
         "a",
         "b",
         2,
@@ -252,7 +257,9 @@ async def test_github_artifact_resolution_covers_validation_errors(monkeypatch):
         await resolve([httpx.Response(200, json={"name": "../bad"})])
 
     original_type = common.SSHManager.archive_type_from_path
-    monkeypatch.setattr(common.SSHManager, "archive_type_from_path", classmethod(lambda _cls, _name: "tar"))
+    monkeypatch.setattr(
+        common.SSHManager, "archive_type_from_path", classmethod(lambda _cls, _name: "tar")
+    )
     with pytest.raises(RuntimeError, match="ZIP"):
         await resolve([httpx.Response(200, json={"name": "artifact.zip"})])
     monkeypatch.setattr(common.SSHManager, "archive_type_from_path", original_type)
@@ -340,7 +347,12 @@ async def test_file_workers_cover_success_failure_retry_exception_and_cleanup(mo
     )
     assert "Connection failed" in common.download_url_tasks["offline"]["error"]
 
-    resolve = AsyncMock(side_effect=[("https://cdn.example/a.zip", "a.zip"), ("https://cdn.example/a2.zip", "a.zip")])
+    resolve = AsyncMock(
+        side_effect=[
+            ("https://cdn.example/a.zip", "a.zip"),
+            ("https://cdn.example/a2.zip", "a.zip"),
+        ]
+    )
     monkeypatch.setattr(common, "_parse_github_actions_artifact_url", lambda _url: ("a", "b", 2))
     monkeypatch.setattr(common, "_resolve_github_actions_artifact", resolve)
     ssh = _TaskSSH(download=(False, "Download failed: expired"))
@@ -350,7 +362,13 @@ async def test_file_workers_cover_success_failure_retry_exception_and_cleanup(mo
     monkeypatch.setattr(common, "SSHManager", lambda: ssh)
     common.download_url_tasks["github"] = {"created_at": 1.0}
     await common._run_download_url_task(
-        "github", "https://github.com/a/b/actions/runs/1/artifacts/2", "/srv/cs2", None, server, True, "token"
+        "github",
+        "https://github.com/a/b/actions/runs/1/artifacts/2",
+        "/srv/cs2",
+        None,
+        server,
+        True,
+        "token",
     )
     assert common.download_url_tasks["github"]["status"] == "completed"
     assert ssh.download_url_to_file.await_count == 2

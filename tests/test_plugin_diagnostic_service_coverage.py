@@ -162,7 +162,9 @@ async def test_inventory_aliases_groups_and_build_plan(monkeypatch):
     db = _Db(rows=managed)
     market = SimpleNamespace(id=11, dependencies="12")
     dependent = SimpleNamespace(id=12, dependencies=None)
-    monkeypatch.setattr(module.MarketPlugin, "get_by_ids", AsyncMock(return_value=[market, dependent]))
+    monkeypatch.setattr(
+        module.MarketPlugin, "get_by_ids", AsyncMock(return_value=[market, dependent])
+    )
     groups = await module._group_candidates(
         db,
         7,
@@ -204,7 +206,9 @@ async def test_recommendation_and_path_move_console_and_step(monkeypatch):
     user = SimpleNamespace(id=3)
     db = _Db()
     monkeypatch.setattr(module, "authorized_server", AsyncMock(return_value=server))
-    monitor = SimpleNamespace(get_restart_info=lambda _id: {"restart_count": 2, "can_restart": False, "max_restarts": 3})
+    monitor = SimpleNamespace(
+        get_restart_info=lambda _id: {"restart_count": 2, "can_restart": False, "max_restarts": 3}
+    )
     monitor_module = SimpleNamespace(server_monitor=monitor)
     monkeypatch.setitem(__import__("sys").modules, "services.server_monitor", monitor_module)
     result = await module.get_diagnostic_recommendation(db, user, 7)
@@ -219,12 +223,16 @@ async def test_recommendation_and_path_move_console_and_step(monkeypatch):
         await module._move_entry(manager, server, entry, quarantine=False)
 
     entries = {entry.candidate_key: entry}
-    await module._set_candidates(db, manager, server, user, entries, [entry.candidate_key], quarantine=True)
+    await module._set_candidates(
+        db, manager, server, user, entries, [entry.candidate_key], quarantine=True
+    )
     assert not db.added
     entry.is_quarantined = False
     monkeypatch.setattr(module, "authorized_server", AsyncMock(return_value=server))
     manager.commands = [(True, "", "")]
-    await module._set_candidates(db, manager, server, user, entries, [entry.candidate_key], quarantine=True)
+    await module._set_candidates(
+        db, manager, server, user, entries, [entry.candidate_key], quarantine=True
+    )
     assert db.commits == 1
 
     manager.commands = [(True, "12\n", ""), (True, "fatal error secret\nnormal\n", "")]
@@ -243,9 +251,7 @@ async def test_health_attempt_covers_a2s_and_limits(monkeypatch):
     server = _server()
     user = SimpleNamespace(id=3)
     db = _Db(user=user)
-    manager = _Manager(
-        commands=[(True, "0\n", ""), (True, "fatal error: token\n", "")]
-    )
+    manager = _Manager(commands=[(True, "0\n", ""), (True, "fatal error: token\n", "")])
     run = SimpleNamespace(
         id="run",
         requested_by=3,
@@ -288,16 +294,32 @@ async def test_group_suspect_and_strict_fallback_paths(monkeypatch):
     monkeypatch.setattr(module, "_health_attempt", health)
     monkeypatch.setattr(module.time, "monotonic", lambda: 0.0)
     suspect = await module._run_group_isolation(
-        db, user, server, manager, SimpleNamespace(start_attempts=0), entries,
-        {"ga": ["a"], "gb": ["b"], "gc": ["c"]}, 0.0, None
+        db,
+        user,
+        server,
+        manager,
+        SimpleNamespace(start_attempts=0),
+        entries,
+        {"ga": ["a"], "gb": ["b"], "gc": ["c"]},
+        0.0,
+        None,
     )
     assert suspect == "gb"
 
     run = SimpleNamespace(start_attempts=0, culprit_keys=[], status="running", error=None)
     health.side_effect = [False, True]
     await module._run_strict_fallback(
-        db, user, server, manager, run, entries,
-        {"ga": ["a"], "gb": ["b"]}, "ga", ["a", "b"], 0.0, None
+        db,
+        user,
+        server,
+        manager,
+        run,
+        entries,
+        {"ga": ["a"], "gb": ["b"]},
+        "ga",
+        ["a", "b"],
+        0.0,
+        None,
     )
     assert run.status == "completed_with_quarantine"
     assert run.culprit_keys == ["b"]
@@ -305,8 +327,17 @@ async def test_group_suspect_and_strict_fallback_paths(monkeypatch):
     run = SimpleNamespace(start_attempts=0, culprit_keys=[], status="running", error=None)
     health.side_effect = [False, True]
     await module._run_suspect_analysis(
-        db, user, server, manager, run, entries,
-        {"ga": ["a"], "gb": ["b"]}, "ga", ["a", "b"], 0.0, None
+        db,
+        user,
+        server,
+        manager,
+        run,
+        entries,
+        {"ga": ["a"], "gb": ["b"]},
+        "ga",
+        ["a", "b"],
+        0.0,
+        None,
     )
     assert run.status == "completed_with_quarantine" and run.culprit_keys == ["a"]
 
@@ -314,12 +345,24 @@ async def test_group_suspect_and_strict_fallback_paths(monkeypatch):
 @pytest.mark.asyncio
 async def test_payload_latest_run_restore_and_interrupt(monkeypatch):
     run = SimpleNamespace(
-        id="run", server_id=7, requested_by=3, scope="both", status="completed",
-        plan_hash="hash", culprit_keys=None, start_attempts=2, error=None,
-        created_at=None, completed_at=None, original_server_running=True,
+        id="run",
+        server_id=7,
+        requested_by=3,
+        scope="both",
+        status="completed",
+        plan_hash="hash",
+        culprit_keys=None,
+        start_attempts=2,
+        error=None,
+        created_at=None,
+        completed_at=None,
+        original_server_running=True,
     )
     step = SimpleNamespace(sequence=1, phase="p", candidate_keys=["a"], healthy=True, evidence={})
-    entry = SimpleNamespace(candidate_key="a", source_relative_path="a", is_quarantined=True, is_culprit=True)
+    entry = SimpleNamespace(
+        candidate_key="a", source_relative_path="a", is_quarantined=True, is_culprit=True
+    )
+
     class _PayloadDb(_Db):
         def __init__(self):
             super().__init__(scalar=run)
@@ -333,6 +376,7 @@ async def test_payload_latest_run_restore_and_interrupt(monkeypatch):
     payload = await module.diagnostic_run_payload(db, run)
     assert payload["steps"][0]["phase"] == "p" and payload["quarantine"][0]["is_culprit"]
     monkeypatch.setattr(module, "authorized_server", AsyncMock(return_value=_server()))
+
     class _LatestDb(_Db):
         def __init__(self, scalar):
             super().__init__(scalar=scalar)
@@ -365,12 +409,17 @@ async def test_payload_latest_run_restore_and_interrupt(monkeypatch):
     restore_manager = _Manager()
     monkeypatch.setattr(module, "SSHManager", lambda: restore_manager)
     monkeypatch.setattr(module, "_move_entry", AsyncMock())
-    monkeypatch.setattr(module, "diagnostic_run_payload", AsyncMock(return_value={"status": "restored"}))
+    monkeypatch.setattr(
+        module, "diagnostic_run_payload", AsyncMock(return_value={"status": "restored"})
+    )
     monkeypatch.setattr(module.maintenance_lock_service, "get", lambda *_args, **_kwargs: _Lock())
     restored = await module.restore_diagnostic_run(restore_db, SimpleNamespace(id=3), 7, "run")
     assert restored["status"] == "restored" and run.status == "restored"
 
-    active = [SimpleNamespace(server_id=7, status="running"), SimpleNamespace(server_id=8, status="completed")]
+    active = [
+        SimpleNamespace(server_id=7, status="running"),
+        SimpleNamespace(server_id=8, status="completed"),
+    ]
     interrupt_db = _Db(rows=active)
     database_module = __import__("modules.database", fromlist=["async_session_maker"])
     monkeypatch.setattr(database_module, "async_session_maker", lambda: interrupt_db)
@@ -384,10 +433,18 @@ async def test_execute_plan_rejects_stale_and_empty_plan(monkeypatch):
     user = SimpleNamespace(id=3)
     monkeypatch.setattr(module.maintenance_lock_service, "get", lambda *_args, **_kwargs: _Lock())
     monkeypatch.setattr(module, "authorized_server", AsyncMock(return_value=_server()))
-    monkeypatch.setattr(module, "build_diagnostic_plan", AsyncMock(return_value={"plan_hash": "new", "candidates": []}))
+    monkeypatch.setattr(
+        module,
+        "build_diagnostic_plan",
+        AsyncMock(return_value={"plan_hash": "new", "candidates": []}),
+    )
     with pytest.raises(ValueError, match="changed"):
         await module.execute_diagnostic_plan(db, user, 7, "both", "old")
-    monkeypatch.setattr(module, "build_diagnostic_plan", AsyncMock(return_value={"plan_hash": "same", "candidates": []}))
+    monkeypatch.setattr(
+        module,
+        "build_diagnostic_plan",
+        AsyncMock(return_value={"plan_hash": "same", "candidates": []}),
+    )
     with pytest.raises(ValueError, match="No plugin"):
         await module.execute_diagnostic_plan(db, user, 7, "both", "same")
 
@@ -432,7 +489,9 @@ async def test_execute_plan_success_baseline_failure_and_connect_failure(monkeyp
         run.status = "completed_with_quarantine"
 
     monkeypatch.setattr(module, "_run_suspect_analysis", finish_suspect)
-    monkeypatch.setattr(module, "diagnostic_run_payload", AsyncMock(return_value={"status": "done"}))
+    monkeypatch.setattr(
+        module, "diagnostic_run_payload", AsyncMock(return_value={"status": "done"})
+    )
     manager = _PlanManager()
     monkeypatch.setattr(module, "SSHManager", lambda: manager)
     progress = AsyncMock()

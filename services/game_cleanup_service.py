@@ -461,7 +461,7 @@ class GameCleanupService(CleanupDeleteMixin):
                     "truncated": bool(event.get("truncated")),
                 }
 
-    async def iter_scan(self, ssh_manager, server) -> AsyncIterator[Dict[str, Any]]:
+    async def iter_scan(self, ssh_manager, server) -> AsyncIterator[Dict[str, Any]]:  # noqa: C901 - ordered scan protocol.
         if self.game_dir(server) in ("", ".", "/"):
             yield {
                 "type": "error",

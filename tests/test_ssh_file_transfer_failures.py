@@ -88,23 +88,39 @@ async def test_transfer_connection_and_parent_error_paths(tmp_path):
     offline = SSHManager(use_pool=False)
     offline.connect = AsyncMock(return_value=(False, "offline"))
     assert await offline.upload_file("x", "/srv/a", server) == (False, "Connection failed: offline")
-    assert await offline.download_file("/srv/a", str(tmp_path / "a"), server) == (False, "Connection failed: offline")
-    assert await offline.get_file_size("/srv/a", server) == (False, None, "Connection failed: offline")
+    assert await offline.download_file("/srv/a", str(tmp_path / "a"), server) == (
+        False,
+        "Connection failed: offline",
+    )
+    assert await offline.get_file_size("/srv/a", server) == (
+        False,
+        None,
+        "Connection failed: offline",
+    )
     with pytest.raises(RuntimeError, match="offline"):
         [chunk async for chunk in offline.stream_file("/srv/a", server)]
-    assert await offline.upload_file_with_progress("x", "/srv/a", server) == (False, "Connection failed: offline")
+    assert await offline.upload_file_with_progress("x", "/srv/a", server) == (
+        False,
+        "Connection failed: offline",
+    )
 
     manager = _manager(_Sftp(error=OSError("mkdir failed")))
     manager.execute_command = AsyncMock(return_value=(False, "", "mkdir denied"))
     assert "mkdir denied" in (await manager.upload_file("/tmp/a", "/srv/nested/a", server))[1]
     manager.execute_command = AsyncMock(return_value=(False, "", "mkdir denied"))
-    assert "mkdir denied" in (await manager.upload_file_with_progress(str(source), "/srv/nested/a", server))[1]
+    assert (
+        "mkdir denied"
+        in (await manager.upload_file_with_progress(str(source), "/srv/nested/a", server))[1]
+    )
 
 
 @pytest.mark.asyncio
 async def test_transfer_sftp_and_generic_errors(tmp_path):
     server = _server()
-    for error, label in ((asyncssh.SFTPError(1, "sftp"), "SFTP error"), (RuntimeError("generic"), "Error")):
+    for error, label in (
+        (asyncssh.SFTPError(1, "sftp"), "SFTP error"),
+        (RuntimeError("generic"), "Error"),
+    ):
         manager = _manager(_Sftp(error=error))
         manager.execute_command = AsyncMock(return_value=(True, "", ""))
         assert label in (await manager.upload_file("/tmp/a", "/srv/a", server))[1]

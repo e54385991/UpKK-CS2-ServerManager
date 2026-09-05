@@ -49,14 +49,18 @@ def _responses(*, package="unzip", extract=True, addons=True, copied=True, insta
         responses.append((True, "apt" if package == "apt" else "none", ""))
     if package == "apt":
         responses.extend([(True, "", ""), (True, "", "")])
-    responses.extend([
-        (True, "", "") if extract else (False, "", "bad zip"),
-        (True, "/tmp/swiftly_install_8/extracted/release/addons", "") if addons else (True, "", ""),
-        (True, "", "") if copied else (False, "", "copy failed"),
-        (True, "extracted", "") if addons else (False, "", "missing"),
-        (True, "", "") if addons else (True, "", ""),
-        (True, "installed", "") if installed else (False, "", "missing"),
-    ])
+    responses.extend(
+        [
+            (True, "", "") if extract else (False, "", "bad zip"),
+            (True, "/tmp/swiftly_install_8/extracted/release/addons", "")
+            if addons
+            else (True, "", ""),
+            (True, "", "") if copied else (False, "", "copy failed"),
+            (True, "extracted", "") if addons else (False, "", "missing"),
+            (True, "", "") if addons else (True, "", ""),
+            (True, "installed", "") if installed else (False, "", "missing"),
+        ]
+    )
     return responses
 
 

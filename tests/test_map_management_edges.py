@@ -77,9 +77,7 @@ def test_keyvalues_parser_errors_and_map_metadata():
     with pytest.raises(MapConfigError, match="Unterminated"):
         parse_maps_config('"Maplist" { "x }')
     with pytest.raises(MapConfigError, match="more than once"):
-        parse_maps_config(
-            '"Maplist" { "a" { "workshop_id" "123" } "b" { "workshop_id" "123" } }'
-        )
+        parse_maps_config('"Maplist" { "a" { "workshop_id" "123" } "b" { "workshop_id" "123" } }')
     with pytest.raises(MapConfigError, match="invalid workshop"):
         parse_maps_config('"Maplist" { "a" { "workshop_id" "abc" } }')
     with pytest.raises(MapConfigError, match="must be an object"):
@@ -97,8 +95,13 @@ def test_keyvalues_parser_errors_and_map_metadata():
 
 def test_map_names_restricted_times_and_rendering():
     assert normalize_workshop_id("123456") == "123456"
-    assert normalize_workshop_id("https://steamcommunity.com/sharedfiles/filedetails/?id=123456") == "123456"
-    assert normalize_workshop_id("https://www.steamcommunity.com/sharedfiles/?id=123456") == "123456"
+    assert (
+        normalize_workshop_id("https://steamcommunity.com/sharedfiles/filedetails/?id=123456")
+        == "123456"
+    )
+    assert (
+        normalize_workshop_id("https://www.steamcommunity.com/sharedfiles/?id=123456") == "123456"
+    )
     for value in ("", "123", "0123456", "https://example.com/?id=123456"):
         with pytest.raises(MapConfigError):
             normalize_workshop_id(value)
@@ -112,7 +115,9 @@ def test_map_names_restricted_times_and_rendering():
         validate_restricted_times("bad")
     with pytest.raises(MapConfigError):
         validate_restricted_times("10:00-25:00")
-    block = render_map_block(name='de_dust"2', workshop_id="123456", enabled=False, min_players=2, only_nominate=True)
+    block = render_map_block(
+        name='de_dust"2', workshop_id="123456", enabled=False, min_players=2, only_nominate=True
+    )
     assert '"enabled"\t"0"' in block
     official = render_official_maps_config(["de_z", "DE_Z", "de_a"])
     assert official.index('"de_a"') < official.index('"de_z"')
@@ -130,9 +135,7 @@ def test_map_edit_operations_and_duplicates():
     assert '"enabled"\t"0"' in enabled
     restored = set_map_enabled(enabled, name="de_dust2", workshop_id="123456", enabled=True)
     assert '"enabled"\t"1"' in restored
-    no_enabled = (
-        '"Maplist" { "de_dust2" { "workshop_id" "123456" "filename" "de_dust2" } }'
-    )
+    no_enabled = '"Maplist" { "de_dust2" { "workshop_id" "123456" "filename" "de_dust2" } }'
     inserted = set_map_enabled(no_enabled, name="de_dust2", workshop_id="123456", enabled=True)
     assert '"enabled"' in inserted
     removed = remove_map_from_config(restored, name="de_dust2", workshop_id="123456")

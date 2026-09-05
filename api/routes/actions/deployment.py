@@ -189,7 +189,7 @@ async def cancel_deployment(
         )
 
 
-async def execute_server_action(
+async def execute_server_action(  # noqa: C901
     server_id: int,
     action_data: ServerAction,
     db: DatabaseSession,

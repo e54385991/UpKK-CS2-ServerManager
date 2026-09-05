@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -16,7 +16,9 @@ async def test_page_templates_and_legacy_redirect(monkeypatch):
     request = SimpleNamespace()
     rendered = []
     monkeypatch.setattr(pages, "maybe_redirect_legacy_html", lambda _request: None)
-    monkeypatch.setattr(pages.templates, "TemplateResponse", lambda *args: rendered.append(args) or args)
+    monkeypatch.setattr(
+        pages.templates, "TemplateResponse", lambda *args: rendered.append(args) or args
+    )
     simple_pages = [
         (pages.root, "home.html", (request,)),
         (pages.deployment_tutorial_page, "deployment_tutorial.html", (request,)),
@@ -110,7 +112,9 @@ async def test_file_editor_connection_validation_and_read_paths(monkeypatch):
     monkeypatch.setattr(pages.templates, "TemplateResponse", lambda *args: args)
     current = _EditorSSH()
     monkeypatch.setattr("services.ssh_manager.SSHManager", lambda: current)
-    result = await pages.file_editor_popup(request, 3, "/srv/cs2/cfg/demo.cfg", "demo.cfg", db, user)
+    result = await pages.file_editor_popup(
+        request, 3, "/srv/cs2/cfg/demo.cfg", "demo.cfg", db, user
+    )
     assert result[1] == "file_editor_popup.html" and "\\\\" in result[2]["file_content"]
     failed = _EditorSSH(connect=False)
     monkeypatch.setattr("services.ssh_manager.SSHManager", lambda: failed)

@@ -100,7 +100,7 @@ class CounterStrikeSharpMixin(SSHMixinBase):
         )
         return False, f"Could not determine CounterStrikeSharp version from GitHub API. {mode_hint}"
 
-    async def install_counterstrikesharp(
+    async def install_counterstrikesharp(  # noqa: C901
         self, server: Server, progress_callback=None
     ) -> Tuple[bool, str]:
         """

@@ -42,7 +42,11 @@ class _RunConnection:
 
     async def create_process(self, *args, **kwargs):
         self.process_calls.append((args, kwargs))
-        return SimpleNamespace(stdout=_Stream(b"out\n"), stderr=_Stream(b"err\r"), wait=AsyncMock(return_value=SimpleNamespace(exit_status=0)))
+        return SimpleNamespace(
+            stdout=_Stream(b"out\n"),
+            stderr=_Stream(b"err\r"),
+            wait=AsyncMock(return_value=SimpleNamespace(exit_status=0)),
+        )
 
     def close(self):
         self.closed = True
@@ -108,7 +112,6 @@ async def test_connect_pool_and_direct_failure_matrix(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_execute_command_reconnect_and_interactive_fallback(monkeypatch):
-    from services.ssh import connection_runtime
 
     manager = SSHManager(use_pool=False)
     manager.conn = _RunConnection(_completed(1, b"no", b"bad"))
@@ -182,7 +185,9 @@ async def test_streaming_output_callbacks_timeout_and_reconnect(monkeypatch):
     broken = _RunConnection()
     broken.create_process = AsyncMock(
         return_value=SimpleNamespace(
-            stdout=BrokenStream(), stderr=_Stream(b"err\n"), wait=AsyncMock(return_value=SimpleNamespace(exit_status=1))
+            stdout=BrokenStream(),
+            stderr=_Stream(b"err\n"),
+            wait=AsyncMock(return_value=SimpleNamespace(exit_status=1)),
         )
     )
     manager.conn = broken
@@ -206,7 +211,11 @@ async def test_streaming_output_callbacks_timeout_and_reconnect(monkeypatch):
         return_value=(False, None, "offline")
     )
     result = await retry_manager._retry_stream_after_error(
-        asyncssh.ConnectionLost("lost"), lines, connection_runtime.BoundedLineBuffer(100), AsyncMock(), 1
+        asyncssh.ConnectionLost("lost"),
+        lines,
+        connection_runtime.BoundedLineBuffer(100),
+        AsyncMock(),
+        1,
     )
     assert "Connection failed" in result[2]
 

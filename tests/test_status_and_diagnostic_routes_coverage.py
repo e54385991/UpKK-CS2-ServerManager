@@ -52,7 +52,9 @@ async def test_server_status_verifier_and_all_event_state_transitions(monkeypatc
     assert await status_routes.verify_server_api_key("good", db=db) is server
 
     with pytest.raises(HTTPException) as exc_info:
-        await status_routes.report_server_status(99, status_routes.ServerStatusReport(event_type="crash"), server, db=db)
+        await status_routes.report_server_status(
+            99, status_routes.ServerStatusReport(event_type="crash"), server, db=db
+        )
     assert exc_info.value.status_code == 403
 
     expected = {
@@ -100,7 +102,10 @@ async def test_server_config_and_pool_stats(monkeypatch):
     pool = SimpleNamespace(get_pool_stats=AsyncMock(return_value={"active": 2}))
     pool_module = import_module("services.ssh_connection_pool")
     monkeypatch.setattr(pool_module, "ssh_connection_pool", pool)
-    assert await status_routes.get_ssh_pool_stats() == {"success": True, "pool_stats": {"active": 2}}
+    assert await status_routes.get_ssh_pool_stats() == {
+        "success": True,
+        "pool_stats": {"active": 2},
+    }
 
 
 def _user():
@@ -112,7 +117,9 @@ async def test_plugin_diagnostic_routes_map_success_and_access_errors(monkeypatc
     db = object()
     user = _user()
     monkeypatch.setattr(diagnostics, "enforce_agent_rate_limit", AsyncMock())
-    monkeypatch.setattr(diagnostics, "get_diagnostic_recommendation", AsyncMock(return_value={"hint": "x"}))
+    monkeypatch.setattr(
+        diagnostics, "get_diagnostic_recommendation", AsyncMock(return_value={"hint": "x"})
+    )
     assert await diagnostics.read_plugin_diagnostic_recommendation(3, db, user) == {"hint": "x"}
 
     monkeypatch.setattr(diagnostics, "build_diagnostic_plan", AsyncMock(return_value={"plan": []}))
@@ -126,22 +133,38 @@ async def test_plugin_diagnostic_routes_map_success_and_access_errors(monkeypatc
     assert await diagnostics.run_plugin_diagnostic(3, run_request, db, user) == {"id": "run"}
     execute.assert_awaited_once_with(db, user, 3, "all", "hash")
 
-    monkeypatch.setattr(diagnostics, "get_diagnostic_run", AsyncMock(return_value={"status": "failed"}))
-    monkeypatch.setattr(diagnostics, "restore_diagnostic_run", AsyncMock(return_value={"id": "restored"}))
+    monkeypatch.setattr(
+        diagnostics, "get_diagnostic_run", AsyncMock(return_value={"status": "failed"})
+    )
+    monkeypatch.setattr(
+        diagnostics, "restore_diagnostic_run", AsyncMock(return_value={"id": "restored"})
+    )
     assert await diagnostics.read_plugin_diagnostic(3, "d", db, user) == {"status": "failed"}
     assert await diagnostics.restore_plugin_diagnostic(3, "d", db, user) == {"id": "restored"}
-    monkeypatch.setattr(diagnostics, "execute_diagnostic_plan", AsyncMock(return_value={"id": "resumed"}))
-    assert await diagnostics.resume_plugin_diagnostic(3, "d", run_request, db, user) == {"id": "resumed"}
+    monkeypatch.setattr(
+        diagnostics, "execute_diagnostic_plan", AsyncMock(return_value={"id": "resumed"})
+    )
+    assert await diagnostics.resume_plugin_diagnostic(3, "d", run_request, db, user) == {
+        "id": "resumed"
+    }
 
-    monkeypatch.setattr(diagnostics, "get_diagnostic_recommendation", AsyncMock(side_effect=AgentAccessDenied("hidden")))
+    monkeypatch.setattr(
+        diagnostics,
+        "get_diagnostic_recommendation",
+        AsyncMock(side_effect=AgentAccessDenied("hidden")),
+    )
     with pytest.raises(HTTPException) as exc_info:
         await diagnostics.read_plugin_diagnostic_recommendation(3, db, user)
     assert exc_info.value.status_code == 404
-    monkeypatch.setattr(diagnostics, "build_diagnostic_plan", AsyncMock(side_effect=AgentAccessDenied("hidden")))
+    monkeypatch.setattr(
+        diagnostics, "build_diagnostic_plan", AsyncMock(side_effect=AgentAccessDenied("hidden"))
+    )
     with pytest.raises(HTTPException) as exc_info:
         await diagnostics.plan_plugin_diagnostic(3, request, db, user)
     assert exc_info.value.status_code == 404
-    monkeypatch.setattr(diagnostics, "execute_diagnostic_plan", AsyncMock(side_effect=ValueError("stale plan")))
+    monkeypatch.setattr(
+        diagnostics, "execute_diagnostic_plan", AsyncMock(side_effect=ValueError("stale plan"))
+    )
     with pytest.raises(HTTPException) as exc_info:
         await diagnostics.run_plugin_diagnostic(3, run_request, db, user)
     assert exc_info.value.status_code == 409
@@ -151,20 +174,32 @@ async def test_plugin_diagnostic_routes_map_success_and_access_errors(monkeypatc
 async def test_plugin_diagnostic_read_restore_resume_error_matrix(monkeypatch):
     db = object()
     user = _user()
-    monkeypatch.setattr(diagnostics, "get_diagnostic_run", AsyncMock(side_effect=LookupError("missing")))
+    monkeypatch.setattr(
+        diagnostics, "get_diagnostic_run", AsyncMock(side_effect=LookupError("missing"))
+    )
     with pytest.raises(HTTPException) as exc_info:
         await diagnostics.read_plugin_diagnostic(3, "missing", db, user)
     assert exc_info.value.status_code == 404
-    monkeypatch.setattr(diagnostics, "restore_diagnostic_run", AsyncMock(side_effect=LookupError("missing")))
+    monkeypatch.setattr(
+        diagnostics, "restore_diagnostic_run", AsyncMock(side_effect=LookupError("missing"))
+    )
     with pytest.raises(HTTPException) as exc_info:
         await diagnostics.restore_plugin_diagnostic(3, "missing", db, user)
     assert exc_info.value.status_code == 404
 
-    monkeypatch.setattr(diagnostics, "get_diagnostic_run", AsyncMock(return_value={"status": "running"}))
+    monkeypatch.setattr(
+        diagnostics, "get_diagnostic_run", AsyncMock(return_value={"status": "running"})
+    )
     with pytest.raises(HTTPException) as exc_info:
-        await diagnostics.resume_plugin_diagnostic(3, "run", SimpleNamespace(scope="x", expected_plan_hash="h"), db, user)
+        await diagnostics.resume_plugin_diagnostic(
+            3, "run", SimpleNamespace(scope="x", expected_plan_hash="h"), db, user
+        )
     assert exc_info.value.status_code == 409
-    monkeypatch.setattr(diagnostics, "get_diagnostic_run", AsyncMock(side_effect=AgentAccessDenied("gone")))
+    monkeypatch.setattr(
+        diagnostics, "get_diagnostic_run", AsyncMock(side_effect=AgentAccessDenied("gone"))
+    )
     with pytest.raises(HTTPException) as exc_info:
-        await diagnostics.resume_plugin_diagnostic(3, "run", SimpleNamespace(scope="x", expected_plan_hash="h"), db, user)
+        await diagnostics.resume_plugin_diagnostic(
+            3, "run", SimpleNamespace(scope="x", expected_plan_hash="h"), db, user
+        )
     assert exc_info.value.status_code == 404

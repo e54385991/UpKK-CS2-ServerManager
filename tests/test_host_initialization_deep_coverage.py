@@ -157,9 +157,12 @@ async def test_retry_probe_os_release_and_install_result_boundaries(monkeypatch)
     assert await host._probe_missing(_Runner([(0, "", "")]), ["a"]) == []
     assert await host._probe_missing(_Runner([(1, "", "")]), ["a"]) == ["a"]
     assert await host._detect_os_release(_Runner([(1, "", "")])) is None
-    assert await host._detect_os_release(
-        _Runner([(0, "ID=ubuntu\nVERSION_ID=22.04\nVERSION_CODENAME=jammy\n", "")])
-    ) is not None
+    assert (
+        await host._detect_os_release(
+            _Runner([(0, "ID=ubuntu\nVERSION_ID=22.04\nVERSION_CODENAME=jammy\n", "")])
+        )
+        is not None
+    )
 
     timeout_runner = _Runner([TimeoutError(), (1, "", "failed"), (1, "", "failed")])
     monkeypatch.setattr(host.asyncio, "sleep", AsyncMock())

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from modules.models import AIMessage, AIRun, AIToolRun
+from modules.models import AIMessage
 from services import ai_orchestrator as orchestrator
 from services.ai_security import AIConfigurationError
 
@@ -74,8 +74,13 @@ class _SessionFactory:
 
 def _run(**values):
     defaults = dict(
-        id="run-1", conversation_id="conv-1", user_id=1, server_id=None,
-        status="queued", error=None, completed_at=None,
+        id="run-1",
+        conversation_id="conv-1",
+        user_id=1,
+        server_id=None,
+        status="queued",
+        error=None,
+        completed_at=None,
     )
     defaults.update(values)
     return SimpleNamespace(**defaults)
@@ -143,9 +148,17 @@ async def test_process_ai_run_completes_text_response(monkeypatch):
     )
     monkeypatch.setattr(orchestrator, "async_session_maker", _SessionFactory(db))
     monkeypatch.setattr(orchestrator, "get_effective_provider", AsyncMock(return_value=provider))
-    monkeypatch.setattr(orchestrator.AISystemSettings, "get_or_create", AsyncMock(return_value=settings))
+    monkeypatch.setattr(
+        orchestrator.AISystemSettings, "get_or_create", AsyncMock(return_value=settings)
+    )
     monkeypatch.setattr(orchestrator, "build_system_prompt", lambda *_args: "system")
-    monkeypatch.setattr(orchestrator, "_create_provider_response_with_retry", AsyncMock(return_value={"content": "hello", "usage": {"prompt_tokens": 3, "completion_tokens": 2}}))
+    monkeypatch.setattr(
+        orchestrator,
+        "_create_provider_response_with_retry",
+        AsyncMock(
+            return_value={"content": "hello", "usage": {"prompt_tokens": 3, "completion_tokens": 2}}
+        ),
+    )
     monkeypatch.setattr(orchestrator, "_emit", AsyncMock())
     await orchestrator.process_ai_run(run.id)
     assert run.status == "completed"
@@ -156,7 +169,15 @@ async def test_process_ai_run_completes_text_response(monkeypatch):
 async def test_load_messages_resume_rejected_tools_and_tool_failure(monkeypatch):
     user = SimpleNamespace(id=1)
     conversation = SimpleNamespace(id="c", user_id=1)
-    message = AIMessage(id=3, conversation_id="c", role="tool", content="result", visible=False, tool_name="read", tool_call_id="call")
+    message = AIMessage(
+        id=3,
+        conversation_id="c",
+        role="tool",
+        content="result",
+        visible=False,
+        tool_name="read",
+        tool_call_id="call",
+    )
     db = _Session(results=[_Rows(rows=[message])])
     monkeypatch.setattr(orchestrator, "build_system_prompt", lambda *_args: "system")
     messages = await orchestrator._load_provider_messages(db, conversation, user, None, "admin")
@@ -165,8 +186,13 @@ async def test_load_messages_resume_rejected_tools_and_tool_failure(monkeypatch)
 
     run = _run(status="running")
     rejected = SimpleNamespace(
-        id="tool", status="rejected", completed_at=None, result=None,
-        tool_call_id="call", tool_name="tool", progress_snapshot=None,
+        id="tool",
+        status="rejected",
+        completed_at=None,
+        result=None,
+        tool_call_id="call",
+        tool_name="tool",
+        progress_snapshot=None,
     )
     db = _Session(results=[_Rows(rows=[rejected]), _Rows(scalar=0)])
     monkeypatch.setattr(orchestrator, "_emit", AsyncMock())
@@ -174,12 +200,24 @@ async def test_load_messages_resume_rejected_tools_and_tool_failure(monkeypatch)
     assert rejected.result["error"] == "denied_by_user"
 
     tool = SimpleNamespace(
-        id="tool", tool_call_id="call", tool_name="read", arguments={},
-        arguments_hash="a" * 64, risk="read", requires_approval=False,
-        status="pending", approved_by=None, approved_at=None, progress_snapshot=None,
+        id="tool",
+        tool_call_id="call",
+        tool_name="read",
+        arguments={},
+        arguments_hash="a" * 64,
+        risk="read",
+        requires_approval=False,
+        status="pending",
+        approved_by=None,
+        approved_at=None,
+        progress_snapshot=None,
     )
     db = _Session([SimpleNamespace(id=1, is_active=True)], [])
-    monkeypatch.setattr(orchestrator, "execute_tool", AsyncMock(return_value={"success": False, "error": "remote failed"}))
+    monkeypatch.setattr(
+        orchestrator,
+        "execute_tool",
+        AsyncMock(return_value={"success": False, "error": "remote failed"}),
+    )
     monkeypatch.setattr(orchestrator, "authorized_server", AsyncMock(return_value=None))
     monkeypatch.setattr(orchestrator, "audit_security_event", lambda *_a, **_k: None)
     monkeypatch.setattr(orchestrator, "_emit", AsyncMock())
@@ -192,8 +230,15 @@ async def test_load_messages_resume_rejected_tools_and_tool_failure(monkeypatch)
 async def test_restart_interrupts_runs_releases_locks_and_conversation_interrupt(monkeypatch):
     run = _run(status="running", user_id=1, server_id=4)
     tool = SimpleNamespace(
-        id="tool", run_id="run-1", status="running", risk="write", result=None, completed_at=None,
-        tool_call_id="call", tool_name="write", progress_snapshot=None,
+        id="tool",
+        run_id="run-1",
+        status="running",
+        risk="write",
+        result=None,
+        completed_at=None,
+        tool_call_id="call",
+        tool_name="write",
+        progress_snapshot=None,
     )
     db = _Session(results=[_Rows(rows=[run]), _Rows(rows=[tool])])
     monkeypatch.setattr(orchestrator, "async_session_maker", _SessionFactory(db))
@@ -201,13 +246,19 @@ async def test_restart_interrupts_runs_releases_locks_and_conversation_interrupt
     client = SimpleNamespace(delete=AsyncMock())
     monkeypatch.setattr(orchestrator.redis_manager, "prefixed_key", lambda value: value)
     monkeypatch.setattr(orchestrator.redis_manager, "client", client)
-    monkeypatch.setattr(orchestrator.maintenance_lock_service, "force_release_server_lock", AsyncMock())
+    monkeypatch.setattr(
+        orchestrator.maintenance_lock_service, "force_release_server_lock", AsyncMock()
+    )
     assert await orchestrator.interrupt_active_ai_runs() == 1
     assert run.status == "interrupted"
     client.delete.assert_awaited_once()
 
     db = _Session(results=[_Rows(scalar=None)])
-    assert (await orchestrator.interrupt_conversation_run(db, SimpleNamespace(id=1, is_admin=False), "c"))["interrupted"] is False
+    assert (
+        await orchestrator.interrupt_conversation_run(
+            db, SimpleNamespace(id=1, is_admin=False), "c"
+        )
+    )["interrupted"] is False
     owner = SimpleNamespace(id=1, is_admin=False)
     active = SimpleNamespace(id="r", user_id=2, status="running", completed_at=None, error=None)
     with pytest.raises(PermissionError):
@@ -232,21 +283,32 @@ def test_orchestrator_labels_snapshots_and_usage_edge_cases(monkeypatch):
         assert orchestrator._approval_step_id(name, step, index)
         assert orchestrator._approval_step_label(step)
     assert orchestrator._approval_step_id("other", "plain", 2) == "step:3"
-    assert orchestrator._approval_step_label({"action": "install_market_plugin", "title": "MapChooser"}) == "Install MapChooser"
+    assert (
+        orchestrator._approval_step_label(
+            {"action": "install_market_plugin", "title": "MapChooser"}
+        )
+        == "Install MapChooser"
+    )
     assert orchestrator._approval_step_label({"action": "restart_server"}) == "Restart server"
     assert orchestrator._approval_step_label({"action": "validate_startup_revision"})
     assert orchestrator._approval_step_label({"action": "save_startup_settings"})
     assert orchestrator._approval_step_label({"action": "verify_server"})
     assert orchestrator._approval_step_label({"action": "patch_plugin_config"})
     assert orchestrator._approval_step_label({"action": "verify"})
-    assert orchestrator._approval_step_label({"plugin_id": 2, "title": "Sensitive"}).startswith("Install")
-    assert orchestrator._approval_step_label({"plugin_id": 2, "title": "Sensitive", "status": "already_installed"}).startswith("Skip")
+    assert orchestrator._approval_step_label({"plugin_id": 2, "title": "Sensitive"}).startswith(
+        "Install"
+    )
+    assert orchestrator._approval_step_label(
+        {"plugin_id": 2, "title": "Sensitive", "status": "already_installed"}
+    ).startswith("Skip")
     assert orchestrator._approval_step_label({"action": "unknown_action"}) == "unknown action"
     assert orchestrator._approval_step_label(None) == "Planned operation"
 
     monkeypatch.setattr(orchestrator, "get_current_time", lambda: datetime.now(timezone.utc))
     tool_run = SimpleNamespace(progress_snapshot=None, progress_updated_at=None)
-    orchestrator._update_progress_snapshot(tool_run, {"step_id": "missing", "step_status": "bad", "message": "x"})
+    orchestrator._update_progress_snapshot(
+        tool_run, {"step_id": "missing", "step_status": "bad", "message": "x"}
+    )
     assert tool_run.progress_snapshot["current_step"] is None
     tool_run.progress_snapshot = {
         "version": 1,
@@ -257,13 +319,31 @@ def test_orchestrator_labels_snapshots_and_usage_edge_cases(monkeypatch):
         ],
     }
     orchestrator._finalize_progress_snapshot(tool_run, success=True, message="ok")
-    assert all(step["status"] in {"completed", "failed"} for step in tool_run.progress_snapshot["steps"])
-    tool_run.progress_snapshot["steps"] = [{"id": "a", "status": "pending"}, {"id": "b", "status": "running"}]
-    orchestrator._finalize_progress_snapshot(tool_run, success=False, message="stop", interrupted=True)
+    assert all(
+        step["status"] in {"completed", "failed"} for step in tool_run.progress_snapshot["steps"]
+    )
+    tool_run.progress_snapshot["steps"] = [
+        {"id": "a", "status": "pending"},
+        {"id": "b", "status": "running"},
+    ]
+    orchestrator._finalize_progress_snapshot(
+        tool_run, success=False, message="stop", interrupted=True
+    )
     assert all(step["status"] == "interrupted" for step in tool_run.progress_snapshot["steps"])
 
-    assert orchestrator._provider_token_usage({"usage": {"prompt_tokens": True, "input_tokens": "bad", "completion_tokens": -1, "total_tokens": 6}}) == (0, 6)
-    assert orchestrator._provider_token_usage({"usage": {"prompt_tokens": 20_000_000, "completion_tokens": 3}}) == (10_000_000, 3)
+    assert orchestrator._provider_token_usage(
+        {
+            "usage": {
+                "prompt_tokens": True,
+                "input_tokens": "bad",
+                "completion_tokens": -1,
+                "total_tokens": 6,
+            }
+        }
+    ) == (0, 6)
+    assert orchestrator._provider_token_usage(
+        {"usage": {"prompt_tokens": 20_000_000, "completion_tokens": 3}}
+    ) == (10_000_000, 3)
     assert orchestrator._token_count(object()) >= 1
 
 
@@ -271,29 +351,56 @@ def test_orchestrator_labels_snapshots_and_usage_edge_cases(monkeypatch):
 async def test_orchestrator_reconcile_and_lock_edge_cases(monkeypatch):
     now = datetime.now(timezone.utc)
     expired = SimpleNamespace(
-        id="expired", run_id="r1", status="pending_approval", risk="write",
-        approval_expires_at=now - timedelta(seconds=1), result=None, completed_at=None,
-        tool_call_id="c1", tool_name="write", progress_snapshot=None,
+        id="expired",
+        run_id="r1",
+        status="pending_approval",
+        risk="write",
+        approval_expires_at=now - timedelta(seconds=1),
+        result=None,
+        completed_at=None,
+        tool_call_id="c1",
+        tool_name="write",
+        progress_snapshot=None,
     )
     invalid = SimpleNamespace(
-        id="invalid", run_id="r2", status="approved", risk="write",
-        approval_expires_at=now + timedelta(hours=1), result=None, completed_at=None,
-        tool_call_id="c2", tool_name="write", progress_snapshot=None,
+        id="invalid",
+        run_id="r2",
+        status="approved",
+        risk="write",
+        approval_expires_at=now + timedelta(hours=1),
+        result=None,
+        completed_at=None,
+        tool_call_id="c2",
+        tool_name="write",
+        progress_snapshot=None,
     )
     invalid2 = SimpleNamespace(
-        id="invalid2", run_id="r2", status="queued", risk="write",
-        approval_expires_at=now + timedelta(hours=1), result=None, completed_at=None,
-        tool_call_id="c3", tool_name="write", progress_snapshot=None,
+        id="invalid2",
+        run_id="r2",
+        status="queued",
+        risk="write",
+        approval_expires_at=now + timedelta(hours=1),
+        result=None,
+        completed_at=None,
+        tool_call_id="c3",
+        tool_name="write",
+        progress_snapshot=None,
     )
-    run1 = SimpleNamespace(id="r1", conversation_id="c", status="waiting_approval", completed_at=None, error=None)
-    run2 = SimpleNamespace(id="r2", conversation_id="c", status="waiting_approval", completed_at=None, error=None)
+    run1 = SimpleNamespace(
+        id="r1", conversation_id="c", status="waiting_approval", completed_at=None, error=None
+    )
+    run2 = SimpleNamespace(
+        id="r2", conversation_id="c", status="waiting_approval", completed_at=None, error=None
+    )
 
     class _SequenceDb(_Session):
         def __init__(self, results):
             super().__init__(results=results)
 
     db = _SequenceDb([_Rows(rows=[run1, run2]), _Rows(rows=[expired, invalid, invalid2])])
-    changed = await orchestrator.reconcile_waiting_approval_runs(db, user_id=1, conversation_id="c", run_id="r1")
+    changed = await orchestrator.reconcile_waiting_approval_runs(
+        db, user_id=1, conversation_id="c", run_id="r1"
+    )
     assert changed == {"r1", "r2"} and run1.status == "expired" and run2.status == "cancelled"
 
     db = _SequenceDb([_Rows(rows=[run1]), _Rows(rows=[])])
@@ -330,15 +437,26 @@ async def test_execute_tool_run_auth_lock_precomputed_and_events(monkeypatch):
         events.append(args)
 
     async def execute(_name, _args, context):
-        await context.emit("tool_progress", {"step_id": "step", "step_status": "running", "message": "working"})
+        await context.emit(
+            "tool_progress", {"step_id": "step", "step_status": "running", "message": "working"}
+        )
         return {"success": True, "message": "done"}
 
     arguments = {}
     _, arguments_hash = orchestrator.canonical_arguments(arguments)
     tool = SimpleNamespace(
-        id="t", tool_call_id="call", tool_name="read_server", arguments=arguments,
-        arguments_hash=arguments_hash, risk="read", requires_approval=False,
-        approved_by=None, approved_at=None, status="pending", result=None, error=None,
+        id="t",
+        tool_call_id="call",
+        tool_name="read_server",
+        arguments=arguments,
+        arguments_hash=arguments_hash,
+        risk="read",
+        requires_approval=False,
+        approved_by=None,
+        approved_at=None,
+        status="pending",
+        result=None,
+        error=None,
         progress_snapshot={"version": 1, "steps": [{"id": "step", "status": "pending"}]},
         completed_at=None,
     )
@@ -352,23 +470,47 @@ async def test_execute_tool_run_auth_lock_precomputed_and_events(monkeypatch):
     precomputed_values = vars(tool).copy()
     precomputed_values.update(status="pending", result=None, completed_at=None)
     precomputed = SimpleNamespace(**precomputed_values)
-    await orchestrator._execute_tool_run(_Session([user]), run, precomputed, user, None, {"success": True})
+    await orchestrator._execute_tool_run(
+        _Session([user]), run, precomputed, user, None, {"success": True}
+    )
     assert precomputed.status == "completed"
 
     inactive = SimpleNamespace(id=1, is_active=False)
     db = _Session([inactive])
     failed = SimpleNamespace(
-        id="bad", tool_call_id="bad", tool_name="read_server", arguments={}, arguments_hash=arguments_hash,
-        risk="read", requires_approval=False, approved_by=None, approved_at=None, status="pending",
-        result=None, error=None, progress_snapshot=None, completed_at=None,
+        id="bad",
+        tool_call_id="bad",
+        tool_name="read_server",
+        arguments={},
+        arguments_hash=arguments_hash,
+        risk="read",
+        requires_approval=False,
+        approved_by=None,
+        approved_at=None,
+        status="pending",
+        result=None,
+        error=None,
+        progress_snapshot=None,
+        completed_at=None,
     )
     await orchestrator._execute_tool_run(db, run, failed, user, None)
     assert failed.status == "failed" and "active" in failed.error
 
     approved = SimpleNamespace(
-        id="approved", tool_call_id="approved", tool_name="write_server", arguments={}, arguments_hash="x",
-        risk="write", requires_approval=True, approved_by=1, approved_at=datetime.now(timezone.utc),
-        status="approved", result=None, error=None, progress_snapshot=None, completed_at=None,
+        id="approved",
+        tool_call_id="approved",
+        tool_name="write_server",
+        arguments={},
+        arguments_hash="x",
+        risk="write",
+        requires_approval=True,
+        approved_by=1,
+        approved_at=datetime.now(timezone.utc),
+        status="approved",
+        result=None,
+        error=None,
+        progress_snapshot=None,
+        completed_at=None,
     )
     db = _Session([user])
     await orchestrator._execute_tool_run(db, run, approved, user, None)
@@ -395,7 +537,9 @@ async def test_process_ai_run_waits_for_write_approval_and_handles_policy(monkey
     )
     monkeypatch.setattr(orchestrator, "async_session_maker", _SessionFactory(db))
     monkeypatch.setattr(orchestrator, "get_effective_provider", AsyncMock(return_value=provider))
-    monkeypatch.setattr(orchestrator.AISystemSettings, "get_or_create", AsyncMock(return_value=settings))
+    monkeypatch.setattr(
+        orchestrator.AISystemSettings, "get_or_create", AsyncMock(return_value=settings)
+    )
     monkeypatch.setattr(orchestrator, "build_system_prompt", lambda *_args: "system")
     monkeypatch.setattr(
         orchestrator,
@@ -404,12 +548,20 @@ async def test_process_ai_run_waits_for_write_approval_and_handles_policy(monkey
             return_value={
                 "content": "",
                 "tool_calls": [
-                    {"id": "call-1", "function": {"name": "apply_plugin_plan", "arguments": '{"plugin_id": 1, "expected_plan_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'} }
+                    {
+                        "id": "call-1",
+                        "function": {
+                            "name": "apply_plugin_plan",
+                            "arguments": '{"plugin_id": 1, "expected_plan_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}',
+                        },
+                    }
                 ],
             }
         ),
     )
-    monkeypatch.setattr(orchestrator, "build_approval_summary", AsyncMock(return_value={"steps": []}))
+    monkeypatch.setattr(
+        orchestrator, "build_approval_summary", AsyncMock(return_value={"steps": []})
+    )
     monkeypatch.setattr(orchestrator, "_emit", AsyncMock())
     await orchestrator.process_ai_run(run.id)
     assert run.status == "waiting_approval"
@@ -425,7 +577,9 @@ async def test_process_ai_run_waits_for_write_approval_and_handles_policy(monkey
     monkeypatch.setattr(orchestrator, "async_session_maker", _SessionFactory(db))
     monkeypatch.setattr(orchestrator.Server, "get_by_id_and_user", AsyncMock(return_value=server))
     monkeypatch.setattr(orchestrator, "get_effective_provider", AsyncMock(return_value=provider))
-    monkeypatch.setattr(orchestrator.AISystemSettings, "get_or_create", AsyncMock(return_value=settings))
+    monkeypatch.setattr(
+        orchestrator.AISystemSettings, "get_or_create", AsyncMock(return_value=settings)
+    )
     monkeypatch.setattr(
         orchestrator,
         "get_effective_agent_policy",

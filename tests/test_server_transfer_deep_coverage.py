@@ -114,7 +114,11 @@ async def test_export_endpoint_serializes_attachment(monkeypatch):
     monkeypatch.setattr(
         transfer,
         "collect_export_bundle",
-        AsyncMock(return_value=ServerConfigExport(servers=[server_to_config_entry(server, include_secrets=False)])),
+        AsyncMock(
+            return_value=ServerConfigExport(
+                servers=[server_to_config_entry(server, include_secrets=False)]
+            )
+        ),
     )
     response = await transfer.export_server_configs(
         server_ids=[1], include_secrets=False, db=_Db(), current_user=SimpleNamespace(id=7)

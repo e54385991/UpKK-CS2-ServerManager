@@ -45,7 +45,9 @@ class _File:
 
 class _Sftp:
     def __init__(self, attrs=None, content=b"text"):
-        self.attrs = attrs or SimpleNamespace(type=FILEXFER_TYPE_REGULAR, size=4, mtime=1, permissions=0o644)
+        self.attrs = attrs or SimpleNamespace(
+            type=FILEXFER_TYPE_REGULAR, size=4, mtime=1, permissions=0o644
+        )
         self.file = _File(content)
         self.stat_error = None
         self.calls = []
@@ -57,7 +59,9 @@ class _Sftp:
         )
         yield SimpleNamespace(
             filename="addons",
-            attrs=SimpleNamespace(type=FILEXFER_TYPE_DIRECTORY, size=None, mtime=None, permissions=None),
+            attrs=SimpleNamespace(
+                type=FILEXFER_TYPE_DIRECTORY, size=None, mtime=None, permissions=None
+            ),
         )
 
     async def stat(self, _path):
@@ -113,8 +117,16 @@ async def test_list_and_read_cover_connection_sftp_retry_encoding_and_size(monke
     server = _server()
     offline = SSHManager(use_pool=False)
     offline.connect = AsyncMock(return_value=(False, "offline"))
-    assert await offline.list_directory("/srv/cs2", server) == (False, [], "Connection failed: offline")
-    assert await offline.read_file("/srv/cs2/a", server) == (False, "", "Connection failed: offline")
+    assert await offline.list_directory("/srv/cs2", server) == (
+        False,
+        [],
+        "Connection failed: offline",
+    )
+    assert await offline.read_file("/srv/cs2/a", server) == (
+        False,
+        "",
+        "Connection failed: offline",
+    )
 
     sftp = _Sftp()
     manager = _manager(sftp)
@@ -149,10 +161,19 @@ async def test_write_delete_create_and_rename_cover_all_remote_outcomes():
     server = _server()
     offline = SSHManager(use_pool=False)
     offline.connect = AsyncMock(return_value=(False, "offline"))
-    assert await offline.write_file("/srv/cs2/a", "x", server) == (False, "Connection failed: offline")
+    assert await offline.write_file("/srv/cs2/a", "x", server) == (
+        False,
+        "Connection failed: offline",
+    )
     assert await offline.delete_path("/srv/cs2/a", server) == (False, "Connection failed: offline")
-    assert await offline.create_directory("/srv/cs2/a", server) == (False, "Connection failed: offline")
-    assert await offline.rename_path("/srv/cs2/a", "/srv/cs2/b", server) == (False, "Connection failed: offline")
+    assert await offline.create_directory("/srv/cs2/a", server) == (
+        False,
+        "Connection failed: offline",
+    )
+    assert await offline.rename_path("/srv/cs2/a", "/srv/cs2/b", server) == (
+        False,
+        "Connection failed: offline",
+    )
 
     sftp = _Sftp()
     manager = _manager(sftp)
@@ -219,14 +240,24 @@ async def test_remote_exists_and_copy_path_validation_failures():
         "/srv/cs2/d/a",
         "",
     )
-    assert await manager.copy_into_directory("/", "/srv/cs2/d", server) == (False, "", "Invalid source path")
+    assert await manager.copy_into_directory("/", "/srv/cs2/d", server) == (
+        False,
+        "",
+        "Invalid source path",
+    )
     assert await manager.copy_into_directory("/srv/cs2/d", "/srv/cs2/d", server) == (
         False,
         "",
         "Cannot copy a folder into itself",
     )
-    manager.validate_path_within_base = AsyncMock(side_effect=[(True, ""), (False, "bad destination")])
-    assert (await manager.copy_into_directory("/srv/cs2/a", "/srv/cs2/d", server))[2] == "bad destination"
+    manager.validate_path_within_base = AsyncMock(
+        side_effect=[(True, ""), (False, "bad destination")]
+    )
+    assert (await manager.copy_into_directory("/srv/cs2/a", "/srv/cs2/d", server))[
+        2
+    ] == "bad destination"
     manager.validate_path_within_base = AsyncMock(return_value=(True, ""))
     manager.execute_command = AsyncMock(return_value=(False, "", "copy error"))
-    assert "copy error" in (await manager.copy_into_directory("/srv/cs2/a", "/srv/cs2/d", server))[2]
+    assert (
+        "copy error" in (await manager.copy_into_directory("/srv/cs2/a", "/srv/cs2/d", server))[2]
+    )

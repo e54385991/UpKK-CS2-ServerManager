@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -48,9 +47,12 @@ def test_cleanup_paths_parsers_and_commands_cover_safety_edges():
     assert service._parse_find_output(server, "f\t2\t3\t/srv/cs2/a\0broken")
     assert "find" in service._find_named_files_command(server, ("*.log",))
     assert "mindepth" in service._find_children_command("/srv/cs2")
-    assert service._filter_nested_items(
-        [_record("/srv/cs2/a/b"), _record("/srv/cs2/a", kind="d")]
-    )[0]["path"] == "/srv/cs2/a"
+    assert (
+        service._filter_nested_items([_record("/srv/cs2/a/b"), _record("/srv/cs2/a", kind="d")])[0][
+            "path"
+        ]
+        == "/srv/cs2/a"
+    )
     assert service._empty_scan(server)["safe_item_count"] == 0
 
 
@@ -86,7 +88,9 @@ async def test_cleanup_command_text_fallback_process_and_find_events(monkeypatch
     assert [part async for part in service._iter_command_text(fallback, "scan", 3)] == ["out"]
 
     ssh = SimpleNamespace(conn=None, execute_command=AsyncMock(return_value=(False, "", "offline")))
-    events = [event async for event in service._iter_find_records(ssh, server, "scan", parse_limit=1)]
+    events = [
+        event async for event in service._iter_find_records(ssh, server, "scan", parse_limit=1)
+    ]
     assert events == [{"type": "error", "message": "offline"}]
 
     async def fake_text(*_args, **_kwargs):
@@ -125,7 +129,13 @@ async def test_cleanup_iter_scan_projects_all_phases(monkeypatch):
         calls += 1
         yield {"type": "heartbeat"}
         yield {"type": "progress", "found": len(records), "size": sum(x["size"] for x in records)}
-        yield {"type": "complete", "listed": records, "found": len(records), "size": 20, "truncated": False}
+        yield {
+            "type": "complete",
+            "listed": records,
+            "found": len(records),
+            "size": 20,
+            "truncated": False,
+        }
 
     async def fake_size(*_args, **_kwargs):
         return 100
@@ -145,7 +155,9 @@ async def test_cleanup_iter_scan_projects_all_phases(monkeypatch):
     assert [event async for event in service.iter_scan(bad, server)] == [
         {"type": "error", "message": "Connection failed: down"}
     ]
-    assert [event async for event in service.iter_scan(ssh, _server(game_directory="/"))][0]["type"] == "error"
+    assert [event async for event in service.iter_scan(ssh, _server(game_directory="/"))][0][
+        "type"
+    ] == "error"
 
 
 @pytest.mark.asyncio
@@ -177,7 +189,9 @@ async def test_cleanup_delete_and_purge_cover_modes_failures_and_limits(monkeypa
     monkeypatch.setattr(
         service,
         "_scan_direct_children",
-        AsyncMock(return_value=(True, [_record(service.workshop_dir(server) + "/1", kind="d")], "")),
+        AsyncMock(
+            return_value=(True, [_record(service.workshop_dir(server) + "/1", kind="d")], "")
+        ),
     )
     ssh.delete_path.side_effect = None
     ssh.delete_path.return_value = (True, "")

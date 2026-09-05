@@ -160,20 +160,32 @@ async def test_discord_storage_and_option_fallback_branches(monkeypatch):
     )
     monkeypatch.setattr(routes, "list_guilds", AsyncMock(return_value=[{"id": "1"}]))
     assert await routes._load_discord_options(user.id, "token") == ([{"id": "1"}], [], [])
-    monkeypatch.setattr(routes, "get_guild_options", AsyncMock(return_value=([{"id": "2"}], [{"id": "3"}])))
+    monkeypatch.setattr(
+        routes, "get_guild_options", AsyncMock(return_value=([{"id": "2"}], [{"id": "3"}]))
+    )
     assert await routes._load_discord_options(user.id, "token", "1") == (
         [{"id": "1"}],
         [{"id": "2"}],
         [{"id": "3"}],
     )
 
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(side_effect=DiscordBotAPIError("bad")))
+    monkeypatch.setattr(
+        routes, "_load_discord_options", AsyncMock(side_effect=DiscordBotAPIError("bad"))
+    )
     with pytest.raises(HTTPException) as bad_role:
-        await routes._validate_binding_selection(user.id, "token", guild_id="1", channel_ids=[], role_ids=[])
+        await routes._validate_binding_selection(
+            user.id, "token", guild_id="1", channel_ids=[], role_ids=[]
+        )
     assert bad_role.value.status_code == 400
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(return_value=([], [{"id": "2", "type": 0}], [{"id": "3"}])))
+    monkeypatch.setattr(
+        routes,
+        "_load_discord_options",
+        AsyncMock(return_value=([], [{"id": "2", "type": 0}], [{"id": "3"}])),
+    )
     with pytest.raises(HTTPException) as role_error:
-        await routes._validate_binding_selection(user.id, "token", guild_id="1", channel_ids=[], role_ids=["9"])
+        await routes._validate_binding_selection(
+            user.id, "token", guild_id="1", channel_ids=[], role_ids=["9"]
+        )
     assert role_error.value.status_code == 422
 
 
@@ -182,7 +194,9 @@ async def test_discord_option_helpers_cover_cache_rest_validation_and_errors(mon
     user_id = 9
     token = "x"
     cached = {"guilds": [{"id": "1", "name": "Guild"}], "channels": [], "roles": []}
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(return_value=(cached["guilds"], [], [])))
+    monkeypatch.setattr(
+        routes, "_load_discord_options", AsyncMock(return_value=(cached["guilds"], [], []))
+    )
     result = await routes._discord_options_response(user_id, token, None)
     assert result.guilds[0].name == "Guild"
     monkeypatch.setattr(
@@ -208,28 +222,42 @@ async def test_discord_option_helpers_cover_cache_rest_validation_and_errors(mon
         await routes._discord_options_response(user_id, token, "1")
     assert exc.value.status_code == 400
 
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(return_value=([], [{"id": "2", "type": 0}], [])))
-    await routes._validate_binding_selection(user_id, token, guild_id=None, channel_ids=[], role_ids=[])
-    await routes._validate_binding_selection(user_id, token, guild_id="1", channel_ids=["2"], role_ids=[])
+    monkeypatch.setattr(
+        routes, "_load_discord_options", AsyncMock(return_value=([], [{"id": "2", "type": 0}], []))
+    )
+    await routes._validate_binding_selection(
+        user_id, token, guild_id=None, channel_ids=[], role_ids=[]
+    )
+    await routes._validate_binding_selection(
+        user_id, token, guild_id="1", channel_ids=["2"], role_ids=[]
+    )
     with pytest.raises(HTTPException) as bad_channel:
-        await routes._validate_binding_selection(user_id, token, guild_id="1", channel_ids=["9"], role_ids=[])
+        await routes._validate_binding_selection(
+            user_id, token, guild_id="1", channel_ids=["9"], role_ids=[]
+        )
     assert bad_channel.value.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_discord_bot_crud_test_and_options_routes(monkeypatch):
     user = _user()
-    identity = SimpleNamespace(application_id="100", bot_user_id="101", username="bot", discriminator="0")
+    identity = SimpleNamespace(
+        application_id="100", bot_user_id="101", username="bot", discriminator="0"
+    )
     monkeypatch.setattr(routes, "test_bot_token", AsyncMock(return_value=identity))
     monkeypatch.setattr(routes, "encrypt_credential", lambda value: f"enc:{value}")
     monkeypatch.setattr(routes, "decrypt_credential", lambda _value: "token")
-    monkeypatch.setattr(routes, "build_invite_url", lambda value: f"invite:{value}" if value else None)
+    monkeypatch.setattr(
+        routes, "build_invite_url", lambda value: f"invite:{value}" if value else None
+    )
     monkeypatch.setattr(routes, "_notify_manager", AsyncMock())
     monkeypatch.setattr(routes, "record_audit_event", AsyncMock())
     bot = _bot()
     db = _DB(gets={UserDiscordBot: None}, results=[_Result(value=None)])
     created = await routes.update_discord_bot(
-        DiscordBotSettingsUpdate(token="t" * 20, enabled=True, message_trigger_mode="mention_and_greetings"),
+        DiscordBotSettingsUpdate(
+            token="t" * 20, enabled=True, message_trigger_mode="mention_and_greetings"
+        ),
         db,
         user,
         SimpleNamespace(),
@@ -244,30 +272,46 @@ async def test_discord_bot_crud_test_and_options_routes(monkeypatch):
 
     success = await routes.test_discord_bot(DiscordBotTestRequest(token="t" * 20), db, user)
     assert success.success
-    monkeypatch.setattr(routes, "test_bot_token", AsyncMock(side_effect=DiscordBotAPIError("invalid")))
+    monkeypatch.setattr(
+        routes, "test_bot_token", AsyncMock(side_effect=DiscordBotAPIError("invalid"))
+    )
     failure = await routes.test_discord_bot(DiscordBotTestRequest(token="t" * 20), db, user)
     assert failure.success is False
 
     monkeypatch.setattr(routes, "_stored_token", AsyncMock(return_value=(bot, "token")))
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(return_value=([{"id": "1"}], [], [])))
+    monkeypatch.setattr(
+        routes, "_load_discord_options", AsyncMock(return_value=([{"id": "1"}], [], []))
+    )
     guilds = await routes.get_discord_bot_guilds(db, user)
     assert guilds[0].id == "1"
     options = await routes.get_discord_global_binding_options(db, user, None)
     assert options.guilds[0].id == "1"
 
-    monkeypatch.setattr(routes, "test_bot_token", AsyncMock(side_effect=DiscordBotAPIError("invalid")))
+    monkeypatch.setattr(
+        routes, "test_bot_token", AsyncMock(side_effect=DiscordBotAPIError("invalid"))
+    )
     with pytest.raises(HTTPException) as update_error:
         await routes.update_discord_bot(
-            DiscordBotSettingsUpdate(token="t" * 20), _DB(gets={UserDiscordBot: bot}, results=[_Result(value=None)]), user, SimpleNamespace()
+            DiscordBotSettingsUpdate(token="t" * 20),
+            _DB(gets={UserDiscordBot: bot}, results=[_Result(value=None)]),
+            user,
+            SimpleNamespace(),
         )
     assert update_error.value.status_code == 400
     with pytest.raises(HTTPException) as enable_error:
         await routes.update_discord_bot(
-            DiscordBotSettingsUpdate(enabled=True), _DB(gets={UserDiscordBot: UserDiscordBot(user_id=9)}), user, SimpleNamespace()
+            DiscordBotSettingsUpdate(enabled=True),
+            _DB(gets={UserDiscordBot: UserDiscordBot(user_id=9)}),
+            user,
+            SimpleNamespace(),
         )
     assert enable_error.value.status_code == 409
-    assert (await routes.delete_discord_bot(_DB(gets={UserDiscordBot: None}), user, SimpleNamespace())).connection_status == "not_configured"
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(side_effect=DiscordBotAPIError("gone")))
+    assert (
+        await routes.delete_discord_bot(_DB(gets={UserDiscordBot: None}), user, SimpleNamespace())
+    ).connection_status == "not_configured"
+    monkeypatch.setattr(
+        routes, "_load_discord_options", AsyncMock(side_effect=DiscordBotAPIError("gone"))
+    )
     with pytest.raises(HTTPException) as guild_error:
         await routes.get_discord_bot_guilds(db, user)
     assert guild_error.value.status_code == 400
@@ -299,7 +343,9 @@ async def test_global_binding_server_binding_and_agent_routes(monkeypatch):
     assert global_result.capabilities == [DiscordCapability.STATUS]
 
     monkeypatch.setattr(routes, "_owned_server", AsyncMock(return_value=server))
-    monkeypatch.setattr(routes, "_binding_response", AsyncMock(return_value=SimpleNamespace(server_id=11)))
+    monkeypatch.setattr(
+        routes, "_binding_response", AsyncMock(return_value=SimpleNamespace(server_id=11))
+    )
     server_result = await routes.update_server_discord_bot_settings(
         11, DiscordBindingUpdate(enabled=False), db, user, SimpleNamespace()
     )
@@ -330,22 +376,39 @@ async def test_global_binding_server_binding_and_agent_routes(monkeypatch):
 async def test_menu_push_and_binding_response_failure_paths(monkeypatch):
     user = _user()
     bot = _bot()
-    binding = ServerDiscordBinding(server_id=11, user_id=9, enabled=True, guild_id="20", channel_ids=["30"], capabilities=["status"])
+    binding = ServerDiscordBinding(
+        server_id=11,
+        user_id=9,
+        enabled=True,
+        guild_id="20",
+        channel_ids=["30"],
+        capabilities=["status"],
+    )
     db = _DB(gets={UserDiscordBot: bot}, results=[_Result(rows=[(binding, _server())])])
     monkeypatch.setattr(routes, "_stored_token", AsyncMock(return_value=(bot, "token")))
     monkeypatch.setattr(routes, "_bound_menu_push_channels", AsyncMock(return_value={"20": {"30"}}))
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(return_value=([{"id": "20"}], [{"id": "30", "type": 0}], [])))
+    monkeypatch.setattr(
+        routes,
+        "_load_discord_options",
+        AsyncMock(return_value=([{"id": "20"}], [{"id": "30", "type": 0}], [])),
+    )
     monkeypatch.setattr(routes.redis_manager, "hit_rate_limit", AsyncMock(return_value=(True, 0)))
     monkeypatch.setattr(routes, "get_guild_locale", AsyncMock(return_value="en-US"))
     monkeypatch.setattr(routes, "send_menu_launcher", AsyncMock(return_value=("55", 1)))
     monkeypatch.setattr(routes.discord_menu_task_registry, "create", lambda _task: None)
     monkeypatch.setattr(routes, "delete_menu_launcher_after", lambda *_args: None)
-    pushed = await routes.push_discord_menu(DiscordMenuPushRequest(guild_id="20", channel_id="30"), db, user)
+    pushed = await routes.push_discord_menu(
+        DiscordMenuPushRequest(guild_id="20", channel_id="30"), db, user
+    )
     assert pushed.message_id == "55"
 
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(side_effect=DiscordBotAPIError("down")))
+    monkeypatch.setattr(
+        routes, "_load_discord_options", AsyncMock(side_effect=DiscordBotAPIError("down"))
+    )
     with pytest.raises(HTTPException) as exc:
-        await routes.push_discord_menu(DiscordMenuPushRequest(guild_id="20", channel_id="30"), db, user)
+        await routes.push_discord_menu(
+            DiscordMenuPushRequest(guild_id="20", channel_id="30"), db, user
+        )
     assert exc.value.status_code == 400
 
     for kwargs in (
@@ -353,15 +416,29 @@ async def test_menu_push_and_binding_response_failure_paths(monkeypatch):
         {"enabled": True, "token_encrypted": None},
         {"enabled": True, "token_encrypted": "x", "connection_status": "bad"},
     ):
-        result = await routes._binding_response(_DB(gets={ServerDiscordBinding: binding, UserDiscordBot: _bot(**kwargs)}), 11, 9)
+        result = await routes._binding_response(
+            _DB(gets={ServerDiscordBinding: binding, UserDiscordBot: _bot(**kwargs)}), 11, 9
+        )
         assert result.disabled_reason is not None
 
-    assert (await routes._binding_response(_DB(gets={ServerDiscordBinding: None, UserDiscordBot: bot}), 11, 9)).disabled_reason == "binding_disabled"
-    invalid_binding = ServerDiscordBinding(server_id=11, user_id=9, enabled=True, invalid_reason="sync_failed")
-    assert (await routes._binding_response(_DB(gets={ServerDiscordBinding: invalid_binding, UserDiscordBot: bot}), 11, 9)).disabled_reason == "sync_failed"
+    assert (
+        await routes._binding_response(
+            _DB(gets={ServerDiscordBinding: None, UserDiscordBot: bot}), 11, 9
+        )
+    ).disabled_reason == "binding_disabled"
+    invalid_binding = ServerDiscordBinding(
+        server_id=11, user_id=9, enabled=True, invalid_reason="sync_failed"
+    )
+    assert (
+        await routes._binding_response(
+            _DB(gets={ServerDiscordBinding: invalid_binding, UserDiscordBot: bot}), 11, 9
+        )
+    ).disabled_reason == "sync_failed"
 
     monkeypatch.setattr(routes, "_bound_menu_push_channels", AsyncMock(return_value={}))
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(side_effect=DiscordBotAPIError("down")))
+    monkeypatch.setattr(
+        routes, "_load_discord_options", AsyncMock(side_effect=DiscordBotAPIError("down"))
+    )
     with pytest.raises(HTTPException) as no_fallback:
         await routes.get_discord_menu_push_options(db, user)
     assert no_fallback.value.status_code == 400
@@ -370,14 +447,28 @@ async def test_menu_push_and_binding_response_failure_paths(monkeypatch):
     assert fallback.guilds[0].id == "20"
 
     with pytest.raises(HTTPException) as channel_error:
-        await routes.push_discord_menu(DiscordMenuPushRequest(guild_id="20", channel_id="99"), db, user)
+        await routes.push_discord_menu(
+            DiscordMenuPushRequest(guild_id="20", channel_id="99"), db, user
+        )
     assert channel_error.value.status_code == 422
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(return_value=([{"id": "20"}], [{"id": "30", "type": 99}], [])))
+    monkeypatch.setattr(
+        routes,
+        "_load_discord_options",
+        AsyncMock(return_value=([{"id": "20"}], [{"id": "30", "type": 99}], [])),
+    )
     with pytest.raises(HTTPException) as type_error:
-        await routes.push_discord_menu(DiscordMenuPushRequest(guild_id="20", channel_id="30"), db, user)
+        await routes.push_discord_menu(
+            DiscordMenuPushRequest(guild_id="20", channel_id="30"), db, user
+        )
     assert type_error.value.status_code == 422
-    monkeypatch.setattr(routes, "_load_discord_options", AsyncMock(return_value=([{"id": "20"}], [{"id": "30", "type": 0}], [])))
+    monkeypatch.setattr(
+        routes,
+        "_load_discord_options",
+        AsyncMock(return_value=([{"id": "20"}], [{"id": "30", "type": 0}], [])),
+    )
     monkeypatch.setattr(routes.redis_manager, "hit_rate_limit", AsyncMock(return_value=(False, 4)))
     with pytest.raises(HTTPException) as rate_error:
-        await routes.push_discord_menu(DiscordMenuPushRequest(guild_id="20", channel_id="30"), db, user)
+        await routes.push_discord_menu(
+            DiscordMenuPushRequest(guild_id="20", channel_id="30"), db, user
+        )
     assert rate_error.value.status_code == 429

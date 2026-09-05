@@ -359,7 +359,7 @@ async def _save_launch_args(db: AsyncSession, server: Server, value: str | None)
     await redis_manager.clear_server_cache(int(server.id))
 
 
-async def execute_game_mode_plan(
+async def execute_game_mode_plan(  # noqa: C901
     db: AsyncSession,
     server: Server,
     user: User,

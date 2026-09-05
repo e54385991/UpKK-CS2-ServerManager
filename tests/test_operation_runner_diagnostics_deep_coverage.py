@@ -71,7 +71,9 @@ async def test_diagnostic_progress_and_enqueue_dispatch(monkeypatch):
     assert hub.emitted[0][2]["message"] == "scanning"
     assert hub.emitted[1][2]["message"] == "heartbeat"
 
-    monkeypatch.setattr(diagnostics, "_dispatch", AsyncMock(side_effect=lambda record, _factory: record))
+    monkeypatch.setattr(
+        diagnostics, "_dispatch", AsyncMock(side_effect=lambda record, _factory: record)
+    )
     execute = await diagnostics.enqueue_plugin_diagnostic_execute(
         server_id=5, actor_user_id=7, scope="both", expected_plan_hash="hash"
     )
@@ -92,9 +94,12 @@ async def test_diagnostic_progress_and_enqueue_dispatch(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_diagnostic_workers_handle_missing_inactive_and_terminal_payloads(monkeypatch):
-    assert await diagnostics.run_plugin_diagnostic_execute(
-        operation_id="missing", scope="both", expected_plan_hash="hash"
-    ) is None
+    assert (
+        await diagnostics.run_plugin_diagnostic_execute(
+            operation_id="missing", scope="both", expected_plan_hash="hash"
+        )
+        is None
+    )
     hub = _install(monkeypatch, user=SimpleNamespace(is_active=False), record=_record())
     await diagnostics.run_plugin_diagnostic_execute(
         operation_id="op-diag", scope="both", expected_plan_hash="hash"
@@ -163,8 +168,14 @@ async def test_diagnostic_workers_cover_all_expected_exception_families(monkeypa
 async def test_diagnostic_resume_success_and_inactive(monkeypatch):
     service = __import__("services.plugin_diagnostic_service", fromlist=["service"])
     hub = _install(monkeypatch, user=SimpleNamespace(is_active=True), record=_record())
-    monkeypatch.setattr(service, "restore_diagnostic_run", AsyncMock(return_value={"status": "completed"}))
-    monkeypatch.setattr(service, "execute_diagnostic_plan", AsyncMock(return_value={"status": "completed", "id": "d2"}))
+    monkeypatch.setattr(
+        service, "restore_diagnostic_run", AsyncMock(return_value={"status": "completed"})
+    )
+    monkeypatch.setattr(
+        service,
+        "execute_diagnostic_plan",
+        AsyncMock(return_value={"status": "completed", "id": "d2"}),
+    )
     await diagnostics.run_plugin_diagnostic_resume(
         operation_id="op-diag", diagnostic_id="d1", scope="both", expected_plan_hash="hash"
     )
@@ -173,4 +184,3 @@ async def test_diagnostic_resume_success_and_inactive(monkeypatch):
     hub = _install(monkeypatch, user=None, record=_record())
     await diagnostics.run_plugin_diagnostic_restore(operation_id="op-diag", diagnostic_id="d1")
     assert hub.finished[-1][1]["success"] is False
-

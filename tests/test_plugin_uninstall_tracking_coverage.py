@@ -62,8 +62,14 @@ def test_uninstall_path_normalization_and_tracking_helpers():
     with pytest.raises(ValueError, match="at least one"):
         uninstall.normalize_uninstall_paths([])
 
-    assert tracking.canonical_repo_url(" https://github.com/Org/Repo.git/ ") == "https://github.com/Org/Repo"
-    assert tracking.repo_api_url("https://github.com/Org/Repo") == "https://api.github.com/repos/Org/Repo/releases/latest"
+    assert (
+        tracking.canonical_repo_url(" https://github.com/Org/Repo.git/ ")
+        == "https://github.com/Org/Repo"
+    )
+    assert (
+        tracking.repo_api_url("https://github.com/Org/Repo")
+        == "https://api.github.com/repos/Org/Repo/releases/latest"
+    )
     with pytest.raises(ValueError):
         tracking.canonical_repo_url("https://gitlab.com/a/b")
     assert tracking.derive_asset_glob(None, "v1") is None
@@ -92,13 +98,19 @@ async def test_uninstall_plugin_files_success_partial_connection_and_exception(m
     ssh.disconnect.assert_awaited_once()
     assert progress.await_count >= 3
 
-    ssh = SimpleNamespace(connect=AsyncMock(return_value=(False, "offline")), disconnect=AsyncMock())
+    ssh = SimpleNamespace(
+        connect=AsyncMock(return_value=(False, "offline")), disconnect=AsyncMock()
+    )
     monkeypatch.setattr(uninstall, "SSHManager", lambda: ssh)
     result = await uninstall.uninstall_plugin_files(server=_server(), files_to_delete=["a"])
     assert result["failed_files"] == ["a"]
     ssh.disconnect.assert_not_awaited()
 
-    ssh = SimpleNamespace(connect=AsyncMock(return_value=(True, "ok")), disconnect=AsyncMock(), execute_command=AsyncMock(side_effect=RuntimeError("remote")))
+    ssh = SimpleNamespace(
+        connect=AsyncMock(return_value=(True, "ok")),
+        disconnect=AsyncMock(),
+        execute_command=AsyncMock(side_effect=RuntimeError("remote")),
+    )
     monkeypatch.setattr(uninstall, "SSHManager", lambda: ssh)
     result = await uninstall.uninstall_plugin_files(server=_server(), files_to_delete=["a"])
     assert result["message"] == "Uninstallation error: remote"

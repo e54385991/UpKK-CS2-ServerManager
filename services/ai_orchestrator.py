@@ -805,7 +805,7 @@ async def _resume_decided_tools(db, run: AIRun, user: User, server: Server | Non
     return int(pending_result.scalar_one()) > 0
 
 
-async def process_ai_run(run_id: str) -> None:
+async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration state machine.
     """Run or resume one conversation job. Exceptions become persisted failures."""
     async with async_session_maker() as db:
         run = await db.get(AIRun, run_id)

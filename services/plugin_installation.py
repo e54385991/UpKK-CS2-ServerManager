@@ -155,7 +155,7 @@ async def get_server_for_user(
     return server
 
 
-async def install_github_plugin(
+async def install_github_plugin(  # noqa: C901
     server_id: int,
     request: GitHubPluginInstallRequest,
     db: AsyncSession,

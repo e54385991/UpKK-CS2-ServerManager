@@ -36,7 +36,9 @@ async def test_update_server_success_stopped_and_running_restore(monkeypatch):
     manager = _Update()
     cache = AsyncMock(return_value=(True, "1.2.3"))
     monkeypatch.setattr("services.steam_inf_service.steam_inf_service.refresh_version_cache", cache)
-    monkeypatch.setattr("services.ssh.game_update.resolve_steamcmd_max_retries", AsyncMock(return_value=2))
+    monkeypatch.setattr(
+        "services.ssh.game_update.resolve_steamcmd_max_retries", AsyncMock(return_value=2)
+    )
     progress = []
     assert await manager.update_server(_server(), progress.append) == (
         True,
@@ -48,7 +50,10 @@ async def test_update_server_success_stopped_and_running_restore(monkeypatch):
 
     manager = _Update()
     manager._prepare_update_session.return_value = (True, None)
-    monkeypatch.setattr("services.steam_inf_service.steam_inf_service.refresh_version_cache", AsyncMock(return_value=(False, None)))
+    monkeypatch.setattr(
+        "services.steam_inf_service.steam_inf_service.refresh_version_cache",
+        AsyncMock(return_value=(False, None)),
+    )
     assert await manager.update_server(_server()) == (
         True,
         "Server updated and restored to running state successfully",
@@ -70,8 +75,13 @@ async def test_update_server_failure_preparation_retry_and_cache_exception(monke
     manager._prepare_update_session.return_value = (True, None)
     manager._execute_steamcmd_with_retry.return_value = (False, "stdout error", "stderr error")
     manager.start_server.return_value = (False, "restart failed")
-    monkeypatch.setattr("services.ssh.game_update.resolve_steamcmd_max_retries", AsyncMock(return_value=1))
-    monkeypatch.setattr("services.steam_inf_service.steam_inf_service.refresh_version_cache", AsyncMock(side_effect=RuntimeError("cache down")))
+    monkeypatch.setattr(
+        "services.ssh.game_update.resolve_steamcmd_max_retries", AsyncMock(return_value=1)
+    )
+    monkeypatch.setattr(
+        "services.steam_inf_service.steam_inf_service.refresh_version_cache",
+        AsyncMock(side_effect=RuntimeError("cache down")),
+    )
     result = await manager.update_server(_server())
     assert result[0] is False
     assert "recovery start failed" in result[1]
@@ -84,8 +94,13 @@ async def test_validate_server_warning_restart_and_error_paths(monkeypatch):
     manager._running_server_session_managers.return_value = ["tmux"]
     manager._execute_steamcmd_with_retry.return_value = (False, "", "validation error")
     manager.start_server.return_value = (False, "cannot restart")
-    monkeypatch.setattr("services.ssh.game_update.resolve_steamcmd_max_retries", AsyncMock(return_value=1))
-    monkeypatch.setattr("services.steam_inf_service.steam_inf_service.refresh_version_cache", AsyncMock(return_value=(True, "v")))
+    monkeypatch.setattr(
+        "services.ssh.game_update.resolve_steamcmd_max_retries", AsyncMock(return_value=1)
+    )
+    monkeypatch.setattr(
+        "services.steam_inf_service.steam_inf_service.refresh_version_cache",
+        AsyncMock(return_value=(True, "v")),
+    )
     result = await manager.validate_server(_server())
     assert result == (True, "Server updated and validated successfully")
     assert manager._stop_server_sessions_connected.await_count == 1
@@ -113,10 +128,14 @@ async def test_prepare_restore_and_status_helpers_cover_stops_and_offline():
     assert await manager._prepare_update_session(server, send, None) == (False, None)
     manager._running_server_session_managers.return_value = ["tmux", "screen"]
     manager._configured_session_manager_available_connected.return_value = (False, "not configured")
-    assert (await manager._prepare_update_session(server, send, None))[1].startswith("Server update aborted")
+    assert (await manager._prepare_update_session(server, send, None))[1].startswith(
+        "Server update aborted"
+    )
     manager._configured_session_manager_available_connected.return_value = (True, "ok")
     manager._stop_server_sessions_connected.return_value = (False, "failed")
-    assert (await manager._prepare_update_session(server, send, None))[1].startswith("Server update aborted")
+    assert (await manager._prepare_update_session(server, send, None))[1].startswith(
+        "Server update aborted"
+    )
 
     assert await manager._restore_updated_server(server, False, None, send) == (
         True,

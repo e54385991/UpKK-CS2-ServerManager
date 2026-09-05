@@ -9,7 +9,12 @@ import pytest
 from fastapi import HTTPException
 
 from api.routes.servers import configuration as config
-from modules import CustomCommandCreate, CustomCommandExecuteRequest, CustomCommandUpdate, DiscordSettingsUpdate
+from modules import (
+    CustomCommandCreate,
+    CustomCommandExecuteRequest,
+    CustomCommandUpdate,
+    DiscordSettingsUpdate,
+)
 
 
 class _Db:
@@ -82,20 +87,34 @@ async def test_discord_settings_routes_validate_update_and_test_notification(mon
     db = _Db()
     user = SimpleNamespace(id=7)
     monkeypatch.setattr(config, "get_server_with_permission", AsyncMock(return_value=server))
-    monkeypatch.setattr(config.discord_notification_service, "webhook_configured", lambda value: bool(value.discord_webhook_url))
+    monkeypatch.setattr(
+        config.discord_notification_service,
+        "webhook_configured",
+        lambda value: bool(value.discord_webhook_url),
+    )
     response = await config.get_discord_settings(3, db, user)
     assert response.webhook_configured is True
-    monkeypatch.setattr(config.discord_notification_service, "validate_webhook_url", lambda _url: (False, "bad webhook"))
+    monkeypatch.setattr(
+        config.discord_notification_service,
+        "validate_webhook_url",
+        lambda _url: (False, "bad webhook"),
+    )
     with pytest.raises(HTTPException, match="bad webhook"):
         await config.update_discord_settings(
             3, DiscordSettingsUpdate(discord_webhook_url="https://bad"), db, user, SimpleNamespace()
         )
     with pytest.raises(HTTPException, match="required"):
         await config.update_discord_settings(
-            3, DiscordSettingsUpdate(discord_notifications_enabled=True, clear_webhook=True), db, user, SimpleNamespace()
+            3,
+            DiscordSettingsUpdate(discord_notifications_enabled=True, clear_webhook=True),
+            db,
+            user,
+            SimpleNamespace(),
         )
 
-    monkeypatch.setattr(config.discord_notification_service, "validate_webhook_url", lambda _url: (True, ""))
+    monkeypatch.setattr(
+        config.discord_notification_service, "validate_webhook_url", lambda _url: (True, "")
+    )
     monkeypatch.setattr(config.redis_manager, "clear_server_cache", AsyncMock())
     monkeypatch.setattr(config, "record_audit_event", AsyncMock())
     updated = await config.update_discord_settings(
@@ -114,11 +133,19 @@ async def test_discord_settings_routes_validate_update_and_test_notification(mon
     assert server.discord_crash_restart_min_interval_minutes == 10
     assert db.commits == 1
 
-    monkeypatch.setattr(config.discord_notification_service, "send_test", AsyncMock(return_value=(False, "not sent")))
+    monkeypatch.setattr(
+        config.discord_notification_service,
+        "send_test",
+        AsyncMock(return_value=(False, "not sent")),
+    )
     with pytest.raises(HTTPException, match="not sent"):
         await config.test_discord_settings(3, SimpleNamespace(message="hello"), db, user)
-    monkeypatch.setattr(config.discord_notification_service, "send_test", AsyncMock(return_value=(True, "sent")))
-    assert (await config.test_discord_settings(3, SimpleNamespace(message="hello"), db, user))["success"] is True
+    monkeypatch.setattr(
+        config.discord_notification_service, "send_test", AsyncMock(return_value=(True, "sent"))
+    )
+    assert (await config.test_discord_settings(3, SimpleNamespace(message="hello"), db, user))[
+        "success"
+    ] is True
 
 
 @pytest.mark.asyncio
@@ -128,27 +155,39 @@ async def test_custom_command_routes_and_audit_mapping(monkeypatch):
     user = SimpleNamespace(id=7)
     monkeypatch.setattr(config, "get_server_with_permission", AsyncMock(return_value=server))
     command = _Command(id=2, name="status", target="host", commands="uptime")
-    monkeypatch.setattr(config.CustomCommand, "get_all_by_server_and_user", AsyncMock(return_value=[command]))
+    monkeypatch.setattr(
+        config.CustomCommand, "get_all_by_server_and_user", AsyncMock(return_value=[command])
+    )
     assert await config.list_custom_commands(3, db, user) == [command]
     created = await config.create_custom_command(
         3, CustomCommandCreate(name="status", target="host", commands="uptime"), db, user
     )
     assert created.name == "status" and db.commits == 1
-    monkeypatch.setattr(config.CustomCommand, "get_by_id_server_and_user", AsyncMock(return_value=command))
-    changed = await config.update_custom_command(
-        3, 2, CustomCommandUpdate(name="new"), db, user
+    monkeypatch.setattr(
+        config.CustomCommand, "get_by_id_server_and_user", AsyncMock(return_value=command)
     )
+    changed = await config.update_custom_command(3, 2, CustomCommandUpdate(name="new"), db, user)
     assert changed.name == "new"
     assert (await config.delete_custom_command(3, 2, db, user)).success is True
-    monkeypatch.setattr(config, "execute_and_log_custom_commands", AsyncMock(return_value={"success": True, "message": "ok", "results": []}))
+    monkeypatch.setattr(
+        config,
+        "execute_and_log_custom_commands",
+        AsyncMock(return_value={"success": True, "message": "ok", "results": []}),
+    )
     monkeypatch.setattr(config, "record_audit_event", AsyncMock())
     result = await config.execute_one_time_custom_command(
-        3, CustomCommandExecuteRequest(target="host", commands="uptime"), db, user, SimpleNamespace()
+        3,
+        CustomCommandExecuteRequest(target="host", commands="uptime"),
+        db,
+        user,
+        SimpleNamespace(),
     )
     assert result.success is True
     result = await config.execute_saved_custom_command(3, 2, db, user, SimpleNamespace())
     assert result.success is True
-    monkeypatch.setattr(config.CustomCommand, "get_by_id_server_and_user", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        config.CustomCommand, "get_by_id_server_and_user", AsyncMock(return_value=None)
+    )
     with pytest.raises(HTTPException, match="not found"):
         await config.update_custom_command(3, 2, CustomCommandUpdate(name="x"), db, user)
 

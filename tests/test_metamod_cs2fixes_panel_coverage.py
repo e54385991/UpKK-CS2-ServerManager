@@ -29,6 +29,7 @@ def _manager(responses):
     manager.connect = AsyncMock(return_value=(True, "ok"))
     manager.disconnect = AsyncMock()
     manager.execute_command = AsyncMock(side_effect=responses)
+
     async def upload(*_args, **kwargs):
         callback = getattr(kwargs.get("progress_callback"), "progress_event_callback", None)
         if callback:
@@ -82,7 +83,9 @@ async def test_metamod_panel_proxy_success_and_upload_failure(monkeypatch, tmp_p
             (True, "installed", ""),
         ]
     )
-    manager._fetch_latest_metamod_url = AsyncMock(return_value=(True, "https://github.com/mm.tar.gz"))
+    manager._fetch_latest_metamod_url = AsyncMock(
+        return_value=(True, "https://github.com/mm.tar.gz")
+    )
     monkeypatch.setattr(module.tempfile, "gettempdir", lambda: str(tmp_path))
     from modules.http_helper import http_helper
 
@@ -92,7 +95,9 @@ async def test_metamod_panel_proxy_success_and_upload_failure(monkeypatch, tmp_p
     manager.upload_file_with_progress.assert_awaited_once()
 
     manager = _manager([(True, "exists", ""), (True, "", "")])
-    manager._fetch_latest_metamod_url = AsyncMock(return_value=(True, "https://github.com/mm.tar.gz"))
+    manager._fetch_latest_metamod_url = AsyncMock(
+        return_value=(True, "https://github.com/mm.tar.gz")
+    )
     monkeypatch.setattr(http_helper, "download_file", _download)
     manager.upload_file_with_progress = AsyncMock(return_value=(False, "upload failed"))
     result = await manager.install_metamod(server)
@@ -114,7 +119,9 @@ async def test_cs2fixes_panel_proxy_success_and_download_failure(monkeypatch, tm
             (True, "installed", ""),
         ]
     )
-    manager._fetch_github_release_url = AsyncMock(return_value=(True, "https://github.com/fix.tar.gz"))
+    manager._fetch_github_release_url = AsyncMock(
+        return_value=(True, "https://github.com/fix.tar.gz")
+    )
     monkeypatch.setattr(module.tempfile, "gettempdir", lambda: str(tmp_path))
     from modules.http_helper import http_helper
 
@@ -124,7 +131,9 @@ async def test_cs2fixes_panel_proxy_success_and_download_failure(monkeypatch, tm
     manager.upload_file_with_progress.assert_awaited_once()
 
     manager = _manager([(True, "exists", ""), (True, "exists", ""), (True, "", "")])
-    manager._fetch_github_release_url = AsyncMock(return_value=(True, "https://github.com/fix.tar.gz"))
+    manager._fetch_github_release_url = AsyncMock(
+        return_value=(True, "https://github.com/fix.tar.gz")
+    )
     monkeypatch.setattr(http_helper, "download_file", AsyncMock(return_value=(False, "cdn")))
     result = await manager.install_cs2fixes(server)
     assert not result[0] and "Failed to download" in result[1]

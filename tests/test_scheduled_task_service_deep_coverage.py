@@ -231,7 +231,9 @@ async def test_execute_task_non_hub_lock_connect_failure_and_action_failure(monk
     lock = _Lock()
     monkeypatch.setattr(scheduled.maintenance_lock_service, "get", lambda *_a, **_k: lock)
     _session_patch(monkeypatch, _Db(server=server))
-    monkeypatch.setattr(scheduled, "SSHManager", lambda: _ssh(connect=AsyncMock(return_value=(False, "offline"))))
+    monkeypatch.setattr(
+        scheduled, "SSHManager", lambda: _ssh(connect=AsyncMock(return_value=(False, "offline")))
+    )
     await service._execute_task(task)
     assert statuses.await_args_list[-1].args[1] == "failed"
     notified.assert_awaited_once()
@@ -241,7 +243,9 @@ async def test_execute_task_non_hub_lock_connect_failure_and_action_failure(monk
     monkeypatch.setattr(scheduled.maintenance_lock_service, "get", lambda *_a, **_k: lock)
     ssh = _ssh()
     monkeypatch.setattr(scheduled, "SSHManager", lambda: ssh)
-    monkeypatch.setattr(service, "_execute_action", AsyncMock(return_value=(False, "action failed")))
+    monkeypatch.setattr(
+        service, "_execute_action", AsyncMock(return_value=(False, "action failed"))
+    )
     await service._execute_task(_task(id=11, action="log_cleanup"))
     assert statuses.await_args_list[-1].args[1:] == ("failed", "action failed")
     assert ssh.disconnect.await_count == 1
@@ -299,7 +303,9 @@ async def test_backup_plugins_s3_branches(monkeypatch):
     assert await service._execute_backup_plugins(ssh, server, progress) == (True, "local backup")
 
     monkeypatch.setattr(scheduled.s3_backup_service, "is_configured", lambda _owner: True)
-    monkeypatch.setattr(scheduled.discord_notification_service, "queue_notify", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        scheduled.discord_notification_service, "queue_notify", lambda *_a, **_k: None
+    )
     assert await service._execute_backup_plugins(ssh, server, progress) == (
         False,
         "Plugin backup completed locally, but the archive path was not captured for S3 upload.",
@@ -333,7 +339,9 @@ async def test_map_pool_sync_and_execute_action_dispatch(monkeypatch):
     ssh = _ssh()
     import services.remote_map_pool_service as pool_module
 
-    monkeypatch.setattr(pool_module, "synchronize_remote_map_pool", AsyncMock(return_value=("x", 4)))
+    monkeypatch.setattr(
+        pool_module, "synchronize_remote_map_pool", AsyncMock(return_value=("x", 4))
+    )
     assert await service._execute_map_pool_sync(ssh, server) == (
         True,
         "Synchronized 4 maps from the custom remote map pool",
@@ -372,7 +380,10 @@ async def test_map_pool_sync_and_execute_action_dispatch(monkeypatch):
     assert await service._execute_action(ssh, server, "log_cleanup") == (True, "cleaned")
     monkeypatch.setattr(scheduled, "automatic_start_block_reason", lambda _server: "blocked")
     assert await service._execute_action(ssh, server, "start") == (False, "blocked")
-    assert await service._execute_action(ssh, server, "unknown") == (False, "Unknown action: unknown")
+    assert await service._execute_action(ssh, server, "unknown") == (
+        False,
+        "Unknown action: unknown",
+    )
     monkeypatch.setattr(scheduled, "automatic_start_block_reason", lambda _server: None)
     ssh.start_server.side_effect = RuntimeError("start error")
     assert await service._execute_action(ssh, server, "start") == (False, "start error")

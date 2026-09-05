@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -90,7 +89,11 @@ async def test_start_server_handles_invalid_config_script_failure_and_start_fail
     server = _server(api_key=None)
     manager = _manager(server)
     original_normalize = game_start_module.normalize_default_map
-    monkeypatch.setattr(game_start_module, "normalize_default_map", lambda _value: (_ for _ in ()).throw(ValueError("bad map")))
+    monkeypatch.setattr(
+        game_start_module,
+        "normalize_default_map",
+        lambda _value: (_ for _ in ()).throw(ValueError("bad map")),
+    )
     monkeypatch.setattr("services.ssh.game_start.asyncio.sleep", _no_sleep)
     ok, message = await manager.start_server(server)
     assert not ok and "Invalid startup configuration" in message
@@ -98,22 +101,28 @@ async def test_start_server_handles_invalid_config_script_failure_and_start_fail
 
     server = _server()
     manager = _manager(server)
-    manager.execute_command = AsyncMock(side_effect=lambda command, **_kwargs: (
-        (False, "", "cannot write") if command.startswith("test -f") else
-        (False, "", "cannot deploy") if command.startswith("cat >") else
-        (True, "exists" if command.startswith("test -f") else "", "")
-    ))
+    manager.execute_command = AsyncMock(
+        side_effect=lambda command, **_kwargs: (
+            (False, "", "cannot write")
+            if command.startswith("test -f")
+            else (False, "", "cannot deploy")
+            if command.startswith("cat >")
+            else (True, "exists" if command.startswith("test -f") else "", "")
+        )
+    )
     monkeypatch.setattr("services.ssh.game_start.asyncio.sleep", _no_sleep)
     ok, message = await manager.start_server(server)
     assert ok, message
 
     server = _server(api_key="secret")
     manager = _manager(server)
-    manager.execute_command = AsyncMock(side_effect=[
-        (True, "", ""),
-        (True, "exists", ""),
-        (False, "", "start failed"),
-    ])
+    manager.execute_command = AsyncMock(
+        side_effect=[
+            (True, "", ""),
+            (True, "exists", ""),
+            (False, "", "start failed"),
+        ]
+    )
     monkeypatch.setattr("services.ssh.game_start.asyncio.sleep", _no_sleep)
     ok, message = await manager.start_server(server)
     assert not ok and "Start command failed" in message
@@ -143,10 +152,11 @@ async def test_start_server_reports_immediate_crash_and_auto_restart(monkeypatch
     server = _server()
     manager = _manager(server, sessions=())
     manager._running_server_session_managers = AsyncMock(side_effect=[[], []])
-    manager.execute_command = AsyncMock(side_effect=lambda command, **_kwargs: (
-        (True, "console error", "") if "console.log" in command else
-        (True, "No core dump", "")
-    ))
+    manager.execute_command = AsyncMock(
+        side_effect=lambda command, **_kwargs: (
+            (True, "console error", "") if "console.log" in command else (True, "No core dump", "")
+        )
+    )
     _patch_monitor(monkeypatch, can_restart=(True, "available"))
     recursive = AsyncMock(return_value=(True, "restarted"))
     manager.start_server = recursive
@@ -164,9 +174,9 @@ async def test_start_server_verifies_quick_crash_process_port_and_diagnostics(mo
         manager = _manager(server, sessions=())
         manager._running_server_session_managers = AsyncMock(side_effect=[["tmux"], ["tmux"], []])
 
-        async def execute(command, **_kwargs):
+        async def execute(command, _verification=verification, **_kwargs):
             if "pgrep -f" in command:
-                return True, "running" if verification == "process" else "stopped", ""
+                return True, "running" if _verification == "process" else "stopped", ""
             if "netstat -tuln" in command:
                 return True, "tcp 0 0 :27015", ""
             return True, "exists", ""
@@ -186,7 +196,11 @@ async def test_start_server_verifies_quick_crash_process_port_and_diagnostics(mo
         if "netstat -tuln" in command:
             return True, "not listening", ""
         if "console.log" in command:
-            return True, "bind: address already in use permission denied map failed library.so segmentation fault failed to load error", ""
+            return (
+                True,
+                "bind: address already in use permission denied map failed library.so segmentation fault failed to load error",
+                "",
+            )
         if "core*" in command:
             return True, "/tmp/core.1", ""
         if "ldd" in command:

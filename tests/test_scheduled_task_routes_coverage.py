@@ -55,7 +55,7 @@ async def test_scheduled_task_helpers_and_create_list_get(monkeypatch):
     with pytest.raises(HTTPException) as caught:
         routes._require_user_managed_task(_task(action="log_cleanup"))
     assert caught.value.status_code == 404
-    assert routes._require_user_managed_task(_task()) .action == "restart"
+    assert routes._require_user_managed_task(_task()).action == "restart"
 
     _patch_access(monkeypatch)
     db = _Db()
@@ -81,11 +81,15 @@ async def test_scheduled_task_helpers_and_create_list_get(monkeypatch):
 
     visible = _task(action="restart")
     hidden = _task(id=10, action="map_pool_sync")
-    monkeypatch.setattr(routes.ScheduledTask, "get_all_by_server", AsyncMock(return_value=[visible, hidden]))
+    monkeypatch.setattr(
+        routes.ScheduledTask, "get_all_by_server", AsyncMock(return_value=[visible, hidden])
+    )
     listed = await routes.list_scheduled_tasks(4, db, SimpleNamespace(id=2, is_admin=False))
     assert listed == [visible]
 
-    monkeypatch.setattr(routes.ScheduledTask, "get_by_id_and_server", AsyncMock(return_value=visible))
+    monkeypatch.setattr(
+        routes.ScheduledTask, "get_by_id_and_server", AsyncMock(return_value=visible)
+    )
     assert await routes.get_scheduled_task(4, 9, db, SimpleNamespace(id=2)) is visible
     monkeypatch.setattr(routes.ScheduledTask, "get_by_id_and_server", AsyncMock(return_value=None))
     with pytest.raises(HTTPException) as caught:
@@ -117,7 +121,9 @@ async def test_scheduled_task_update_covers_schedule_recalculation_and_errors(mo
     task = _task()
     monkeypatch.setattr(routes.ScheduledTask, "get_by_id_and_server", AsyncMock(return_value=task))
     next_run = datetime(2026, 9, 4, tzinfo=timezone.utc)
-    monkeypatch.setattr(routes.scheduled_task_service, "_calculate_next_run", lambda value: next_run)
+    monkeypatch.setattr(
+        routes.scheduled_task_service, "_calculate_next_run", lambda value: next_run
+    )
     result = await routes.update_scheduled_task(
         4,
         9,
@@ -196,7 +202,9 @@ async def test_scheduled_task_delete_and_toggle_cover_conflicts_and_states(monke
     assert caught.value.status_code == 404
 
     hidden = _task(action="log_cleanup")
-    monkeypatch.setattr(routes.ScheduledTask, "get_by_id_and_server", AsyncMock(return_value=hidden))
+    monkeypatch.setattr(
+        routes.ScheduledTask, "get_by_id_and_server", AsyncMock(return_value=hidden)
+    )
     with pytest.raises(HTTPException) as caught:
         await routes.delete_scheduled_task(4, 9, db, SimpleNamespace(id=2))
     assert caught.value.status_code == 404

@@ -128,14 +128,17 @@ async def test_managed_plugin_cleanup_and_launch_save_cover_empty_and_rows(monke
         ({"blocked": True, "blocking_reasons": ["conflict"], "plan_hash": "h"}, "conflict"),
         ({"blocked": False, "blocking_reasons": [], "plan_hash": "new"}, "changed"),
         (
-            {"blocked": False, "blocking_reasons": [], "plan_hash": "h", "warnings": [{"rule_id": 3}]},
+            {
+                "blocked": False,
+                "blocking_reasons": [],
+                "plan_hash": "h",
+                "warnings": [{"rule_id": 3}],
+            },
             "acknowledgement",
         ),
     ],
 )
-async def test_execute_plan_rejects_blocked_stale_and_unacknowledged(
-    monkeypatch, plan, expected
-):
+async def test_execute_plan_rejects_blocked_stale_and_unacknowledged(monkeypatch, plan, expected):
     server = _server()
     user = _patch_lock_and_lookup(monkeypatch, server)
     monkeypatch.setattr(service, "build_game_mode_plan", AsyncMock(return_value=plan))
@@ -171,7 +174,11 @@ async def test_execute_plan_success_covers_startup_framework_restart_and_verify(
     monkeypatch.setattr(service, "record_framework_installation", AsyncMock())
     monkeypatch.setattr(service, "_emit_plan_progress", AsyncMock())
     monkeypatch.setattr(service, "_read_text", AsyncMock(side_effect=["maps", "{}", "maps", "{}"]))
-    monkeypatch.setattr(service, "inspect_game_mode_state", AsyncMock(return_value={"css": True, "mapchooser": True, "maps": True, "config": True}))
+    monkeypatch.setattr(
+        service,
+        "inspect_game_mode_state",
+        AsyncMock(return_value={"css": True, "mapchooser": True, "maps": True, "config": True}),
+    )
     monkeypatch.setattr(service, "wait_for_remote_files", AsyncMock())
     manager = SimpleNamespace(disconnect=AsyncMock())
     monkeypatch.setattr(service, "connect", AsyncMock(return_value=manager))
@@ -217,10 +224,14 @@ async def test_execute_plan_wipe_and_failure_return_partial_result(monkeypatch):
     monkeypatch.setattr(service, "get_recipe", lambda _mode: recipe)
     monkeypatch.setattr(service, "_emit_plan_progress", AsyncMock())
     monkeypatch.setattr(service, "wipe_addons_directory", AsyncMock())
-    monkeypatch.setattr(service, "connect", AsyncMock(return_value=SimpleNamespace(disconnect=AsyncMock())))
-    monkeypatch.setattr(service, "SSHManager", lambda: SimpleNamespace(
-        stop_server=AsyncMock(return_value=(False, "still running"))
-    ))
+    monkeypatch.setattr(
+        service, "connect", AsyncMock(return_value=SimpleNamespace(disconnect=AsyncMock()))
+    )
+    monkeypatch.setattr(
+        service,
+        "SSHManager",
+        lambda: SimpleNamespace(stop_server=AsyncMock(return_value=(False, "still running"))),
+    )
     result = await service.execute_game_mode_plan(
         _DB(), server, user, "test-mode", wipe_addons=True, expected_plan_hash="wipe-hash"
     )
@@ -268,7 +279,9 @@ async def test_execute_plan_market_plugin_install_restart_and_final_verify(monke
             {"css": True, "mapchooser": True, "maps": True, "config": True},
         ]
     )
-    monkeypatch.setattr(service, "inspect_game_mode_state", AsyncMock(side_effect=lambda *_: next(states)))
+    monkeypatch.setattr(
+        service, "inspect_game_mode_state", AsyncMock(side_effect=lambda *_: next(states))
+    )
     monkeypatch.setattr(service, "_read_text", AsyncMock(side_effect=["maps", "{}"]))
     manager = SimpleNamespace(
         disconnect=AsyncMock(),
@@ -311,8 +324,14 @@ async def test_execute_plan_wipe_restart_and_verification_errors(monkeypatch):
     monkeypatch.setattr(service, "get_recipe", lambda _mode: recipe)
     monkeypatch.setattr(service, "_emit_plan_progress", AsyncMock())
     monkeypatch.setattr(service, "wipe_addons_directory", AsyncMock())
-    monkeypatch.setattr(service, "inspect_game_mode_state", AsyncMock(return_value={"css": False, "mapchooser": True}))
-    monkeypatch.setattr(service, "connect", AsyncMock(return_value=SimpleNamespace(disconnect=AsyncMock())))
+    monkeypatch.setattr(
+        service,
+        "inspect_game_mode_state",
+        AsyncMock(return_value={"css": False, "mapchooser": True}),
+    )
+    monkeypatch.setattr(
+        service, "connect", AsyncMock(return_value=SimpleNamespace(disconnect=AsyncMock()))
+    )
     monkeypatch.setattr(service, "_clear_managed_plugins", AsyncMock(return_value=2))
 
     class _SSH:
@@ -351,7 +370,9 @@ async def test_execute_plan_restart_start_failure_is_persisted(monkeypatch):
     monkeypatch.setattr(service, "build_game_mode_plan", AsyncMock(return_value=plan))
     monkeypatch.setattr(service, "get_recipe", lambda _mode: recipe)
     monkeypatch.setattr(service, "_emit_plan_progress", AsyncMock())
-    monkeypatch.setattr(service, "connect", AsyncMock(return_value=SimpleNamespace(disconnect=AsyncMock())))
+    monkeypatch.setattr(
+        service, "connect", AsyncMock(return_value=SimpleNamespace(disconnect=AsyncMock()))
+    )
 
     class _SSH:
         async def stop_server(self, _server):

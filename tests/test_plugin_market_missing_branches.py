@@ -75,8 +75,14 @@ async def test_market_server_and_dependency_helpers_cover_all_outcomes(monkeypat
     monkeypatch.setattr(Server, "get_by_id", admin_lookup)
     monkeypatch.setattr(Server, "get_by_id_and_user", owner_lookup)
     db = _Db()
-    assert await plugin_market.get_server_for_user(4, db, SimpleNamespace(id=1, is_admin=True)) is server
-    assert await plugin_market.get_server_for_user(4, db, SimpleNamespace(id=1, is_admin=False)) is server
+    assert (
+        await plugin_market.get_server_for_user(4, db, SimpleNamespace(id=1, is_admin=True))
+        is server
+    )
+    assert (
+        await plugin_market.get_server_for_user(4, db, SimpleNamespace(id=1, is_admin=False))
+        is server
+    )
     assert db.commits == 2
     admin_lookup.return_value = None
     with pytest.raises(HTTPException) as missing:
@@ -94,19 +100,49 @@ async def test_market_server_and_dependency_helpers_cover_all_outcomes(monkeypat
 
     install.return_value = SimpleNamespace(success=False, message="bad")
     installed, error = await plugin_market._install_dependencies(
-        install, {**plan, "installation_order": [1, 2]}, 1, 4, [], [], [], False, db, SimpleNamespace(id=1), object()
+        install,
+        {**plan, "installation_order": [1, 2]},
+        1,
+        4,
+        [],
+        [],
+        [],
+        False,
+        db,
+        SimpleNamespace(id=1),
+        object(),
     )
     assert installed == [] and "failed" in error.message
 
     install.side_effect = HTTPException(status_code=409, detail="conflict")
     installed, error = await plugin_market._install_dependencies(
-        install, {**plan, "installation_order": [1, 2]}, 1, 4, [], [], [], False, db, SimpleNamespace(id=1), object()
+        install,
+        {**plan, "installation_order": [1, 2]},
+        1,
+        4,
+        [],
+        [],
+        [],
+        False,
+        db,
+        SimpleNamespace(id=1),
+        object(),
     )
     assert installed == [] and "stopped" in error.message
 
     monkeypatch.setattr(MarketPlugin, "get_by_ids", AsyncMock(side_effect=ValueError("bad ids")))
     installed, error = await plugin_market._install_dependencies(
-        install, {**plan, "installation_order": [1, 2]}, 1, 4, [], [], [], False, db, SimpleNamespace(id=1), object()
+        install,
+        {**plan, "installation_order": [1, 2]},
+        1,
+        4,
+        [],
+        [],
+        [],
+        False,
+        db,
+        SimpleNamespace(id=1),
+        object(),
     )
     assert installed == [] and error is None
 
@@ -117,16 +153,30 @@ async def test_market_asset_validation_and_install_counter_cleanup(monkeypatch):
     server = SimpleNamespace(id=4, github_proxy=None)
     user = SimpleNamespace(id=1)
     direct = await plugin_market._resolve_market_asset(
-        plugin, server, _Db(), user, "https://github.com/a/b/releases/download/v1/a.zip", "a.zip", None
+        plugin,
+        server,
+        _Db(),
+        user,
+        "https://github.com/a/b/releases/download/v1/a.zip",
+        "a.zip",
+        None,
     )
     assert direct[0].endswith("a.zip")
 
-    monkeypatch.setattr(plugin_market, "resolve_latest_market_asset", AsyncMock(side_effect=RuntimeSelectionRequired("choose")))
+    monkeypatch.setattr(
+        plugin_market,
+        "resolve_latest_market_asset",
+        AsyncMock(side_effect=RuntimeSelectionRequired("choose")),
+    )
     with pytest.raises(HTTPException) as conflict:
         await plugin_market._resolve_market_asset(plugin, server, _Db(), user, None, None, None)
     assert conflict.value.status_code == 409
-    monkeypatch.setattr(plugin_market, "resolve_latest_market_asset", AsyncMock(return_value=(None, "no asset")))
-    resolved = await plugin_market._resolve_market_asset(plugin, server, _Db(), user, None, None, None)
+    monkeypatch.setattr(
+        plugin_market, "resolve_latest_market_asset", AsyncMock(return_value=(None, "no asset"))
+    )
+    resolved = await plugin_market._resolve_market_asset(
+        plugin, server, _Db(), user, None, None, None
+    )
     assert resolved[0] is None and resolved[4] == "no asset"
 
     db = _Db()
@@ -175,7 +225,9 @@ async def test_market_asset_validation_and_install_counter_cleanup(monkeypatch):
         [],
     )
     assert result is failed
-    monkeypatch.setattr(plugin_market, "install_github_plugin", AsyncMock(side_effect=RuntimeError("boom")))
+    monkeypatch.setattr(
+        plugin_market, "install_github_plugin", AsyncMock(side_effect=RuntimeError("boom"))
+    )
     result = await plugin_market._execute_market_install(
         plugin,
         4,
@@ -217,29 +269,42 @@ async def test_market_readme_dependencies_and_admin_crud_errors(monkeypatch):
     monkeypatch.setattr(
         plugin_market.http_helper,
         "get",
-        AsyncMock(side_effect=[
-            (True, {"name": "Demo", "description": "desc"}, None),
-            (True, {"content": bad_readme}, None),
-        ]),
+        AsyncMock(
+            side_effect=[
+                (True, {"name": "Demo", "description": "desc"}, None),
+                (True, {"content": bad_readme}, None),
+            ]
+        ),
     )
     assert (await plugin_market.fetch_github_repo_info("https://github.com/acme/demo")).success
 
     db = _Db()
     monkeypatch.setattr(MarketPlugin, "get_by_github_url", AsyncMock(return_value=None))
-    monkeypatch.setattr(plugin_market, "fetch_github_repo_info", AsyncMock(return_value=SimpleNamespace(success=False)))
+    monkeypatch.setattr(
+        plugin_market,
+        "fetch_github_repo_info",
+        AsyncMock(return_value=SimpleNamespace(success=False)),
+    )
     with pytest.raises(HTTPException) as invalid_category:
         await plugin_market.create_plugin(
-            plugin_market.MarketPluginCreate(github_url="https://github.com/acme/new", category="bad"),
+            plugin_market.MarketPluginCreate(
+                github_url="https://github.com/acme/new", category="bad"
+            ),
             db,
             SimpleNamespace(id=1, is_admin=True, username="admin"),
         )
     assert invalid_category.value.status_code == 400
 
     monkeypatch.setattr(MarketPlugin, "get_by_id", AsyncMock(return_value=plugin))
-    monkeypatch.setattr(plugin_market, "validate_dependencies", AsyncMock(side_effect=ValueError("invalid")))
+    monkeypatch.setattr(
+        plugin_market, "validate_dependencies", AsyncMock(side_effect=ValueError("invalid"))
+    )
     with pytest.raises(HTTPException) as bad_dep:
         await plugin_market.update_plugin(
-            1, plugin_market.MarketPluginUpdate(dependencies="x"), db, SimpleNamespace(username="admin")
+            1,
+            plugin_market.MarketPluginUpdate(dependencies="x"),
+            db,
+            SimpleNamespace(username="admin"),
         )
     assert bad_dep.value.status_code == 400
 
@@ -260,25 +325,40 @@ async def test_market_archive_asset_selection_and_uninstall_tracking(monkeypatch
     db = _Db()
     monkeypatch.setattr(MarketPlugin, "get_by_id", AsyncMock(return_value=plugin))
     monkeypatch.setattr(plugin_market, "get_server_for_user", AsyncMock(return_value=server))
-    monkeypatch.setattr(plugin_market.http_helper, "get", AsyncMock(return_value=(True, {"assets": [{"name": "windows.zip"}, {"name": "linux.zip"}]}, None)))
+    monkeypatch.setattr(
+        plugin_market.http_helper,
+        "get",
+        AsyncMock(
+            return_value=(True, {"assets": [{"name": "windows.zip"}, {"name": "linux.zip"}]}, None)
+        ),
+    )
     with pytest.raises(HTTPException) as no_asset:
-        await plugin_market.analyze_plugin_archive(1, server_id=4, download_url=None, db=db, current_user=user)
+        await plugin_market.analyze_plugin_archive(
+            1, server_id=4, download_url=None, db=db, current_user=user
+        )
     assert no_asset.value.status_code == 404
 
     plugin.github_url = "https://gitlab.com/acme/demo"
     with pytest.raises(HTTPException) as invalid_url:
-        await plugin_market.analyze_plugin_archive(1, server_id=4, download_url=None, db=db, current_user=user)
+        await plugin_market.analyze_plugin_archive(
+            1, server_id=4, download_url=None, db=db, current_user=user
+        )
     assert invalid_url.value.status_code == 400
 
     plugin.github_url = "https://github.com/acme/demo"
     archive = AsyncMock(return_value={"files": []})
     monkeypatch.setattr("api.routes.github_plugins.analyze_archive", archive)
-    result = await plugin_market.analyze_plugin_archive(1, server_id=4, download_url="https://x/a.zip", db=db, current_user=user)
+    result = await plugin_market.analyze_plugin_archive(
+        1, server_id=4, download_url="https://x/a.zip", db=db, current_user=user
+    )
     assert result == {"files": []}
 
     tracked = SimpleNamespace()
     db = _Db([tracked])
-    monkeypatch.setattr("api.routes.github_plugins.uninstall_plugin", AsyncMock(return_value=SimpleNamespace(success=True, message="ok")))
+    monkeypatch.setattr(
+        "api.routes.github_plugins.uninstall_plugin",
+        AsyncMock(return_value=SimpleNamespace(success=True, message="ok")),
+    )
     result = await plugin_market.uninstall_market_plugin(
         1, 4, plugin_market.PluginUninstallRequest(files_to_delete=[]), db, user, object()
     )

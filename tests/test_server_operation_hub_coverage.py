@@ -138,10 +138,14 @@ async def test_create_get_schedule_and_queue_limit(hub, monkeypatch):
 @pytest.mark.asyncio
 async def test_listing_failed_dismiss_clear_and_latest_message(hub, monkeypatch):
     old = _record(
-        "old", status="failed", server_id=1,
+        "old",
+        status="failed",
+        server_id=1,
         completed_at=(datetime.now(timezone.utc) - timedelta(days=8)).isoformat(),
     )
-    fresh = _record("fresh", status="failed", server_id=1, completed_at=datetime.now(timezone.utc).isoformat())
+    fresh = _record(
+        "fresh", status="failed", server_id=1, completed_at=datetime.now(timezone.utc).isoformat()
+    )
     hub._records.update({"old": old, "fresh": fresh})
     hub._failed[1] = ["old", "fresh", "missing"]
     failed = await hub.list_failed_for_server(1)
@@ -163,7 +167,9 @@ async def test_listing_failed_dismiss_clear_and_latest_message(hub, monkeypatch)
     hub._failed[3] = ["current"]
     await hub.dismiss_failed("current")
     assert 3 not in hub._current
-    monkeypatch.setattr(module.redis_manager, "delete", AsyncMock(side_effect=RuntimeError("redis")))
+    monkeypatch.setattr(
+        module.redis_manager, "delete", AsyncMock(side_effect=RuntimeError("redis"))
+    )
     await hub.dismiss_failed("nonexistent")
 
 
@@ -178,7 +184,9 @@ async def test_abort_finish_promote_and_forward_progress(hub, monkeypatch):
     hub._tasks["current"] = task
     hub._runners["next"] = lambda: None
     started = []
-    monkeypatch.setattr(hub, "_start", lambda operation_id, _factory=None: started.append(operation_id))
+    monkeypatch.setattr(
+        hub, "_start", lambda operation_id, _factory=None: started.append(operation_id)
+    )
     aborted = await hub.abort(1, message="cancelled")
     assert aborted["status"] == "failed" and task.cancelled
     assert hub._current[1] == "next" and started == ["next"]
@@ -215,7 +223,9 @@ async def test_emit_subscribe_replay_and_wait_paths(hub, monkeypatch):
         await hub.wait_until_terminal("missing")
 
     redis = module.redis_manager
-    redis.client.lrange = AsyncMock(return_value=[json.dumps({"sequence": "5", "message": "loaded"}), "bad"])
+    redis.client.lrange = AsyncMock(
+        return_value=[json.dumps({"sequence": "5", "message": "loaded"}), "bad"]
+    )
     hub._events["loaded"] = []
     loaded = await hub.replay("loaded", after_sequence=1)
     assert loaded[0]["message"] == "loaded"
@@ -276,7 +286,9 @@ async def test_persistence_and_load_error_paths(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_list_for_server_and_lost_pending_worker(hub):
-    hub._records.update({"a": _record("a", server_id=1), "b": _record("b", server_id=1, status="completed")})
+    hub._records.update(
+        {"a": _record("a", server_id=1), "b": _record("b", server_id=1, status="completed")}
+    )
     hub._current[1] = "a"
     hub._pending[1] = ["a", "b"]
     listed = await hub.list_for_server(1)

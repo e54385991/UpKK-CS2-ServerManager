@@ -177,6 +177,7 @@ async def test_steam_inf_read_failures_refresh_and_periodic(monkeypatch):
 
     worker = _Fail("missing")
     monkeypatch.setattr(steam, "_ssh_manager_factory", lambda: worker)
+
     def timeout_wait(awaitable, _timeout=None, **_kwargs):
         awaitable.close()
         raise asyncio.TimeoutError
@@ -238,7 +239,11 @@ async def test_steam_inf_lifecycle_and_db_update_error(monkeypatch):
 @pytest.mark.asyncio
 async def test_a2s_cache_loops_and_cache_version(monkeypatch):
     service = a2s.A2SCacheService()
-    steam_api = SimpleNamespace(check_version=AsyncMock(return_value=(True, {"success": True, "required_version": "1.2", "message": "ok"})))
+    steam_api = SimpleNamespace(
+        check_version=AsyncMock(
+            return_value=(True, {"success": True, "required_version": "1.2", "message": "ok"})
+        )
+    )
     monkeypatch.setattr("services.steam_api_service.steam_api_service", steam_api)
     redis = SimpleNamespace(set=AsyncMock(), get=AsyncMock(return_value={"version": "1.2"}))
     monkeypatch.setattr(a2s, "redis_manager", redis)
@@ -256,7 +261,9 @@ async def test_a2s_cache_loops_and_cache_version(monkeypatch):
 
     service.running = True
     monkeypatch.setattr(service, "_query_all_servers", AsyncMock(side_effect=RuntimeError("query")))
-    monkeypatch.setattr(service, "_cache_steam_version", AsyncMock(side_effect=RuntimeError("version")))
+    monkeypatch.setattr(
+        service, "_cache_steam_version", AsyncMock(side_effect=RuntimeError("version"))
+    )
     monkeypatch.setattr(a2s.asyncio, "sleep", AsyncMock(side_effect=asyncio.CancelledError))
     with pytest.raises(asyncio.CancelledError):
         await service._query_loop()
@@ -311,7 +318,9 @@ async def test_a2s_queries_success_failures_and_lifecycle(monkeypatch):
     await service._query_all_servers()
 
     service._query_and_cache_server = AsyncMock()
-    redis.get = AsyncMock(side_effect=[{"success": True}, '{"success": false}', "bad", RuntimeError("x")])
+    redis.get = AsyncMock(
+        side_effect=[{"success": True}, '{"success": false}', "bad", RuntimeError("x")]
+    )
     assert await service.get_cached_info(1) == {"success": True}
     assert await service.get_cached_info(1) == {"success": False}
     assert await service.get_cached_info(1) is None
@@ -355,10 +364,15 @@ async def test_ssh_health_auth_due_and_lifecycle(monkeypatch):
     assert await monitor._test_ssh_connection(_server(is_password_auth=True, is_key_auth=False))
     assert conn.closed
     assert await monitor._test_ssh_connection(_server(is_password_auth=False, is_key_auth=True))
-    assert await monitor._test_ssh_connection(_server(is_password_auth=False, is_key_auth=False)) is False
+    assert (
+        await monitor._test_ssh_connection(_server(is_password_auth=False, is_key_auth=False))
+        is False
+    )
     monkeypatch.setattr(health.asyncssh, "connect", AsyncMock(side_effect=asyncio.TimeoutError))
     assert await monitor._test_ssh_connection(server) is False
-    monkeypatch.setattr(health.asyncssh, "connect", AsyncMock(side_effect=asyncssh.PermissionDenied("no")))
+    monkeypatch.setattr(
+        health.asyncssh, "connect", AsyncMock(side_effect=asyncssh.PermissionDenied("no"))
+    )
     assert await monitor._test_ssh_connection(server) is False
     monkeypatch.setattr(health.asyncssh, "connect", AsyncMock(side_effect=RuntimeError("ssh")))
     assert await monitor._test_ssh_connection(server) is False

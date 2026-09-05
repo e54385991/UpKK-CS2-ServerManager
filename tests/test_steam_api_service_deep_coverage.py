@@ -14,7 +14,10 @@ def test_steam_version_helpers_cover_numeric_and_datetime_edges(monkeypatch):
     assert module.steam_version_query(None) == "1"
     assert module.steam_version_query(" 1.41.2.5 ") == "14125"
     assert module.steam_version_query("release") == "1"
-    assert module.advertised_version_from_response({"message": "Server version required: 1.2.3"}) == "1.2.3"
+    assert (
+        module.advertised_version_from_response({"message": "Server version required: 1.2.3"})
+        == "1.2.3"
+    )
     assert module.advertised_version_from_response({"required_version": 14125}) == "14125"
     assert module.advertised_version_from_response({"required_version": ""}) is None
     assert module.resolve_advertised_version(None, installed="1.2.3", up_to_date=True) == "1.2.3"
@@ -47,10 +50,14 @@ async def test_check_version_cache_http_and_response_shapes(monkeypatch):
     assert ok and cached["cached"] is True and cached["up_to_date"] is True
 
     monkeypatch.setattr(module.redis_manager, "get", AsyncMock(return_value=None))
-    monkeypatch.setattr(module.http_helper, "get", AsyncMock(return_value=(False, None, "network timeout")))
+    monkeypatch.setattr(
+        module.http_helper, "get", AsyncMock(return_value=(False, None, "network timeout"))
+    )
     ok, result = await service.check_version(use_cache=True)
     assert not ok and "Cannot reach" in result["error"]
-    monkeypatch.setattr(module.http_helper, "get", AsyncMock(return_value=(False, None, "bad request")))
+    monkeypatch.setattr(
+        module.http_helper, "get", AsyncMock(return_value=(False, None, "bad request"))
+    )
     ok, result = await service.check_version(use_cache=False)
     assert not ok and result["error"] == "bad request"
 
@@ -71,7 +78,9 @@ async def test_check_version_cache_http_and_response_shapes(monkeypatch):
     assert ok and result["required_version"] == "1.4.5"
     module.redis_manager.set.assert_awaited()
 
-    monkeypatch.setattr(module.http_helper, "get", AsyncMock(side_effect=RuntimeError("proxy down")))
+    monkeypatch.setattr(
+        module.http_helper, "get", AsyncMock(side_effect=RuntimeError("proxy down"))
+    )
     ok, result = await service.check_version(use_cache=False)
     assert not ok and "Cannot reach" in result["error"]
 
@@ -79,7 +88,9 @@ async def test_check_version_cache_http_and_response_shapes(monkeypatch):
 @pytest.mark.asyncio
 async def test_create_game_server_account_success_and_failures(monkeypatch):
     service = module.SteamAPIService()
-    post = AsyncMock(return_value=(True, {"response": {"login_token": "token", "steamid": "id"}}, ""))
+    post = AsyncMock(
+        return_value=(True, {"response": {"login_token": "token", "steamid": "id"}}, "")
+    )
     monkeypatch.setattr(module.http_helper, "post", post)
     ok, result = await service.create_game_server_account("key", "")
     assert ok and result["login_token"] == "token"
@@ -92,7 +103,9 @@ async def test_create_game_server_account_success_and_failures(monkeypatch):
         (True, {"response": {"error": "quota"}}, ""),
     ]
     for success, payload, error in cases:
-        monkeypatch.setattr(module.http_helper, "post", AsyncMock(return_value=(success, payload, error)))
+        monkeypatch.setattr(
+            module.http_helper, "post", AsyncMock(return_value=(success, payload, error))
+        )
         ok, result = await service.create_game_server_account("key")
         assert not ok and result["error"]
 

@@ -26,7 +26,13 @@ async def test_remote_map_url_validation_and_fetch(monkeypatch):
         "example.com",
         8443,
     )
-    for value in ("", "ftp://example.com/x", "http://localhost/x", "https://u:p@example.com/x", "https://example.com/x#f"):
+    for value in (
+        "",
+        "ftp://example.com/x",
+        "http://localhost/x",
+        "https://u:p@example.com/x",
+        "https://example.com/x#f",
+    ):
         with pytest.raises(pool.RemoteMapPoolError):
             pool._validate_remote_map_url_syntax(value)
     monkeypatch.setattr(pool, "_resolve_hostname", lambda *_args: {"8.8.8.8"})
@@ -73,15 +79,21 @@ async def test_remote_map_url_validation_and_fetch(monkeypatch):
 
     monkeypatch.setattr(pool, "_resolve_hostname", lambda *_args: {"8.8.8.8"})
     content = append_map_to_config(DEFAULT_MAPS_CONFIG, name="de_dust2", workshop_id="123")
-    monkeypatch.setattr(pool.httpx, "AsyncClient", lambda **_kwargs: _Client(_Response(chunks=[content.encode()])))
+    monkeypatch.setattr(
+        pool.httpx, "AsyncClient", lambda **_kwargs: _Client(_Response(chunks=[content.encode()]))
+    )
     assert await pool.fetch_remote_map_pool("https://example.com/maps.txt") == content
     monkeypatch.setattr(pool.httpx, "AsyncClient", lambda **_kwargs: _Client(_Response(404)))
     with pytest.raises(pool.RemoteMapPoolError, match="HTTP 404"):
         await pool.fetch_remote_map_pool("https://example.com/maps.txt")
-    monkeypatch.setattr(pool.httpx, "AsyncClient", lambda **_kwargs: _Client(_Response(200, chunks=[b"\xff"])))
+    monkeypatch.setattr(
+        pool.httpx, "AsyncClient", lambda **_kwargs: _Client(_Response(200, chunks=[b"\xff"]))
+    )
     with pytest.raises(pool.RemoteMapPoolError, match="UTF-8"):
         await pool.fetch_remote_map_pool("https://example.com/maps.txt")
-    monkeypatch.setattr(pool, "validate_remote_map_url", AsyncMock(side_effect=pool.RemoteMapPoolError("bad url")))
+    monkeypatch.setattr(
+        pool, "validate_remote_map_url", AsyncMock(side_effect=pool.RemoteMapPoolError("bad url"))
+    )
     with pytest.raises(pool.RemoteMapPoolError, match="bad url"):
         await pool.fetch_remote_map_pool("https://example.com/maps.txt")
 
@@ -90,6 +102,7 @@ async def test_remote_map_url_validation_and_fetch(monkeypatch):
 async def test_remote_map_redirect_replace_and_sync(monkeypatch):
     server = _server()
     content = append_map_to_config(DEFAULT_MAPS_CONFIG, name="de_dust2", workshop_id="123")
+
     class _Response:
         is_redirect = True
         status_code = 302
@@ -142,7 +155,9 @@ async def test_remote_map_redirect_replace_and_sync(monkeypatch):
     ssh.execute_command = AsyncMock(return_value=(False, "", "mkdir failed"))
     with pytest.raises(pool.RemoteMapPoolError, match="mkdir failed"):
         await pool.replace_remote_map_pool(ssh, server, content)
-    ssh.execute_command = AsyncMock(side_effect=[(True, "", ""), (False, "", "mv failed"), (True, "", "")])
+    ssh.execute_command = AsyncMock(
+        side_effect=[(True, "", ""), (False, "", "mv failed"), (True, "", "")]
+    )
     with pytest.raises(pool.RemoteMapPoolError, match="mv failed"):
         await pool.replace_remote_map_pool(ssh, server, content)
     ssh.execute_command = AsyncMock(return_value=(False, "", "missing"))
@@ -169,11 +184,16 @@ def test_inventory_decoding_aliases_and_evidence():
     assert not inventory._aliases_match({"short"}, {"other"})
 
     item = SimpleNamespace(framework_key="metamod", title="Metamod:Source")
-    assert inventory.installation_evidence(item, {"frameworks": {"metamod": True}})[0]["kind"] == "framework"
+    assert (
+        inventory.installation_evidence(item, {"frameworks": {"metamod": True}})[0]["kind"]
+        == "framework"
+    )
     item = SimpleNamespace(title="CounterStrikeSharp")
     assert inventory.installation_evidence(item, {"frameworks": {"counterstrikesharp": True}})
     item = SimpleNamespace(title="My Plugin", custom_install_path="addons/MyPlugin")
-    remote = {"plugins": [{"kind": "css", "name": "MyPlugin.dll", "relative_path": "x", "key": "k"}]}
+    remote = {
+        "plugins": [{"kind": "css", "name": "MyPlugin.dll", "relative_path": "x", "key": "k"}]
+    }
     assert inventory.installation_evidence(item, remote)[0]["name"] == "MyPlugin.dll"
     managed = [SimpleNamespace(market_plugin_id=1, title="My Plugin")]
     planned = [SimpleNamespace(id=2, title="My Plugin")]

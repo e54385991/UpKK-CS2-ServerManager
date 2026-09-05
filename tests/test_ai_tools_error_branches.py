@@ -128,9 +128,7 @@ async def test_ai_context_saved_command_and_connection_errors(monkeypatch):
     with pytest.raises(RuntimeError, match="offline"):
         await ai_tools._connect(_server())
 
-    command = SimpleNamespace(
-        id=3, target="host", commands="echo x", name="x", updated_at=None
-    )
+    command = SimpleNamespace(id=3, target="host", commands="echo x", name="x", updated_at=None)
     monkeypatch.setattr(
         ai_tools.CustomCommand,
         "get_by_id_server_and_user",
@@ -158,16 +156,22 @@ async def test_market_preview_handles_panel_native_asset_and_missing_plugin(monk
     user = SimpleNamespace(id=1)
     panel = SimpleNamespace(id=1, title="Panel")
     asset_plugin = SimpleNamespace(id=2, title="Asset")
-    monkeypatch.setattr(ai_tools.MarketPlugin, "get_by_ids", AsyncMock(return_value=[panel, asset_plugin]))
+    monkeypatch.setattr(
+        ai_tools.MarketPlugin, "get_by_ids", AsyncMock(return_value=[panel, asset_plugin])
+    )
     monkeypatch.setattr(
         "services.plugin_conflict_service._panel_framework_key",
         lambda plugin: "metamod" if plugin is panel else None,
     )
     monkeypatch.setattr(
         "services.plugin_conflict_service._latest_release_asset",
-        AsyncMock(return_value={"release_id": 9, "release_tag": "v1", "asset_name": "x-steamrt4.zip"}),
+        AsyncMock(
+            return_value={"release_id": 9, "release_tag": "v1", "asset_name": "x-steamrt4.zip"}
+        ),
     )
-    monkeypatch.setattr("services.linux_runtime_service.steam_runtime_for_asset", lambda _name: "steamrt4")
+    monkeypatch.setattr(
+        "services.linux_runtime_service.steam_runtime_for_asset", lambda _name: "steamrt4"
+    )
     plan = {"installation_order": [1, 2], "already_installed": []}
     result = await ai_tools._market_release_selection_preview(
         _Db(), server, user, plan, {"reason": "matched"}
@@ -226,7 +230,11 @@ async def test_ai_css_log_filters_invalid_binary_and_keyword_entries(monkeypatch
 
     def list_commands(command):
         if "find " in command:
-            return True, "1\tbad.dll\t1\n2\tbad.log\tnope\n3\terror.log\t300000\n4\tother.txt\t4\n", ""
+            return (
+                True,
+                "1\tbad.dll\t1\n2\tbad.log\tnope\n3\terror.log\t300000\n4\tother.txt\t4\n",
+                "",
+            )
         if "grep -Iqi" in command:
             return False, "", ""
         if "test -s" in command:
@@ -240,7 +248,9 @@ async def test_ai_css_log_filters_invalid_binary_and_keyword_entries(monkeypatch
     )
     assert listed["logs"] == []
 
-    binary_manager = _SSH(command_result=lambda command: (False, "", "") if "test -s" in command else (True, "", ""))
+    binary_manager = _SSH(
+        command_result=lambda command: (False, "", "") if "test -s" in command else (True, "", "")
+    )
     monkeypatch.setattr(ai_tools, "SSHManager", lambda: binary_manager)
     with pytest.raises(ValueError, match="binary"):
         await ai_tools.read_css_error_log(
@@ -265,7 +275,9 @@ async def test_ai_patch_file_rejects_null_stale_and_remote_failures(monkeypatch)
     with pytest.raises(ValueError, match="null bytes"):
         await ai_tools.patch_server_text_file(
             ctx,
-            ai_tools.FilePatchInput(relative_path="cfg/a.cfg", expected_revision=revision, content="x\x00y"),
+            ai_tools.FilePatchInput(
+                relative_path="cfg/a.cfg", expected_revision=revision, content="x\x00y"
+            ),
         )
 
     manager = _SSH(read_result=(True, current, ""))
@@ -273,7 +285,9 @@ async def test_ai_patch_file_rejects_null_stale_and_remote_failures(monkeypatch)
     with pytest.raises(ValueError, match="changed since"):
         await ai_tools.patch_server_text_file(
             ctx,
-            ai_tools.FilePatchInput(relative_path="cfg/a.cfg", expected_revision="0" * 64, content="new"),
+            ai_tools.FilePatchInput(
+                relative_path="cfg/a.cfg", expected_revision="0" * 64, content="new"
+            ),
         )
 
     manager = _SSH(valid=(False, "outside"), read_result=(True, current, ""))
@@ -281,7 +295,9 @@ async def test_ai_patch_file_rejects_null_stale_and_remote_failures(monkeypatch)
     with pytest.raises(ValueError, match="outside"):
         await ai_tools.patch_server_text_file(
             ctx,
-            ai_tools.FilePatchInput(relative_path="cfg/a.cfg", expected_revision=revision, content="new"),
+            ai_tools.FilePatchInput(
+                relative_path="cfg/a.cfg", expected_revision=revision, content="new"
+            ),
         )
 
     manager = _SSH(read_result=(False, "", "read failed"))
@@ -289,7 +305,9 @@ async def test_ai_patch_file_rejects_null_stale_and_remote_failures(monkeypatch)
     with pytest.raises(RuntimeError, match="read failed"):
         await ai_tools.patch_server_text_file(
             ctx,
-            ai_tools.FilePatchInput(relative_path="cfg/a.cfg", expected_revision=revision, content="new"),
+            ai_tools.FilePatchInput(
+                relative_path="cfg/a.cfg", expected_revision=revision, content="new"
+            ),
         )
 
     manager = _SSH(command_result=(False, "", "backup failed"), read_result=(True, current, ""))
@@ -297,7 +315,9 @@ async def test_ai_patch_file_rejects_null_stale_and_remote_failures(monkeypatch)
     with pytest.raises(RuntimeError, match="backup failed"):
         await ai_tools.patch_server_text_file(
             ctx,
-            ai_tools.FilePatchInput(relative_path="cfg/a.cfg", expected_revision=revision, content="new"),
+            ai_tools.FilePatchInput(
+                relative_path="cfg/a.cfg", expected_revision=revision, content="new"
+            ),
         )
 
 
@@ -331,9 +351,7 @@ async def test_ai_operation_tracking_warning_and_restart_stop_failure(monkeypatc
         ctx, ai_tools.ServerOperationInput(operation="install_metamod")
     )
     assert installed["tracking_warning"]
-    restarted = await ai_tools.control_server(
-        ctx, ai_tools.ServerControlInput(action="restart")
-    )
+    restarted = await ai_tools.control_server(ctx, ai_tools.ServerControlInput(action="restart"))
     assert restarted == {"success": False, "message": "Restart stopped before start: still running"}
 
 
@@ -347,22 +365,24 @@ async def test_ai_policy_dispatch_and_approval_hash_conflicts(monkeypatch):
         "services.a2s_query.a2s_service.query_server_info",
         AsyncMock(return_value=(True, {})),
     )
-    monkeypatch.setattr(
-        "services.agent_policy_service.require_agent_capabilities", AsyncMock()
-    )
+    monkeypatch.setattr("services.agent_policy_service.require_agent_capabilities", AsyncMock())
     await ai_tools.execute_tool("inspect_server", {}, ctx)
 
     monkeypatch.setattr(
         "services.agent_policy_service.get_effective_agent_policy",
         AsyncMock(return_value=SimpleNamespace(capabilities=set())),
     )
-    monkeypatch.setattr(ai_tools, "send_game_console_command", AsyncMock(return_value={"success": True}))
+    monkeypatch.setattr(
+        ai_tools, "send_game_console_command", AsyncMock(return_value={"success": True})
+    )
     with pytest.raises(AgentCapabilityDenied):
         await ai_tools.change_current_map(ctx, ai_tools.ChangeCurrentMapInput(query="dust"))
 
     plan = {"no_op": False, "value": 1}
     upgrade_service = SimpleNamespace(build_plugin_upgrade_plan=AsyncMock(return_value=plan))
-    monkeypatch.setattr("services.plugin_auto_update_service.plugin_auto_update_service", upgrade_service)
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.plugin_auto_update_service", upgrade_service
+    )
     with pytest.raises(PermissionError, match="changed after approval"):
         await ai_tools.apply_managed_plugin_upgrade(
             ctx,
@@ -371,11 +391,28 @@ async def test_ai_policy_dispatch_and_approval_hash_conflicts(monkeypatch):
 
     monkeypatch.setattr(ai_tools, "_require_current_server", AsyncMock(return_value=server))
     for name, arguments, patch_target, message in (
-        ("apply_workshop_map", {"workshop_id_or_url": "1", "expected_plan_hash": "0" * 64}, "services.workshop_map_service.build_workshop_map_plan", "Workshop plan changed"),
-        ("execute_plugin_crash_isolation", {"scope": "both", "expected_plan_hash": "0" * 64}, "services.plugin_diagnostic_service.build_diagnostic_plan", "Diagnostic plan changed"),
-        ("apply_github_plugin_install", {"repo_url": "https://github.com/a/b", "expected_plan_hash": "0" * 64}, "services.github_plugin_plan_service.build_github_install_plan", "GitHub installation plan changed"),
+        (
+            "apply_workshop_map",
+            {"workshop_id_or_url": "1", "expected_plan_hash": "0" * 64},
+            "services.workshop_map_service.build_workshop_map_plan",
+            "Workshop plan changed",
+        ),
+        (
+            "execute_plugin_crash_isolation",
+            {"scope": "both", "expected_plan_hash": "0" * 64},
+            "services.plugin_diagnostic_service.build_diagnostic_plan",
+            "Diagnostic plan changed",
+        ),
+        (
+            "apply_github_plugin_install",
+            {"repo_url": "https://github.com/a/b", "expected_plan_hash": "0" * 64},
+            "services.github_plugin_plan_service.build_github_install_plan",
+            "GitHub installation plan changed",
+        ),
     ):
-        mocked = AsyncMock(return_value={"plan_hash": "1" * 64, "candidates": [], "health_policy": {}})
+        mocked = AsyncMock(
+            return_value={"plan_hash": "1" * 64, "candidates": [], "health_policy": {}}
+        )
         monkeypatch.setattr(patch_target, mocked)
         with pytest.raises(ValueError, match=message):
             await ai_tools.build_approval_summary(name, arguments, ctx)

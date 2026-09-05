@@ -39,7 +39,9 @@ class _Deployment(GameDeploymentMixin):
 async def test_deployment_preflight_progress_and_home_permission_paths(monkeypatch):
     manager = _Deployment()
     result = SimpleNamespace(success=True, message="ready", apt_mirror=None)
-    monkeypatch.setattr("services.ssh.game_deployment.ensure_steamcmd_packages", AsyncMock(return_value=result))
+    monkeypatch.setattr(
+        "services.ssh.game_deployment.ensure_steamcmd_packages", AsyncMock(return_value=result)
+    )
     manager.current_server = _server()
     progress = []
     assert await manager._steamcmd_host_preflight_connected(progress.append) == (True, "ready")
@@ -170,7 +172,9 @@ async def test_deployment_download_extraction_and_steamcmd_terminal_paths(monkey
     manager.execute_command = all_success
     manager._execute_steamcmd_with_retry = AsyncMock(return_value=(False, "", "network"))
     manager._cs2_executable_path = lambda _server: "/srv/cs2/cs2/game/bin/cs2"
-    monkeypatch.setattr("services.ssh.game_deployment.resolve_steamcmd_max_retries", AsyncMock(return_value=2))
+    monkeypatch.setattr(
+        "services.ssh.game_deployment.resolve_steamcmd_max_retries", AsyncMock(return_value=2)
+    )
     result = await manager.deploy_cs2_server(server)
     assert result[0] is False and "network" in result[1]
 
@@ -187,7 +191,9 @@ async def test_deployment_download_extraction_and_steamcmd_terminal_paths(monkey
     manager.execute_command = symlink_failure
     manager._execute_steamcmd_with_retry = AsyncMock(return_value=(True, "", ""))
     manager._cs2_executable_exists_connected = AsyncMock(return_value=(True, "/srv/cs2/cs2"))
-    monkeypatch.setattr("services.ssh.game_deployment.resolve_steamcmd_max_retries", AsyncMock(return_value=1))
+    monkeypatch.setattr(
+        "services.ssh.game_deployment.resolve_steamcmd_max_retries", AsyncMock(return_value=1)
+    )
     result = await manager.deploy_cs2_server(server)
     assert result == (True, "CS2 server deployed successfully")
     assert any(command.startswith("ln -sf") for command in calls)
@@ -201,7 +207,9 @@ async def test_deployment_panel_proxy_download_upload_and_cleanup(monkeypatch, t
     manager._execute_steamcmd_with_retry = AsyncMock(return_value=(True, "", ""))
     manager._cs2_executable_exists_connected = AsyncMock(return_value=(True, "/srv/cs2/cs2"))
     manager.execute_command = AsyncMock(return_value=(True, "", ""))
-    monkeypatch.setattr("services.ssh.game_deployment.resolve_steamcmd_max_retries", AsyncMock(return_value=1))
+    monkeypatch.setattr(
+        "services.ssh.game_deployment.resolve_steamcmd_max_retries", AsyncMock(return_value=1)
+    )
     monkeypatch.setattr("services.ssh.game_deployment.tempfile.gettempdir", lambda: str(tmp_path))
 
     async def download(_url, path, *, progress_callback, **_kwargs):

@@ -60,9 +60,7 @@ async def test_connect_and_inspect_parse_success_and_remote_failure():
     finally:
         remote.SSHManager = original
 
-    inspect_manager = _Manager(
-        [(True, "addons=1\nmalformed\ncss=0\nmapchooser=1\nconfig=0\n", "")]
-    )
+    inspect_manager = _Manager([(True, "addons=1\nmalformed\ncss=0\nmapchooser=1\nconfig=0\n", "")])
     values = await remote.inspect_game_mode_state(inspect_manager, _server())
     assert values == {"addons": True, "css": False, "mapchooser": True, "config": False}
     failing = _Manager([(False, "stdout", "remote error")])
@@ -115,7 +113,9 @@ async def test_wait_wipe_and_replace_cover_empty_bad_and_atomic_cleanup_paths():
         await remote.wipe_addons_directory(_Manager(), "/srv/cs2/addons")
 
     with pytest.raises(remote.GameModeRemoteError):
-        await remote.replace_remote_file(_Manager([(False, "", "mkdir")]), _server(), "/x/a", "x", existed=False)
+        await remote.replace_remote_file(
+            _Manager([(False, "", "mkdir")]), _server(), "/x/a", "x", existed=False
+        )
     with pytest.raises(remote.GameModeRemoteError):
         await remote.replace_remote_file(
             _Manager([(True, "", ""), (False, "", "backup")]),

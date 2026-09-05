@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
 from api.routes.file_manager import files
@@ -143,7 +143,7 @@ class _Upload:
 
 @pytest.mark.asyncio
 async def test_upload_file_uses_tmp_path_and_cleans_up(monkeypatch, tmp_path):
-    server = _access(monkeypatch)
+    _access(monkeypatch)
     audit = _audit(monkeypatch)
     target = tmp_path / "upload.tmp"
 
@@ -239,7 +239,9 @@ async def test_download_file_streams_large_files_and_disconnects(monkeypatch):
 
     manager = _ssh(
         monkeypatch,
-        get_file_size=AsyncMock(return_value=(True, files.STREAMING_DOWNLOAD_THRESHOLD_BYTES + 1, "")),
+        get_file_size=AsyncMock(
+            return_value=(True, files.STREAMING_DOWNLOAD_THRESHOLD_BYTES + 1, "")
+        ),
         stream_file=chunks,
     )
     response = await files.download_file(7, "/srv/cs2/big.zip", db=None, current_user=_user())
@@ -426,7 +428,11 @@ async def test_copy_paths_validates_each_source_and_disconnects(monkeypatch):
     manager = _ssh(
         monkeypatch,
         copy_into_directory=AsyncMock(
-            side_effect=lambda source, destination, _server: (True, f"{destination}/{Path(source).name}", "")
+            side_effect=lambda source, destination, _server: (
+                True,
+                f"{destination}/{Path(source).name}",
+                "",
+            )
         ),
     )
     result = await files.copy_paths(

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from modules import ServerDiscordBinding, User, UserDiscordBot
+from modules import User, UserDiscordBot
 from services import discord_bot_manager as module
 from services.discord_bot_manager import DiscordBotManager, _Runtime
 
@@ -170,8 +170,13 @@ async def test_reconcile_user_success_and_renew_lease_lost(monkeypatch):
     monkeypatch.setattr(module, "async_session_maker", lambda: db)
     monkeypatch.setattr(module, "decrypt_credential", lambda _value: "token")
     monkeypatch.setattr(module.redis_manager, "acquire_lock", AsyncMock(return_value=True))
-    monkeypatch.setattr(module, "ManagedDiscordClient", lambda *_args, **_kwargs: SimpleNamespace(start=lambda *_a, **_k: None))
+    monkeypatch.setattr(
+        module,
+        "ManagedDiscordClient",
+        lambda *_args, **_kwargs: SimpleNamespace(start=lambda *_a, **_k: None),
+    )
     renew_method = manager._renew_lease
+
     class _FakeTask:
         def add_done_callback(self, _callback):
             return None
@@ -220,7 +225,9 @@ async def test_runtime_cleanup_client_stop_and_lifecycle_loops(monkeypatch):
     client.close.assert_awaited_once()
 
     manager._started = True
-    await manager._reconcile_loop.__wrapped__(manager) if hasattr(manager._reconcile_loop, "__wrapped__") else None
+    await manager._reconcile_loop.__wrapped__(manager) if hasattr(
+        manager._reconcile_loop, "__wrapped__"
+    ) else None
 
 
 @pytest.mark.asyncio
@@ -235,7 +242,9 @@ async def test_client_stopped_and_reconcile_all_short_paths(monkeypatch):
     manager._runtimes[4] = _Runtime(SimpleNamespace(), "f", "b", "lease", task, renew)
     monkeypatch.setattr(module.redis_manager, "release_lock", AsyncMock())
     await manager._client_stopped(4, task)
-    manager._update_bot_status.assert_awaited_with(4, "disconnected", "Discord Gateway disconnected")
+    manager._update_bot_status.assert_awaited_with(
+        4, "disconnected", "Discord Gateway disconnected"
+    )
 
     db = _DB()
     monkeypatch.setattr(module, "async_session_maker", lambda: db)

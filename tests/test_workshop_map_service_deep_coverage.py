@@ -153,9 +153,7 @@ async def test_fetch_details_metadata_and_pool_failures(monkeypatch):
 async def test_read_configs_and_find_market_plugin(monkeypatch):
     server = _server()
     state = _state(maps=True, config=True)
-    manager = _Manager(
-        reads=[(False, "", "maps unreadable"), (False, "", "config unreadable")]
-    )
+    manager = _Manager(reads=[(False, "", "maps unreadable"), (False, "", "config unreadable")])
     with pytest.raises(workshop.WorkshopPlanError, match="maps.txt"):
         await workshop._read_configs(manager, server, state)
     manager.reads = iter([(True, "maps", ""), (False, "", "config unreadable")])
@@ -198,7 +196,11 @@ async def test_build_plan_install_steps_and_conflicts(monkeypatch):
     monkeypatch.setattr(workshop, "_read_configs", AsyncMock(return_value=(maps, config)))
     market = SimpleNamespace(id=8, title=workshop.MAPCHOOSER_MARKET_TITLE)
     monkeypatch.setattr(workshop, "_find_mapchooser", AsyncMock(return_value=market))
-    plugin_plan = {"plugin": {"id": 8}, "hard_conflicts": ["conflict"], "warnings": [{"rule_id": 2}]}
+    plugin_plan = {
+        "plugin": {"id": 8},
+        "hard_conflicts": ["conflict"],
+        "warnings": [{"rule_id": 2}],
+    }
     monkeypatch.setattr(workshop, "build_plugin_install_plan", AsyncMock(return_value=plugin_plan))
     plan = await workshop.build_workshop_map_plan(
         db,
@@ -268,7 +270,9 @@ async def test_install_prerequisites_success_and_restart_failures(monkeypatch):
     monkeypatch.setattr(workshop, "SSHManager", _Installer)
     monkeypatch.setattr(workshop, "record_framework_installation", AsyncMock())
     plugin_result = {"success": True, "message": "installed"}
-    monkeypatch.setattr(workshop, "execute_plugin_install_plan", AsyncMock(return_value=plugin_result))
+    monkeypatch.setattr(
+        workshop, "execute_plugin_install_plan", AsyncMock(return_value=plugin_result)
+    )
     plan = _plan(_state(metamod=False, css=False, mapchooser=False))
     plan["plugin_plan"] = {"plugin": {"id": 8}, "plan_hash": "hash"}
     plan["steps"] = [{"action": "restart_server"}]
@@ -294,7 +298,10 @@ async def test_install_prerequisites_success_and_restart_failures(monkeypatch):
             db,
             server,
             user,
-            {"current": {"metamod": True, "css": True, "mapchooser": True}, "steps": [{"action": "restart_server"}]},
+            {
+                "current": {"metamod": True, "css": True, "mapchooser": True},
+                "steps": [{"action": "restart_server"}],
+            },
             report,
             set(),
             None,
@@ -310,7 +317,10 @@ async def test_install_prerequisites_success_and_restart_failures(monkeypatch):
             db,
             server,
             user,
-            {"current": {"metamod": True, "css": True, "mapchooser": True}, "steps": [{"action": "restart_server"}]},
+            {
+                "current": {"metamod": True, "css": True, "mapchooser": True},
+                "steps": [{"action": "restart_server"}],
+            },
             report,
             set(),
             None,
@@ -396,7 +406,9 @@ async def test_configure_final_verification_failure_and_execute_guards(monkeypat
 
     current = _server()
     monkeypatch.setattr(workshop.Server, "get_by_id_and_user", AsyncMock(return_value=current))
-    monkeypatch.setattr(workshop, "build_workshop_map_plan", AsyncMock(return_value=_plan(blocked=True)))
+    monkeypatch.setattr(
+        workshop, "build_workshop_map_plan", AsyncMock(return_value=_plan(blocked=True))
+    )
     with pytest.raises(workshop.WorkshopPlanError, match="blocked"):
         await workshop.execute_workshop_map_plan(db, server, user, {"workshop_id_or_url": "123"})
 

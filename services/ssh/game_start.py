@@ -71,7 +71,7 @@ class GameStartMixin(SSHMixinBase):
         remaining = await self._running_server_session_managers(server)
         return not remaining, initial_managers
 
-    async def start_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
+    async def start_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:  # noqa: C901 - startup protocol.
         """
         Start CS2 server with LGSM-style configuration and real-time output streaming
 

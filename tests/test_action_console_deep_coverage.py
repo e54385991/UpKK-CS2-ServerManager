@@ -50,7 +50,9 @@ class _Output:
 class _Process:
     def __init__(self):
         self.stdout = _Output()
-        self.stdin = SimpleNamespace(write=lambda value: setattr(self, "input", value), drain=AsyncMock())
+        self.stdin = SimpleNamespace(
+            write=lambda value: setattr(self, "input", value), drain=AsyncMock()
+        )
         self.sizes = []
         self.terminated = False
         self.killed = False
@@ -78,7 +80,9 @@ async def test_console_helpers_cover_session_probe_relay_and_cleanup(monkeypatch
     server = _server()
     monkeypatch.setattr(console, "find_running_session_manager", AsyncMock(return_value="screen"))
     assert await console._active_game_session(ssh, 4, server) == "screen"
-    monkeypatch.setattr(console, "find_running_session_manager", AsyncMock(side_effect=RuntimeError("probe")))
+    monkeypatch.setattr(
+        console, "find_running_session_manager", AsyncMock(side_effect=RuntimeError("probe"))
+    )
     assert await console._active_game_session(ssh, 4, server) is None
 
     process = _Process()
@@ -113,8 +117,12 @@ async def test_ssh_console_endpoint_auth_connection_and_interactive_errors(monke
     await console.ssh_console_websocket(ws, 4)
     assert not ws.accepted
 
-    ssh = SimpleNamespace(connect=AsyncMock(return_value=(False, "refused")), disconnect=AsyncMock())
-    monkeypatch.setattr(console, "authenticate_websocket", AsyncMock(return_value=(object(), _server())))
+    ssh = SimpleNamespace(
+        connect=AsyncMock(return_value=(False, "refused")), disconnect=AsyncMock()
+    )
+    monkeypatch.setattr(
+        console, "authenticate_websocket", AsyncMock(return_value=(object(), _server()))
+    )
     monkeypatch.setattr(console, "SSHManager", lambda: ssh)
     ws = _WebSocket()
     await console.ssh_console_websocket(ws, 4)
@@ -152,8 +160,12 @@ async def test_ssh_console_endpoint_auth_connection_and_interactive_errors(monke
 @pytest.mark.asyncio
 async def test_game_console_endpoint_covers_not_running_and_attached_relay(monkeypatch):
     server = _server()
-    monkeypatch.setattr(console, "authenticate_websocket", AsyncMock(return_value=(object(), server)))
-    ssh = SimpleNamespace(connect=AsyncMock(return_value=(False, "offline")), disconnect=AsyncMock())
+    monkeypatch.setattr(
+        console, "authenticate_websocket", AsyncMock(return_value=(object(), server))
+    )
+    ssh = SimpleNamespace(
+        connect=AsyncMock(return_value=(False, "offline")), disconnect=AsyncMock()
+    )
     monkeypatch.setattr(console, "SSHManager", lambda: ssh)
     ws = _WebSocket()
     await console.game_console_websocket(ws, 4)

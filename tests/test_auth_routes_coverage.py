@@ -56,7 +56,9 @@ def _request(headers=None, cookies=None):
         "type": "http",
         "method": "POST",
         "path": "/api/auth",
-        "headers": [(key.lower().encode(), value.encode()) for key, value in (headers or {}).items()],
+        "headers": [
+            (key.lower().encode(), value.encode()) for key, value in (headers or {}).items()
+        ],
         "query_string": b"",
         "client": ("test", 1),
         "server": ("test", 80),
@@ -99,7 +101,9 @@ async def test_public_register_login_and_session_branches(monkeypatch):
     request = _request()
     user = _user()
     monkeypatch.setattr(auth, "register_user", AsyncMock(return_value="registered"))
-    data = SimpleNamespace(username="alice", email="a@e", password="pw", captcha_token="t", captcha_code="AB12")
+    data = SimpleNamespace(
+        username="alice", email="a@e", password="pw", captcha_token="t", captcha_code="AB12"
+    )
     assert await auth.register(data, request, _DB()) == "registered"
 
     monkeypatch.setattr(auth, "enforce_rate_limit", AsyncMock())
@@ -123,7 +127,9 @@ async def test_public_register_login_and_session_branches(monkeypatch):
     user.is_active = True
     monkeypatch.setattr(auth, "create_access_token", lambda **_kwargs: "access")
     monkeypatch.setattr(auth, "set_web_session_cookie", lambda *_args: None)
-    result = await auth.login(UserLogin(username="alice", password="pw"), request, Response(), _DB())
+    result = await auth.login(
+        UserLogin(username="alice", password="pw"), request, Response(), _DB()
+    )
     assert result == {"access_token": "access", "token_type": "bearer"}
     assert await auth.get_google_config() == {
         "client_id": auth.settings.GOOGLE_CLIENT_ID,
@@ -140,27 +146,43 @@ async def test_public_register_login_and_session_branches(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_password_profile_api_key_and_s3_routes(monkeypatch):
-    user = _user(api_key="old", steam_api_key="steam", github_token="gh-token", has_github_token=True)
+    user = _user(
+        api_key="old", steam_api_key="steam", github_token="gh-token", has_github_token=True
+    )
     request = _request()
     monkeypatch.setattr(auth, "require_captcha", AsyncMock())
     monkeypatch.setattr(auth, "record_audit_event", AsyncMock())
     monkeypatch.setattr(auth, "verify_password_async", AsyncMock(return_value=False))
     with pytest.raises(HTTPException):
         await auth.reset_password(
-            PasswordReset(current_password="badpass", new_password="newpass", confirm_password="newpass"),
-            request, user, _DB(),
+            PasswordReset(
+                current_password="badpass", new_password="newpass", confirm_password="newpass"
+            ),
+            request,
+            user,
+            _DB(),
         )
     monkeypatch.setattr(auth, "verify_password_async", AsyncMock(return_value=True))
     with pytest.raises(HTTPException):
         await auth.reset_password(
-            PasswordReset(current_password="oldpass", new_password="newpass", confirm_password="otherpass"),
-            request, user, _DB(),
+            PasswordReset(
+                current_password="oldpass", new_password="newpass", confirm_password="otherpass"
+            ),
+            request,
+            user,
+            _DB(),
         )
     monkeypatch.setattr(auth, "get_password_hash_async", AsyncMock(return_value="new-hash"))
-    assert (await auth.reset_password(
-        PasswordReset(current_password="oldpass", new_password="newpass", confirm_password="newpass"),
-        request, user, _DB(),
-    ))["success"] is True
+    assert (
+        await auth.reset_password(
+            PasswordReset(
+                current_password="oldpass", new_password="newpass", confirm_password="newpass"
+            ),
+            request,
+            user,
+            _DB(),
+        )
+    )["success"] is True
 
     monkeypatch.setattr(auth, "require_captcha", AsyncMock())
     duplicate = _user(id=9)
@@ -179,7 +201,9 @@ async def test_password_profile_api_key_and_s3_routes(monkeypatch):
     assert (await auth.get_api_key(user))["api_key"] == "key"
     monkeypatch.setattr(auth, "generate_api_key", lambda: "generated")
     monkeypatch.setattr(auth.User, "get_by_api_key", AsyncMock(return_value=None))
-    assert (await auth.generate_user_api_key(ApiKeyGenerate(), request, user, _DB()))["api_key"] == "generated"
+    assert (await auth.generate_user_api_key(ApiKeyGenerate(), request, user, _DB()))[
+        "api_key"
+    ] == "generated"
     assert (await auth.revoke_api_key(request, user, _DB()))["success"] is True
     with pytest.raises(HTTPException):
         await auth.revoke_api_key(request, _user(), _DB())
@@ -193,12 +217,22 @@ async def test_password_profile_api_key_and_s3_routes(monkeypatch):
     monkeypatch.setattr(auth.s3_backup_service, "is_configured", lambda _u: True)
     assert (await auth.get_s3_settings(user)).retention_count == 4
     data = S3SettingsUpdate(
-        enabled=True, endpoint_url="", region="us", bucket="bucket", access_key_id="ak",
-        prefix="p", use_ssl=False, retention_count=5, clear_secret=True, secret_access_key="ignored",
+        enabled=True,
+        endpoint_url="",
+        region="us",
+        bucket="bucket",
+        access_key_id="ak",
+        prefix="p",
+        use_ssl=False,
+        retention_count=5,
+        clear_secret=True,
+        secret_access_key="ignored",
     )
     result = await auth.update_s3_settings(data, request, user, _DB())
     assert result.enabled is True and user.s3_secret_access_key is None
-    monkeypatch.setattr(auth.s3_backup_service, "test_connection", AsyncMock(return_value=(True, "ok", [])))
+    monkeypatch.setattr(
+        auth.s3_backup_service, "test_connection", AsyncMock(return_value=(True, "ok", []))
+    )
     assert (await auth.test_s3_settings(user))["success"] is True
 
 
@@ -209,17 +243,37 @@ async def test_server_token_password_reset_wrappers_and_logout(monkeypatch):
     with pytest.raises(HTTPException):
         await auth.generate_server_token(GenerateServerTokenRequest(), user, _DB())
     user.steam_api_key = "steam-key"
-    monkeypatch.setattr(auth.steam_api_service, "create_game_server_account", AsyncMock(return_value=(False, {"error": "bad"})))
-    result = await auth.generate_server_token(GenerateServerTokenRequest(server_name="  "), user, _DB())
+    monkeypatch.setattr(
+        auth.steam_api_service,
+        "create_game_server_account",
+        AsyncMock(return_value=(False, {"error": "bad"})),
+    )
+    result = await auth.generate_server_token(
+        GenerateServerTokenRequest(server_name="  "), user, _DB()
+    )
     assert result.success is False
-    monkeypatch.setattr(auth.steam_api_service, "create_game_server_account", AsyncMock(return_value=(True, {"success": True, "login_token": "GSLT"})))
-    result = await auth.generate_server_token(GenerateServerTokenRequest(server_name="  server  "), user, _DB())
+    monkeypatch.setattr(
+        auth.steam_api_service,
+        "create_game_server_account",
+        AsyncMock(return_value=(True, {"success": True, "login_token": "GSLT"})),
+    )
+    result = await auth.generate_server_token(
+        GenerateServerTokenRequest(server_name="  server  "), user, _DB()
+    )
     assert result.login_token == "GSLT"
 
-    monkeypatch.setattr("api.password_reset.request_password_reset", AsyncMock(return_value={"ok": True}))
-    assert await auth.forgot_password(ForgotPasswordRequest(email="a@example.com"), _request(), _DB()) == {"ok": True}
-    monkeypatch.setattr("api.password_reset.complete_password_reset", AsyncMock(return_value={"ok": True}))
-    assert await auth.reset_password_with_token(ResetPasswordRequest(token="x", new_password="newpass"), _request(), _DB()) == {"ok": True}
+    monkeypatch.setattr(
+        "api.password_reset.request_password_reset", AsyncMock(return_value={"ok": True})
+    )
+    assert await auth.forgot_password(
+        ForgotPasswordRequest(email="a@example.com"), _request(), _DB()
+    ) == {"ok": True}
+    monkeypatch.setattr(
+        "api.password_reset.complete_password_reset", AsyncMock(return_value={"ok": True})
+    )
+    assert await auth.reset_password_with_token(
+        ResetPasswordRequest(token="x", new_password="newpass"), _request(), _DB()
+    ) == {"ok": True}
 
     monkeypatch.setattr("modules.auth._get_active_user_for_token", AsyncMock(return_value=user))
     monkeypatch.setattr("modules.auth.web_session_cookie_name", lambda: "session")
@@ -245,10 +299,14 @@ async def test_google_oauth_configuration_invalid_existing_and_registration(monk
         await auth.google_oauth_login(oauth, request, response, _DB())
     assert exc.value.status_code == 401
 
-    monkeypatch.setattr(auth.to_thread, "run_sync", AsyncMock(return_value={"sub": "google-id", "email": "a@e"}))
+    monkeypatch.setattr(
+        auth.to_thread, "run_sync", AsyncMock(return_value={"sub": "google-id", "email": "a@e"})
+    )
     monkeypatch.setattr(auth.User, "get_by_google_id", AsyncMock(return_value=user))
     monkeypatch.setattr(auth, "create_access_token", lambda **_kwargs: "token")
-    assert (await auth.google_oauth_login(oauth, request, response, _DB()))["access_token"] == "token"
+    assert (await auth.google_oauth_login(oauth, request, response, _DB()))[
+        "access_token"
+    ] == "token"
     user.is_active = False
     with pytest.raises(HTTPException):
         await auth.google_oauth_login(oauth, request, response, _DB())

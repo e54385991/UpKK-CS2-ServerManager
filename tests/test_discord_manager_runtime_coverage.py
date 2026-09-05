@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from services import discord_bot_manager as discord_manager
-from services.discord_bot_manager import DiscordBotManager
 from services.discord_authorization_service import DiscordAuthorizationDenied
+from services.discord_bot_manager import DiscordBotManager
 
 
 class _Context:
@@ -54,7 +54,9 @@ class _Db:
 
 
 def _server(**overrides):
-    values = dict(id=3, name="demo", host="example.test", game_port=27015, game_directory="/srv/cs2")
+    values = dict(
+        id=3, name="demo", host="example.test", game_port=27015, game_directory="/srv/cs2"
+    )
     values.update(overrides)
     return SimpleNamespace(**values)
 
@@ -65,7 +67,9 @@ def _interaction(**overrides):
         channel_id=20,
         user=SimpleNamespace(id=30, roles=[]),
         guild=SimpleNamespace(preferred_locale="en-US"),
-        response=SimpleNamespace(is_done=lambda: False, send_message=AsyncMock(), defer=AsyncMock()),
+        response=SimpleNamespace(
+            is_done=lambda: False, send_message=AsyncMock(), defer=AsyncMock()
+        ),
         followup=SimpleNamespace(send=AsyncMock()),
         data={},
     )
@@ -120,27 +124,48 @@ async def test_discord_server_resolution_and_error_response_cover_authorization_
     monkeypatch.setattr(discord_manager, "async_session_maker", lambda: _Context(db))
     server = _server()
     binding = SimpleNamespace(capabilities=["status"])
-    monkeypatch.setattr(discord_manager, "authorized_bindings", AsyncMock(return_value=[(binding, server)]))
+    monkeypatch.setattr(
+        discord_manager, "authorized_bindings", AsyncMock(return_value=[(binding, server)])
+    )
     client = SimpleNamespace(owner_user_id=1)
     interaction = _interaction()
-    resolved = await manager._resolve_server(client, interaction, discord_manager.DiscordCapability.STATUS, None)
+    resolved = await manager._resolve_server(
+        client, interaction, discord_manager.DiscordCapability.STATUS, None
+    )
     assert resolved.id == 3
-    assert await manager._resolve_server(client, interaction, discord_manager.DiscordCapability.STATUS, "3") == server
+    assert (
+        await manager._resolve_server(
+            client, interaction, discord_manager.DiscordCapability.STATUS, "3"
+        )
+        == server
+    )
     with pytest.raises(DiscordAuthorizationDenied, match="unavailable"):
-        await manager._resolve_server(client, interaction, discord_manager.DiscordCapability.STATUS, "bad")
+        await manager._resolve_server(
+            client, interaction, discord_manager.DiscordCapability.STATUS, "bad"
+        )
 
     monkeypatch.setattr(discord_manager, "authorized_bindings", AsyncMock(return_value=[]))
     with pytest.raises(DiscordAuthorizationDenied, match="No authorized"):
-        await manager._resolve_server(client, interaction, discord_manager.DiscordCapability.STATUS, None)
-    monkeypatch.setattr(discord_manager, "authorized_bindings", AsyncMock(return_value=[(binding, server), (binding, _server(id=4))]))
+        await manager._resolve_server(
+            client, interaction, discord_manager.DiscordCapability.STATUS, None
+        )
+    monkeypatch.setattr(
+        discord_manager,
+        "authorized_bindings",
+        AsyncMock(return_value=[(binding, server), (binding, _server(id=4))]),
+    )
     with pytest.raises(DiscordAuthorizationDenied, match="Multiple"):
-        await manager._resolve_server(client, interaction, discord_manager.DiscordCapability.STATUS, None)
+        await manager._resolve_server(
+            client, interaction, discord_manager.DiscordCapability.STATUS, None
+        )
 
     response = SimpleNamespace(is_done=lambda: False, send_message=AsyncMock())
     await manager._respond_error(_interaction(response=response), ValueError("bad input"))
     response = SimpleNamespace(is_done=lambda: True, send_message=AsyncMock())
     followup = SimpleNamespace(send=AsyncMock())
-    await manager._respond_error(_interaction(response=response, followup=followup), ValueError("bad input"))
+    await manager._respond_error(
+        _interaction(response=response, followup=followup), ValueError("bad input")
+    )
     response.send_message.assert_not_awaited()
     followup.send.assert_awaited_once()
 
@@ -149,7 +174,9 @@ async def test_discord_server_resolution_and_error_response_cover_authorization_
 async def test_discord_menu_sync_and_status_embed_cover_success_and_failure(monkeypatch):
     manager = DiscordBotManager()
     db = _Db([SimpleNamespace(guild_id="10")])
-    bot = SimpleNamespace(global_binding_configured=True, global_binding_enabled=True, global_guild_id="11")
+    bot = SimpleNamespace(
+        global_binding_configured=True, global_binding_enabled=True, global_guild_id="11"
+    )
 
     async def get(_model, _id):
         return bot
@@ -176,7 +203,15 @@ async def test_discord_menu_sync_and_status_embed_cover_success_and_failure(monk
     monkeypatch.setattr(
         discord_manager,
         "load_panel_status_sources",
-        AsyncMock(return_value={"a2s_ok": True, "info": {"server_name": "Live"}, "response_time_ms": 5, "last_updated": None, "disk_info": {}}),
+        AsyncMock(
+            return_value={
+                "a2s_ok": True,
+                "info": {"server_name": "Live"},
+                "response_time_ms": 5,
+                "last_updated": None,
+                "disk_info": {},
+            }
+        ),
     )
     embed = await manager._status_embed(_server())
     assert embed.title == "Live"
@@ -192,7 +227,7 @@ def test_discord_menu_views_and_plugin_embeds_cover_empty_single_and_multiple():
         "en-US", [(binding, _server()), (binding, _server(id=4, name="other"))], requester_user_id=1
     )
     assert one is not None and two is not None
-    from modules import MarketPlugin, ManagedPlugin
+    from modules import ManagedPlugin, MarketPlugin
 
     market = MarketPlugin(id=1, title="Market", github_url="https://github.com/a/b")
     managed = ManagedPlugin(

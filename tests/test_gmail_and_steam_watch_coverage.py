@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import sys
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock
@@ -101,7 +100,9 @@ async def test_gmail_oauth_flow_success_and_failure_redirect(monkeypatch):
     settings = SimpleNamespace(
         gmail_credentials_json='{"web": {"client_id": "id"}}', gmail_token_json=None
     )
-    monkeypatch.setattr(gmail.SystemSettings, "get_or_create_settings", AsyncMock(return_value=settings))
+    monkeypatch.setattr(
+        gmail.SystemSettings, "get_or_create_settings", AsyncMock(return_value=settings)
+    )
     result = await gmail.gmail_oauth_authorize(SimpleNamespace(), db, _user())
     assert result == {"authorization_url": "https://accounts.invalid/auth", "state": "state"}
     callback = await gmail.gmail_oauth_callback(SimpleNamespace(), code="code", db=db)
@@ -123,7 +124,11 @@ async def test_steamcmd_watch_reconnects_and_stops_after_missing_process(monkeyp
     monkeypatch.setattr(watch, "send_deployment_update", AsyncMock())
     monkeypatch.setattr(watch, "find_running_session_manager", AsyncMock(return_value=None))
     monkeypatch.setattr(watch.asyncio, "sleep", AsyncMock())
-    ssh = SimpleNamespace(connect=AsyncMock(return_value=(True, "ok")), disconnect=AsyncMock(), execute_command=AsyncMock(return_value=(True, "", "")))
+    ssh = SimpleNamespace(
+        connect=AsyncMock(return_value=(True, "ok")),
+        disconnect=AsyncMock(),
+        execute_command=AsyncMock(return_value=(True, "", "")),
+    )
     monkeypatch.setattr(watch, "SSHManager", lambda: ssh)
     monkeypatch.setattr(watch, "steamcmd_session_name", lambda _id: "steam-session")
     await watch.maybe_resume_steamcmd_watch(server)
@@ -144,7 +149,9 @@ async def test_steamcmd_watch_reconnects_and_stops_after_missing_process(monkeyp
 async def test_steamcmd_watch_capture_output_and_connection_failure(monkeypatch):
     server = SimpleNamespace(id=5, session_manager="screen", game_directory="/srv/cs2")
     monkeypatch.setattr(watch, "send_deployment_update", AsyncMock())
-    hub = SimpleNamespace(get_current=AsyncMock(side_effect=[{"status": "running", "action": "update"}, None]))
+    hub = SimpleNamespace(
+        get_current=AsyncMock(side_effect=[{"status": "running", "action": "update"}, None])
+    )
     monkeypatch.setattr(watch, "server_operation_hub", hub)
     monkeypatch.setattr(watch, "find_running_session_manager", AsyncMock(return_value="tmux"))
     monkeypatch.setattr(watch, "incremental_console_lines", lambda _old, _new: ["line"])
@@ -153,13 +160,17 @@ async def test_steamcmd_watch_capture_output_and_connection_failure(monkeypatch)
     ssh = SimpleNamespace(
         connect=AsyncMock(return_value=(True, "ok")),
         disconnect=AsyncMock(),
-        execute_command=AsyncMock(side_effect=[(True, "123\ninvalid", ""), (True, "new output", "")]),
+        execute_command=AsyncMock(
+            side_effect=[(True, "123\ninvalid", ""), (True, "new output", "")]
+        ),
     )
     monkeypatch.setattr(watch, "SSHManager", lambda: ssh)
     await watch._run_watch(server)
     assert any(call.args[1] == "output" for call in watch.send_deployment_update.await_args_list)
 
-    ssh = SimpleNamespace(connect=AsyncMock(return_value=(False, "offline")), disconnect=AsyncMock())
+    ssh = SimpleNamespace(
+        connect=AsyncMock(return_value=(False, "offline")), disconnect=AsyncMock()
+    )
     monkeypatch.setattr(watch, "SSHManager", lambda: ssh)
     await watch._run_watch(server)
     assert "cannot be polled" in watch.send_deployment_update.await_args.args[2]

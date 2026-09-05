@@ -112,7 +112,9 @@ async def test_pool_open_connection_auth_modes_and_get_failures(monkeypatch):
     assert "password" in captured[0]
     assert captured[1]["client_keys"] == ["/tmp/key"]
     with pytest.raises(ValueError):
-        await pool._open_connection(_server(is_password_auth=False, is_key_auth=False, auth_type="bad"))
+        await pool._open_connection(
+            _server(is_password_auth=False, is_key_auth=False, auth_type="bad")
+        )
 
     pool = _pool()
     server = _server()

@@ -62,7 +62,9 @@ async def test_selfcheck_fixes_steamclient_gameinfo_and_script(monkeypatch):
 
     manager.execute_command = execute
     monkeypatch.setattr(manager, "disconnect", AsyncMock())
-    monkeypatch.setattr("services.ssh.game_selfcheck.anyio.open_file", AsyncMock(return_value=_ScriptFile()))
+    monkeypatch.setattr(
+        "services.ssh.game_selfcheck.anyio.open_file", AsyncMock(return_value=_ScriptFile())
+    )
 
     async def callback(message):
         progress.append(message)
@@ -130,7 +132,9 @@ async def test_selfcheck_existing_configuration_and_deploy_failure(monkeypatch):
 
     manager.execute_command = execute
     monkeypatch.setattr(manager, "disconnect", AsyncMock())
-    monkeypatch.setattr("services.ssh.game_selfcheck.anyio.open_file", AsyncMock(return_value=_ScriptFile()))
+    monkeypatch.setattr(
+        "services.ssh.game_selfcheck.anyio.open_file", AsyncMock(return_value=_ScriptFile())
+    )
     ok, message = await manager.perform_server_selfcheck(server)
     assert not ok and "remain" in message
 

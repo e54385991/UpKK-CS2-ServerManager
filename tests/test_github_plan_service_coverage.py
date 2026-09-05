@@ -115,7 +115,10 @@ def test_archive_mapping_inference_and_projection_branches():
     assert mapping == [{"source": ".", "target": "addons"}]
     assert plans._detect_mapping([_entry("readme.txt")], "demo")[2] is True
 
-    assert plans._apply_user_mapping([_entry("payload/a.dll")], "payload", "addons/demo")[0] == "payload"
+    assert (
+        plans._apply_user_mapping([_entry("payload/a.dll")], "payload", "addons/demo")[0]
+        == "payload"
+    )
     with pytest.raises(plans.GitHubPlanError, match="target_prefix"):
         plans._apply_user_mapping([], None, "tmp")
     with pytest.raises(plans.GitHubPlanError, match="source_prefix"):
@@ -182,7 +185,9 @@ async def test_github_inspect_and_search_handle_release_and_documentation_varian
         {"private": True},
     ]
     with pytest.raises(plans.GitHubPlanError, match="Private"):
-        await plans.inspect_github_plugin(object(), SimpleNamespace(id=1), "https://github.com/acme/demo")
+        await plans.inspect_github_plugin(
+            object(), SimpleNamespace(id=1), "https://github.com/acme/demo"
+        )
 
     request.side_effect = [
         {"full_name": "acme/demo"},
@@ -190,7 +195,9 @@ async def test_github_inspect_and_search_handle_release_and_documentation_varian
         plans.GitHubPlanError("no readme"),
     ]
     # The release asset has no URL and the README failure is intentionally downgraded to a warning.
-    inspected = await plans.inspect_github_plugin(object(), SimpleNamespace(id=1), "https://github.com/acme/demo")
+    inspected = await plans.inspect_github_plugin(
+        object(), SimpleNamespace(id=1), "https://github.com/acme/demo"
+    )
     assert any("README" in warning for warning in inspected["warnings"])
 
     monkeypatch.setattr(
@@ -205,7 +212,12 @@ async def test_github_inspect_and_search_handle_release_and_documentation_varian
             side_effect=[
                 {
                     "repo_url": "https://github.com/acme/demo",
-                    "repository": {"full_name": "acme/demo", "description": "demo", "stars": 2, "pushed_at": "1"},
+                    "repository": {
+                        "full_name": "acme/demo",
+                        "description": "demo",
+                        "stars": 2,
+                        "pushed_at": "1",
+                    },
                     "release": {"assets": [1], "tag": "v1", "published_at": "2"},
                     "selected_asset": {"name": "demo.zip"},
                 }
@@ -284,11 +296,18 @@ def test_github_archive_edge_cases_and_mappings(tmp_path):
     with pytest.raises(plans.GitHubPlanError, match="links"):
         plans._tar_entries(str(tar_path))
 
-    entries = [_entry("addons/plugin.dll"), _entry("cfg/server.json"), _entry("addons/gamedata/x.json")]
+    entries = [
+        _entry("addons/plugin.dll"),
+        _entry("cfg/server.json"),
+        _entry("addons/gamedata/x.json"),
+    ]
     mapped = plans._mapped_files(entries, [{"source": ".", "target": "addons"}])
     assert {item["file_role"] for item in mapped} == {"data", "config", "gamedata"}
     with pytest.raises(plans.GitHubPlanError, match="more than"):
-        plans._mapped_files([_entry(f"x/{i}.dll") for i in range(plans.MAX_AUTOMATIC_FILES + 1)], [{"source": "x", "target": "addons"}])
+        plans._mapped_files(
+            [_entry(f"x/{i}.dll") for i in range(plans.MAX_AUTOMATIC_FILES + 1)],
+            [{"source": "x", "target": "addons"}],
+        )
 
 
 @pytest.mark.asyncio
@@ -340,7 +359,9 @@ async def test_github_request_target_recipe_and_inspect_errors(monkeypatch, tmp_
 
     monkeypatch.setattr(plans, "SSHManager", lambda: _SSH())
     with pytest.raises(plans.GitHubPlanError, match="regular"):
-        await plans._target_revisions(SimpleNamespace(game_directory="/srv"), [{"target_path": "addons/p.dll"}])
+        await plans._target_revisions(
+            SimpleNamespace(game_directory="/srv"), [{"target_path": "addons/p.dll"}]
+        )
 
     class _Db:
         async def execute(self, _query):
@@ -348,13 +369,22 @@ async def test_github_request_target_recipe_and_inspect_errors(monkeypatch, tmp_
 
     with pytest.raises(plans.GitHubPlanError, match="recipe"):
         await plans._recipe_for_plan(_Db(), SimpleNamespace(id=1), "https://github.com/a/b", 1)
-    assert await plans._recipe_for_plan(_Db(), SimpleNamespace(id=1), "https://github.com/a/b", None) is None
+    assert (
+        await plans._recipe_for_plan(_Db(), SimpleNamespace(id=1), "https://github.com/a/b", None)
+        is None
+    )
 
     archive = tmp_path / "bad.zip"
-    monkeypatch.setattr(plans, "_download_release_asset", AsyncMock(return_value=(str(archive), "h", 2)))
-    monkeypatch.setattr(plans, "_archive_entries", lambda *_args: (_ for _ in ()).throw(RuntimeError("bad")))
+    monkeypatch.setattr(
+        plans, "_download_release_asset", AsyncMock(return_value=(str(archive), "h", 2))
+    )
+    monkeypatch.setattr(
+        plans, "_archive_entries", lambda *_args: (_ for _ in ()).throw(RuntimeError("bad"))
+    )
     with pytest.raises(plans.GitHubPlanError, match="safely"):
-        await plans.inspect_release_asset_layout({"url": "https://github.com/a/releases/download/v/a.zip", "name": "a.zip"}, "a")
+        await plans.inspect_release_asset_layout(
+            {"url": "https://github.com/a/releases/download/v/a.zip", "name": "a.zip"}, "a"
+        )
 
 
 def test_github_install_plan_validation_and_recipe_creation(monkeypatch):
@@ -408,7 +438,17 @@ def test_github_install_plan_validation_and_recipe_creation(monkeypatch):
     )
     assert recipe.created_by == 2 and len(recipe.revision) == 64
     with pytest.raises(PermissionError):
-        asyncio.run(plans.create_install_recipe(db, SimpleNamespace(id=2, is_admin=False), {"repo_url": "https://github.com/acme/demo", "target_prefix": "addons", "display_name": "x"}))
+        asyncio.run(
+            plans.create_install_recipe(
+                db,
+                SimpleNamespace(id=2, is_admin=False),
+                {
+                    "repo_url": "https://github.com/acme/demo",
+                    "target_prefix": "addons",
+                    "display_name": "x",
+                },
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -470,13 +510,19 @@ async def test_build_github_install_plan_success_and_selection_errors(monkeypatc
 
     with pytest.raises(plans.GitHubPlanError, match="managed"):
         await plans.build_github_install_plan(
-            _Db(), SimpleNamespace(id=3), 7,
-            GitHubPluginInstallPlanRequest(repo_url="https://github.com/roflmuffin/counterstrikesharp"),
+            _Db(),
+            SimpleNamespace(id=3),
+            7,
+            GitHubPluginInstallPlanRequest(
+                repo_url="https://github.com/roflmuffin/counterstrikesharp"
+            ),
         )
     inspected["selected_asset"] = None
     with pytest.raises(plans.GitHubPlanError, match="exactly one"):
         await plans.build_github_install_plan(
-            _Db(), SimpleNamespace(id=3), 7,
+            _Db(),
+            SimpleNamespace(id=3),
+            7,
             GitHubPluginInstallPlanRequest(repo_url="https://github.com/acme/demo"),
         )
 
@@ -501,10 +547,20 @@ async def test_execute_github_install_plan_dependencies_and_managed_tracking(mon
         "source_prefix": "addons",
         "target_revisions": {},
         "recipe_id": None,
-        "files": [{"target_path": "addons/p.cfg", "file_role": "config", "target_revision": "old", "sha256": "new"}],
+        "files": [
+            {
+                "target_path": "addons/p.cfg",
+                "file_role": "config",
+                "target_revision": "old",
+                "sha256": "new",
+            }
+        ],
         "exclude_dirs": [],
         "exclude_files": [],
-        "asset": {"name": "demo-linux.zip", "url": "https://github.com/acme/demo/releases/download/v1/demo-linux.zip"},
+        "asset": {
+            "name": "demo-linux.zip",
+            "url": "https://github.com/acme/demo/releases/download/v1/demo-linux.zip",
+        },
         "repo_url": "https://github.com/acme/demo",
         "release_id": "r1",
         "release_tag": "v1",
@@ -538,19 +594,33 @@ async def test_execute_github_install_plan_dependencies_and_managed_tracking(mon
         def add(self, value):
             self.added.append(value)
 
-    managed = SimpleNamespace(id=11, install_recipe_id=None, installed_asset_name=None, archive_sha256=None, config_policy=None)
+    managed = SimpleNamespace(
+        id=11,
+        install_recipe_id=None,
+        installed_asset_name=None,
+        archive_sha256=None,
+        config_policy=None,
+    )
     db = _Db(managed)
     monkeypatch.setattr(plans, "authorized_server", AsyncMock(return_value=server))
     monkeypatch.setattr(plans, "build_github_install_plan", AsyncMock(return_value=plan))
     monkeypatch.setattr(
         plans,
         "install_github_plugin_with_retry",
-        AsyncMock(return_value=GitHubPluginInstallResponse(success=True, message="installed", installed_files=1)),
+        AsyncMock(
+            return_value=GitHubPluginInstallResponse(
+                success=True, message="installed", installed_files=1
+            )
+        ),
     )
     monkeypatch.setattr(plans, "_target_revisions", AsyncMock(return_value={}))
-    monkeypatch.setattr("services.linux_runtime_service.steam_runtime_for_asset", lambda _name: "steamrt3")
+    monkeypatch.setattr(
+        "services.linux_runtime_service.steam_runtime_for_asset", lambda _name: "steamrt3"
+    )
     monkeypatch.setattr(plans.maintenance_lock_service, "get", lambda *_args, **_kwargs: _Lock())
-    result = await plans.execute_github_install_plan(db, SimpleNamespace(id=3), 7, request, "h" * 64)
+    result = await plans.execute_github_install_plan(
+        db, SimpleNamespace(id=3), 7, request, "h" * 64
+    )
     assert result["success"] and result["restart_required"]
     assert managed.installed_asset_name == "demo-linux.zip" and db.added
 

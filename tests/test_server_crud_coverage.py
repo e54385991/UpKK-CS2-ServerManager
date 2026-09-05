@@ -12,7 +12,7 @@ import pytest
 from fastapi import HTTPException
 
 from api.routes.servers import crud
-from modules import Server, ServerCreate, ServerStatus, SystemSettings
+from modules import Server, ServerCreate, SystemSettings
 from services.host_initialization import HostDependencyResult
 
 
@@ -168,7 +168,11 @@ async def test_create_record_captcha_duplicates_defaults_and_audit(monkeypatch):
     monkeypatch.setattr(
         crud.SystemSettings,
         "get_or_create_settings",
-        AsyncMock(return_value=SystemSettings(default_proxy_mode="github_url", github_proxy_url="https://proxy")),
+        AsyncMock(
+            return_value=SystemSettings(
+                default_proxy_mode="github_url", github_proxy_url="https://proxy"
+            )
+        ),
     )
     host_result = HostDependencyResult(
         success=True,
@@ -192,18 +196,20 @@ async def test_create_record_captcha_duplicates_defaults_and_audit(monkeypatch):
     assert any(isinstance(item, crud.ServerAgentPolicy) for item in db.added)
     assert crud.record_audit_event.await_count == 1
 
-    monkeypatch.setattr(crud.Server, "get_by_name_and_user", AsyncMock(return_value=SimpleNamespace()))
+    monkeypatch.setattr(
+        crud.Server, "get_by_name_and_user", AsyncMock(return_value=SimpleNamespace())
+    )
     with pytest.raises(HTTPException) as exc:
         await crud.create_server_record(_create(), _DB(), user, request)
     assert exc.value.status_code == 400
     with pytest.raises(HTTPException) as exc:
-        await crud.create_server_record(
-            _create(), _DB(), user, request, source_server_id=9
-        )
+        await crud.create_server_record(_create(), _DB(), user, request, source_server_id=9)
     assert exc.value.status_code == 409
 
     monkeypatch.setattr(crud.Server, "get_by_name_and_user", AsyncMock(return_value=None))
-    monkeypatch.setattr(crud.Server, "get_by_host_directory_and_user", AsyncMock(return_value=SimpleNamespace()))
+    monkeypatch.setattr(
+        crud.Server, "get_by_host_directory_and_user", AsyncMock(return_value=SimpleNamespace())
+    )
     with pytest.raises(HTTPException) as exc:
         await crud.create_server_record(_create(), _DB(), user, request)
     assert exc.value.status_code == 400
@@ -233,11 +239,18 @@ async def test_create_record_skip_validation_proxy_modes_and_listing(monkeypatch
     monkeypatch.setattr(
         crud.SystemSettings,
         "get_or_create_settings",
-        AsyncMock(return_value=SystemSettings(default_proxy_mode="github_url", github_proxy_url="x")),
+        AsyncMock(
+            return_value=SystemSettings(default_proxy_mode="github_url", github_proxy_url="x")
+        ),
     )
     server = await crud.create_server_record(
-            _create(use_panel_proxy=True), _DB(), user, SimpleNamespace(),
-        skip_host_initialization=True, apply_system_defaults=False, source_server_id=3,
+        _create(use_panel_proxy=True),
+        _DB(),
+        user,
+        SimpleNamespace(),
+        skip_host_initialization=True,
+        apply_system_defaults=False,
+        source_server_id=3,
     )
     assert server.use_panel_proxy is True
 
@@ -263,14 +276,16 @@ async def test_update_apply_delete_server_and_admin_listing(monkeypatch):
     monkeypatch.setattr(crud, "get_server_with_permission", AsyncMock(return_value=server))
     monkeypatch.setattr(crud, "record_audit_event", AsyncMock())
     monkeypatch.setattr(crud.redis_manager, "clear_server_cache", AsyncMock())
-    monkeypatch.setattr(
-        "services.server_monitor.server_monitor.start_monitoring", lambda *_a: None
-    )
+    monkeypatch.setattr("services.server_monitor.server_monitor.start_monitoring", lambda *_a: None)
     db = _DB()
     from modules import ServerUpdate
 
     response = await crud.update_server(
-        4, ServerUpdate(server_name="new", enable_panel_monitoring=True), db, user, SimpleNamespace()
+        4,
+        ServerUpdate(server_name="new", enable_panel_monitoring=True),
+        db,
+        user,
+        SimpleNamespace(),
     )
     assert response.restart_required is False
     assert server.enable_panel_monitoring is True
@@ -289,10 +304,10 @@ async def test_update_apply_delete_server_and_admin_listing(monkeypatch):
     assert await crud.delete_server(4, db, user, SimpleNamespace()) is None
     assert crud.redis_manager.clear_server_cache.await_count >= 4
 
-    owner = SimpleNamespace(id=8, username="owner")
-    other = SimpleNamespace(id=9, username="other")
     rows = SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [server]))
     monkeypatch.setattr(crud.Server, "get_all", AsyncMock(return_value=[server]))
     admin_db = _DB(rows)
-    result = await crud.list_all_servers_admin(0, 10, db=admin_db, current_user=SimpleNamespace(id=1, is_admin=True))
+    result = await crud.list_all_servers_admin(
+        0, 10, db=admin_db, current_user=SimpleNamespace(id=1, is_admin=True)
+    )
     assert result[0].user is None

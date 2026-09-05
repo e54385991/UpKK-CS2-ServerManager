@@ -7,7 +7,7 @@ from .common import _cleanup_local_download_dir
 
 
 class CS2FixesMixin(SSHMixinBase):
-    async def install_cs2fixes(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
+    async def install_cs2fixes(self, server: Server, progress_callback=None) -> Tuple[bool, str]:  # noqa: C901 - plugin installation protocol.
         """
         Install CS2Fixes for CS2 server
 

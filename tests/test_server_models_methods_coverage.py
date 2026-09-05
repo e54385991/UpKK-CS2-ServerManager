@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 
 import pytest
 
@@ -94,7 +93,10 @@ async def test_server_query_helpers_cover_owner_and_admin_variants():
     session = _Session(_Result([row], scalar=row))
     assert await Server.get_by_id_and_user(session, 4, 1) is row
     assert await Server.get_by_name_and_user(session, "alpha", 1) is row
-    assert await Server.get_by_host_directory_and_user(session, "host", "/home/cs2server/cs2", 1) is row
+    assert (
+        await Server.get_by_host_directory_and_user(session, "host", "/home/cs2server/cs2", 1)
+        is row
+    )
     assert await Server.get_by_id(session, 4) is row
     assert await Server.get_by_api_key(session, "api") is row
     assert await Server.get_all_by_user(session, 1, skip=2, limit=3) == [row]
@@ -143,4 +145,3 @@ async def test_log_task_command_and_initialized_models_helpers():
     assert await CustomCommand.get_by_id_server_and_user(session, 4, 2, 1) is command
     session.result = _Result([initialized], scalar=initialized)
     assert await InitializedServer.get_all_by_user(session, 1) == [initialized]
-

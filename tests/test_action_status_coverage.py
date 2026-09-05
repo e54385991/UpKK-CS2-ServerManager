@@ -81,14 +81,21 @@ async def test_reset_counter_and_metamod_cache_ssh_fallbacks(monkeypatch):
     server = _server()
     _access(monkeypatch, server)
     pool = SimpleNamespace(reset_reconnection_counter=AsyncMock())
-    monkeypatch.setattr(importlib.import_module("services.ssh_connection_pool"), "ssh_connection_pool", pool)
-    assert (await routes.reset_reconnect_counter(4, _Db(), SimpleNamespace(id=2)))["success"] is True
+    monkeypatch.setattr(
+        importlib.import_module("services.ssh_connection_pool"), "ssh_connection_pool", pool
+    )
+    assert (await routes.reset_reconnect_counter(4, _Db(), SimpleNamespace(id=2)))[
+        "success"
+    ] is True
     pool.reset_reconnection_counter.side_effect = RuntimeError("reset failed")
     with pytest.raises(HTTPException) as caught:
         await routes.reset_reconnect_counter(4, _Db(), SimpleNamespace(id=2))
     assert caught.value.status_code == 500
 
-    client = SimpleNamespace(get=AsyncMock(return_value='{"success": true, "installed": true, "path": "/x"}'), set=AsyncMock())
+    client = SimpleNamespace(
+        get=AsyncMock(return_value='{"success": true, "installed": true, "path": "/x"}'),
+        set=AsyncMock(),
+    )
     redis = SimpleNamespace(prefixed_key=lambda key: f"prefix:{key}", client=client)
     monkeypatch.setattr(routes, "redis_manager", redis)
     cached = await routes.get_metamod_status(4, _Db(), SimpleNamespace(id=2))

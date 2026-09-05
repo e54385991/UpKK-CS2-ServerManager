@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import importlib
 import hashlib
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from services import discord_bot_manager as module
 from modules.schemas.discord import DiscordCapability
+from services import discord_bot_manager as module
 from services.discord_bot_manager import DiscordBotManager
 
 
@@ -95,14 +95,20 @@ async def test_discord_commands_help_status_plugins_and_upgrade(monkeypatch):
     interaction.response.defer.assert_awaited()
 
     plugin = SimpleNamespace(id=4, title="Plugin", version="1")
-    monkeypatch.setattr(module.MarketPlugin, "search_plugins", AsyncMock(return_value=([plugin], 1)))
+    monkeypatch.setattr(
+        module.MarketPlugin, "search_plugins", AsyncMock(return_value=([plugin], 1))
+    )
     await manager.command_plugin_search(client, interaction, "plug", None)
     await manager.command_plugin_list(client, interaction, None)
     assert interaction.response.send_message.await_count >= 3
 
     auto_module = importlib.import_module("services.plugin_auto_update_service")
     plan = {"no_op": True, "name": "Plugin"}
-    monkeypatch.setattr(auto_module.plugin_auto_update_service, "build_plugin_upgrade_plan", AsyncMock(return_value=plan))
+    monkeypatch.setattr(
+        auto_module.plugin_auto_update_service,
+        "build_plugin_upgrade_plan",
+        AsyncMock(return_value=plan),
+    )
     await manager.command_plugin_upgrade(client, interaction, 4, None)
     assert "already" in str(module._publish_interaction_update.await_args.kwargs.get("content"))
 
@@ -141,7 +147,9 @@ async def test_confirmation_build_publish_save_and_cancel_paths(monkeypatch):
         interaction, server, "start", DiscordCapability.START, {"action": "start"}, {"steps": []}
     )
     assert db.saved.message_id == "78"
-    interaction.edit_original_response.side_effect = module._http_error(10008) if hasattr(module, "_http_error") else None
+    interaction.edit_original_response.side_effect = (
+        module._http_error(10008) if hasattr(module, "_http_error") else None
+    )
     interaction.original_response.return_value = SimpleNamespace(id=79)
     await manager._send_confirmation(
         interaction, server, "start", DiscordCapability.START, {"action": "start"}, {"steps": []}
@@ -208,26 +216,44 @@ async def test_execute_operation_routes_tools_upgrade_and_ownership(monkeypatch)
             },
         ),
     ):
-        item = SimpleNamespace(id=f"{action}-1", action=action, server_id=3, owner_user_id=1, arguments=arguments)
+        item = SimpleNamespace(
+            id=f"{action}-1", action=action, server_id=3, owner_user_id=1, arguments=arguments
+        )
         result = await manager._execute_operation(interaction, item)
         assert result["success"] is True
-    upgrade = SimpleNamespace(id="upgrade", action="plugin_upgrade", server_id=3, owner_user_id=1, arguments={"plugin_id": 4})
+    upgrade = SimpleNamespace(
+        id="upgrade",
+        action="plugin_upgrade",
+        server_id=3,
+        owner_user_id=1,
+        arguments={"plugin_id": 4},
+    )
     enqueue = AsyncMock(return_value={"operation_id": "hub-op"})
     enqueue_module = importlib.import_module("services.operation_enqueue")
     monkeypatch.setattr(enqueue_module, "enqueue_plugin_auto_update", enqueue)
     hub_module = importlib.import_module("services.server_operation_hub")
-    monkeypatch.setattr(hub_module, "server_operation_hub", SimpleNamespace(wait_until_terminal=AsyncMock(return_value={"success": True, "message": "upgraded"})))
+    monkeypatch.setattr(
+        hub_module,
+        "server_operation_hub",
+        SimpleNamespace(
+            wait_until_terminal=AsyncMock(return_value={"success": True, "message": "upgraded"})
+        ),
+    )
     assert (await manager._execute_operation(interaction, upgrade))["success"] is True
     with pytest.raises(ValueError):
         await manager._execute_operation(
             interaction,
-            SimpleNamespace(id="unknown", action="unsupported", server_id=3, owner_user_id=1, arguments={}),
+            SimpleNamespace(
+                id="unknown", action="unsupported", server_id=3, owner_user_id=1, arguments={}
+            ),
         )
     db.server = SimpleNamespace(id=3, user_id=99)
     with pytest.raises(module.DiscordOperationDenied):
         await manager._execute_operation(
             interaction,
-            SimpleNamespace(id="denied", action="start", server_id=3, owner_user_id=1, arguments={}),
+            SimpleNamespace(
+                id="denied", action="start", server_id=3, owner_user_id=1, arguments={}
+            ),
         )
 
 
@@ -253,7 +279,9 @@ async def test_confirm_and_execute_success_failure_and_exception(monkeypatch):
     monkeypatch.setattr(module, "record_discord_operation_event", AsyncMock())
     publish = AsyncMock()
     monkeypatch.setattr(module, "_publish_interaction_update", publish)
-    monkeypatch.setattr(manager, "_execute_operation", AsyncMock(return_value={"success": True, "message": "done"}))
+    monkeypatch.setattr(
+        manager, "_execute_operation", AsyncMock(return_value={"success": True, "message": "done"})
+    )
     await manager._confirm_and_execute(_interaction(), "op")
     assert saved.status == "completed"
     assert publish.await_count == 2

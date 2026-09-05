@@ -58,17 +58,25 @@ def test_system_cleanup_helpers_cover_all_allowlisted_targets():
 async def test_system_cleanup_policy_scan_and_failed_connection(monkeypatch):
     service = cleanup.SystemCleanupService()
     task = SimpleNamespace(
-        schedule_value="bad", last_run="last", next_run="next", last_status="ok", last_error=None, run_count=2
+        schedule_value="bad",
+        last_run="last",
+        next_run="next",
+        last_status="ok",
+        last_error=None,
+        run_count=2,
     )
     policy = service.policy_from_server(
-        _server(cleanup_targets=["not-a-target"], cleanup_retain_days=999, sudo_password="secret"), task
+        _server(cleanup_targets=["not-a-target"], cleanup_retain_days=999, sudo_password="secret"),
+        task,
     )
     assert policy["targets"] == ["game_logs"]
     assert policy["retain_days"] == 90
     assert policy["has_sudo_password"] is True
     assert policy["schedule_value"] == "03:30"
 
-    monkeypatch.setattr(cleanup.game_cleanup_service, "_ensure_connected", AsyncMock(return_value=(False, "down")))
+    monkeypatch.setattr(
+        cleanup.game_cleanup_service, "_ensure_connected", AsyncMock(return_value=(False, "down"))
+    )
     with pytest.raises(RuntimeError, match="Connection failed"):
         await service.scan(AsyncMock(), _server())
 
@@ -76,7 +84,9 @@ async def test_system_cleanup_policy_scan_and_failed_connection(monkeypatch):
         execute_command=AsyncMock(side_effect=lambda command, timeout=20: (True, "1024", "")),
         execute_sudo_command=AsyncMock(return_value=(True, "", "")),
     )
-    monkeypatch.setattr(cleanup.game_cleanup_service, "_ensure_connected", AsyncMock(return_value=(True, "")))
+    monkeypatch.setattr(
+        cleanup.game_cleanup_service, "_ensure_connected", AsyncMock(return_value=(True, ""))
+    )
 
     class _Runner:
         async def resolve_privilege(self):
@@ -85,7 +95,9 @@ async def test_system_cleanup_policy_scan_and_failed_connection(monkeypatch):
     monkeypatch.setattr(cleanup, "SshManagerHostRunner", lambda *_args: _Runner())
     events = [event async for event in service.iter_scan(ssh, _server(), retain_days=3)]
     assert events[0]["phase"] == "privilege"
-    assert len([event for event in events if event["type"] == "target"]) == len(cleanup.SYSTEM_TARGET_IDS)
+    assert len([event for event in events if event["type"] == "target"]) == len(
+        cleanup.SYSTEM_TARGET_IDS
+    )
     assert events[-1]["type"] == "done"
     assert events[-1]["data"]["privilege"] == "none"
     assert events[-1]["data"]["manual_execute"]
@@ -95,7 +107,9 @@ async def test_system_cleanup_policy_scan_and_failed_connection(monkeypatch):
 async def test_system_cleanup_apply_root_sudo_failures_and_game_logs(monkeypatch):
     service = cleanup.SystemCleanupService()
     server = _server(cleanup_targets=list(cleanup.SYSTEM_TARGET_IDS))
-    monkeypatch.setattr(cleanup.game_cleanup_service, "_ensure_connected", AsyncMock(return_value=(True, "")))
+    monkeypatch.setattr(
+        cleanup.game_cleanup_service, "_ensure_connected", AsyncMock(return_value=(True, ""))
+    )
     monkeypatch.setattr(
         cleanup.game_cleanup_service,
         "purge_old_logs",
@@ -143,7 +157,9 @@ async def test_system_cleanup_apply_root_sudo_failures_and_game_logs(monkeypatch
 async def test_system_cleanup_scheduled_adds_manual_commands(monkeypatch):
     service = cleanup.SystemCleanupService()
     server = _server(cleanup_targets=["journal"])
-    monkeypatch.setattr(cleanup.game_cleanup_service, "_ensure_connected", AsyncMock(return_value=(True, "")))
+    monkeypatch.setattr(
+        cleanup.game_cleanup_service, "_ensure_connected", AsyncMock(return_value=(True, ""))
+    )
 
     class _Runner:
         async def resolve_privilege(self):

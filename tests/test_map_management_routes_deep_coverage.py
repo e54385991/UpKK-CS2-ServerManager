@@ -101,14 +101,20 @@ async def test_map_helpers_and_prerequisite_routes_cover_failures(monkeypatch):
     server = _server()
     assert maps._remote_paths(server)["maps"].endswith("maps.txt")
     ssh = _Ssh()
-    ssh.execute_command.return_value = (True, "counterstrikesharp=1\nmapchooser=0\nmaps_file=1\nconfig_file=0", "")
+    ssh.execute_command.return_value = (
+        True,
+        "counterstrikesharp=1\nmapchooser=0\nmaps_file=1\nconfig_file=0",
+        "",
+    )
     result = await maps._inspect_prerequisites(ssh, server)
     assert result["counterstrikesharp_installed"] and not result["ready"]
     with pytest.raises(HTTPException) as exc_info:
         maps._require_prerequisites(result)
     assert exc_info.value.status_code == 412
     with pytest.raises(HTTPException) as exc_info:
-        maps._require_prerequisites({"counterstrikesharp_installed": False, "mapchooser_installed": False})
+        maps._require_prerequisites(
+            {"counterstrikesharp_installed": False, "mapchooser_installed": False}
+        )
     assert exc_info.value.status_code == 412
     ssh.execute_command.return_value = (False, "", "permission denied")
     with pytest.raises(HTTPException) as exc_info:
@@ -117,7 +123,10 @@ async def test_map_helpers_and_prerequisite_routes_cover_failures(monkeypatch):
 
     ssh = _Ssh()
     assert await maps._read_maps_config(ssh, server, False) == (maps.DEFAULT_MAPS_CONFIG, False)
-    assert await maps._read_plugin_config(ssh, server, False) == (maps.DEFAULT_PLUGIN_CONFIG_CONTENT, False)
+    assert await maps._read_plugin_config(ssh, server, False) == (
+        maps.DEFAULT_PLUGIN_CONFIG_CONTENT,
+        False,
+    )
     ssh.read_file.return_value = (False, "", "unreadable")
     with pytest.raises(HTTPException):
         await maps._read_maps_config(ssh, server, True)
@@ -156,13 +165,25 @@ async def test_map_status_custom_sync_and_uninstall_routes(monkeypatch):
     }
 
     task = SimpleNamespace(
-        schedule_value="bad", enabled=True, last_run=None, next_run=None,
-        last_status="failed", last_error="old", run_count=2,
+        schedule_value="bad",
+        enabled=True,
+        last_run=None,
+        next_run=None,
+        last_status="failed",
+        last_error="old",
+        run_count=2,
     )
     db = _Db([_Result(rows=[task, SimpleNamespace(enabled=True, next_run="old")])])
-    monkeypatch.setattr(maps, "validate_remote_map_url", AsyncMock(return_value="https://maps.invalid/normalized"))
+    monkeypatch.setattr(
+        maps, "validate_remote_map_url", AsyncMock(return_value="https://maps.invalid/normalized")
+    )
     updated = await maps.update_custom_map_sync(
-        3, maps.CustomMapSyncUpdateRequest(url="https://maps.invalid/pool", interval_seconds=300, enabled=True), db, object()
+        3,
+        maps.CustomMapSyncUpdateRequest(
+            url="https://maps.invalid/pool", interval_seconds=300, enabled=True
+        ),
+        db,
+        object(),
     )
     assert updated["enabled"] is True and task.enabled is True
     assert db.commits == 1
@@ -170,7 +191,9 @@ async def test_map_status_custom_sync_and_uninstall_routes(monkeypatch):
     db = _Db([_Result(rows=[])])
     server.map_pool_sync_url = None
     with pytest.raises(HTTPException, match="URL"):
-        await maps.run_custom_map_sync(3, maps.CustomMapSyncRunRequest(expected_revision=REVISION), db, object())
+        await maps.run_custom_map_sync(
+            3, maps.CustomMapSyncRunRequest(expected_revision=REVISION), db, object()
+        )
     server.map_pool_sync_url = "https://maps.invalid/pool"
     monkeypatch.setattr(maps, "_read_maps_config", AsyncMock(return_value=("maps", True)))
     monkeypatch.setattr(maps, "content_revision", lambda _content: REVISION)
@@ -179,11 +202,17 @@ async def test_map_status_custom_sync_and_uninstall_routes(monkeypatch):
     monkeypatch.setattr(maps, "_replace_maps_config", AsyncMock())
     monkeypatch.setattr(maps, "_record_map_sync_result", AsyncMock())
     monkeypatch.setattr(maps, "_config_payload", lambda *args, **kwargs: {"maps": []})
-    result = await maps.run_custom_map_sync(3, maps.CustomMapSyncRunRequest(expected_revision=REVISION), db, object())
+    result = await maps.run_custom_map_sync(
+        3, maps.CustomMapSyncRunRequest(expected_revision=REVISION), db, object()
+    )
     assert result["message"]
-    monkeypatch.setattr(maps, "fetch_remote_map_pool", AsyncMock(side_effect=maps.RemoteMapPoolError("remote")))
+    monkeypatch.setattr(
+        maps, "fetch_remote_map_pool", AsyncMock(side_effect=maps.RemoteMapPoolError("remote"))
+    )
     with pytest.raises(HTTPException) as exc_info:
-        await maps.run_custom_map_sync(3, maps.CustomMapSyncRunRequest(expected_revision=REVISION), db, object())
+        await maps.run_custom_map_sync(
+            3, maps.CustomMapSyncRunRequest(expected_revision=REVISION), db, object()
+        )
     assert exc_info.value.status_code == 502
 
     monkeypatch.setattr(maps, "get_server_with_permission", AsyncMock(return_value=server))
@@ -192,17 +221,22 @@ async def test_map_status_custom_sync_and_uninstall_routes(monkeypatch):
     tracked = SimpleNamespace(auto_update_enabled=True, last_status="installed", last_error="x")
     db = _Db([_Result(rows=[tracked])])
     result = await maps.uninstall_mapchooser_plugin(
-        3, maps.MapChooserUninstallRequest(confirmation=maps.MAPCHOOSER_UNINSTALL_CONFIRMATION), db, object()
+        3,
+        maps.MapChooserUninstallRequest(confirmation=maps.MAPCHOOSER_UNINSTALL_CONFIRMATION),
+        db,
+        object(),
     )
     assert result["success"] and tracked.last_status == "uninstalled"
     with pytest.raises(HTTPException, match="confirmation"):
-        await maps.uninstall_mapchooser_plugin(3, maps.MapChooserUninstallRequest(confirmation="no"), db, object())
+        await maps.uninstall_mapchooser_plugin(
+            3, maps.MapChooserUninstallRequest(confirmation="no"), db, object()
+        )
 
 
 @pytest.mark.asyncio
 async def test_map_config_preset_and_map_mutation_routes(monkeypatch):
     ssh = _Ssh()
-    server = _patch_common(monkeypatch, ssh)
+    _patch_common(monkeypatch, ssh)
     db = _Db()
     monkeypatch.setattr(maps, "_read_maps_config", AsyncMock(return_value=("maps", True)))
     monkeypatch.setattr(maps, "_read_plugin_config", AsyncMock(return_value=("config", True)))
@@ -210,14 +244,19 @@ async def test_map_config_preset_and_map_mutation_routes(monkeypatch):
     monkeypatch.setattr(maps, "_replace_plugin_config", AsyncMock())
     monkeypatch.setattr(maps, "_plugin_config_payload", lambda *args, **kwargs: {"fields": []})
     monkeypatch.setattr(maps, "_config_payload", lambda *args, **kwargs: {"maps": []})
-    monkeypatch.setattr(maps, "update_plugin_config", lambda content, values, **_kwargs: content + " updated")
+    monkeypatch.setattr(
+        maps, "update_plugin_config", lambda content, values, **_kwargs: content + " updated"
+    )
     monkeypatch.setattr(maps, "parse_maps_config", lambda _content: SimpleNamespace(maps=[]))
     monkeypatch.setattr(maps, "content_revision", lambda _content: REVISION)
 
     assert (await maps.get_plugin_config(3, db, object()))["fields"] == []
     assert (await maps.get_maps_config(3, db, object()))["maps"] == []
     result = await maps.update_mapchooser_plugin_config(
-        3, maps.PluginConfigUpdateRequest(values={"VoteDuration": 10}, expected_revision=REVISION), db, object()
+        3,
+        maps.PluginConfigUpdateRequest(values={"VoteDuration": 10}, expected_revision=REVISION),
+        db,
+        object(),
     )
     assert result["message"]
     result = await maps.update_maps_config(
@@ -232,7 +271,12 @@ async def test_map_config_preset_and_map_mutation_routes(monkeypatch):
     assert result["preset"] == "official"
     monkeypatch.setattr(maps, "_remote_maps_config", AsyncMock(return_value="kz maps"))
     result = await maps.apply_map_preset(
-        3, maps.MapPresetApplyRequest(preset="kz", expected_revision=REVISION, plugin_config_expected_revision=REVISION), db, object()
+        3,
+        maps.MapPresetApplyRequest(
+            preset="kz", expected_revision=REVISION, plugin_config_expected_revision=REVISION
+        ),
+        db,
+        object(),
     )
     assert result["plugin_config"] is not None
     monkeypatch.setattr(maps, "normalize_workshop_id", lambda value: value)
@@ -246,12 +290,22 @@ async def test_map_config_preset_and_map_mutation_routes(monkeypatch):
 
     monkeypatch.setattr(maps, "set_map_enabled", lambda content, **_kwargs: content + " toggled")
     result = await maps.update_map_enabled(
-        3, maps.MapEnabledUpdateRequest(name="Map", workshop_id="123", expected_revision=REVISION, enabled=False), db, object()
+        3,
+        maps.MapEnabledUpdateRequest(
+            name="Map", workshop_id="123", expected_revision=REVISION, enabled=False
+        ),
+        db,
+        object(),
     )
     assert "Disabled" in result["message"]
-    monkeypatch.setattr(maps, "remove_map_from_config", lambda content, **_kwargs: content + " removed")
+    monkeypatch.setattr(
+        maps, "remove_map_from_config", lambda content, **_kwargs: content + " removed"
+    )
     result = await maps.delete_map(
-        3, maps.MapIdentityRequest(name="Map", workshop_id="123", expected_revision=REVISION), db, object()
+        3,
+        maps.MapIdentityRequest(name="Map", workshop_id="123", expected_revision=REVISION),
+        db,
+        object(),
     )
     assert result["message"]
 
@@ -259,7 +313,7 @@ async def test_map_config_preset_and_map_mutation_routes(monkeypatch):
 @pytest.mark.asyncio
 async def test_map_route_conflict_and_lock_errors_are_translated(monkeypatch):
     ssh = _Ssh()
-    server = _patch_common(monkeypatch, ssh)
+    _patch_common(monkeypatch, ssh)
     db = _Db()
     monkeypatch.setattr(maps.maintenance_lock_service, "get", lambda *_args, **_kwargs: _Lock())
     monkeypatch.setattr(maps, "_read_maps_config", AsyncMock(return_value=("maps", True)))

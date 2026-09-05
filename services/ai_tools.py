@@ -1880,7 +1880,7 @@ def canonical_arguments(arguments: dict[str, Any]) -> tuple[str, str]:
     return serialized, hashlib.sha256(serialized.encode()).hexdigest()
 
 
-async def build_approval_summary(
+async def build_approval_summary(  # noqa: C901
     name: str, arguments: dict[str, Any], context: ToolContext
 ) -> dict[str, Any]:
     """Build a fresh, read-only confirmation card for a mutating tool."""

@@ -9,12 +9,10 @@ from unittest.mock import AsyncMock
 import discord
 import pytest
 
-from modules import ManagedPlugin, MarketPlugin
 from modules.schemas.discord import DiscordCapability
 from services import discord_bot_manager as module
 from services.change_map_service import ChangeMapAmbiguousError, MapCandidate
 from services.discord_bot_manager import DiscordBotManager, ManagedDiscordClient
-from services.discord_bot_service import DiscordBotAPIError
 
 
 class _Result:
@@ -98,7 +96,9 @@ async def test_message_edit_publish_and_public_error_fallbacks(monkeypatch):
 
 
 def test_status_formats_and_view_constructors_cover_remaining_helpers(monkeypatch):
-    monkeypatch.setattr(module, "get_current_time", lambda: __import__("datetime").datetime(2025, 1, 1))
+    monkeypatch.setattr(
+        module, "get_current_time", lambda: __import__("datetime").datetime(2025, 1, 1)
+    )
     assert module.format_panel_update_age("2025-01-01T00:00:05") == "2025-01-01 00:00:05"
     assert module.format_panel_update_age("2024-12-31T23:59:59") == "1s ago"
     assert module.format_panel_update_age("2024-12-31T23:00:00") == "1h ago"
@@ -109,7 +109,13 @@ def test_status_formats_and_view_constructors_cover_remaining_helpers(monkeypatc
     fields = module.status_card_fields(
         _server(),
         a2s_ok=True,
-        info={"player_count": 2, "max_players": 10, "server_name": "live", "map_name": "de", "version": "1"},
+        info={
+            "player_count": 2,
+            "max_players": 10,
+            "server_name": "live",
+            "map_name": "de",
+            "version": "1",
+        },
         response_time_ms=12,
         last_updated="2025-01-01T00:00:00",
         disk_info={"used_gb": 1, "total_gb": 2, "used_percent": 50},
@@ -146,7 +152,9 @@ async def test_managed_client_callbacks_autocomplete_and_authorized_pairs(monkey
     await client.on_ready()
     await client.on_guild_remove(SimpleNamespace(id=12))
     await client.on_message(SimpleNamespace())
-    await client.on_interaction(SimpleNamespace(type=discord.InteractionType.application_command, data={}))
+    await client.on_interaction(
+        SimpleNamespace(type=discord.InteractionType.application_command, data={})
+    )
     await client.on_interaction(
         SimpleNamespace(type=discord.InteractionType.component, data={"custom_id": "cs2:menu:open"})
     )
@@ -156,17 +164,28 @@ async def test_managed_client_callbacks_autocomplete_and_authorized_pairs(monkey
     assert await client._autocomplete_server(interaction, "x") == []
     server = _server(name="Alpha")
     binding = SimpleNamespace(capabilities=["status"])
+
     class _Context:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *_args): return None
-        async def execute(self, _query): return _Result([(binding, server)])
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def execute(self, _query):
+            return _Result([(binding, server)])
+
     monkeypatch.setattr(module, "async_session_maker", lambda: _Context())
     monkeypatch.setattr(module, "authorized_bindings", AsyncMock(return_value=[(binding, server)]))
     interaction = _interaction()
     interaction.user.roles = [SimpleNamespace(id=7)]
     choices = await client._autocomplete_server(interaction, "alp")
     assert choices[0].value == "3"
-    monkeypatch.setattr(module, "authorized_bindings", AsyncMock(side_effect=module.DiscordAuthorizationDenied("no")))
+    monkeypatch.setattr(
+        module,
+        "authorized_bindings",
+        AsyncMock(side_effect=module.DiscordAuthorizationDenied("no")),
+    )
     assert await client._autocomplete_server(interaction, "") == []
 
     manager_obj = DiscordBotManager()
@@ -176,8 +195,25 @@ async def test_managed_client_callbacks_autocomplete_and_authorized_pairs(monkey
     monkeypatch.setattr(module, "async_session_maker", lambda: _Context())
     monkeypatch.setattr(module, "authorized_bindings", AsyncMock(return_value=[(binding, server)]))
     client_stub = SimpleNamespace(owner_user_id=4)
-    assert await manager_obj._authorized_menu_pairs(client_stub, guild_id=None, channel_id=20, actor_user_id=1, actor_role_ids=set(), actor_is_channel_manager=False) == []
-    pairs = await manager_obj._authorized_menu_pairs(client_stub, guild_id=10, channel_id=20, actor_user_id=1, actor_role_ids=set(), actor_is_channel_manager=False)
+    assert (
+        await manager_obj._authorized_menu_pairs(
+            client_stub,
+            guild_id=None,
+            channel_id=20,
+            actor_user_id=1,
+            actor_role_ids=set(),
+            actor_is_channel_manager=False,
+        )
+        == []
+    )
+    pairs = await manager_obj._authorized_menu_pairs(
+        client_stub,
+        guild_id=10,
+        channel_id=20,
+        actor_user_id=1,
+        actor_role_ids=set(),
+        actor_is_channel_manager=False,
+    )
     assert pairs == [(binding, server)]
 
 
@@ -229,7 +265,9 @@ async def test_change_map_and_message_agent_failure_choices(monkeypatch):
     client = SimpleNamespace(owner_user_id=1)
     binding = SimpleNamespace(capabilities=[DiscordCapability.AGENT_ASK.value])
     monkeypatch.setattr(module, "available_discord_agent_server_ids", AsyncMock(return_value={3}))
-    monkeypatch.setattr(module, "resolve_discord_agent_server", lambda _prompt, servers: next(servers, None))
+    monkeypatch.setattr(
+        module, "resolve_discord_agent_server", lambda _prompt, servers: next(servers, None)
+    )
     assert await manager._message_agent_server(client, [(binding, server)], "hello") == server
     message = SimpleNamespace(guild=None, reply=AsyncMock())
     await manager._run_message_agent(client, message, server, "x")
@@ -238,7 +276,9 @@ async def test_change_map_and_message_agent_failure_choices(monkeypatch):
     message.channel = SimpleNamespace(id=20)
     progress = SimpleNamespace(edit=AsyncMock())
     message.reply = AsyncMock(return_value=progress)
-    monkeypatch.setattr(module, "ask_discord_agent", AsyncMock(side_effect=RuntimeError("agent bad")))
+    monkeypatch.setattr(
+        module, "ask_discord_agent", AsyncMock(side_effect=RuntimeError("agent bad"))
+    )
     await manager._run_message_agent(client, message, server, "x")
     progress.edit.assert_awaited_once()
 
@@ -273,9 +313,7 @@ async def test_handle_menu_action_dispatches_each_public_action(monkeypatch, act
     monkeypatch.setattr(manager, "_publish_menu_status", AsyncMock())
     monkeypatch.setattr(manager, "_publish_menu_confirmation", AsyncMock())
     monkeypatch.setattr(module, "reset_discord_conversation", AsyncMock())
-    await manager._handle_menu_action(
-        client, interaction, issued_at=1, server_id=3, action=action
-    )
+    await manager._handle_menu_action(client, interaction, issued_at=1, server_id=3, action=action)
     if action in {"plugin_search", "plugin_install", "game_console", "change_map", "agent_ask"}:
         interaction.response.send_modal.assert_awaited_once()
     elif action in {"plugin_list", "plugin_upgrade"}:
@@ -306,9 +344,13 @@ async def test_menu_component_open_expired_identity_and_unknown_branches(monkeyp
     with pytest.raises(module.DiscordAuthorizationDenied, match="component"):
         await manager._handle_menu_component(client, interaction, ["cs2", "menu"])
     with pytest.raises(module.DiscordAuthorizationDenied, match="identity"):
-        await manager._handle_menu_component(client, interaction, ["cs2", "menu", "page", "bad", "30"])
+        await manager._handle_menu_component(
+            client, interaction, ["cs2", "menu", "page", "bad", "30"]
+        )
     monkeypatch.setattr(module, "menu_is_expired", lambda _value: True)
-    await manager._handle_menu_component(client, interaction, ["cs2", "menu", "page", "1", "30", "0"])
+    await manager._handle_menu_component(
+        client, interaction, ["cs2", "menu", "page", "1", "30", "0"]
+    )
     monkeypatch.setattr(module, "menu_is_expired", lambda _value: False)
     with pytest.raises(module.DiscordAuthorizationDenied, match="Unknown menu"):
         await manager._handle_menu_component(client, interaction, ["cs2", "menu", "wat", "1", "30"])
@@ -324,19 +366,42 @@ async def test_market_map_views_and_rendered_ai_states(monkeypatch):
     state = {"query": "test", "mode": "browse", "server_id": 3}
     monkeypatch.setattr(module.redis_manager, "get", AsyncMock(return_value=state))
     monkeypatch.setattr(module.MarketPlugin, "search_plugins", AsyncMock(return_value=([], 0)))
-    view = await manager._market_search_view(client, interaction, issued_at=1, server_id=3, nonce="n", page=0)
+    view = await manager._market_search_view(
+        client, interaction, issued_at=1, server_id=3, nonce="n", page=0
+    )
     assert view is not None
     monkeypatch.setattr(module.redis_manager, "get", AsyncMock(return_value=None))
     with pytest.raises(module.DiscordAuthorizationDenied, match="expired"):
-        await manager._market_search_view(client, interaction, issued_at=1, server_id=3, nonce="n", page=0)
-    monkeypatch.setattr(module.redis_manager, "get", AsyncMock(return_value={"mode": "bad", "server_id": 3}))
+        await manager._market_search_view(
+            client, interaction, issued_at=1, server_id=3, nonce="n", page=0
+        )
+    monkeypatch.setattr(
+        module.redis_manager, "get", AsyncMock(return_value={"mode": "bad", "server_id": 3})
+    )
     with pytest.raises(module.DiscordAuthorizationDenied, match="does not match"):
-        await manager._market_search_view(client, interaction, issued_at=1, server_id=3, nonce="n", page=0)
+        await manager._market_search_view(
+            client, interaction, issued_at=1, server_id=3, nonce="n", page=0
+        )
 
     message = SimpleNamespace(edit=AsyncMock())
-    monkeypatch.setattr(module, "discord_run_snapshot", AsyncMock(return_value={"status": "completed", "message": "done", "error": None, "tool": None}))
+    monkeypatch.setattr(
+        module,
+        "discord_run_snapshot",
+        AsyncMock(
+            return_value={"status": "completed", "message": "done", "error": None, "tool": None}
+        ),
+    )
     assert await manager._render_ai_run_message(message, "run")
-    monkeypatch.setattr(module, "discord_run_snapshot", AsyncMock(return_value={"status": "waiting_approval", "tool": {"name": "start", "id": "t", "plan": {}}}))
+    monkeypatch.setattr(
+        module,
+        "discord_run_snapshot",
+        AsyncMock(
+            return_value={
+                "status": "waiting_approval",
+                "tool": {"name": "start", "id": "t", "plan": {}},
+            }
+        ),
+    )
     assert await manager._render_ai_run_message(message, "run")
     interaction = _interaction()
     await manager._render_ai_run(interaction, "run")

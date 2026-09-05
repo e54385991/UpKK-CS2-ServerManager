@@ -119,7 +119,9 @@ async def _no_op(*_args, **_kwargs):
 
 def _patch_common(monkeypatch, manager, *, locked_server=None):
     server = locked_server or _server()
-    monkeypatch.setattr(deployment, "get_server_and_verify_ownership", AsyncMock(return_value=server))
+    monkeypatch.setattr(
+        deployment, "get_server_and_verify_ownership", AsyncMock(return_value=server)
+    )
     monkeypatch.setattr(deployment, "SSHManager", lambda: manager)
     monkeypatch.setattr(deployment.redis_manager, "get", AsyncMock(return_value=None))
     monkeypatch.setattr(deployment.redis_manager, "set", AsyncMock(return_value=True))
@@ -167,7 +169,9 @@ async def test_execute_server_action_success_branches(monkeypatch, action):
 
     framework = AsyncMock()
     known_github = AsyncMock()
-    monkeypatch.setattr("services.plugin_auto_update_service.record_framework_installation", framework)
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.record_framework_installation", framework
+    )
     monkeypatch.setattr(
         "services.plugin_auto_update_service.record_known_github_installation", known_github
     )
@@ -203,7 +207,9 @@ async def test_execute_server_action_status_branches(monkeypatch, status_text):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["deploy", "start", "stop", "update", "validate", "install_metamod"])
+@pytest.mark.parametrize(
+    "action", ["deploy", "start", "stop", "update", "validate", "install_metamod"]
+)
 async def test_execute_server_action_failure_branches(monkeypatch, action):
     manager = _SSH(success=False)
     server = _patch_common(monkeypatch, manager)
@@ -222,7 +228,9 @@ async def test_execute_server_action_failure_branches(monkeypatch, action):
 async def test_action_preflight_lock_and_exception_paths(monkeypatch):
     server = _server()
     db = _DB()
-    monkeypatch.setattr(deployment, "get_server_and_verify_ownership", AsyncMock(return_value=server))
+    monkeypatch.setattr(
+        deployment, "get_server_and_verify_ownership", AsyncMock(return_value=server)
+    )
     monkeypatch.setattr(deployment.redis_manager, "get", AsyncMock(return_value="locked"))
     with pytest.raises(HTTPException) as conflict:
         await deployment.execute_server_action(
@@ -274,30 +282,39 @@ async def test_restart_preflight_and_cleanup_variants(monkeypatch):
 async def test_deployment_lock_progress_logs_and_cancel_paths(monkeypatch):
     server = _server(status=ServerStatus.DEPLOYING)
     db = _DB()
-    monkeypatch.setattr(deployment, "get_server_and_verify_ownership", AsyncMock(return_value=server))
+    monkeypatch.setattr(
+        deployment, "get_server_and_verify_ownership", AsyncMock(return_value=server)
+    )
     monkeypatch.setattr(deployment.redis_manager, "get", AsyncMock(return_value="1"))
     result = await deployment.check_deployment_lock(server.id, db, SimpleNamespace(id=7))
     assert result.body and b"lock_exists" in result.body
 
-    monkeypatch.setattr(deployment.redis_manager, "get_deployment_progress", AsyncMock(return_value=[{"m": 1}]))
+    monkeypatch.setattr(
+        deployment.redis_manager, "get_deployment_progress", AsyncMock(return_value=[{"m": 1}])
+    )
     progress = await deployment.get_deployment_progress(server.id, db, SimpleNamespace(id=7))
     assert progress["total_messages"] == 1
 
     monkeypatch.setattr(deployment.DeploymentLog, "get_logs_by_server", AsyncMock(return_value=[]))
-    assert await deployment.get_server_logs(server.id, db=db, current_user=SimpleNamespace(id=7)) == []
+    assert (
+        await deployment.get_server_logs(server.id, db=db, current_user=SimpleNamespace(id=7)) == []
+    )
 
     monkeypatch.setattr(deployment, "request_steamcmd_cancel", _no_op)
     monkeypatch.setattr(deployment, "force_clear_steamcmd_lock", _no_op)
     monkeypatch.setattr(deployment, "clear_steamcmd_cancel", _no_op)
     monkeypatch.setattr(deployment.maintenance_lock_service, "force_release_server_lock", _no_op)
     monkeypatch.setattr(deployment.redis_manager, "clear_deployment_progress", _no_op)
-    monkeypatch.setattr(deployment, "SSHManager", lambda: SimpleNamespace(
-        connect=AsyncMock(return_value=(False, "offline")), disconnect=AsyncMock()
-    ))
+    monkeypatch.setattr(
+        deployment,
+        "SSHManager",
+        lambda: SimpleNamespace(
+            connect=AsyncMock(return_value=(False, "offline")), disconnect=AsyncMock()
+        ),
+    )
     monkeypatch.setattr(
         "services.server_operation_hub.server_operation_hub.abort", AsyncMock(return_value=False)
     )
     cancelled = await deployment.cancel_deployment(server.id, db, SimpleNamespace(id=7))
     assert cancelled.body and b"force-stopped" in cancelled.body
     assert server.status == ServerStatus.ERROR
-

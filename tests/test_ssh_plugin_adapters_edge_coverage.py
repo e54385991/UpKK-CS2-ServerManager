@@ -75,7 +75,9 @@ async def test_metamod_install_covers_connection_prerequisites_and_download_fail
             "test -f": (False, "", "missing"),
         },
     )
-    manager._fetch_latest_metamod_url = AsyncMock(return_value=(True, "https://github.com/mm.tar.gz"))
+    manager._fetch_latest_metamod_url = AsyncMock(
+        return_value=(True, "https://github.com/mm.tar.gz")
+    )
     result = await manager.install_metamod(server)
     assert result[0] is False and "download failed" in result[1].lower()
     manager.disconnect.assert_awaited_once()
@@ -86,7 +88,9 @@ async def test_metamod_install_covers_connection_prerequisites_and_download_fail
         default=(True, "exists", ""),
         markers={"stat -f%z": (True, "10", ""), "test -f": (True, "exists", "")},
     )
-    manager._fetch_latest_metamod_url = AsyncMock(return_value=(True, "https://github.com/mm.tar.gz"))
+    manager._fetch_latest_metamod_url = AsyncMock(
+        return_value=(True, "https://github.com/mm.tar.gz")
+    )
     result = await manager.install_metamod(server)
     assert "too small" in result[1]
 
@@ -100,7 +104,9 @@ async def test_metamod_install_covers_connection_prerequisites_and_download_fail
             "tar -xzf": (False, "", "bad tar"),
         },
     )
-    manager._fetch_latest_metamod_url = AsyncMock(return_value=(True, "https://github.com/mm.tar.gz"))
+    manager._fetch_latest_metamod_url = AsyncMock(
+        return_value=(True, "https://github.com/mm.tar.gz")
+    )
     result = await manager.install_metamod(server)
     assert result == (False, "Metamod extraction failed: bad tar")
 
@@ -119,14 +125,18 @@ async def test_metamod_install_covers_gameinfo_and_verification_branches(monkeyp
         "test -f /srv/cs2/cs2/game/csgo/gameinfo.gi": (False, "", "missing"),
     }
     manager = _manager(monkeypatch, module, markers=base)
-    manager._fetch_latest_metamod_url = AsyncMock(return_value=(True, "https://github.com/mm.tar.gz"))
+    manager._fetch_latest_metamod_url = AsyncMock(
+        return_value=(True, "https://github.com/mm.tar.gz")
+    )
     assert "gameinfo.gi not found" in (await manager.install_metamod(server))[1]
 
     base["test -f /srv/cs2/cs2/game/csgo/gameinfo.gi"] = (True, "exists", "")
     base["grep -q"] = (True, "found", "")
     base["test -d /srv/cs2/cs2/game/csgo/addons/metamod"] = (False, "", "missing")
     manager = _manager(monkeypatch, module, markers=base)
-    manager._fetch_latest_metamod_url = AsyncMock(return_value=(True, "https://github.com/mm.tar.gz"))
+    manager._fetch_latest_metamod_url = AsyncMock(
+        return_value=(True, "https://github.com/mm.tar.gz")
+    )
     assert "verification failed" in (await manager.install_metamod(server))[1]
 
     base["grep -q"] = (True, "notfound", "")
@@ -134,7 +144,9 @@ async def test_metamod_install_covers_gameinfo_and_verification_branches(monkeyp
     base["sed -i"] = (False, "", "read-only")
     base["test -d /srv/cs2/cs2/game/csgo/addons/metamod"] = (True, "installed", "")
     manager = _manager(monkeypatch, module, markers=base)
-    manager._fetch_latest_metamod_url = AsyncMock(return_value=(True, "https://github.com/mm.tar.gz"))
+    manager._fetch_latest_metamod_url = AsyncMock(
+        return_value=(True, "https://github.com/mm.tar.gz")
+    )
     result = await manager.install_metamod(server)
     assert result == (False, "Metamod gameinfo.gi configuration verification failed")
 
@@ -161,7 +173,10 @@ async def test_cs2fixes_install_covers_prerequisites_fetch_and_download_errors(m
         markers={"test -d /srv/cs2/cs2/game/csgo/addons/metamod": (False, "", "missing")},
     )
     manager.install_metamod = AsyncMock(return_value=(False, "mm failed"))
-    assert await manager.install_cs2fixes(server) == (False, "Metamod installation failed: mm failed")
+    assert await manager.install_cs2fixes(server) == (
+        False,
+        "Metamod installation failed: mm failed",
+    )
 
     manager = _manager(
         monkeypatch,
@@ -182,7 +197,9 @@ async def test_cs2fixes_install_covers_prerequisites_fetch_and_download_errors(m
             "test -f": (False, "", "missing"),
         },
     )
-    manager._fetch_github_release_url = AsyncMock(return_value=(True, "https://github.com/fix.tar.gz"))
+    manager._fetch_github_release_url = AsyncMock(
+        return_value=(True, "https://github.com/fix.tar.gz")
+    )
     assert "download failed" in (await manager.install_cs2fixes(server))[1].lower()
 
     manager = _manager(
@@ -195,7 +212,9 @@ async def test_cs2fixes_install_covers_prerequisites_fetch_and_download_errors(m
             "stat -f%z": (True, "10", ""),
         },
     )
-    manager._fetch_github_release_url = AsyncMock(return_value=(True, "https://github.com/fix.tar.gz"))
+    manager._fetch_github_release_url = AsyncMock(
+        return_value=(True, "https://github.com/fix.tar.gz")
+    )
     assert "too small" in (await manager.install_cs2fixes(server))[1]
 
     manager = SSHManager(use_pool=False)
@@ -215,11 +234,13 @@ async def test_swiftly_install_covers_release_fallback_and_download_errors(monke
     assert "CS2 server not found" in (await manager.install_swiftly(server))[1]
 
     manager = _manager(monkeypatch, module, default=(True, "exists", ""))
-    manager.execute_command = AsyncMock(side_effect=[
-        (True, "exists", ""),
-        (False, "", "api error"),
-        (False, "", "still down"),
-    ])
+    manager.execute_command = AsyncMock(
+        side_effect=[
+            (True, "exists", ""),
+            (False, "", "api error"),
+            (False, "", "still down"),
+        ]
+    )
     assert "Could not determine" in (await manager.install_swiftly(server))[1]
 
     manager = _manager(
@@ -229,13 +250,15 @@ async def test_swiftly_install_covers_release_fallback_and_download_errors(monke
         markers={"test -f": (False, "", "missing")},
     )
     manager.execute_command_streaming = AsyncMock(return_value=(False, "", "curl failed"))
-    manager.execute_command = AsyncMock(side_effect=[
-        (True, "exists", ""),
-        (True, "https://github.com/swiftly.zip", ""),
-        (True, "", ""),
-        (False, "", "missing"),
-        (True, "", ""),
-    ])
+    manager.execute_command = AsyncMock(
+        side_effect=[
+            (True, "exists", ""),
+            (True, "https://github.com/swiftly.zip", ""),
+            (True, "", ""),
+            (False, "", "missing"),
+            (True, "", ""),
+        ]
+    )
     result = await manager.install_swiftly(server)
     assert "download failed" in result[1].lower()
 
@@ -350,7 +373,10 @@ async def test_counterstrikesharp_fallback_and_package_installation(monkeypatch)
     manager.execute_command_streaming = AsyncMock(return_value=(True, "", ""))
     result = await manager.install_counterstrikesharp(server)
     assert result == (True, "CounterStrikeSharp installed successfully")
-    assert "counterstrikesharp-with-runtime-linux-1.2.3.zip" in manager.execute_command_streaming.await_args.args[0]
+    assert (
+        "counterstrikesharp-with-runtime-linux-1.2.3.zip"
+        in manager.execute_command_streaming.await_args.args[0]
+    )
 
 
 @pytest.mark.asyncio

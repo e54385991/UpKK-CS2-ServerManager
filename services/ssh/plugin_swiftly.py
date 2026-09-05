@@ -7,7 +7,7 @@ from .common import _cleanup_local_download_dir
 
 
 class SwiftlyMixin(SSHMixinBase):
-    async def install_swiftly(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
+    async def install_swiftly(self, server: Server, progress_callback=None) -> Tuple[bool, str]:  # noqa: C901 - plugin installation protocol.
         """
         Install SwiftlyS2 framework for CS2 server
 

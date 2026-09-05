@@ -46,16 +46,11 @@ async def test_monitoring_logs_success_and_redis_failure(monkeypatch):
         1, limit=5, event_type="lifecycle", db=None, current_user=SimpleNamespace(id=1)
     )
     assert result == [{"event": "start"}]
-    redis.get_monitoring_logs.assert_awaited_once_with(
-        server_id=1, event_type="lifecycle", limit=5
-    )
+    redis.get_monitoring_logs.assert_awaited_once_with(server_id=1, event_type="lifecycle", limit=5)
 
     redis.get_monitoring_logs.side_effect = RuntimeError("redis offline")
     assert (
-        await monitoring.get_monitoring_logs(
-            1, db=None, current_user=SimpleNamespace(id=1)
-        )
-        == []
+        await monitoring.get_monitoring_logs(1, db=None, current_user=SimpleNamespace(id=1)) == []
     )
 
 
@@ -84,7 +79,10 @@ async def test_monitoring_ping_cache_test_and_all_cache_paths(monkeypatch):
     assert result["servers"]["1"]["error"] == "Cache unavailable"
     assert result["servers"]["2"] == {"success": False}
 
-    monkeypatch.setattr("modules.database.async_session_maker", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
+    monkeypatch.setattr(
+        "modules.database.async_session_maker",
+        lambda: (_ for _ in ()).throw(RuntimeError("db down")),
+    )
     result = await monitoring.get_all_servers_a2s_cache()
     assert result["error"] == "db down"
 

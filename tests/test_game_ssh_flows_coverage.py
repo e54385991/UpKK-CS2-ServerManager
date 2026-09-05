@@ -186,7 +186,9 @@ async def test_steamcmd_retry_recovers_and_reports_verified_completion(monkeypat
         ]
     )
     progress: list[str] = []
-    monkeypatch.setattr("services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False)
+    )
 
     checks = iter((False, True))
 
@@ -209,17 +211,19 @@ async def test_steamcmd_retry_recovers_and_reports_verified_completion(monkeypat
 async def test_steamcmd_retry_covers_cancel_and_non_retryable_failures(monkeypatch):
     manager = GameSteamcmdMixin()
     progress = AsyncMock()
-    monkeypatch.setattr("services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        "services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=True)
+    )
     cancelled = await manager._execute_steamcmd_with_retry(
         "steamcmd", _server(id=3), progress_callback=progress, max_retries=0
     )
     assert cancelled[0] is False
 
-    monkeypatch.setattr("services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False))
-    manager._prepare_steamcmd_retry = AsyncMock(return_value=True)
-    manager._run_steamcmd_attempt = AsyncMock(
-        return_value=(False, "bad", "fatal", "fatal", False)
+    monkeypatch.setattr(
+        "services.ssh.game_steamcmd._legacy_cancel_requested", AsyncMock(return_value=False)
     )
+    manager._prepare_steamcmd_retry = AsyncMock(return_value=True)
+    manager._run_steamcmd_attempt = AsyncMock(return_value=(False, "bad", "fatal", "fatal", False))
     failed = await manager._execute_steamcmd_with_retry(
         "steamcmd", _server(id=3), progress_callback=progress, max_retries=0
     )
@@ -230,12 +234,14 @@ async def test_steamcmd_retry_covers_cancel_and_non_retryable_failures(monkeypat
 async def test_steamcmd_session_start_and_pid_helpers_cover_fallbacks(monkeypatch):
     manager = GameSteamcmdMixin()
     server = _server(id=3, game_directory="/srv/cs2", session_manager="tmux")
-    manager.execute_command = AsyncMock(side_effect=[
-        (True, "", ""),
-        (True, "", ""),
-        (True, "", ""),
-        (True, "7\nnot-a-pid\n", ""),
-    ])
+    manager.execute_command = AsyncMock(
+        side_effect=[
+            (True, "", ""),
+            (True, "", ""),
+            (True, "", ""),
+            (True, "7\nnot-a-pid\n", ""),
+        ]
+    )
     manager._steamcmd_session_running = AsyncMock(side_effect=[None, "tmux"])
     progress: list[str] = []
 

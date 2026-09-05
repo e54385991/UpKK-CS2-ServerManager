@@ -84,7 +84,7 @@ async def test_install_plugin_to_server_covers_each_remote_stage(monkeypatch):
             disconnect=AsyncMock(),
             execute_command=AsyncMock(side_effect=responses or [(True, "", "")] * 4),
         )
-        monkeypatch.setattr(plugins, "SSHManager", lambda: ssh)
+        monkeypatch.setattr(plugins, "SSHManager", lambda _ssh=ssh: _ssh)
         return ssh
 
     ssh = ssh_factory()
@@ -100,7 +100,10 @@ async def test_install_plugin_to_server_covers_each_remote_stage(monkeypatch):
     ]:
         db = _Db()
         ssh = ssh_factory(connect_result=connect_result, responses=responses)
-        assert await plugins._install_plugin_to_server(server, plugin, "https://x/a", None, db) is False
+        assert (
+            await plugins._install_plugin_to_server(server, plugin, "https://x/a", None, db)
+            is False
+        )
         ssh.disconnect.assert_awaited_once()
 
     db = _Db()
@@ -115,13 +118,17 @@ async def test_plugin_install_dependencies_invalid_and_existing_states(monkeypat
     server = _server()
     plugin = _plugin(dependencies="not-json")
     monkeypatch.setattr(plugins.Server, "get_by_id_and_user", AsyncMock(return_value=server))
-    monkeypatch.setattr(plugins.InstalledPlugin, "get_by_server_and_plugin", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        plugins.InstalledPlugin, "get_by_server_and_plugin", AsyncMock(return_value=None)
+    )
     monkeypatch.setattr(plugins, "_install_plugin_to_server", AsyncMock(return_value=True))
     db = _Db([plugin])
     request = PluginInstallRequest(plugin_id=7)
     assert (await plugins.install_plugin(3, request, user, db, server)).status_code == 200
 
-    monkeypatch.setattr(plugins.InstalledPlugin, "get_by_server_and_plugin", AsyncMock(return_value=object()))
+    monkeypatch.setattr(
+        plugins.InstalledPlugin, "get_by_server_and_plugin", AsyncMock(return_value=object())
+    )
     with pytest.raises(HTTPException, match="already installed"):
         await plugins.install_plugin(3, request, user, _Db([plugin]), server)
     monkeypatch.setattr(plugins.Server, "get_by_id_and_user", AsyncMock(return_value=None))
@@ -131,7 +138,9 @@ async def test_plugin_install_dependencies_invalid_and_existing_states(monkeypat
     with pytest.raises(HTTPException, match="Plugin not found"):
         await plugins.install_plugin(3, request, user, _Db([None]), server)
 
-    monkeypatch.setattr(plugins.InstalledPlugin, "get_by_server_and_plugin", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        plugins.InstalledPlugin, "get_by_server_and_plugin", AsyncMock(return_value=None)
+    )
     monkeypatch.setattr(plugins, "_install_plugin_to_server", AsyncMock(return_value=False))
     with pytest.raises(HTTPException, match="Failed to install"):
         await plugins.install_plugin(3, request, user, _Db([plugin]), server)
@@ -144,6 +153,7 @@ async def test_plugin_uninstall_and_installed_listing_cover_missing_and_ssh_stat
             return self
 
     monkeypatch.setattr(plugins, "select", lambda *_args: _Query())
+
     class _Installed:
         id = 0
         server_id = 0
@@ -164,7 +174,7 @@ async def test_plugin_uninstall_and_installed_listing_cover_missing_and_ssh_stat
             execute_command=AsyncMock(return_value=(True, "", "")),
             disconnect=AsyncMock(),
         )
-        monkeypatch.setattr(plugins, "SSHManager", lambda: ssh)
+        monkeypatch.setattr(plugins, "SSHManager", lambda _ssh=ssh: _ssh)
         result = await plugins.uninstall_plugin(3, 4, user, db, server)
         assert result.status_code == 200
         assert db.deleted == [installed]
@@ -183,8 +193,18 @@ async def test_plugin_upload_size_and_database_failure_cleanup(monkeypatch, tmp_
     with pytest.raises(HTTPException) as exc_info:
         await plugins.upload_plugin(
             UploadFile(filename="demo.tar.gz", file=io.BytesIO(b"1234")),
-            "demo", "Demo", "desc", "utility", "1", None, None, None,
-            "addons/plugins", False, current_user=admin, db=_Db()
+            "demo",
+            "Demo",
+            "desc",
+            "utility",
+            "1",
+            None,
+            None,
+            None,
+            "addons/plugins",
+            False,
+            current_user=admin,
+            db=_Db(),
         )
     assert exc_info.value.status_code == 413
     assert not list((tmp_path / "static/uploads/plugins").glob("*"))
@@ -199,7 +219,17 @@ async def test_plugin_upload_size_and_database_failure_cleanup(monkeypatch, tmp_
     with pytest.raises(HTTPException, match="Failed to upload"):
         await plugins.upload_plugin(
             UploadFile(filename="demo.tar.gz", file=io.BytesIO(b"ok")),
-            "demo", "Demo", "desc", "utility", "1", None, None, None,
-            "addons/plugins", False, current_user=admin, db=result_db
+            "demo",
+            "Demo",
+            "desc",
+            "utility",
+            "1",
+            None,
+            None,
+            None,
+            "addons/plugins",
+            False,
+            current_user=admin,
+            db=result_db,
         )
     assert not list((tmp_path / "static/uploads/plugins").glob("*"))

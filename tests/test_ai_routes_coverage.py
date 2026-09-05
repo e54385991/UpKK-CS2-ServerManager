@@ -17,10 +17,9 @@ from modules import (
     AIMessageCreate,
     AIProviderTestRequest,
     AIRun,
-    AIToolDecisionRequest,
-    AIToolRun,
     AISystemSettings,
     AISystemSettingsUpdate,
+    AIToolRun,
     UserAISettings,
     UserAISettingsUpdate,
 )
@@ -135,9 +134,7 @@ async def test_system_provider_test_success_and_invalid_configuration(monkeypatc
         "test_provider",
         AsyncMock(return_value=(True, False, True, "tool unavailable")),
     )
-    result = await routes.test_system_ai_settings(
-        AIProviderTestRequest(), db, _user(is_admin=True)
-    )
+    result = await routes.test_system_ai_settings(AIProviderTestRequest(), db, _user(is_admin=True))
     assert result.success is False
     assert item.provider_tested is True
     assert item.tool_calling_tested is False
@@ -199,9 +196,7 @@ async def test_user_settings_get_update_test_modes_and_errors(monkeypatch):
     monkeypatch.setattr(routes, "_apply_model_parameters", lambda _request, _item: False)
     system = _system()
     monkeypatch.setattr(routes.AISystemSettings, "get_or_create", AsyncMock(return_value=system))
-    disabled = await routes.test_user_ai_settings(
-        AIProviderTestRequest(), db, _user()
-    )
+    disabled = await routes.test_user_ai_settings(AIProviderTestRequest(), db, _user())
     assert disabled.success is False
     assert "custom" in disabled.message
 
@@ -262,7 +257,9 @@ async def test_conversation_crud_and_message_lifecycle(monkeypatch):
         await routes.create_ai_conversation(AIConversationCreate(), _DB(), user)
     assert exc.value.status_code == 409
     monkeypatch.setattr(routes, "get_effective_provider", AsyncMock(return_value=SimpleNamespace()))
-    monkeypatch.setattr(routes, "get_effective_agent_policy", AsyncMock(return_value=SimpleNamespace(enabled=False)))
+    monkeypatch.setattr(
+        routes, "get_effective_agent_policy", AsyncMock(return_value=SimpleNamespace(enabled=False))
+    )
     with pytest.raises(HTTPException) as exc:
         await routes.create_ai_conversation(AIConversationCreate(server_id=3), _DB(), user)
     assert exc.value.status_code == 403
@@ -271,7 +268,9 @@ async def test_conversation_crud_and_message_lifecycle(monkeypatch):
     assert listed == [conversation]
     message = AIMessage(id=1, conversation_id="c1", role="user", content="hi", visible=True)
     monkeypatch.setattr(routes, "_conversation_for_user", real_conversation_for_user)
-    detail = await routes.get_ai_conversation("c1", _DB(_Result(conversation), _Result(None, [message])), user)
+    detail = await routes.get_ai_conversation(
+        "c1", _DB(_Result(conversation), _Result(None, [message])), user
+    )
     assert detail.messages[0].content == "hi"
 
     monkeypatch.setattr(routes, "_conversation_for_user", AsyncMock(return_value=conversation))
@@ -304,17 +303,28 @@ async def test_send_interrupt_and_run_lookup_paths(monkeypatch):
         await routes.send_ai_message("c1", AIMessageCreate(content="again"), _DB(), user)
     assert exc.value.status_code == 409
     monkeypatch.setattr(routes, "get_effective_provider", AsyncMock(return_value=SimpleNamespace()))
-    monkeypatch.setattr(routes, "interrupt_conversation_run", AsyncMock(return_value={"status": "cancelled"}))
+    monkeypatch.setattr(
+        routes, "interrupt_conversation_run", AsyncMock(return_value={"status": "cancelled"})
+    )
     assert await routes.interrupt_conversation("c1", _DB(), user) == {"status": "cancelled"}
-    monkeypatch.setattr(routes, "interrupt_conversation_run", AsyncMock(side_effect=PermissionError("no")))
+    monkeypatch.setattr(
+        routes, "interrupt_conversation_run", AsyncMock(side_effect=PermissionError("no"))
+    )
     with pytest.raises(HTTPException) as exc:
         await routes.interrupt_conversation("c1", _DB(), user)
     assert exc.value.status_code == 403
 
     run = AIRun(id="r1", conversation_id="c1", user_id=8, status="done", source="web")
     tool = AIToolRun(
-        id="t1", run_id="r1", tool_call_id="call", tool_name="read", arguments={},
-        arguments_hash="a" * 64, status="completed", risk="read", requires_approval=False,
+        id="t1",
+        run_id="r1",
+        tool_call_id="call",
+        tool_name="read",
+        arguments={},
+        arguments_hash="a" * 64,
+        status="completed",
+        risk="read",
+        requires_approval=False,
     )
     monkeypatch.setattr(routes, "_run_for_user", AsyncMock(return_value=run))
     monkeypatch.setattr(routes, "reconcile_waiting_approval_runs", AsyncMock(return_value=set()))
@@ -330,13 +340,27 @@ async def test_send_interrupt_and_run_lookup_paths(monkeypatch):
 async def test_background_tasks_list_delete_and_endpoint(monkeypatch):
     user = _user()
     run = SimpleNamespace(
-        id="r1", conversation_id="c1", server_id=2, status="running", error=None,
-        created_at=None, updated_at=None, completed_at=None,
+        id="r1",
+        conversation_id="c1",
+        server_id=2,
+        status="running",
+        error=None,
+        created_at=None,
+        updated_at=None,
+        completed_at=None,
     )
     tool = SimpleNamespace(
-        id="t1", run_id="r1", tool_name="write", risk="write", status="queued",
-        plan_snapshot={}, progress_snapshot={"done": 1}, progress_updated_at=None,
-        error=None, created_at=None, completed_at=None,
+        id="t1",
+        run_id="r1",
+        tool_name="write",
+        risk="write",
+        status="queued",
+        plan_snapshot={},
+        progress_snapshot={"done": 1},
+        progress_updated_at=None,
+        error=None,
+        created_at=None,
+        completed_at=None,
     )
     monkeypatch.setattr(routes, "reconcile_waiting_approval_runs", AsyncMock(return_value=set()))
     monkeypatch.setattr(routes, "cleanup_expired_ai_runs", AsyncMock())
@@ -345,13 +369,22 @@ async def test_background_tasks_list_delete_and_endpoint(monkeypatch):
     )
     assert tasks[0].tools[0].tool_name == "write"
     assert await routes.list_ai_background_tasks(10, "c1", _DB(_Result(rows=[])), user) == []
-    assert await routes._list_ai_background_tasks_endpoint(10, "c1", db=_DB(_Result(rows=[])), current_user=user) == []
+    assert (
+        await routes._list_ai_background_tasks_endpoint(
+            10, "c1", db=_DB(_Result(rows=[])), current_user=user
+        )
+        == []
+    )
 
-    monkeypatch.setattr(routes, "_run_for_user", AsyncMock(return_value=SimpleNamespace(id="r1", status="done")))
+    monkeypatch.setattr(
+        routes, "_run_for_user", AsyncMock(return_value=SimpleNamespace(id="r1", status="done"))
+    )
     db = _DB()
     assert await routes.delete_ai_background_task("r1", db, user) is None
     assert db.deleted
-    monkeypatch.setattr(routes, "_run_for_user", AsyncMock(return_value=SimpleNamespace(id="r1", status="running")))
+    monkeypatch.setattr(
+        routes, "_run_for_user", AsyncMock(return_value=SimpleNamespace(id="r1", status="running"))
+    )
     with pytest.raises(HTTPException) as exc:
         await routes.delete_ai_background_task("r1", _DB(), user)
     assert exc.value.status_code == 409
@@ -362,10 +395,18 @@ async def test_tool_approval_rejects_mismatch_expired_and_capability_denial(monk
     user = _user()
     run = SimpleNamespace(id="r1", server_id=2)
     item = SimpleNamespace(
-        id="t1", run_id="r1", tool_name="apply_plugin_plan", risk="write",
-        status="pending_approval", requires_approval=True, arguments_hash="a" * 64,
-        arguments={}, approval_expires_at=get_current_time() + timedelta(minutes=5),
-        approved_by=None, approved_actor_type=None, approved_at=None,
+        id="t1",
+        run_id="r1",
+        tool_name="apply_plugin_plan",
+        risk="write",
+        status="pending_approval",
+        requires_approval=True,
+        arguments_hash="a" * 64,
+        arguments={},
+        approval_expires_at=get_current_time() + timedelta(minutes=5),
+        approved_by=None,
+        approved_actor_type=None,
+        approved_at=None,
     )
     monkeypatch.setattr(routes, "_run_for_user", AsyncMock(return_value=run))
     monkeypatch.setattr(routes, "reconcile_waiting_approval_runs", AsyncMock(return_value=set()))
@@ -376,16 +417,22 @@ async def test_tool_approval_rejects_mismatch_expired_and_capability_denial(monk
     monkeypatch.setattr(routes, "get_current_time", get_current_time)
 
     rejected = await routes.decide_ai_tool(
-        "r1", "t1", SchemaDecision(decision="reject", arguments_hash="a" * 64),
-        _DB(_Result(item), _Result(0)), user,
+        "r1",
+        "t1",
+        SchemaDecision(decision="reject", arguments_hash="a" * 64),
+        _DB(_Result(item), _Result(0)),
+        user,
     )
     assert rejected == {"status": "rejected"}
 
     item.status = "pending_approval"
     with pytest.raises(HTTPException) as exc:
         await routes.decide_ai_tool(
-            "r1", "t1", SchemaDecision(decision="approve", arguments_hash="b" * 64),
-            _DB(_Result(item)), user,
+            "r1",
+            "t1",
+            SchemaDecision(decision="approve", arguments_hash="b" * 64),
+            _DB(_Result(item)),
+            user,
         )
     assert exc.value.status_code == 409
 
@@ -393,16 +440,24 @@ async def test_tool_approval_rejects_mismatch_expired_and_capability_denial(monk
     item.approval_expires_at = get_current_time() - timedelta(minutes=1)
     with pytest.raises(HTTPException) as exc:
         await routes.decide_ai_tool(
-            "r1", "t1", SchemaDecision(decision="approve", arguments_hash="a" * 64),
-            _DB(_Result(item)), user,
+            "r1",
+            "t1",
+            SchemaDecision(decision="approve", arguments_hash="a" * 64),
+            _DB(_Result(item)),
+            user,
         )
     assert exc.value.status_code == 409
 
     item.approval_expires_at = get_current_time() + timedelta(minutes=5)
-    monkeypatch.setattr(routes, "require_agent_capabilities", AsyncMock(side_effect=AgentCapabilityDenied("denied")))
+    monkeypatch.setattr(
+        routes, "require_agent_capabilities", AsyncMock(side_effect=AgentCapabilityDenied("denied"))
+    )
     with pytest.raises(HTTPException) as exc:
         await routes.decide_ai_tool(
-            "r1", "t1", SchemaDecision(decision="approve", arguments_hash="a" * 64),
-            _DB(_Result(item)), user,
+            "r1",
+            "t1",
+            SchemaDecision(decision="approve", arguments_hash="a" * 64),
+            _DB(_Result(item)),
+            user,
         )
     assert exc.value.status_code == 403

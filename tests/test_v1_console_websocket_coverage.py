@@ -53,7 +53,9 @@ class _Stdout:
 class _Process:
     def __init__(self):
         self.stdout = _Stdout([b"hello\n", b""])
-        self.stdin = SimpleNamespace(write=lambda value: setattr(self, "input", value), drain=AsyncMock())
+        self.stdin = SimpleNamespace(
+            write=lambda value: setattr(self, "input", value), drain=AsyncMock()
+        )
         self.sizes = []
         self.terminated = False
 
@@ -135,7 +137,9 @@ async def test_console_session_start_covers_ssh_game_preflight_and_success(monke
         execute_command=AsyncMock(),
         create_interactive_process=AsyncMock(),
     )
-    monkeypatch.setattr(console, "find_running_session_manager", AsyncMock(side_effect=RuntimeError("probe")))
+    monkeypatch.setattr(
+        console, "find_running_session_manager", AsyncMock(side_effect=RuntimeError("probe"))
+    )
     ws = _WebSocket()
     assert await console._start_console_session(ws, ssh, server, "game") is None
     assert "check server status" in ws.sent[-1]["message"]
@@ -183,7 +187,9 @@ async def test_console_run_cleanup_handles_websocket_disconnect_and_errors(monke
     ssh = SimpleNamespace(disconnect=AsyncMock())
     monkeypatch.setattr(console, "SSHManager", lambda: ssh)
     monkeypatch.setattr(console, "_start_console_session", AsyncMock(return_value=process))
-    monkeypatch.setattr(console, "_relay_console_input", AsyncMock(side_effect=console.WebSocketDisconnect()))
+    monkeypatch.setattr(
+        console, "_relay_console_input", AsyncMock(side_effect=console.WebSocketDisconnect())
+    )
     websocket = _WebSocket()
     await console._run_console(websocket, _server(), kind="ssh")
     assert process.terminated
@@ -197,7 +203,9 @@ async def test_console_run_cleanup_handles_websocket_disconnect_and_errors(monke
 
     ssh = SimpleNamespace(disconnect=AsyncMock())
     monkeypatch.setattr(console, "SSHManager", lambda: ssh)
-    monkeypatch.setattr(console, "_start_console_session", AsyncMock(side_effect=RuntimeError("boom")))
+    monkeypatch.setattr(
+        console, "_start_console_session", AsyncMock(side_effect=RuntimeError("boom"))
+    )
     websocket = _WebSocket()
     await console._run_console(websocket, _server(), kind="ssh")
     assert websocket.sent[-1]["type"] == "error"
@@ -207,7 +215,10 @@ async def test_console_run_cleanup_handles_websocket_disconnect_and_errors(monke
 @pytest.mark.asyncio
 async def test_console_websocket_endpoints_auth_accept_and_dispatch(monkeypatch):
     server = _server()
-    for endpoint, kind in ((console.ssh_console_websocket, "ssh"), (console.game_console_websocket, "game")):
+    for endpoint, kind in (
+        (console.ssh_console_websocket, "ssh"),
+        (console.game_console_websocket, "game"),
+    ):
         websocket = _WebSocket()
         monkeypatch.setattr(console, "_authenticate_console", AsyncMock(return_value=server))
         runner = AsyncMock()

@@ -10,7 +10,8 @@ import pytest
 from fastapi import HTTPException
 
 from api.routes import github_plugins, plugin_market
-from api.routes.v1 import console, github_plugins as v1_github
+from api.routes.v1 import console
+from api.routes.v1 import github_plugins as v1_github
 from api.routes.v1.schemas import GitHubInstallPlanRequest
 
 
@@ -19,7 +20,9 @@ def test_market_and_legacy_github_parsers_cover_valid_and_invalid_inputs():
     assert plugin_market._requested_release(
         "https://github.com/acme/demo/releases/download/v1/demo.zip"
     ) == ("tag:v1", "v1", "demo.zip")
-    assert plugin_market._requested_release("https://github.com/acme/demo/releases/download/v1") == (
+    assert plugin_market._requested_release(
+        "https://github.com/acme/demo/releases/download/v1"
+    ) == (
         None,
         None,
         None,

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from urllib.parse import urlsplit
 
 import asyncssh
 import pytest
 from asyncssh.constants import FILEXFER_TYPE_DIRECTORY, FILEXFER_TYPE_REGULAR
-from urllib.parse import urlsplit
 
 from services.ssh.connection_download import DownloadConnectionMixin
 from services.ssh.file_archive import ArchiveOperationsMixin
@@ -83,6 +83,7 @@ def _manager(sftp):
     manager = _Download()
     manager.conn = _Connection(sftp)
     manager.validate_path_within_base = AsyncMock(return_value=(True, ""))
+
     async def find_tool(candidates):
         return f"/usr/bin/{candidates[0]}"
 
@@ -127,7 +128,9 @@ async def test_download_url_uses_content_disposition_when_target_is_unknown():
     )
     manager = _manager(sftp)
     manager.execute_command = AsyncMock(return_value=(True, "", ""))
-    callback = lambda _path: None
+
+    async def callback(_path):
+        return None
 
     success, error = await manager.download_url_to_file(
         "https://example.com/download",
@@ -209,27 +212,38 @@ async def test_download_url_existing_target_redirect_and_remote_failures():
 
     manager = _manager(ExistingSftp())
     manager.execute_command = AsyncMock(return_value=(True, "", ""))
-    assert await manager.download_url_to_file("https://x/a.zip", "/srv/cs2/plugin.zip", _server()) == (
+    assert await manager.download_url_to_file(
+        "https://x/a.zip", "/srv/cs2/plugin.zip", _server()
+    ) == (
         False,
         "Target file already exists. Enable overwrite to replace it.",
     )
     manager = _manager(ExistingSftp(target_type=2))
     manager.execute_command = AsyncMock(return_value=(True, "", ""))
-    assert "regular file" in (await manager.download_url_to_file(
-        "https://x/a.zip", "/srv/cs2/plugin.zip", _server(), overwrite=True
-    ))[1]
+    assert (
+        "regular file"
+        in (
+            await manager.download_url_to_file(
+                "https://x/a.zip", "/srv/cs2/plugin.zip", _server(), overwrite=True
+            )
+        )[1]
+    )
 
     sftp = _ArchiveSftp()
     manager = _manager(sftp)
+
     async def failed_download(command, **_kwargs):
         if "curl" in command:
             return False, "", "secret"
         return True, "", ""
 
     manager.execute_command = failed_download
-    assert "Download failed" in (await manager.download_url_to_file(
-        "https://x/a.zip", "/srv/cs2/plugin.zip", _server()
-    ))[1]
+    assert (
+        "Download failed"
+        in (
+            await manager.download_url_to_file("https://x/a.zip", "/srv/cs2/plugin.zip", _server())
+        )[1]
+    )
 
     class RedirectSftp(_ArchiveSftp):
         def __init__(self):
@@ -265,13 +279,20 @@ async def test_download_url_metadata_and_redirect_validation_errors():
 
     manager = _manager(BadMeta())
     manager.execute_command = AsyncMock(return_value=(True, "", ""))
-    assert "metadata is not a regular" in (await manager.download_url_to_file(
-        "https://example.com/a.zip", "/srv/cs2/a.zip", _server()
-    ))[1]
+    assert (
+        "metadata is not a regular"
+        in (
+            await manager.download_url_to_file(
+                "https://example.com/a.zip", "/srv/cs2/a.zip", _server()
+            )
+        )[1]
+    )
     manager = _manager(_ArchiveSftp())
     manager.execute_command = AsyncMock(return_value=(True, "", ""))
     manager._validate_remote_download_url = lambda _url: (None, "bad url")
-    assert await manager.download_url_to_file("https://example.com/a.zip", "/srv/cs2/a.zip", _server()) == (
+    assert await manager.download_url_to_file(
+        "https://example.com/a.zip", "/srv/cs2/a.zip", _server()
+    ) == (
         False,
         "bad url",
     )
@@ -305,15 +326,17 @@ async def test_extract_archive_rejects_special_entries_and_tool_failures():
     manager._inspect_archive_connected = AsyncMock(
         return_value=(True, {"folders": [], "has_backslash_separators": False}, "")
     )
+
     async def special_entry(command, **_kwargs):
         if "-type l" in command:
             return True, "/tmp/link", ""
         return True, "", ""
 
     manager.execute_command = special_entry
-    assert "link or special" in (await manager.extract_archive(
-        "/srv/cs2/a.zip", "/srv/cs2/out", _server()
-    ))[1]
+    assert (
+        "link or special"
+        in (await manager.extract_archive("/srv/cs2/a.zip", "/srv/cs2/out", _server()))[1]
+    )
 
     manager = _manager(_ArchiveSftp())
     manager._inspect_archive_connected = AsyncMock(
@@ -321,6 +344,7 @@ async def test_extract_archive_rejects_special_entries_and_tool_failures():
     )
     manager._find_remote_tool = AsyncMock(return_value=None)
     manager.execute_command = AsyncMock(return_value=(True, "", ""))
-    assert "install unzip" in (await manager.extract_archive(
-        "/srv/cs2/a.zip", "/srv/cs2/out", _server()
-    ))[1]
+    assert (
+        "install unzip"
+        in (await manager.extract_archive("/srv/cs2/a.zip", "/srv/cs2/out", _server()))[1]
+    )

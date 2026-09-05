@@ -11,7 +11,7 @@ from .connection import ConnectionMixin
 class DownloadExtractMixin(SSHMixinBase):
     """Focused file-system capability."""
 
-    async def download_url_to_file(
+    async def download_url_to_file(  # noqa: C901
         self,
         url: str,
         target_path: Optional[str],
@@ -257,7 +257,7 @@ class DownloadExtractMixin(SSHMixinBase):
                 timeout=10,
             )
 
-    async def extract_archive(
+    async def extract_archive(  # noqa: C901
         self,
         archive_path: str,
         destination_path: str,

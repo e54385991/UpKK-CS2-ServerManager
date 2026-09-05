@@ -8,17 +8,17 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from api.routes import github_plugins as routes
 from modules import (
     GitHubInstallRecipeCreate,
+    GitHubPluginInspectRequest,
     GitHubPluginInstallExecuteRequest,
     GitHubPluginInstallPlanRequest,
     GitHubPluginInstallRequest,
-    GitHubPluginInspectRequest,
     PluginUninstallRequest,
 )
 from services.ai_access import AgentAccessDenied
 from services.github_plugin_plan_service import GitHubPlanError
-from api.routes import github_plugins as routes
 
 
 def _user(**overrides):
@@ -81,27 +81,49 @@ async def test_secure_archive_analysis_success_and_failures(monkeypatch, tmp_pat
         {"path": "cfg/demo.cfg", "is_dir": False, "size": 4},
     ]
     monkeypatch.setattr(routes, "_validate_download_url", Mock())
-    monkeypatch.setattr(routes, "_download_release_asset", AsyncMock(return_value=(str(archive), "d", 10)))
+    monkeypatch.setattr(
+        routes, "_download_release_asset", AsyncMock(return_value=(str(archive), "d", 10))
+    )
     monkeypatch.setattr(routes, "_archive_entries", Mock(return_value=entries))
-    response = await routes._secure_archive_analysis(db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip")
+    response = await routes._secure_archive_analysis(
+        db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip"
+    )
     assert response.success and response.has_addons_dir and response.archive_type == "zip"
-    assert response.total_size if hasattr(response, "total_size") else response.all_files[0].size == 12
+    assert (
+        response.total_size if hasattr(response, "total_size") else response.all_files[0].size == 12
+    )
     assert not archive.exists()
 
-    monkeypatch.setattr(routes, "_download_release_asset", AsyncMock(side_effect=GitHubPlanError("bad archive")))
-    failed = await routes._secure_archive_analysis(db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip")
+    monkeypatch.setattr(
+        routes, "_download_release_asset", AsyncMock(side_effect=GitHubPlanError("bad archive"))
+    )
+    failed = await routes._secure_archive_analysis(
+        db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip"
+    )
     assert not failed.success and failed.error == "bad archive"
-    monkeypatch.setattr(routes, "_download_release_asset", AsyncMock(side_effect=RuntimeError("network")))
+    monkeypatch.setattr(
+        routes, "_download_release_asset", AsyncMock(side_effect=RuntimeError("network"))
+    )
     with pytest.raises(RuntimeError, match="network"):
-        await routes._secure_archive_analysis(db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip")
+        await routes._secure_archive_analysis(
+            db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip"
+        )
 
-    monkeypatch.setattr(routes, "_download_release_asset", AsyncMock(return_value=(str(archive), "d", 10)))
+    monkeypatch.setattr(
+        routes, "_download_release_asset", AsyncMock(return_value=(str(archive), "d", 10))
+    )
     monkeypatch.setattr(routes, "_archive_entries", Mock(side_effect=RuntimeError("malformed")))
-    failed = await routes._secure_archive_analysis(db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip")
+    failed = await routes._secure_archive_analysis(
+        db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip"
+    )
     assert not failed.success and "safely inspected" in failed.error
 
-    monkeypatch.setattr("services.ai_access.authorized_server", AsyncMock(side_effect=AgentAccessDenied("denied")))
-    failed = await routes._secure_archive_analysis(db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip")
+    monkeypatch.setattr(
+        "services.ai_access.authorized_server", AsyncMock(side_effect=AgentAccessDenied("denied"))
+    )
+    failed = await routes._secure_archive_analysis(
+        db, user, 3, "https://github.com/a/b/releases/download/v1/demo.zip"
+    )
     assert not failed.success and failed.error == "denied"
 
 
@@ -112,12 +134,18 @@ async def test_github_simple_routes_and_error_mapping(monkeypatch):
     monkeypatch.setattr(routes, "enforce_agent_rate_limit", AsyncMock())
     search = AsyncMock(return_value={"query": "demo", "candidates": []})
     monkeypatch.setattr(routes, "search_github_plugins_service", search)
-    assert (await routes.search_github_cs2_plugins("demo", 2, db=db, current_user=user))["query"] == "demo"
-    monkeypatch.setattr(routes, "search_github_plugins_service", AsyncMock(side_effect=AgentAccessDenied("gone")))
+    assert (await routes.search_github_cs2_plugins("demo", 2, db=db, current_user=user))[
+        "query"
+    ] == "demo"
+    monkeypatch.setattr(
+        routes, "search_github_plugins_service", AsyncMock(side_effect=AgentAccessDenied("gone"))
+    )
     with pytest.raises(Exception) as error:
         await routes.search_github_cs2_plugins("demo", 2, db=db, current_user=user)
     assert error.value.status_code == 404
-    monkeypatch.setattr(routes, "search_github_plugins_service", AsyncMock(side_effect=GitHubPlanError("bad")))
+    monkeypatch.setattr(
+        routes, "search_github_plugins_service", AsyncMock(side_effect=GitHubPlanError("bad"))
+    )
     with pytest.raises(Exception) as error:
         await routes.search_github_cs2_plugins("demo", 2, db=db, current_user=user)
     assert error.value.status_code == 409
@@ -126,7 +154,9 @@ async def test_github_simple_routes_and_error_mapping(monkeypatch):
     monkeypatch.setattr(routes, "inspect_github_plugin_service", inspect)
     request = GitHubPluginInspectRequest(repo_url="https://github.com/a/b")
     assert (await routes.inspect_github_plugin(request, db, user))["repo_url"]
-    monkeypatch.setattr(routes, "inspect_github_plugin_service", AsyncMock(side_effect=GitHubPlanError("no")))
+    monkeypatch.setattr(
+        routes, "inspect_github_plugin_service", AsyncMock(side_effect=GitHubPlanError("no"))
+    )
     with pytest.raises(Exception) as error:
         await routes.inspect_github_plugin(request, db, user)
     assert error.value.status_code == 409
@@ -135,7 +165,9 @@ async def test_github_simple_routes_and_error_mapping(monkeypatch):
     monkeypatch.setattr(routes, "build_github_install_plan", plan)
     plan_request = GitHubPluginInstallPlanRequest(repo_url="https://github.com/a/b")
     assert (await routes.plan_github_plugin_install(3, plan_request, db, user))["server_id"] == 3
-    monkeypatch.setattr(routes, "build_github_install_plan", AsyncMock(side_effect=GitHubPlanError("bad plan")))
+    monkeypatch.setattr(
+        routes, "build_github_install_plan", AsyncMock(side_effect=GitHubPlanError("bad plan"))
+    )
     with pytest.raises(Exception) as error:
         await routes.plan_github_plugin_install(3, plan_request, db, user)
     assert error.value.status_code == 409
@@ -148,18 +180,31 @@ async def test_github_simple_routes_and_error_mapping(monkeypatch):
     result = await routes.apply_github_plugin_install(3, execute_request, db, user)
     assert result["success"]
     assert execute.await_args.args[4] == "b" * 64
-    monkeypatch.setattr(routes, "execute_github_install_plan", AsyncMock(side_effect=AgentAccessDenied("gone")))
+    monkeypatch.setattr(
+        routes, "execute_github_install_plan", AsyncMock(side_effect=AgentAccessDenied("gone"))
+    )
     with pytest.raises(Exception) as error:
         await routes.apply_github_plugin_install(3, execute_request, db, user)
     assert error.value.status_code == 404
 
-    recipe = SimpleNamespace(id=9, repo_url="https://github.com/a/b", revision="main", source_prefix="x", target_prefix="addons")
+    recipe = SimpleNamespace(
+        id=9,
+        repo_url="https://github.com/a/b",
+        revision="main",
+        source_prefix="x",
+        target_prefix="addons",
+    )
     monkeypatch.setattr(routes, "create_install_recipe", AsyncMock(return_value=recipe))
     recipe_request = GitHubInstallRecipeCreate(
-        repo_url="https://github.com/a/b", display_name="Demo", source_prefix="x", target_prefix="addons"
+        repo_url="https://github.com/a/b",
+        display_name="Demo",
+        source_prefix="x",
+        target_prefix="addons",
     )
     assert (await routes.create_github_install_recipe(recipe_request, db, user))["id"] == 9
-    monkeypatch.setattr(routes, "create_install_recipe", AsyncMock(side_effect=GitHubPlanError("recipe")))
+    monkeypatch.setattr(
+        routes, "create_install_recipe", AsyncMock(side_effect=GitHubPlanError("recipe"))
+    )
     with pytest.raises(Exception) as error:
         await routes.create_github_install_recipe(recipe_request, db, user)
     assert error.value.status_code == 409
@@ -172,10 +217,16 @@ async def test_releases_ownership_and_install_wrapper(monkeypatch):
     assert not (await routes.get_github_releases("bad", db=db, current_user=user)).success
     monkeypatch.setattr(routes, "get_effective_github_token", AsyncMock(return_value="token"))
     monkeypatch.setattr(routes.http_helper, "get", AsyncMock(return_value=(False, None, "offline")))
-    failed = await routes.get_github_releases("https://github.com/acme/demo", count=20, db=db, current_user=user)
+    failed = await routes.get_github_releases(
+        "https://github.com/acme/demo", count=20, db=db, current_user=user
+    )
     assert not failed.success and "Failed" in failed.error
-    monkeypatch.setattr(routes.http_helper, "get", AsyncMock(return_value=(True, {"items": []}, None)))
-    invalid = await routes.get_github_releases("https://github.com/acme/demo", db=db, current_user=user)
+    monkeypatch.setattr(
+        routes.http_helper, "get", AsyncMock(return_value=(True, {"items": []}, None))
+    )
+    invalid = await routes.get_github_releases(
+        "https://github.com/acme/demo", db=db, current_user=user
+    )
     assert not invalid.success and "Unexpected" in invalid.error
     releases = [
         {"draft": True, "assets": []},
@@ -187,15 +238,27 @@ async def test_releases_ownership_and_install_wrapper(monkeypatch):
             "name": "Demo",
             "assets": [
                 {"name": "demo-windows.zip", "browser_download_url": "w"},
-                {"name": "demo-linux.zip", "browser_download_url": "https://github.com/a/b/releases/download/v1/demo.zip", "size": 2},
+                {
+                    "name": "demo-linux.zip",
+                    "browser_download_url": "https://github.com/a/b/releases/download/v1/demo.zip",
+                    "size": 2,
+                },
                 {"name": "readme.txt", "browser_download_url": "t"},
             ],
         },
     ]
     monkeypatch.setattr(routes.http_helper, "get", AsyncMock(return_value=(True, releases, None)))
-    monkeypatch.setattr("services.linux_runtime_service.annotate_runtime_assets", lambda assets, _profile: assets)
-    result = await routes.get_github_releases("https://github.com/acme/demo", count=20, db=db, current_user=user)
-    assert result.success and len(result.releases) == 1 and result.releases[0].assets[0].name == "demo-linux.zip"
+    monkeypatch.setattr(
+        "services.linux_runtime_service.annotate_runtime_assets", lambda assets, _profile: assets
+    )
+    result = await routes.get_github_releases(
+        "https://github.com/acme/demo", count=20, db=db, current_user=user
+    )
+    assert (
+        result.success
+        and len(result.releases) == 1
+        and result.releases[0].assets[0].name == "demo-linux.zip"
+    )
 
     monkeypatch.setattr(routes.Server, "get_by_id", AsyncMock(return_value=_server()))
     monkeypatch.setattr(routes.Server, "get_by_id_and_user", AsyncMock(return_value=_server()))
@@ -206,12 +269,20 @@ async def test_releases_ownership_and_install_wrapper(monkeypatch):
         await routes.get_server_and_verify_ownership(db, 3, user)
     assert error.value.status_code == 404
 
-    missing = await routes.install_github_plugin(3, _install_request(installation_plan_hash=None), db, user)
+    missing = await routes.install_github_plugin(
+        3, _install_request(installation_plan_hash=None), db, user
+    )
     assert not missing.success
-    monkeypatch.setattr(routes, "execute_github_install_plan", AsyncMock(return_value={"success": True, "message": "ok", "installed_files": 4}))
+    monkeypatch.setattr(
+        routes,
+        "execute_github_install_plan",
+        AsyncMock(return_value={"success": True, "message": "ok", "installed_files": 4}),
+    )
     installed = await routes.install_github_plugin(3, _install_request(), db, user)
     assert installed.success and installed.installed_files == 4
-    monkeypatch.setattr(routes, "execute_github_install_plan", AsyncMock(side_effect=GitHubPlanError("blocked")))
+    monkeypatch.setattr(
+        routes, "execute_github_install_plan", AsyncMock(side_effect=GitHubPlanError("blocked"))
+    )
     failed_install = await routes.install_github_plugin(3, _install_request(), db, user)
     assert not failed_install.success and failed_install.message == "blocked"
 
@@ -249,12 +320,16 @@ class _FileSSH:
 async def test_installed_analysis_and_uninstall_paths(monkeypatch):
     db = _db()
     user = _user()
-    monkeypatch.setattr(routes, "get_server_and_verify_ownership", AsyncMock(return_value=_server()))
+    monkeypatch.setattr(
+        routes, "get_server_and_verify_ownership", AsyncMock(return_value=_server())
+    )
     ssh = _FileSSH()
     monkeypatch.setattr(routes, "SSHManager", lambda: ssh)
     result = await routes.analyze_installed_plugins(3, db=db, current_user=user)
     assert result.success and result.total_size == 12 and any(item.is_dir for item in result.files)
-    bad_path = await routes.analyze_installed_plugins(3, directory="../etc", db=db, current_user=user)
+    bad_path = await routes.analyze_installed_plugins(
+        3, directory="../etc", db=db, current_user=user
+    )
     assert not bad_path.success and "Invalid" in bad_path.error
     monkeypatch.setattr(routes, "SSHManager", lambda: _FileSSH(mode="missing"))
     missing = await routes.analyze_installed_plugins(3, db=db, current_user=user)

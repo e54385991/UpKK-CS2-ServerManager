@@ -111,7 +111,9 @@ def _ctx(server=None, *, db=None, user=None, emit=None):
 def _patch_common(monkeypatch, ssh):
     monkeypatch.setattr(ai_tools, "authorized_server", AsyncMock(return_value=_server()))
     monkeypatch.setattr(ai_tools, "SSHManager", lambda: ssh)
-    monkeypatch.setattr(ai_tools, "maintenance_lock_service", SimpleNamespace(get=lambda *_a, **_k: _Lock()))
+    monkeypatch.setattr(
+        ai_tools, "maintenance_lock_service", SimpleNamespace(get=lambda *_a, **_k: _Lock())
+    )
     monkeypatch.setattr(ai_tools, "enforce_agent_rate_limit", AsyncMock())
 
 
@@ -151,11 +153,15 @@ async def test_ai_read_handlers_cover_server_inventory_files_and_logs(monkeypatc
     ctx.emit = emitted
     found = await ai_tools.search_server_files(
         ctx,
-        ai_tools.FileSearchInput(query="cfg", relative_path="addons", search_content=False, limit=5),
+        ai_tools.FileSearchInput(
+            query="cfg", relative_path="addons", search_content=False, limit=5
+        ),
     )
     assert found["count"] >= 1
     emitted.assert_awaited()
-    content = await ai_tools.read_server_text_file(ctx, ai_tools.FileReadInput(relative_path="cfg/a.cfg"))
+    content = await ai_tools.read_server_text_file(
+        ctx, ai_tools.FileReadInput(relative_path="cfg/a.cfg")
+    )
     assert content["path"] == "cfg/a.cfg"
     assert content["revision"] == hashlib.sha256("safe=1\npassword=***".encode()).hexdigest()
     tail = await ai_tools.tail_server_log(ctx, ai_tools.TailLogInput(lines=20))
@@ -209,8 +215,16 @@ async def test_ai_write_handlers_cover_lifecycle_console_and_file_patch(monkeypa
     monkeypatch.setattr(
         "services.plugin_auto_update_service.record_framework_installation", AsyncMock()
     )
-    for operation in ("deploy", "update", "validate", "install_metamod", "install_counterstrikesharp"):
-        result = await ai_tools.run_server_operation(ctx, ai_tools.ServerOperationInput(operation=operation))
+    for operation in (
+        "deploy",
+        "update",
+        "validate",
+        "install_metamod",
+        "install_counterstrikesharp",
+    ):
+        result = await ai_tools.run_server_operation(
+            ctx, ai_tools.ServerOperationInput(operation=operation)
+        )
         assert isinstance(result["success"], bool)
     assert ctx.db.commits >= 5
 
@@ -234,7 +248,9 @@ async def test_ai_write_handlers_cover_lifecycle_console_and_file_patch(monkeypa
     monkeypatch.setattr("services.audit_log_service.record_audit_event", AsyncMock())
     patched = await ai_tools.patch_server_text_file(
         ctx,
-        ai_tools.FilePatchInput(relative_path="cfg/server.cfg", expected_revision=expected, content="new=2"),
+        ai_tools.FilePatchInput(
+            relative_path="cfg/server.cfg", expected_revision=expected, content="new=2"
+        ),
     )
     assert patched["success"] is True
     assert patched["backup_path"].startswith("cfg/server.cfg.ai-backup-")
@@ -245,9 +261,7 @@ async def test_ai_tool_dispatch_and_approval_summary_cover_validation(monkeypatc
     server = _server()
     ctx = _ctx(server)
     _patch_common(monkeypatch, _SSH())
-    monkeypatch.setattr(
-        "services.agent_policy_service.require_agent_capabilities", AsyncMock()
-    )
+    monkeypatch.setattr("services.agent_policy_service.require_agent_capabilities", AsyncMock())
     result = await ai_tools.execute_tool("lookup_cs2_knowledge", {"topic": "layout"}, ctx)
     assert result["topic"] == "layout"
     with pytest.raises(ValueError, match="Unknown tool"):

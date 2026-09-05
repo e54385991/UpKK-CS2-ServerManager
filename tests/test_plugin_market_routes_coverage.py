@@ -80,7 +80,9 @@ async def test_market_asset_resolution_covers_filtering_and_runtime_selection(mo
     assert result is None and "download URL" in error
 
     monkeypatch.setattr("services.linux_runtime_service.has_paired_runtime_assets", lambda _: True)
-    monkeypatch.setattr("services.linux_runtime_service.select_unique_runtime_asset", lambda *_a: None)
+    monkeypatch.setattr(
+        "services.linux_runtime_service.select_unique_runtime_asset", lambda *_a: None
+    )
     get.return_value = (
         True,
         {"assets": [{"name": "demo.zip", "browser_download_url": "https://x/a.zip"}]},
@@ -97,9 +99,11 @@ async def test_market_repo_info_and_dependency_helpers_cover_external_response_s
     monkeypatch.setattr(
         plugin_market.http_helper,
         "get",
-        AsyncMock(side_effect=[
-            (False, None, "forbidden"),
-        ]),
+        AsyncMock(
+            side_effect=[
+                (False, None, "forbidden"),
+            ]
+        ),
     )
     failed = await plugin_market.fetch_github_repo_info("https://github.com/acme/demo")
     assert failed.success is False and "forbidden" in failed.error
@@ -108,13 +112,17 @@ async def test_market_repo_info_and_dependency_helpers_cover_external_response_s
     monkeypatch.setattr(
         plugin_market.http_helper,
         "get",
-        AsyncMock(side_effect=[
-            (True, {"name": "Demo", "description": "", "owner": {}}, None),
-            (True, {"content": readme}, None),
-        ]),
+        AsyncMock(
+            side_effect=[
+                (True, {"name": "Demo", "description": "", "owner": {}}, None),
+                (True, {"content": readme}, None),
+            ]
+        ),
     )
     info = await plugin_market.fetch_github_repo_info("https://github.com/acme/demo")
-    assert info.success and info.description == "Useful details More details" and info.author == "acme"
+    assert (
+        info.success and info.description == "Useful details More details" and info.author == "acme"
+    )
 
     dep_a, dep_b = _plugin(2), _plugin(3)
     monkeypatch.setattr(MarketPlugin, "get_by_ids", AsyncMock(return_value=[dep_a, dep_b]))
@@ -204,7 +212,11 @@ async def test_market_crud_and_plan_wrappers_cover_not_found_and_success(monkeyp
         1, server_id=5, install_dependencies=False, db=db, current_user=user
     )
     assert preflight["plugin_id"] == 1
-    monkeypatch.setattr(plugin_market, "build_plugin_install_plan", AsyncMock(side_effect=plugin_market.PluginPlanError("blocked")))
+    monkeypatch.setattr(
+        plugin_market,
+        "build_plugin_install_plan",
+        AsyncMock(side_effect=plugin_market.PluginPlanError("blocked")),
+    )
     with pytest.raises(HTTPException, match="blocked"):
         await plugin_market.plugin_install_preflight(
             1, server_id=5, install_dependencies=True, db=db, current_user=user

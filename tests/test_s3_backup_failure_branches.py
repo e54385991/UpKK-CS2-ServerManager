@@ -116,14 +116,18 @@ async def test_test_connection_reports_each_probe_failure(monkeypatch):
     assert not ok and "delete denied" in message
     assert steps[-1]["name"] == "delete"
 
-    monkeypatch.setattr(service, "_get_client", lambda _user: (_ for _ in ()).throw(RuntimeError("offline")))
+    monkeypatch.setattr(
+        service, "_get_client", lambda _user: (_ for _ in ()).throw(RuntimeError("offline"))
+    )
     ok, message, steps = await service.test_connection(user)
     assert not ok and "offline" in message and steps[0]["name"] == "connection"
 
 
 def test_client_configuration_and_value_normalization(monkeypatch):
     service = S3BackupService()
-    user = _user(s3_prefix=" /root/ ", s3_region=" eu-west-1 ", s3_endpoint_url="https://objects.example")
+    user = _user(
+        s3_prefix=" /root/ ", s3_region=" eu-west-1 ", s3_endpoint_url="https://objects.example"
+    )
     captured = {}
 
     class _Config:
@@ -170,13 +174,13 @@ async def test_upload_retention_and_listing_errors(monkeypatch):
     upload_client = _ProbeClient()
     upload_client.upload_file = lambda *_args: (_ for _ in ()).throw(RuntimeError("upload denied"))
     monkeypatch.setattr(service, "_get_client", lambda _user: upload_client)
-    ok, message, key = await service.upload_remote_backup(
-        _SSH(), server, user, "/backups/a.tar.gz"
-    )
+    ok, message, key = await service.upload_remote_backup(_SSH(), server, user, "/backups/a.tar.gz")
     assert not ok and key is None and "upload denied" in message
 
     list_client = _BackupObjectsClient(delete_error=RuntimeError("list broken"))
-    monkeypatch.setattr(service, "_get_client", lambda _user: (_ for _ in ()).throw(RuntimeError("client broken")))
+    monkeypatch.setattr(
+        service, "_get_client", lambda _user: (_ for _ in ()).throw(RuntimeError("client broken"))
+    )
     assert await service.list_backups(user, server) == (
         False,
         [],
@@ -216,11 +220,13 @@ async def test_upload_retention_message_and_download_client_error(monkeypatch, t
     monkeypatch.setattr(service, "_get_client", lambda _user: client)
     ssh = SimpleNamespace(download_file=AsyncMock(return_value=(True, "")), disconnect=AsyncMock())
     ok, message, key = await service.upload_remote_backup(
-        ssh, server, user, "/backups/a.tar.gz", progress_callback=[] .append
+        ssh, server, user, "/backups/a.tar.gz", progress_callback=[].append
     )
     assert ok and key.endswith("a.tar.gz") and "needs attention" in message
 
-    broken = SimpleNamespace(download_file=lambda *_args: (_ for _ in ()).throw(RuntimeError("download denied")))
+    broken = SimpleNamespace(
+        download_file=lambda *_args: (_ for _ in ()).throw(RuntimeError("download denied"))
+    )
     monkeypatch.setattr(service, "_get_client", lambda _user: broken)
     ok, error = await service.download_backup(
         user, server, "panel/user-7/server-3/a.tar.gz", str(tmp_path / "x" / "a.tar.gz")

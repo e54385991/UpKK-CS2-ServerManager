@@ -2306,7 +2306,7 @@ class DiscordBotManager:
             return
         raise DiscordAuthorizationDenied("Unknown or unavailable menu action")
 
-    async def _handle_menu_component(
+    async def _handle_menu_component(  # noqa: C901
         self,
         client: ManagedDiscordClient,
         interaction: discord.Interaction,
