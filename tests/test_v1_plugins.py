@@ -407,6 +407,43 @@ def test_v1_server_plugins_list(monkeypatch):
     assert "exclude_dirs" not in body[0]
 
 
+def test_v1_forget_one_plugin_record_keeps_files_and_reports_it(monkeypatch):
+    managed = _sample_managed()
+    client, _user = _client(monkeypatch=monkeypatch)
+    forget = AsyncMock(return_value=managed)
+    monkeypatch.setattr("api.routes.v1.plugins.forget_managed_plugin", forget)
+    monkeypatch.setattr("api.routes.v1.plugins.record_audit_event", AsyncMock(return_value=None))
+
+    response = client.delete("/api/v1/servers/1/plugins/3")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert "MatchZy" in body["message"]
+    assert "not deleted" in body["message"]
+    assert forget.await_args.args[1:] == (1, 3)
+
+
+def test_v1_forget_missing_plugin_record_is_404(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch)
+    monkeypatch.setattr("api.routes.v1.plugins.forget_managed_plugin", AsyncMock(return_value=None))
+    assert client.delete("/api/v1/servers/1/plugins/999").status_code == 404
+
+
+def test_v1_forget_all_plugin_records_reports_the_count(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch)
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.forget_server_managed_plugins", AsyncMock(return_value=4)
+    )
+    monkeypatch.setattr("api.routes.v1.plugins.record_audit_event", AsyncMock(return_value=None))
+
+    response = client.delete("/api/v1/servers/1/plugins")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert "4 plugin record(s)" in body["message"]
+    assert "not deleted" in body["message"]
+
+
 def test_v1_plugin_preflight(monkeypatch):
     client, _user = _client(monkeypatch=monkeypatch)
     planner = AsyncMock(return_value=_sample_plan())

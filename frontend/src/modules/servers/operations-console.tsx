@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import {
   CirclePlay,
   CircleStop,
@@ -12,10 +12,10 @@ import {
 } from "lucide-react";
 import { ForceStopButton } from "@/modules/servers/force-stop-button";
 import { AptMirrorSwitcher } from "@/modules/servers/apt-mirror-switcher";
-import { OperationLiveLog, formatOperationClock } from "@/modules/servers/operation-live-log";
+import { OperationHistory } from "@/modules/servers/operation-history";
+import { OperationLiveLog } from "@/modules/servers/operation-live-log";
 import { useOperationRunner } from "@/modules/servers/use-operation-runner";
 import {
-  isServerOperationAction,
   SERVER_STATUS_TONE,
   type DeploymentLock,
   type DeploymentLogEntry,
@@ -62,7 +62,6 @@ export function OperationsConsole({
 }) {
   const t = useTranslations("serverDetail");
   const tServers = useTranslations("servers");
-  const format = useFormatter();
   const {
     status,
     operation,
@@ -176,40 +175,7 @@ export function OperationsConsole({
           onForceStopDone={refreshAfterForceStop}
         />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("history")}</CardTitle>
-            <CardDescription>{t("historyHelp")}</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {logs.length === 0 ? (
-              <p className="px-5 py-8 text-sm text-fg-subtle">{t("historyEmpty")}</p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {logs.map((entry) => (
-                  <li key={entry.id} className="px-5 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-fg">
-                        {isServerOperationAction(entry.action)
-                          ? t(`actions.${entry.action}`)
-                          : entry.action}
-                      </p>
-                      <span className="font-mono text-xs text-fg-subtle">
-                        {entry.createdAt
-                          ? formatOperationClock(entry.createdAt, format.dateTime)
-                          : "—"}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-fg-muted">
-                      {entry.status}
-                      {entry.errorMessage ? ` · ${entry.errorMessage}` : ""}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+        <OperationHistory logs={logs} />
       </div>
       </div>
     </div>

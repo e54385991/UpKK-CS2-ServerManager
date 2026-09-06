@@ -7,6 +7,8 @@ import type { ApiResult } from "@/shared/api/server-fetch";
 import {
   analyzeGitHubArchive,
   exportPluginCatalog,
+  forgetAllServerPlugins,
+  forgetServerPlugin,
   getPluginInstallPlan,
   importPluginCatalog,
   installGitHubPlugin,
@@ -151,6 +153,35 @@ export async function listServerMarketPluginIdsAction(
       item.marketPluginId != null ? [item.marketPluginId] : [],
     ),
   };
+}
+
+function revalidateInstalledPlugins(serverId: number) {
+  revalidatePath(`/servers/${serverId}/plugins`);
+  revalidatePath(`/servers/${serverId}/updates`);
+  revalidatePath(`/servers/${serverId}`);
+  revalidatePath("/plugins");
+}
+
+/**
+ * Clear one tracked plugin record. This is bookkeeping only: the panel stops
+ * tracking versions and auto-updates, and nothing is removed from the host.
+ */
+export async function forgetServerPluginAction(
+  serverId: number,
+  managedPluginId: number,
+): Promise<ApiResult<ActionResultDto>> {
+  const result = await forgetServerPlugin(serverId, managedPluginId);
+  if (result.ok) revalidateInstalledPlugins(serverId);
+  return result;
+}
+
+/** Clear every tracked plugin record for a server. Host files are kept. */
+export async function forgetAllServerPluginsAction(
+  serverId: number,
+): Promise<ApiResult<ActionResultDto>> {
+  const result = await forgetAllServerPlugins(serverId);
+  if (result.ok) revalidateInstalledPlugins(serverId);
+  return result;
 }
 
 export async function listGitHubReleasesAction(

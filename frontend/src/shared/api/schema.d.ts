@@ -4576,7 +4576,11 @@ export interface paths {
         get: operations["list_server_plugins_api_v1_servers__server_id__plugins_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Forget All Server Plugins
+         * @description Clear every tracking record for a server. Files on the host are kept.
+         */
+        delete: operations["forget_all_server_plugins_api_v1_servers__server_id__plugins_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4717,6 +4721,26 @@ export interface paths {
          */
         post: operations["uninstall_market_plugin_api_v1_servers__server_id__plugins_market__plugin_id__uninstall_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugins/{managed_plugin_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget Server Plugin
+         * @description Clear one tracking record. Files on the host are kept.
+         */
+        delete: operations["forget_server_plugin_api_v1_servers__server_id__plugins__managed_plugin_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -25294,6 +25318,37 @@ export interface operations {
             };
         };
     };
+    forget_all_server_plugins_api_v1_servers__server_id__plugins_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     analyze_github_archive_api_v1_servers__server_id__plugins_github_analyze_archive_get: {
         parameters: {
             query: {
@@ -25526,6 +25581,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_server_plugin_api_v1_servers__server_id__plugins__managed_plugin_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                managed_plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
                 };
             };
             /** @description Validation Error */

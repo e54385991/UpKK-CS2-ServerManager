@@ -1,6 +1,7 @@
 import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
 import type {
+  ActionResultDto,
   ManagedPluginViewDto,
   MarketPluginPageDto,
   MarketPluginViewDto,
@@ -121,6 +122,26 @@ export async function listServerPlugins(
   );
   if (!result.ok) return result;
   return { ok: true, data: result.data.map(toManaged) };
+}
+
+/** Drop one tracking record. Files already on the game server are untouched. */
+export async function forgetServerPlugin(
+  serverId: number,
+  managedPluginId: number,
+): Promise<ApiResult<ActionResultDto>> {
+  return apiFetch<ActionResultDto>(
+    `/api/v1/servers/${serverId}/plugins/${managedPluginId}`,
+    { method: "DELETE" },
+  );
+}
+
+/** Drop every tracking record for a server. Files on the host are untouched. */
+export async function forgetAllServerPlugins(
+  serverId: number,
+): Promise<ApiResult<ActionResultDto>> {
+  return apiFetch<ActionResultDto>(`/api/v1/servers/${serverId}/plugins`, {
+    method: "DELETE",
+  });
 }
 
 function toConflict(raw: {

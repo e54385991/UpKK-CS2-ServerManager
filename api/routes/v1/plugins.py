@@ -26,6 +26,7 @@ from services.plugin_conflict_service import (
 )
 from services.plugins.common import framework_value, parse_dependency_ids, parse_framework
 from services.plugins.description_sync import sync_market_plugin_descriptions
+from services.plugins.tracking import forget_managed_plugin, forget_server_managed_plugins
 from services.server_operation_hub import ServerOperationConflict
 
 from .operation_locks import reject_stuck_lock_unless_active
@@ -540,6 +541,66 @@ async def list_server_plugins(
         .order_by(ManagedPlugin.display_name)
     )
     return [to_managed_view(item) for item in result.scalars().all()]
+
+
+@server_router.delete("", response_model=ActionResult)
+async def forget_all_server_plugins(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    request: Request,
+) -> ActionResult:
+    """Clear every tracking record for a server. Files on the host are kept."""
+    await require_server_access(db, server_id, current_user)
+    removed = await forget_server_managed_plugins(db, server_id)
+    await record_audit_event(
+        category="plugin",
+        action="plugin.tracking.clear_all",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"removed": removed},
+    )
+    return ActionResult(
+        success=True,
+        message=f"Cleared {removed} plugin record(s). Files on the game server were not deleted.",
+    )
+
+
+@server_router.delete("/{managed_plugin_id}", response_model=ActionResult)
+async def forget_server_plugin(
+    server_id: int,
+    managed_plugin_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    request: Request,
+) -> ActionResult:
+    """Clear one tracking record. Files on the host are kept."""
+    await require_server_access(db, server_id, current_user)
+    removed = await forget_managed_plugin(db, server_id, managed_plugin_id)
+    if removed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin record not found")
+    await record_audit_event(
+        category="plugin",
+        action="plugin.tracking.clear",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "managed_plugin_id": managed_plugin_id,
+            "display_name": removed.display_name,
+            "source_type": removed.source_type,
+        },
+    )
+    return ActionResult(
+        success=True,
+        message=(
+            f"Cleared the record for '{removed.display_name}'. "
+            "Files on the game server were not deleted."
+        ),
+    )
 
 
 @server_router.get(

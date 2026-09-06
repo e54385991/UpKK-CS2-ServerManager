@@ -1,18 +1,26 @@
 import { getFormatter, getTranslations } from "next-intl/server";
 import type { Route } from "next";
-import { getServer, getStartupCommand } from "@/modules/servers/api";
+import {
+  getServer,
+  getServerDiskSpace,
+  getStartupCommand,
+} from "@/modules/servers/api";
+import { DiskSpaceCard } from "@/modules/servers/disk-space-card";
 import { StartupCommandCard } from "@/modules/servers/startup-command-card";
 import { workspaceHref } from "@/modules/servers/workspace";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { LinkButton } from "@/shared/ui/link-button";
 
 export async function OverviewPanel({ serverId }: { serverId: number }) {
-  const [t, tStartup, format, result, startup] = await Promise.all([
+  // The disk read is deliberately cache-only (no `force_refresh`): `du` over the
+  // game tree is expensive, so opening the overview must never trigger it.
+  const [t, tStartup, format, result, startup, disk] = await Promise.all([
     getTranslations("serverDetail"),
     getTranslations("startupCommand"),
     getFormatter(),
     getServer(serverId),
     getStartupCommand(serverId),
+    getServerDiskSpace(serverId),
   ]);
 
   if (!result.ok) {
@@ -79,6 +87,12 @@ export async function OverviewPanel({ serverId }: { serverId: number }) {
           />
         </CardContent>
       </Card>
+
+      <DiskSpaceCard
+        serverId={server.id}
+        gameDirectory={server.gameDirectory}
+        disk={disk.ok ? disk.data : null}
+      />
 
       {undeployed ? (
         <Card className="max-w-3xl border-warn/30 bg-warn-muted/30 px-5 py-4">

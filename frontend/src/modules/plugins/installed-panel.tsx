@@ -1,11 +1,10 @@
-import Link from "next/link";
 import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
 import { Puzzle, TriangleAlert } from "lucide-react";
 import { GitHubInstallForm } from "@/modules/plugins/github-install-form";
+import { InstalledPluginsList } from "@/modules/plugins/installed-list";
 import { listServerPlugins } from "@/modules/plugins/api";
 import { getServer } from "@/modules/servers/api";
-import { Badge } from "@/shared/ui/badge";
 import {
   Card,
   CardContent,
@@ -61,38 +60,7 @@ export async function InstalledPluginsPanel({ serverId }: { serverId: number }) 
             </LinkButton>
           </div>
         ) : (
-          <ul className="divide-y divide-line">
-            {result.data.map((plugin) => (
-              <li
-                key={plugin.id}
-                className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0 space-y-1">
-                  <p className="truncate text-sm font-medium text-fg">
-                    {plugin.displayName}
-                  </p>
-                  <p className="text-xs text-fg-subtle">
-                    {plugin.installedVersion}
-                    {plugin.latestVersion &&
-                    plugin.latestVersion !== plugin.installedVersion
-                      ? ` → ${plugin.latestVersion}`
-                      : ""}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge tone="neutral">{plugin.sourceType}</Badge>
-                  {plugin.marketPluginId ? (
-                    <Link
-                      href={`/plugins/${plugin.marketPluginId}?serverId=${serverId}` as Route}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      {t("viewInMarket")}
-                    </Link>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
+          <InstalledPluginsList serverId={serverId} plugins={result.data} />
         )}
       </CardContent>
     </Card>

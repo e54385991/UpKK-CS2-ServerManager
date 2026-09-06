@@ -544,7 +544,26 @@
     "forceStopFail": "Force-stop failed.",
     "history": "Recent operations",
     "historyHelp": "Latest completed and failed actions for this server.",
-    "historyEmpty": "No operation history yet."
+    "historyEmpty": "No operation history yet.",
+    "historyPage": "Page {page} / {pages}",
+    "historyPrevious": "Previous page",
+    "historyNext": "Next page",
+    "disk": {
+      "title": "Disk space",
+      "help": "Game-directory usage and free space on its filesystem.",
+      "directoryUsed": "Directory",
+      "available": "Available",
+      "total": "Filesystem",
+      "usage": "Usage",
+      "noSnapshot": "No cached snapshot yet. Use refresh to read it once.",
+      "cacheNote": "Read from a 1-hour cache. Measuring directory usage walks the disk, so opening this page never reads it; refresh manually when you need fresh numbers.",
+      "lowWarning": "Less than {threshold} GB free. A CS2 deploy or update needs roughly 40 GB and SteamCMD fails part-way when the disk fills up, so free space first.",
+      "state": {
+        "ok": "Healthy",
+        "low": "Low",
+        "critical": "Critical"
+      }
+    }
   },
   "serverNew": {
     "title": "Add server",
@@ -925,7 +944,17 @@
     "frameworkMismatchTitle": "Runtime mismatch",
     "frameworkMismatch": "This server runs {server}, which does not suit {plugin} plugins: it will not be loaded.",
     "frameworkMismatchConfirm": "Install anyway?",
-    "frameworkMissing": "{plugin} was not detected on this server. Install it under Frameworks first, or the plugin stays inactive."
+    "frameworkMissing": "{plugin} was not detected on this server. Install it under Frameworks first, or the plugin stays inactive.",
+    "forgetNotice": "Clearing a record only stops the panel from tracking that plugin's version and auto-updates. Nothing is deleted from your game server.",
+    "forgetOne": "Clear record",
+    "forgetOneTitle": "Clear the record for “{name}”?",
+    "forgetOneDone": "Cleared the record for “{name}”",
+    "forgetAll": "Clear all records",
+    "forgetAllTitle": "Clear all {count} plugin records?",
+    "forgetAllDone": "Cleared {count} plugin record(s)",
+    "forgetConfirm": "Clear record",
+    "forgetPending": "Clearing…",
+    "forgetFailed": "Could not clear the record"
   },
   "assistant": {
     "title": "AI Assistant",

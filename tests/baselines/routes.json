@@ -2402,6 +2402,22 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "DELETE"
+    ],
+    "name": "forget_all_server_plugins",
+    "path": "/api/v1/servers/{server_id}/plugins"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "forget_server_plugin",
+    "path": "/api/v1/servers/{server_id}/plugins/{managed_plugin_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "GET"
     ],
     "name": "plugin_install_preflight",

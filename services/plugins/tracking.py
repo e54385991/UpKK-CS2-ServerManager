@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 
-from sqlmodel import select
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
 
 from modules.database import async_session_maker
 from modules.models import ManagedPlugin
@@ -89,3 +91,38 @@ async def upsert_managed_plugin(
         await db.commit()
         await db.refresh(item)
         return item
+
+
+async def forget_managed_plugin(
+    db: AsyncSession, server_id: int, managed_plugin_id: int
+) -> ManagedPlugin | None:
+    """Drop one tracking row. Files already on the game server are untouched.
+
+    Removing the record only makes the panel stop tracking versions and
+    auto-updates for that plugin; ``managed_plugin_files`` rows follow through
+    the foreign key cascade.
+    """
+    result = await db.execute(
+        select(ManagedPlugin).where(
+            col(ManagedPlugin.id) == managed_plugin_id,
+            col(ManagedPlugin.server_id) == server_id,
+        )
+    )
+    item = result.scalar_one_or_none()
+    if item is None:
+        return None
+    await db.delete(item)
+    await db.commit()
+    return item
+
+
+async def forget_server_managed_plugins(db: AsyncSession, server_id: int) -> int:
+    """Drop every tracking row for one server and return how many were removed."""
+    result = await db.execute(
+        select(ManagedPlugin).where(col(ManagedPlugin.server_id) == server_id)
+    )
+    removed = len(list(result.scalars().all()))
+    if removed:
+        await db.execute(delete(ManagedPlugin).where(col(ManagedPlugin.server_id) == server_id))
+        await db.commit()
+    return removed

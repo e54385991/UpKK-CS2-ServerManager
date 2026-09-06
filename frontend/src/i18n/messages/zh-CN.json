@@ -544,7 +544,26 @@
     "forceStopFail": "强制终止失败。",
     "history": "最近操作",
     "historyHelp": "这台服务器最近完成或失败的操作。",
-    "historyEmpty": "还没有操作记录。"
+    "historyEmpty": "还没有操作记录。",
+    "historyPage": "第 {page} / {pages} 页",
+    "historyPrevious": "上一页",
+    "historyNext": "下一页",
+    "disk": {
+      "title": "磁盘空间",
+      "help": "游戏目录占用与所在文件系统的剩余空间。",
+      "directoryUsed": "目录占用",
+      "available": "可用空间",
+      "total": "分区总量",
+      "usage": "使用率",
+      "noSnapshot": "还没有缓存数据。点右上角刷新读取一次。",
+      "cacheNote": "数据来自 1 小时缓存；统计目录占用需要遍历磁盘，打开本页不会自动读取，请按需手动刷新。",
+      "lowWarning": "剩余空间不足 {threshold} GB。部署或更新 CS2 需要约 40 GB，空间不足会让 SteamCMD 中途失败，请先清理磁盘。",
+      "state": {
+        "ok": "充足",
+        "low": "偏低",
+        "critical": "严重不足"
+      }
+    }
   },
   "serverNew": {
     "title": "添加服务器",
@@ -925,7 +944,17 @@
     "frameworkMismatchTitle": "运行框架不匹配",
     "frameworkMismatch": "这台服务器是 {server}，不适合 {plugin} 插件：装上去也不会被加载。",
     "frameworkMismatchConfirm": "仍要继续安装吗？",
-    "frameworkMissing": "这台服务器还没有检测到 {plugin}，请先在「基座 / 框架」装好，插件才会生效。"
+    "frameworkMissing": "这台服务器还没有检测到 {plugin}，请先在「基座 / 框架」装好，插件才会生效。",
+    "forgetNotice": "清除记录只是让面板不再跟踪该插件的版本与自动更新，不会删除您服务器上的任何文件。",
+    "forgetOne": "清除记录",
+    "forgetOneTitle": "清除「{name}」的记录？",
+    "forgetOneDone": "已清除「{name}」的记录",
+    "forgetAll": "清除全部记录",
+    "forgetAllTitle": "清除全部 {count} 条插件记录？",
+    "forgetAllDone": "已清除 {count} 条插件记录",
+    "forgetConfirm": "清除记录",
+    "forgetPending": "清除中…",
+    "forgetFailed": "清除记录失败"
   },
   "assistant": {
     "title": "AI 助手",
