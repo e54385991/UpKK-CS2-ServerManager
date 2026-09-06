@@ -15,22 +15,46 @@ export function isPluginCategory(value: string): value is PluginCategory {
 }
 
 /**
- * The two top-level marketplace sections. They mirror the mutually exclusive
- * CS2 plugin runtimes in `@/modules/servers/frameworks`; `swiftly` is the key
- * the rest of the panel already uses for SwiftlyS2.
+ * A listing's runtime. `counterstrikesharp` and `swiftly` mirror the mutually
+ * exclusive CS2 plugin runtimes in `@/modules/servers/frameworks` (`swiftly` is
+ * the key the rest of the panel already uses for SwiftlyS2). `other` marks a
+ * listing that belongs to neither: it appears in both marketplace sections and
+ * is exempt from the install-time runtime check.
  */
-export const PLUGIN_FRAMEWORKS = ["counterstrikesharp", "swiftly"] as const;
+export const PLUGIN_FRAMEWORKS = [
+  "counterstrikesharp",
+  "swiftly",
+  "other",
+] as const;
 
 export type PluginFramework = (typeof PLUGIN_FRAMEWORKS)[number];
 
-export const DEFAULT_PLUGIN_FRAMEWORK: PluginFramework = "counterstrikesharp";
+/** The two sections the marketplace is browsed by. */
+export const PLUGIN_FRAMEWORK_SECTIONS = ["counterstrikesharp", "swiftly"] as const;
+
+export type PluginFrameworkSection = (typeof PLUGIN_FRAMEWORK_SECTIONS)[number];
+
+export const DEFAULT_PLUGIN_FRAMEWORK: PluginFrameworkSection = "counterstrikesharp";
 
 export function isPluginFramework(value: string): value is PluginFramework {
   return (PLUGIN_FRAMEWORKS as readonly string[]).includes(value);
 }
 
+export function isPluginFrameworkSection(
+  value: string,
+): value is PluginFrameworkSection {
+  return (PLUGIN_FRAMEWORK_SECTIONS as readonly string[]).includes(value);
+}
+
 export function toPluginFramework(value: string | null | undefined): PluginFramework {
   return value && isPluginFramework(value) ? value : DEFAULT_PLUGIN_FRAMEWORK;
+}
+
+/** Resolve the browsed section, falling back to the default section. */
+export function toPluginFrameworkSection(
+  value: string | null | undefined,
+): PluginFrameworkSection {
+  return value && isPluginFrameworkSection(value) ? value : DEFAULT_PLUGIN_FRAMEWORK;
 }
 
 export type PluginRef = {
@@ -136,7 +160,7 @@ export type DescriptionSyncSummary = {
 };
 
 export type DescriptionSyncInput = {
-  readonly framework?: PluginFramework;
+  readonly framework?: PluginFrameworkSection;
   readonly overwrite?: boolean;
   readonly pluginIds?: readonly number[];
 };
@@ -160,7 +184,7 @@ export type PluginDependencyOptions = {
 export type MarketQuery = {
   readonly q?: string;
   readonly category?: string;
-  readonly framework?: PluginFramework;
+  readonly framework?: PluginFrameworkSection;
   readonly limit?: number;
   readonly offset?: number;
 };
@@ -315,6 +339,15 @@ export type GitHubInstallPlan = {
   readonly dependencies: readonly PluginRef[];
 };
 
+/** Whether the target server actually runs the plugin's runtime. */
+export type PluginFrameworkCompatibility = {
+  readonly plugin: string;
+  readonly installed: readonly string[];
+  readonly conflicting: readonly string[];
+  readonly missing: boolean;
+  readonly mismatch: boolean;
+};
+
 export type PluginInstallPlan = {
   readonly serverId: number;
   readonly plugin: PluginRef;
@@ -325,6 +358,7 @@ export type PluginInstallPlan = {
   readonly compatibilityUnknown: readonly string[];
   readonly hardConflicts: readonly PluginConflict[];
   readonly warnings: readonly PluginConflict[];
+  readonly framework: PluginFrameworkCompatibility;
   readonly steps: readonly PluginInstallStep[];
   readonly blocked: boolean;
   readonly planHash: string;

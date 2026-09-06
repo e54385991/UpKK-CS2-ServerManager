@@ -47,7 +47,7 @@ from services.plugin_conflict_service import (
 from services.plugin_installation import install_github_plugin
 from services.plugins.catalog_fields import apply_market_plugin_update
 from services.plugins.common import parse_framework
-from services.plugins.github_readme import decode_readme, readme_excerpt
+from services.plugins.github_repo_info import fetch_github_repo_info
 from services.plugins.upgrade_exclusions import (
     CONFIG_FILE_EXTENSIONS,
     apply_upgrade_mode_exclusions,
@@ -439,64 +439,6 @@ async def validate_dependencies(db: AsyncSession, dependency_ids: list[int]) -> 
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Dependency plugin with ID {missing_id} not found",
         )
-
-
-async def fetch_github_repo_info(
-    github_url: str, github_proxy: Optional[str] = None, github_token: Optional[str] = None
-) -> GitHubRepoInfo:
-    """
-    Fetch repository information from GitHub API.
-
-    Args:
-        github_url: GitHub repository URL
-        github_proxy: Optional GitHub proxy URL
-        github_token: Optional GitHub personal access token for authentication
-
-    Returns:
-        GitHubRepoInfo with parsed data
-    """
-    try:
-        owner, repo = parse_github_url(github_url)
-    except ValueError as e:
-        return GitHubRepoInfo(success=False, error=str(e))
-
-    # Fetch repo info from GitHub API
-    api_url = f"https://api.github.com/repos/{owner}/{repo}"
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"}
-
-    success, data, error = await http_helper.get(
-        api_url, headers=headers, timeout=30, proxy=github_proxy, github_token=github_token
-    )
-
-    if not success or not isinstance(data, dict):
-        return GitHubRepoInfo(success=False, error=f"Failed to fetch repository info: {error}")
-
-    # Extract repo name and description
-    repo_name = data.get("name", repo)
-    description = data.get("description", "")
-
-    # Fetch the README so the console can offer the full long-form Markdown.
-    readme_url = f"https://api.github.com/repos/{owner}/{repo}/readme"
-    readme_success, readme_data, _ = await http_helper.get(
-        readme_url, headers=headers, timeout=30, proxy=github_proxy, github_token=github_token
-    )
-
-    readme: Optional[str] = None
-    if readme_success and isinstance(readme_data, dict):
-        readme = decode_readme(readme_data.get("content", ""))
-
-    if not description and readme:
-        # No repository description: fall back to a short README excerpt so the
-        # legacy form still lands something usable in its single-line field.
-        description = readme_excerpt(readme)
-
-    return GitHubRepoInfo(
-        success=True,
-        repo_name=repo_name,
-        description=description if description else None,
-        readme=readme,
-        author=owner,
-    )
 
 
 async def populate_dependency_details(
@@ -959,6 +901,10 @@ async def install_plugin(
     acknowledge_warning_rule_ids: list[int] = Query(
         default=[], description="Current soft-conflict rule IDs explicitly acknowledged"
     ),
+    acknowledge_framework_mismatch: bool = Query(
+        default=False,
+        description="Install even though the server runs the other plugin runtime",
+    ),
     upgrade_mode: bool = Query(
         default=False, description="Enable upgrade mode to auto-exclude config files"
     ),
@@ -1014,7 +960,11 @@ async def install_plugin(
             include_dependencies=install_dependencies,
             server=server,
         )
-        validate_plugin_plan_acknowledgements(install_plan, acknowledge_warning_rule_ids)
+        validate_plugin_plan_acknowledgements(
+            install_plan,
+            acknowledge_warning_rule_ids,
+            acknowledge_framework_mismatch=acknowledge_framework_mismatch,
+        )
     except PluginPlanError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 

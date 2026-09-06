@@ -7,7 +7,7 @@ import { LoaderCircle, RefreshCcw } from "lucide-react";
 import { syncMarketPluginDescriptionsAction } from "@/modules/plugins/actions";
 import type {
   DescriptionSyncSummary,
-  PluginFramework,
+  PluginFrameworkSection,
 } from "@/modules/plugins/types";
 import { confirm, notify } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
@@ -28,7 +28,7 @@ const ACTION_TONE = {
 export function SyncDescriptionsButton({
   framework,
 }: {
-  framework: PluginFramework;
+  framework: PluginFrameworkSection;
 }) {
   const t = useTranslations("plugins");
   const router = useRouter();

@@ -12,7 +12,7 @@ import {
   MarketCatalogSkeleton,
 } from "@/modules/plugins/market-catalog";
 import { SyncDescriptionsButton } from "@/modules/plugins/sync-descriptions-button";
-import { toPluginFramework } from "@/modules/plugins/types";
+import { toPluginFrameworkSection } from "@/modules/plugins/types";
 import { listServers } from "@/modules/servers/api";
 import { PageHeader } from "@/shared/ui/page-header";
 
@@ -46,7 +46,7 @@ export default async function PluginsPage({
   const serverId = Number(sp.serverId);
   // The marketplace opens on the CounterStrikeSharp section; SwiftlyS2 is the
   // other top-level tab.
-  const framework = toPluginFramework(sp.framework?.trim());
+  const framework = toPluginFrameworkSection(sp.framework?.trim());
   const query = {
     q: sp.q?.trim() || undefined,
     category: sp.category?.trim() || undefined,

@@ -41,6 +41,7 @@ import type {
   PluginInstallPlan,
 } from "@/modules/plugins/types";
 import { toMarketPlugin, toRef } from "@/modules/plugins/market-mapper";
+import { DEFAULT_PLUGIN_FRAMEWORK } from "@/modules/plugins/types";
 
 export async function listMarketPlugins(
   query: MarketQuery = {},
@@ -150,6 +151,13 @@ function toPlan(raw: PluginInstallPlanViewDto): PluginInstallPlan {
     compatibilityUnknown: raw.compatibility_unknown ?? [],
     hardConflicts: (raw.hard_conflicts ?? []).map(toConflict),
     warnings: (raw.warnings ?? []).map(toConflict),
+    framework: {
+      plugin: raw.framework?.plugin ?? DEFAULT_PLUGIN_FRAMEWORK,
+      installed: raw.framework?.installed ?? [],
+      conflicting: raw.framework?.conflicting ?? [],
+      missing: raw.framework?.missing ?? false,
+      mismatch: raw.framework?.mismatch ?? false,
+    },
     steps: (raw.steps ?? []).map((step) => ({
       order: step.order,
       pluginId: step.plugin_id,
@@ -184,6 +192,7 @@ export async function installMarketPlugin(
   pluginId: number,
   input: {
     readonly acknowledgeWarningRuleIds?: readonly number[];
+    readonly acknowledgeFrameworkMismatch?: boolean;
     readonly planHash?: string;
     readonly downloadUrl?: string | null;
     readonly upgradeMode?: boolean;
@@ -200,6 +209,7 @@ export async function installMarketPlugin(
       timeoutMs: 30_000,
       body: JSON.stringify({
         acknowledge_warning_rule_ids: input.acknowledgeWarningRuleIds ?? [],
+        acknowledge_framework_mismatch: input.acknowledgeFrameworkMismatch ?? false,
         plan_hash: input.planHash ?? null,
         download_url: input.downloadUrl ?? null,
         upgrade_mode: input.upgradeMode ?? false,

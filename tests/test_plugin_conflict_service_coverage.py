@@ -10,6 +10,7 @@ import pytest
 
 from modules import GitHubPluginInstallResponse
 from services import plugin_conflict_service as module
+from services.plugins import progress as progress_module
 
 
 class _Lock:
@@ -61,6 +62,7 @@ def _plugin(plugin_id=1, *, deps=None, title=None, url=None, framework=None):
         install_count=0,
         custom_install_path=None,
         framework_key=framework,
+        framework="counterstrikesharp",
         version="v1",
     )
 
@@ -455,7 +457,9 @@ async def test_prepare_execution_and_lock_progress_error_paths(monkeypatch):
         )
 
     monkeypatch.setattr(
-        module.inspect, "signature", lambda _progress: (_ for _ in ()).throw(TypeError("signature"))
+        progress_module.inspect,
+        "signature",
+        lambda _progress: (_ for _ in ()).throw(TypeError("signature")),
     )
     called = AsyncMock()
     await module._emit_plan_progress(called, "message", step_id="x", step_status="failed")

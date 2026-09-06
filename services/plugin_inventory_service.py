@@ -56,10 +56,13 @@ async def inspect_remote_plugin_inventory(server: Server) -> dict[str, Any]:
     css_root = posixpath.join(csgo, "addons/counterstrikesharp")
     css_bin = posixpath.join(css_root, "bin")
     css_plugins = posixpath.join(css_root, "plugins")
+    swiftly_root = posixpath.join(csgo, "addons/swiftlys2")
     limit = MAX_REMOTE_PLUGINS_PER_FRAMEWORK + 1
     command = (
         f"if test -f {shlex.quote(metamod_binary)}; then printf 'metamod=1\\n'; "
         "else printf 'metamod=0\\n'; fi; "
+        f"if test -d {shlex.quote(swiftly_root)}; then printf 'swiftly=1\\n'; "
+        "else printf 'swiftly=0\\n'; fi; "
         f"if test -d {shlex.quote(css_root)} && find {shlex.quote(css_bin)} "
         "-maxdepth 5 -type f \\( -name CounterStrikeSharp.API.dll "
         "-o -name counterstrikesharp.so -o -name CounterStrikeSharp.dll \\) "
@@ -86,7 +89,12 @@ async def inspect_remote_plugin_inventory(server: Server) -> dict[str, Any]:
         key, separator, value = line.partition("=")
         if separator:
             values[key] = value
-    required = {"metamod", "counterstrikesharp", "metamod_plugins", "counterstrikesharp_plugins"}
+    required = {
+        "metamod",
+        "counterstrikesharp",
+        "metamod_plugins",
+        "counterstrikesharp_plugins",
+    }
     if not required.issubset(values):
         raise PluginInventoryError("Remote plugin inventory returned incomplete data")
 
@@ -117,6 +125,9 @@ async def inspect_remote_plugin_inventory(server: Server) -> dict[str, Any]:
         "frameworks": {
             "metamod": values["metamod"] == "1",
             "counterstrikesharp": values["counterstrikesharp"] == "1",
+            # Absent from a probe that predates this key: treat as not installed
+            # rather than failing the whole inventory.
+            "swiftly": values.get("swiftly") == "1",
         },
         "plugins": plugins,
         "truncated": metamod_truncated or css_truncated,

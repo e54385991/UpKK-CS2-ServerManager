@@ -76,6 +76,8 @@ def test_market_list_filters_by_framework(monkeypatch):
     assert response.status_code == 200
     assert response.json()["items"][0]["framework"] == "swiftly"
     assert search.await_args.kwargs["framework"] is PluginFramework.SWIFTLY
+    # Runtime-agnostic listings belong to no section, so browsing shows them too.
+    assert search.await_args.kwargs["include_framework_agnostic"] is True
 
 
 def test_market_list_rejects_unknown_framework():

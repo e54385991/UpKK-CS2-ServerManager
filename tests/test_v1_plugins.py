@@ -432,6 +432,102 @@ def test_v1_plugin_preflight_can_include_dependencies(monkeypatch):
     assert planner.await_args.kwargs["include_dependencies"] is True
 
 
+def _mismatched_plan() -> dict:
+    return _sample_plan(
+        framework={
+            "plugin": "counterstrikesharp",
+            "installed": ["swiftly"],
+            "conflicting": ["swiftly"],
+            "missing": True,
+            "mismatch": True,
+        }
+    )
+
+
+def test_v1_plugin_preflight_reports_the_runtime_mismatch(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch)
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        AsyncMock(return_value=_sample_market()),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.build_plugin_install_plan",
+        AsyncMock(return_value=_mismatched_plan()),
+    )
+
+    response = client.get("/api/v1/servers/1/plugins/market/11/preflight")
+
+    assert response.status_code == 200
+    framework = response.json()["framework"]
+    assert framework["mismatch"] is True
+    assert framework["conflicting"] == ["swiftly"]
+    assert framework["plugin"] == "counterstrikesharp"
+
+
+def test_v1_plugin_install_refuses_a_runtime_mismatch_without_acknowledgement(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch)
+    enqueue = AsyncMock()
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        AsyncMock(return_value=_sample_market()),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.build_plugin_install_plan",
+        AsyncMock(return_value=_mismatched_plan()),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr("api.routes.v1.plugins.enqueue_plugin_install", enqueue)
+
+    response = client.post("/api/v1/servers/1/plugins/market/11/install", json={})
+
+    assert response.status_code == 409
+    assert "do not load" in response.json()["detail"]
+    enqueue.assert_not_awaited()
+
+
+def test_v1_plugin_install_accepts_an_acknowledged_runtime_mismatch(monkeypatch):
+    client, user = _client(monkeypatch=monkeypatch)
+    operation_id = str(uuid4())
+    enqueue = AsyncMock(
+        return_value={
+            "operation_id": operation_id,
+            "server_id": 1,
+            "action": "install_plugin",
+            "status": "queued",
+            "success": None,
+            "message": None,
+            "server_status": None,
+            "actor_user_id": user.id,
+            "started_at": "2026-08-29T00:00:00+00:00",
+            "completed_at": None,
+        }
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        AsyncMock(return_value=_sample_market()),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.build_plugin_install_plan",
+        AsyncMock(return_value=_mismatched_plan()),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr("api.routes.v1.plugins.enqueue_plugin_install", enqueue)
+
+    response = client.post(
+        "/api/v1/servers/1/plugins/market/11/install",
+        json={"acknowledge_framework_mismatch": True},
+    )
+
+    assert response.status_code == 202
+    assert enqueue.await_args.kwargs["acknowledge_framework_mismatch"] is True
+
+
 def test_v1_plugin_install_returns_202(monkeypatch):
     client, user = _client(monkeypatch=monkeypatch)
     operation_id = str(uuid4())

@@ -23,15 +23,26 @@ class PluginCategory(str, enum.Enum):
 class PluginFramework(str, enum.Enum):
     """Runtime a marketplace plugin is written for.
 
-    The marketplace is split into these two top-level sections. They are the
-    two mutually exclusive CS2 plugin runtimes (see
-    ``frontend/src/modules/servers/frameworks.ts``), so a listing belongs to
-    exactly one of them. The ``swiftly`` value matches the framework key the
-    rest of the panel already uses for SwiftlyS2.
+    ``counterstrikesharp`` and ``swiftly`` are the two mutually exclusive CS2
+    plugin runtimes (see ``frontend/src/modules/servers/frameworks.ts``) and the
+    marketplace's two top-level sections; ``swiftly`` matches the framework key
+    the rest of the panel already uses for SwiftlyS2. ``other`` marks a listing
+    that does not belong to either runtime (a Metamod-only plugin, a config
+    pack, …): it is listed in both sections and is exempt from the install-time
+    runtime check.
     """
 
     COUNTERSTRIKESHARP = "counterstrikesharp"
     SWIFTLY = "swiftly"
+    OTHER = "other"
+
+
+# Sections the marketplace is browsed by. ``OTHER`` is deliberately not one:
+# those listings surface inside whichever section is open.
+PLUGIN_FRAMEWORK_SECTIONS: tuple[PluginFramework, ...] = (
+    PluginFramework.COUNTERSTRIKESHARP,
+    PluginFramework.SWIFTLY,
+)
 
 
 DEFAULT_PLUGIN_FRAMEWORK = PluginFramework.COUNTERSTRIKESHARP
@@ -86,7 +97,7 @@ class MarketPlugin(SQLModel, table=True):
             name="ck_market_plugins_plugin_category",
         ),
         CheckConstraint(
-            "framework IN ('COUNTERSTRIKESHARP', 'SWIFTLY')",
+            "framework IN ('COUNTERSTRIKESHARP', 'SWIFTLY', 'OTHER')",
             name="ck_market_plugins_plugin_framework",
         ),
     )
@@ -171,10 +182,16 @@ class MarketPlugin(SQLModel, table=True):
         skip: int = 0,
         limit: int = 20,
         framework: Optional[PluginFramework] = None,
+        include_framework_agnostic: bool = False,
     ) -> tuple[list[Self], int]:
         """
         Search plugins with filters and pagination.
         Returns tuple of (plugins, total_count)
+
+        ``include_framework_agnostic`` also returns ``OTHER`` listings, which
+        belong to no runtime and are therefore shown in both marketplace
+        sections. Callers that need an exact section (bulk description sync)
+        leave it off.
         """
         from sqlalchemy import func as sqlfunc
         from sqlalchemy import or_
@@ -189,8 +206,12 @@ class MarketPlugin(SQLModel, table=True):
 
         # Apply framework (marketplace section) filter
         if framework:
-            query = query.where(cls.framework == framework)
-            count_query = count_query.where(cls.framework == framework)
+            wanted = [framework]
+            if include_framework_agnostic and framework != PluginFramework.OTHER:
+                wanted.append(PluginFramework.OTHER)
+            framework_condition = col(cls.framework).in_(wanted)
+            query = query.where(framework_condition)
+            count_query = count_query.where(framework_condition)
 
         # Apply search query (search in title, description, author)
         if search_query and search_query.strip():

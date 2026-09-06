@@ -42,10 +42,12 @@ PluginCategoryLiteral = Literal[
     "other",
 ]
 
-# The marketplace is split into these two top-level sections. New listings
-# default to the CounterStrikeSharp stack, which is what most CS2 plugins
-# target.
-PluginFrameworkLiteral = Literal["counterstrikesharp", "swiftly"]
+# The marketplace is browsed by the two runtime sections; ``other`` marks a
+# listing that belongs to neither and is therefore shown in both and exempt
+# from the install-time runtime check. New listings default to the
+# CounterStrikeSharp stack, which is what most CS2 plugins target.
+PluginFrameworkLiteral = Literal["counterstrikesharp", "swiftly", "other"]
+PluginFrameworkSectionLiteral = Literal["counterstrikesharp", "swiftly"]
 
 DEFAULT_PLUGIN_FRAMEWORK: PluginFrameworkLiteral = "counterstrikesharp"
 
@@ -133,6 +135,7 @@ class MarketPluginDescriptionSyncRequest(ApiRequest):
 
     plugin_ids: list[int] = Field(default_factory=list, max_length=200)
     framework: PluginFrameworkLiteral | None = None
+    """Exact section match: syncing ``counterstrikesharp`` skips ``other``."""
     overwrite: bool = True
 
     @field_validator("plugin_ids")
@@ -272,6 +275,21 @@ class PluginInstallStep(V1Model):
     reason: str
 
 
+class PluginFrameworkCompatibilityView(V1Model):
+    """Whether the target server actually runs the plugin's runtime.
+
+    ``mismatch`` means the plugin's runtime is absent while the other one is
+    installed — a CounterStrikeSharp plugin on a SwiftlyS2 server or the
+    reverse. Installing then requires ``acknowledge_framework_mismatch``.
+    """
+
+    plugin: str
+    installed: list[str] = Field(default_factory=list)
+    conflicting: list[str] = Field(default_factory=list)
+    missing: bool = False
+    mismatch: bool = False
+
+
 class PluginInstallPlanView(V1Model):
     """Deterministic install preflight. Does not mutate the server."""
 
@@ -284,6 +302,7 @@ class PluginInstallPlanView(V1Model):
     compatibility_unknown: list[str] = Field(default_factory=list)
     hard_conflicts: list[PluginConflictView] = Field(default_factory=list)
     warnings: list[PluginConflictView] = Field(default_factory=list)
+    framework: PluginFrameworkCompatibilityView
     steps: list[PluginInstallStep] = Field(default_factory=list)
     blocked: bool
     plan_hash: str
@@ -293,9 +312,12 @@ class PluginInstallRequest(ApiRequest):
     """Acknowledge warnings and optionally pin the preflight plan hash.
 
     ``install_dependencies`` is opt-in, matching the legacy web installer.
+    ``acknowledge_framework_mismatch`` is required when the preflight reports
+    that the server runs the other plugin runtime.
     """
 
     acknowledge_warning_rule_ids: list[int] = Field(default_factory=list)
+    acknowledge_framework_mismatch: bool = False
     plan_hash: str | None = Field(default=None, max_length=64)
     download_url: str | None = Field(default=None, max_length=2000)
     upgrade_mode: bool = False
@@ -587,6 +609,7 @@ __all__ = [
     "PluginRef",
     "PluginCategoryLiteral",
     "PluginFrameworkLiteral",
+    "PluginFrameworkSectionLiteral",
     "DEFAULT_PLUGIN_FRAMEWORK",
     "MarketPluginCreateRequest",
     "MarketPluginUpdateRequest",
@@ -603,6 +626,7 @@ __all__ = [
     "ManagedPluginUpdateView",
     "PluginConflictView",
     "PluginInstallStep",
+    "PluginFrameworkCompatibilityView",
     "PluginInstallPlanView",
     "PluginInstallRequest",
     "LinuxRuntimeProfileView",

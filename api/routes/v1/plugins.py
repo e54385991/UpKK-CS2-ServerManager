@@ -32,6 +32,7 @@ from .operation_locks import reject_stuck_lock_unless_active
 from .operation_runner import enqueue_github_plugin_uninstall, enqueue_plugin_install
 from .operations import to_view
 from .schemas import (
+    DEFAULT_PLUGIN_FRAMEWORK,
     ActionResult,
     GitHubRepoInfoRequest,
     GitHubRepoInfoView,
@@ -48,6 +49,7 @@ from .schemas import (
     PluginCategoryView,
     PluginConflictView,
     PluginDependencyOptionsView,
+    PluginFrameworkCompatibilityView,
     PluginInstallPlanView,
     PluginInstallRequest,
     PluginInstallStep,
@@ -169,6 +171,16 @@ def _conflict_views(items: list[dict[str, Any]]) -> list[PluginConflictView]:
     ]
 
 
+def _framework_view(compatibility: dict[str, Any]) -> PluginFrameworkCompatibilityView:
+    return PluginFrameworkCompatibilityView(
+        plugin=str(compatibility.get("plugin") or DEFAULT_PLUGIN_FRAMEWORK),
+        installed=[str(item) for item in compatibility.get("installed") or []],
+        conflicting=[str(item) for item in compatibility.get("conflicting") or []],
+        missing=bool(compatibility.get("missing")),
+        mismatch=bool(compatibility.get("mismatch")),
+    )
+
+
 def to_plan_view(plan: dict[str, Any]) -> PluginInstallPlanView:
     plugin = plan["plugin"]
     return PluginInstallPlanView(
@@ -186,6 +198,7 @@ def to_plan_view(plan: dict[str, Any]) -> PluginInstallPlanView:
         compatibility_unknown=list(plan.get("compatibility_unknown") or []),
         hard_conflicts=_conflict_views(list(plan.get("hard_conflicts") or [])),
         warnings=_conflict_views(list(plan.get("warnings") or [])),
+        framework=_framework_view(plan.get("framework") or {}),
         steps=[
             PluginInstallStep(
                 order=int(step["order"]),
@@ -238,6 +251,7 @@ async def list_market_plugins(
         skip=offset,
         limit=limit,
         framework=framework_enum,
+        include_framework_agnostic=True,
     )
     dependency_lists = await _dependency_refs(db, plugins)
     return Page(
@@ -569,7 +583,11 @@ async def install_market_plugin(
             include_dependencies=body.install_dependencies,
             server=server,
         )
-        validate_plugin_plan_acknowledgements(plan, body.acknowledge_warning_rule_ids)
+        validate_plugin_plan_acknowledgements(
+            plan,
+            body.acknowledge_warning_rule_ids,
+            acknowledge_framework_mismatch=body.acknowledge_framework_mismatch,
+        )
     except PluginPlanError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if plan.get("blocked"):
@@ -589,6 +607,7 @@ async def install_market_plugin(
             plugin_id=plugin_id,
             actor_user_id=current_user.id,
             acknowledge_warning_rule_ids=body.acknowledge_warning_rule_ids,
+            acknowledge_framework_mismatch=body.acknowledge_framework_mismatch,
             plan_hash=body.plan_hash or plan["plan_hash"],
             download_url=body.download_url,
             upgrade_mode=body.upgrade_mode,
@@ -612,6 +631,7 @@ async def install_market_plugin(
             "operation_id": record["operation_id"],
             "plugin_id": plugin_id,
             "upgrade_mode": body.upgrade_mode,
+            "framework_mismatch_acknowledged": body.acknowledge_framework_mismatch,
         },
     )
     return to_view(record)

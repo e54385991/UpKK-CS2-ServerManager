@@ -2,14 +2,14 @@ import Link from "next/link";
 import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
 import {
-  PLUGIN_FRAMEWORKS,
+  PLUGIN_FRAMEWORK_SECTIONS,
   type MarketQuery,
-  type PluginFramework,
+  type PluginFrameworkSection,
 } from "@/modules/plugins/types";
 import { cn } from "@/shared/lib/cn";
 
 export function frameworkHref(
-  framework: PluginFramework,
+  framework: PluginFrameworkSection,
   query: MarketQuery,
   serverId?: number,
 ): Route {
@@ -30,7 +30,7 @@ export async function FrameworkTabs({
   query,
   serverId,
 }: {
-  active: PluginFramework;
+  active: PluginFrameworkSection;
   query: MarketQuery;
   serverId?: number;
 }) {
@@ -42,7 +42,7 @@ export async function FrameworkTabs({
       data-testid="market-framework-tabs"
       className="flex flex-wrap gap-1 rounded-lg border border-line bg-surface-overlay p-1"
     >
-      {PLUGIN_FRAMEWORKS.map((framework) => (
+      {PLUGIN_FRAMEWORK_SECTIONS.map((framework) => (
         <Link
           key={framework}
           href={frameworkHref(framework, query, serverId)}

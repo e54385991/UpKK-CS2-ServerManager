@@ -13005,7 +13005,8 @@
             "default": "counterstrikesharp",
             "enum": [
               "counterstrikesharp",
-              "swiftly"
+              "swiftly",
+              "other"
             ],
             "title": "Framework",
             "type": "string"
@@ -13131,7 +13132,8 @@
               {
                 "enum": [
                   "counterstrikesharp",
-                  "swiftly"
+                  "swiftly",
+                  "other"
                 ],
                 "type": "string"
               },
@@ -13609,7 +13611,8 @@
               {
                 "enum": [
                   "counterstrikesharp",
-                  "swiftly"
+                  "swiftly",
+                  "other"
                 ],
                 "type": "string"
               },
@@ -15993,6 +15996,45 @@
         "title": "PluginDiagnosticRunView",
         "type": "object"
       },
+      "PluginFrameworkCompatibilityView": {
+        "additionalProperties": false,
+        "description": "Whether the target server actually runs the plugin's runtime.\n\n``mismatch`` means the plugin's runtime is absent while the other one is\ninstalled — a CounterStrikeSharp plugin on a SwiftlyS2 server or the\nreverse. Installing then requires ``acknowledge_framework_mismatch``.",
+        "properties": {
+          "conflicting": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conflicting",
+            "type": "array"
+          },
+          "installed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Installed",
+            "type": "array"
+          },
+          "mismatch": {
+            "default": false,
+            "title": "Mismatch",
+            "type": "boolean"
+          },
+          "missing": {
+            "default": false,
+            "title": "Missing",
+            "type": "boolean"
+          },
+          "plugin": {
+            "title": "Plugin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plugin"
+        ],
+        "title": "PluginFrameworkCompatibilityView",
+        "type": "object"
+      },
       "PluginInstallPlanView": {
         "additionalProperties": false,
         "description": "Deterministic install preflight. Does not mutate the server.",
@@ -16021,6 +16063,9 @@
             },
             "title": "Dependencies",
             "type": "array"
+          },
+          "framework": {
+            "$ref": "#/components/schemas/PluginFrameworkCompatibilityView"
           },
           "hard_conflicts": {
             "items": {
@@ -16072,6 +16117,7 @@
         "required": [
           "server_id",
           "plugin",
+          "framework",
           "blocked",
           "plan_hash"
         ],
@@ -16080,8 +16126,13 @@
       },
       "PluginInstallRequest": {
         "additionalProperties": false,
-        "description": "Acknowledge warnings and optionally pin the preflight plan hash.\n\n``install_dependencies`` is opt-in, matching the legacy web installer.",
+        "description": "Acknowledge warnings and optionally pin the preflight plan hash.\n\n``install_dependencies`` is opt-in, matching the legacy web installer.\n``acknowledge_framework_mismatch`` is required when the preflight reports\nthat the server runs the other plugin runtime.",
         "properties": {
+          "acknowledge_framework_mismatch": {
+            "default": false,
+            "title": "Acknowledge Framework Mismatch",
+            "type": "boolean"
+          },
           "acknowledge_warning_rule_ids": {
             "items": {
               "type": "integer"
@@ -29183,6 +29234,18 @@
               },
               "title": "Acknowledge Warning Rule Ids",
               "type": "array"
+            }
+          },
+          {
+            "description": "Install even though the server runs the other plugin runtime",
+            "in": "query",
+            "name": "acknowledge_framework_mismatch",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Install even though the server runs the other plugin runtime",
+              "title": "Acknowledge Framework Mismatch",
+              "type": "boolean"
             }
           },
           {

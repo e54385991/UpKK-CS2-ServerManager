@@ -25,6 +25,10 @@ import type {
   MarketInstallServer,
   PluginInstallPlan,
 } from "@/modules/plugins/types";
+import {
+  PlanSummary,
+  useRuntimeMismatchDetail,
+} from "@/modules/plugins/plan-summary";
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { confirm, notify } from "@/shared/feedback";
 import {
@@ -62,6 +66,7 @@ export function InstallForm({
   onQueued?: () => void;
 }) {
   const t = useTranslations("plugins");
+  const mismatchDetail = useRuntimeMismatchDetail();
   const router = useRouter();
   const [serverId, setServerId] = useState<number | null>(
     defaultServerId ?? servers[0]?.id ?? null,
@@ -287,6 +292,21 @@ export function InstallForm({
       setError(t("needVersion"));
       return;
     }
+    // Foolproofing: a CounterStrikeSharp plugin never loads on a SwiftlyS2
+    // server (and the reverse), so the operator has to confirm explicitly and
+    // the backend refuses the install without the acknowledgement.
+    if (plan.framework.mismatch) {
+      if (
+        !(await confirm({
+          title: t("frameworkMismatchTitle"),
+          description: `${mismatchDetail(plan.framework)}\n${t("frameworkMismatchConfirm")}`,
+          confirmLabel: t("install"),
+          tone: "danger",
+        }))
+      ) {
+        return;
+      }
+    }
     if (plan.warnings.length > 0) {
       const details = plan.warnings
         .map((item) => `#${item.ruleId}: ${item.reason}`)
@@ -304,6 +324,7 @@ export function InstallForm({
     setError(null);
     const result = await installMarketPluginAction(serverId, pluginId, {
       acknowledgeWarningRuleIds: plan.warnings.map((item) => item.ruleId),
+      acknowledgeFrameworkMismatch: plan.framework.mismatch,
       planHash: plan.planHash,
       downloadUrl: selectedAsset.browserDownloadUrl,
       upgradeMode,
@@ -707,55 +728,6 @@ export function InstallForm({
             <p className="text-xs text-ok">{uninstallNotice}</p>
           ) : null}
         </div>
-      ) : null}
-    </div>
-  );
-}
-
-function PlanSummary({ plan }: { plan: PluginInstallPlan }) {
-  const t = useTranslations("plugins");
-  return (
-    <div className="space-y-3 rounded-md border border-line bg-surface-overlay/40 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="text-sm font-medium text-fg">{t("planTitle")}</p>
-        {plan.blocked ? (
-          <Badge tone="danger">{t("blocked")}</Badge>
-        ) : (
-          <Badge tone="ok">{t("ready")}</Badge>
-        )}
-      </div>
-      <ol className="space-y-1.5 text-sm text-fg-muted">
-        {plan.steps.map((step) => (
-          <li key={`${step.order}-${step.pluginId}`}>
-            <span className="font-mono text-xs text-fg-subtle">{step.order}.</span>{" "}
-            {step.title}{" "}
-            <span className="text-fg-subtle">
-              (
-              {step.status === "already_installed" || step.status === "install"
-                ? t(`stepStatus.${step.status}`)
-                : step.status}
-              )
-            </span>
-          </li>
-        ))}
-      </ol>
-      {plan.hardConflicts.length > 0 ? (
-        <ul className="space-y-1 text-sm text-danger">
-          {plan.hardConflicts.map((item) => (
-            <li key={item.ruleId}>
-              {t("hardConflict", { reason: item.reason, id: item.ruleId })}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {plan.warnings.length > 0 ? (
-        <ul className="space-y-1 text-sm text-warn">
-          {plan.warnings.map((item) => (
-            <li key={item.ruleId}>
-              {t("warningConflict", { reason: item.reason, id: item.ruleId })}
-            </li>
-          ))}
-        </ul>
       ) : null}
     </div>
   );

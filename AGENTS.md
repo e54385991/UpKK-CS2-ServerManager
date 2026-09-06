@@ -120,7 +120,19 @@ HTTP request.
   （`MarketPlugin.framework`，取值 `counterstrikesharp` / `swiftly`，与面板其余
   地方的 framework key 一致）。新增插件默认落在 CounterStrikeSharp；控制台
   `/plugins` 默认打开该分区，列表通过 `GET /api/v1/plugins/market?framework=`
-  过滤，可移植目录（导入/导出）也带上该字段。
+  过滤，可移植目录（导入/导出）也带上该字段。第三个取值 `other` 表示插件不属于
+  任何一套运行时：它同时出现在两个分区（`search_plugins(include_framework_agnostic=True)`），
+  也不受下面的运行时校验限制。
+- **安装防呆（运行时校验）**：`build_plugin_install_plan` 会把插件的 framework 与
+  远端实际检测到的运行时（`inspect_remote_plugin_inventory` 的
+  `frameworks.counterstrikesharp` / `frameworks.swiftly`）比对，结果放在 plan 的
+  `framework` 字段（`services/plugins/framework_compatibility.py`）。当插件所需运行时
+  缺失、而另一套运行时已安装时 `mismatch=True`——例如 SwiftlyS2 服务器装
+  CounterStrikeSharp 插件、或 CounterStrikeSharp 服务器装 SwiftlyS2 插件。此时
+  `validate_plugin_plan_acknowledgements` 直接拒绝（409），除非调用方显式传
+  `acknowledge_framework_mismatch`；该确认必须一路带到队列执行时的复核。控制台在
+  预检结果里高亮该警告，并在安装前弹出二次确认。两套运行时都没装只是 `missing`，
+  提示先去装框架，不阻止安装；Metamod 不算冲突运行时。
 - 管理员编辑走 `PATCH /api/v1/plugins/market/{id}`：只应用请求体里出现的字段，
   省略或 `null` 表示保持原值，空字符串表示清空可选文本字段。
 - 批量描述同步是 `POST /api/v1/plugins/market/descriptions/sync`（管理员）：

@@ -11692,7 +11692,7 @@ export interface components {
              * @default counterstrikesharp
              * @enum {string}
              */
-            framework: "counterstrikesharp" | "swiftly";
+            framework: "counterstrikesharp" | "swiftly" | "other";
             /** Github Url */
             github_url: string;
             /** Icon Url */
@@ -11734,7 +11734,7 @@ export interface components {
          */
         MarketPluginDescriptionSyncRequest: {
             /** Framework */
-            framework?: ("counterstrikesharp" | "swiftly") | null;
+            framework?: ("counterstrikesharp" | "swiftly" | "other") | null;
             /**
              * Overwrite
              * @default true
@@ -11887,7 +11887,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Framework */
-            framework?: ("counterstrikesharp" | "swiftly") | null;
+            framework?: ("counterstrikesharp" | "swiftly" | "other") | null;
             /** Icon Url */
             icon_url?: string | null;
             /** Is Recommended */
@@ -12819,6 +12819,32 @@ export interface components {
             }[];
         };
         /**
+         * PluginFrameworkCompatibilityView
+         * @description Whether the target server actually runs the plugin's runtime.
+         *
+         *     ``mismatch`` means the plugin's runtime is absent while the other one is
+         *     installed — a CounterStrikeSharp plugin on a SwiftlyS2 server or the
+         *     reverse. Installing then requires ``acknowledge_framework_mismatch``.
+         */
+        PluginFrameworkCompatibilityView: {
+            /** Conflicting */
+            conflicting?: string[];
+            /** Installed */
+            installed?: string[];
+            /**
+             * Mismatch
+             * @default false
+             */
+            mismatch: boolean;
+            /**
+             * Missing
+             * @default false
+             */
+            missing: boolean;
+            /** Plugin */
+            plugin: string;
+        };
+        /**
          * PluginInstallPlanView
          * @description Deterministic install preflight. Does not mutate the server.
          */
@@ -12831,6 +12857,7 @@ export interface components {
             compatibility_unknown?: string[];
             /** Dependencies */
             dependencies?: components["schemas"]["PluginRef"][];
+            framework: components["schemas"]["PluginFrameworkCompatibilityView"];
             /** Hard Conflicts */
             hard_conflicts?: components["schemas"]["PluginConflictView"][];
             /** Installation Order */
@@ -12852,8 +12879,15 @@ export interface components {
          * @description Acknowledge warnings and optionally pin the preflight plan hash.
          *
          *     ``install_dependencies`` is opt-in, matching the legacy web installer.
+         *     ``acknowledge_framework_mismatch`` is required when the preflight reports
+         *     that the server runs the other plugin runtime.
          */
         PluginInstallRequest: {
+            /**
+             * Acknowledge Framework Mismatch
+             * @default false
+             */
+            acknowledge_framework_mismatch: boolean;
             /** Acknowledge Warning Rule Ids */
             acknowledge_warning_rule_ids?: number[];
             /** Download Url */
@@ -18709,6 +18743,8 @@ export interface operations {
                 install_dependencies?: boolean;
                 /** @description Current soft-conflict rule IDs explicitly acknowledged */
                 acknowledge_warning_rule_ids?: number[];
+                /** @description Install even though the server runs the other plugin runtime */
+                acknowledge_framework_mismatch?: boolean;
                 /** @description Enable upgrade mode to auto-exclude config files */
                 upgrade_mode?: boolean;
             };

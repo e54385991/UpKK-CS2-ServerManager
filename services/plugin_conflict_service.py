@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import inspect
 import json
 import logging
-import re
 from collections.abc import Awaitable, Callable, Iterable
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
@@ -38,16 +36,24 @@ from services.plugin_inventory_service import (
     verified_market_plugin_ids,
 )
 from services.plugins.common import PluginPlanError, parse_dependency_ids
+from services.plugins.framework_compatibility import (
+    evaluate_framework_compatibility,
+    framework_mismatch_message,
+)
 from services.plugins.market_integration import configure_market_plan_handlers
+from services.plugins.panel_frameworks import (
+    GITHUB_REPOSITORY_PATTERN,
+    install_panel_framework,
+    panel_framework_key,
+)
+from services.plugins.progress import emit_plan_progress as _emit_plan_progress
 from services.plugins.tracking import derive_asset_glob, upsert_managed_plugin
 from services.plugins.upgrade_exclusions import apply_upgrade_mode_exclusions
 
 ProgressCallback = Callable[..., Awaitable[None]]
 logger = logging.getLogger(__name__)
 
-_GITHUB_REPOSITORY = re.compile(
-    r"^(?:https://github\.com/|git@github\.com:)([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$"
-)
+_GITHUB_REPOSITORY = GITHUB_REPOSITORY_PATTERN
 _ARCHIVE_EXTENSIONS = (".zip", ".tar.gz", ".tgz", ".tar", ".7z")
 _BLOCKED_ASSET_MARKERS = (
     "windows",
@@ -62,135 +68,10 @@ _BLOCKED_ASSET_MARKERS = (
     "symbols",
     "debug",
 )
-_PANEL_FRAMEWORK_REPOSITORIES = {
-    ("alliedmodders", "metamod-source"): "metamod",
-    ("roflmuffin", "counterstrikesharp"): "counterstrikesharp",
-}
-
-
-def _panel_framework_key(plugin: MarketPlugin) -> str | None:
-    """Identify frameworks that must use the panel's dedicated installers."""
-    match = _GITHUB_REPOSITORY.fullmatch((plugin.github_url or "").strip().rstrip("/"))
-    if match:
-        groups = match.groups()
-        repository_key = (str(groups[0]).casefold(), str(groups[1]).casefold())
-        if repository_key in _PANEL_FRAMEWORK_REPOSITORIES:
-            return _PANEL_FRAMEWORK_REPOSITORIES[repository_key]
-    normalized_title = re.sub(r"[^a-z0-9]+", "", (plugin.title or "").casefold())
-    if normalized_title in {"metamod", "metamodsource"}:
-        return "metamod"
-    if normalized_title == "counterstrikesharp":
-        return "counterstrikesharp"
-    return None
-
-
-async def _install_panel_framework(
-    db: AsyncSession,
-    plugin: MarketPlugin,
-    server: Server,
-    user: User,
-    framework_key: str,
-    progress: ProgressCallback | None,
-) -> dict[str, Any]:
-    """Route framework market entries through the panel-native installer."""
-    from services.plugin_auto_update_service import record_framework_installation
-    from services.ssh_manager import SSHManager
-
-    await _emit_plan_progress(
-        progress,
-        f"Using the panel-native installer for {plugin.title}",
-        step_id=f"plugin:{plugin.id}",
-        step_status="running",
-    )
-
-    async def framework_progress(
-        message: str,
-        _kind: str = "status",
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        await _emit_plan_progress(
-            progress,
-            message,
-            step_id=f"plugin:{plugin.id}",
-            step_status="running",
-            metadata=metadata,
-        )
-
-    manager = SSHManager()
-    if framework_key == "metamod":
-        success, message = await manager.install_metamod(server, framework_progress)
-        installed_frameworks = ("metamod",)
-    else:
-        success, message = await manager.install_counterstrikesharp(server, framework_progress)
-        installed_frameworks = ("metamod", "counterstrikesharp")
-    if not success:
-        return {"success": False, "plugin_id": plugin.id, "message": message}
-
-    tracking_failed = False
-    for installed_framework in installed_frameworks:
-        try:
-            await record_framework_installation(server, user, installed_framework)
-        except Exception as exc:
-            tracking_failed = True
-            logger.warning(
-                "Framework %s installed on server %s but tracking refresh failed: %s",
-                installed_framework,
-                server.id,
-                exc,
-            )
-    plugin.download_count += 1
-    plugin.install_count += 1
-    db.add(plugin)
-    await db.commit()
-    result: dict[str, Any] = {
-        "success": True,
-        "plugin_id": plugin.id,
-        "message": message,
-        "installation_method": "panel_native",
-        "framework": framework_key,
-        "restart_required": True,
-        "next_step": (
-            "Restart (or start) the server and wait for startup before locating generated configs."
-        ),
-    }
-    if tracking_failed:
-        result["tracking_warning"] = (
-            "The framework was installed, but panel version tracking could not be refreshed."
-        )
-    return result
-
-
-async def _emit_plan_progress(
-    progress: ProgressCallback | None,
-    message: str,
-    *,
-    step_id: str,
-    step_status: str,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    if progress is None:
-        return
-    event_metadata = {"step_id": step_id, "step_status": step_status}
-    if metadata:
-        event_metadata = {**event_metadata, **metadata}
-    try:
-        parameters = inspect.signature(progress).parameters.values()
-        accepts_metadata = any(item.kind == inspect.Parameter.VAR_POSITIONAL for item in parameters)
-        accepts_metadata = (
-            accepts_metadata
-            or sum(
-                item.kind
-                in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-                for item in parameters
-            )
-            >= 3
-        )
-    except TypeError, ValueError:
-        accepts_metadata = False
-    if accepts_metadata:
-        await progress(message, "status", event_metadata)
-    else:
-        await progress(message, "status")
+# Framework marketplace entries install through the panel-native installers.
+# The aliases keep the names existing callers and tests already patch.
+_panel_framework_key = panel_framework_key
+_install_panel_framework = install_panel_framework
 
 
 def _plugin_plan_confirmation_payload(plan: dict[str, Any]) -> dict[str, Any]:
@@ -202,6 +83,9 @@ def _plugin_plan_confirmation_payload(plan: dict[str, Any]) -> dict[str, Any]:
         "installation_order": plan["installation_order"],
         "hard_conflicts": plan["hard_conflicts"],
         "warnings": plan["warnings"],
+        # A runtime mismatch has to invalidate an earlier approval; the rest of
+        # the detected runtime state is informational and stays out of the hash.
+        "framework_mismatch": bool((plan.get("framework") or {}).get("mismatch")),
         "blocked": plan["blocked"],
     }
 
@@ -346,6 +230,9 @@ async def build_plugin_install_plan(
     warnings = [item for item in conflicts if item["severity"] == "warning"]
     hard_conflicts.sort(key=lambda item: int(item["rule_id"] or 0))
     warnings.sort(key=lambda item: int(item["rule_id"] or 0))
+    framework = evaluate_framework_compatibility(
+        target.framework, inventory.get("frameworks") or {}
+    )
     plan = {
         "server_id": server_id,
         "plugin": {"id": target.id, "title": target.title},
@@ -358,6 +245,7 @@ async def build_plugin_install_plan(
         "compatibility_unknown": sorted(installed_unknown),
         "hard_conflicts": hard_conflicts,
         "warnings": warnings,
+        "framework": framework,
         "steps": steps,
         "blocked": bool(hard_conflicts),
     }
@@ -373,11 +261,20 @@ async def build_plugin_install_plan(
 
 
 def validate_plugin_plan_acknowledgements(
-    plan: dict[str, Any], acknowledged_warning_rule_ids: Iterable[int]
+    plan: dict[str, Any],
+    acknowledged_warning_rule_ids: Iterable[int],
+    *,
+    acknowledge_framework_mismatch: bool = False,
 ) -> None:
     if plan["hard_conflicts"]:
         ids = ", ".join(str(item["rule_id"]) for item in plan["hard_conflicts"])
         raise PluginPlanError(f"Installation blocked by hard conflict rule(s): {ids}")
+    compatibility = plan.get("framework") or {}
+    if compatibility.get("mismatch") and not acknowledge_framework_mismatch:
+        raise PluginPlanError(
+            framework_mismatch_message(compatibility)
+            + ". Acknowledge the runtime mismatch to install anyway."
+        )
     required = {int(item["rule_id"]) for item in plan["warnings"]}
     acknowledged = {int(item) for item in acknowledged_warning_rule_ids}
     missing = required - acknowledged
@@ -718,6 +615,7 @@ async def _prepare_plugin_execution(
     expected_plan_hash: str | None,
     include_dependencies: bool,
     download_url: str | None,
+    acknowledge_framework_mismatch: bool = False,
 ) -> tuple[
     dict[str, Any], set[int], dict[int, MarketPlugin], dict[int, dict[str, Any]], dict | None
 ]:
@@ -730,7 +628,11 @@ async def _prepare_plugin_execution(
     )
     if expected_plan_hash and refreshed_plan["plan_hash"] != expected_plan_hash:
         raise PluginPlanError("Plugin plan changed; review and approve the new plan")
-    validate_plugin_plan_acknowledgements(refreshed_plan, acknowledged_warning_rule_ids)
+    validate_plugin_plan_acknowledgements(
+        refreshed_plan,
+        acknowledged_warning_rule_ids,
+        acknowledge_framework_mismatch=acknowledge_framework_mismatch,
+    )
     installed = set(refreshed_plan["already_installed"])
     plugins = await MarketPlugin.get_by_ids(db, refreshed_plan["installation_order"])
     by_id = {plugin.id: plugin for plugin in plugins}
@@ -779,6 +681,7 @@ async def execute_plugin_install_plan(
     upgrade_mode: bool = False,
     exclude_dirs: list[str] | None = None,
     exclude_files: list[str] | None = None,
+    acknowledge_framework_mismatch: bool = False,
 ) -> dict[str, Any]:
     """Recompute and execute a plan, stopping immediately after any failure."""
     plan = await build_plugin_install_plan(
@@ -790,7 +693,11 @@ async def execute_plugin_install_plan(
     )
     if expected_plan_hash and plan["plan_hash"] != expected_plan_hash:
         raise PluginPlanError("Plugin plan changed; review and approve the new plan")
-    validate_plugin_plan_acknowledgements(plan, acknowledged_warning_rule_ids)
+    validate_plugin_plan_acknowledgements(
+        plan,
+        acknowledged_warning_rule_ids,
+        acknowledge_framework_mismatch=acknowledge_framework_mismatch,
+    )
     completed: list[dict[str, Any]] = []
 
     async with _optional_server_lock(server.id, acquire_lock, lock_operation):
@@ -818,6 +725,7 @@ async def execute_plugin_install_plan(
             expected_plan_hash,
             include_dependencies,
             download_url,
+            acknowledge_framework_mismatch,
         )
 
         for current_id in refreshed_plan["installation_order"]:
@@ -829,7 +737,11 @@ async def execute_plugin_install_plan(
                 include_dependencies=include_dependencies,
                 server=refreshed_server,
             )
-            validate_plugin_plan_acknowledgements(latest_plan, acknowledged_warning_rule_ids)
+            validate_plugin_plan_acknowledgements(
+                latest_plan,
+                acknowledged_warning_rule_ids,
+                acknowledge_framework_mismatch=acknowledge_framework_mismatch,
+            )
             if latest_plan["installation_order"] != refreshed_plan["installation_order"]:
                 raise PluginPlanError(
                     "Plugin dependency graph changed during execution; review a new plan"

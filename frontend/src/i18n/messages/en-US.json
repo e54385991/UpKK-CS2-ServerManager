@@ -743,7 +743,7 @@
       "success": "{name} was added to the marketplace.",
       "failed": "Could not add the plugin.",
       "framework": "Runtime",
-      "frameworkHint": "Which runtime the plugin targets. Defaults to CounterStrikeSharp; pick SwiftlyS2 for Swiftly plugins."
+      "frameworkHint": "Which runtime the plugin targets. Defaults to CounterStrikeSharp; pick SwiftlyS2 for Swiftly plugins, or “Other / any runtime” for a listing that is not tied to either and can be installed anywhere."
     },
     "installDialogTitle": "Install {title}",
     "installDialogHelp": "Same as the web installer: pick a server, release, and upgrade options, then watch live status here.",
@@ -882,7 +882,8 @@
     "frameworkSections": "Plugin runtime sections",
     "frameworks": {
       "counterstrikesharp": "CounterStrikeSharp",
-      "swiftly": "SwiftlyS2"
+      "swiftly": "SwiftlyS2",
+      "other": "Other / any runtime"
     },
     "edit": {
       "open": "Edit",
@@ -919,7 +920,11 @@
         "skipped": "Skipped",
         "failed": "Failed"
       }
-    }
+    },
+    "frameworkMismatchTitle": "Runtime mismatch",
+    "frameworkMismatch": "This server runs {server}, which does not suit {plugin} plugins: it will not be loaded.",
+    "frameworkMismatchConfirm": "Install anyway?",
+    "frameworkMissing": "{plugin} was not detected on this server. Install it under Frameworks first, or the plugin stays inactive."
   },
   "assistant": {
     "title": "AI Assistant",

@@ -223,10 +223,17 @@ async def test_inventory_remote_inspection_paths(monkeypatch):
         await inventory.inspect_remote_plugin_inventory(server)
     metas = base64.b64encode(b"one.vdf\0two.vdf\0").decode()
     css = base64.b64encode(b"PluginA/PluginA.dll\0").decode()
-    output = f"metamod=1\ncounterstrikesharp=1\nmetamod_plugins={metas}\ncounterstrikesharp_plugins={css}\n"
+    output = (
+        f"metamod=1\nswiftly=1\ncounterstrikesharp=1\n"
+        f"metamod_plugins={metas}\ncounterstrikesharp_plugins={css}\n"
+    )
     manager = _Manager(True, output)
     monkeypatch.setattr(inventory, "SSHManager", lambda: manager)
     result = await inventory.inspect_remote_plugin_inventory(server)
-    assert result["frameworks"] == {"metamod": True, "counterstrikesharp": True}
+    assert result["frameworks"] == {
+        "metamod": True,
+        "counterstrikesharp": True,
+        "swiftly": True,
+    }
     assert len(result["plugins"]) == 3
     manager.disconnect.assert_awaited_once()

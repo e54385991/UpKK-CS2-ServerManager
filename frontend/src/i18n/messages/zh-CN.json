@@ -743,7 +743,7 @@
       "success": "已添加插件 {name}。",
       "failed": "添加插件失败。",
       "framework": "运行框架",
-      "frameworkHint": "插件属于哪套运行时。默认 CounterStrikeSharp；SwiftlyS2 插件请切换到 SwiftlyS2。"
+      "frameworkHint": "插件属于哪套运行时。默认 CounterStrikeSharp；SwiftlyS2 插件请选 SwiftlyS2；选「其他 / 通用」表示不受框架限制，任何服务器都能安装。"
     },
     "installDialogTitle": "安装 {title}",
     "installDialogHelp": "与网页版相同：选择服务器、发行版和升级选项，安装开始后在此查看实时状态。",
@@ -882,7 +882,8 @@
     "frameworkSections": "插件运行框架",
     "frameworks": {
       "counterstrikesharp": "CounterStrikeSharp",
-      "swiftly": "SwiftlyS2"
+      "swiftly": "SwiftlyS2",
+      "other": "其他 / 通用"
     },
     "edit": {
       "open": "编辑",
@@ -919,7 +920,11 @@
         "skipped": "已跳过",
         "failed": "失败"
       }
-    }
+    },
+    "frameworkMismatchTitle": "运行框架不匹配",
+    "frameworkMismatch": "这台服务器是 {server}，不适合 {plugin} 插件：装上去也不会被加载。",
+    "frameworkMismatchConfirm": "仍要继续安装吗？",
+    "frameworkMissing": "这台服务器还没有检测到 {plugin}，请先在「基座 / 框架」装好，插件才会生效。"
   },
   "assistant": {
     "title": "AI 助手",
