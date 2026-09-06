@@ -4,8 +4,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0023_plugin_download_cache"
-down_revision = "0022_plugin_ai_imports"
+revision: str = "0023_plugin_download_cache"
+down_revision: str | None = "0022_plugin_ai_imports"
 branch_labels = None
 depends_on = None
 
