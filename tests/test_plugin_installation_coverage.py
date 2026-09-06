@@ -12,6 +12,7 @@ import pytest
 from modules import GitHubPluginInstallRequest, GitHubPluginInstallResponse
 from services import plugin_diagnostic_service as diagnostics
 from services import plugin_installation as installation
+from services.plugins import install_commands
 
 
 def _server(**overrides):
@@ -39,9 +40,9 @@ def _request(**overrides):
 
 
 def test_installation_command_builders_and_retryability():
-    token = installation._operation_token("  run/with unsafe chars  ")
+    token = install_commands.operation_token("  run/with unsafe chars  ")
     assert token == "run-with-unsafe-chars"
-    assert installation._operation_token(None)
+    assert install_commands.operation_token(None)
     assert installation._remote_plugin_temp_dir(3, "op") == "/tmp/upkk-plugin-3-op"
     rsync = installation._build_plugin_copy_command(
         "/source dir", "/target", ["cfg/*.json"], use_rsync=True

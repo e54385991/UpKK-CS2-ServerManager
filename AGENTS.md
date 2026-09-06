@@ -105,6 +105,14 @@ HTTP request.
 - After a process restart, in-memory runners for **pending** (not yet
   started) jobs are gone; those records must fail cleanly instead of hanging
   as “queued” forever.
+- Every CounterStrikeSharp install **and** upgrade — the framework action, a
+  game-mode recipe, a marketplace/GitHub install of the framework itself, and
+  auto-update — must leave `addons/counterstrikesharp/configs/core.json` with
+  `FollowCS2ServerGuidelines: false`, seeding the file from the shipped
+  `core.example.json` when the install has not created one yet
+  (`services/plugins/counterstrikesharp_core.py`). The step runs after the
+  install succeeds, never fails it, and must not fire for plugins that merely
+  install *into* `addons/counterstrikesharp/plugins`.
 
 # 维护与质量基线
 

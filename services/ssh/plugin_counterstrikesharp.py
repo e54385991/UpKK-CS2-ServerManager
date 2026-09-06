@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from services.plugins.counterstrikesharp_core import apply_counterstrikesharp_core_defaults
+
 from .common import *
 from .common import _cleanup_local_download_dir
 
@@ -415,6 +417,13 @@ class CounterStrikeSharpMixin(SSHMixinBase):
             verify_success, verify_stdout, _ = await self.execute_command(verify_cmd)
 
             if verify_success and "installed" in verify_stdout:
+                # Community plugins need the guidelines gate off, and a fresh
+                # install has no core.json until the first launch writes one.
+                await apply_counterstrikesharp_core_defaults(
+                    self.execute_command,
+                    f"{cs2_dir}/game/csgo",
+                    report=send_progress,
+                )
                 await send_progress("=" * 60)
                 await send_progress("✓ CounterStrikeSharp installed successfully!")
                 await send_progress("=" * 60)
