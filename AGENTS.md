@@ -134,7 +134,14 @@ HTTP request.
   预检结果里高亮该警告，并在安装前弹出二次确认。两套运行时都没装只是 `missing`，
   提示先去装框架，不阻止安装；Metamod 不算冲突运行时。
 - 管理员编辑走 `PATCH /api/v1/plugins/market/{id}`：只应用请求体里出现的字段，
-  省略或 `null` 表示保持原值，空字符串表示清空可选文本字段。
+  省略或 `null` 表示保持原值，空字符串表示清空可选文本字段。分类（`category`）与
+  运行框架（`framework`）都可以在这里改，控制台的「编辑」对话框同样提供这两个下拉。
+- 添加插件时的「从 GitHub 自动填充」会顺带猜测分类：
+  `services/plugins/repo_classification.py` 依据仓库名、描述、topics 和 README 前
+  `README_SCAN_CHARS` 个字符推断 `framework` 与 `category`，随
+  `GET/POST .../market/repo-info` 一起返回。两套运行时都提到、或只是 Metamod 插件时
+  归为 `other`；识别不出时返回 `null`，表单保持原选择。这只是预填，管理员可覆盖，
+  且不会覆盖用户已手动改过的下拉。
 - 批量描述同步是 `POST /api/v1/plugins/market/descriptions/sync`（管理员）：
   用仓库 README 覆盖 marketplace 描述。它只访问 GitHub、不做任何 SSH 操作，
   因此**不进入**每服务器 FIFO，而是有界的同步 HTTP 调用——单次最多

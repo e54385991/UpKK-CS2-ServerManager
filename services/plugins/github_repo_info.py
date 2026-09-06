@@ -9,6 +9,10 @@ from modules.http_helper import http_helper
 from modules.schemas.plugins import GitHubRepoInfo
 from services.github_service import parse_github_url
 from services.plugins.github_readme import decode_readme, readme_excerpt
+from services.plugins.repo_classification import (
+    detect_plugin_framework,
+    suggest_plugin_category,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +47,11 @@ async def fetch_github_repo_info(
     if not success or not isinstance(data, dict):
         return GitHubRepoInfo(success=False, error=f"Failed to fetch repository info: {error}")
 
-    # Extract repo name and description
+    # Extract repo name, description and the repository's own topic labels.
     repo_name = data.get("name", repo)
     description = data.get("description", "")
+    raw_topics = data.get("topics")
+    topics = [str(item) for item in raw_topics] if isinstance(raw_topics, list) else []
 
     # Fetch the README so the console can offer the full long-form Markdown.
     readme_url = f"https://api.github.com/repos/{owner}/{repo}/readme"
@@ -62,10 +68,22 @@ async def fetch_github_repo_info(
         # legacy form still lands something usable in its single-line field.
         description = readme_excerpt(readme)
 
+    # Pre-fill the marketplace dropdowns so a SwiftlyS2 or Metamod-only plugin
+    # does not silently keep the CounterStrikeSharp default.
+    framework = detect_plugin_framework(
+        name=repo_name, description=description, readme=readme, topics=topics
+    )
+    category = suggest_plugin_category(
+        name=repo_name, description=description, readme=readme, topics=topics
+    )
+
     return GitHubRepoInfo(
         success=True,
         repo_name=repo_name,
         description=description if description else None,
         readme=readme,
         author=owner,
+        topics=topics,
+        framework=framework.value if framework else None,
+        category=category.value if category else None,
     )

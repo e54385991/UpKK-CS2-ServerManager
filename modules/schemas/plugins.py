@@ -177,7 +177,7 @@ class MarketPluginCreate(SQLModel):
     category: str = Field(default="other", description="Plugin category")
     framework: str = Field(
         default="counterstrikesharp",
-        description="Marketplace section: counterstrikesharp or swiftly",
+        description="Marketplace section: counterstrikesharp, swiftly, or other",
     )
     tags: Optional[str] = Field(None, description="Comma-separated tags")
     is_recommended: bool = Field(default=False, description="Whether to mark as recommended")
@@ -412,6 +412,10 @@ class GitHubRepoInfo(SQLModel):
     description: Optional[str] = None
     readme: Optional[str] = None
     author: Optional[str] = None
+    topics: List[str] = Field(default_factory=list)
+    # Marketplace classification guessed from the repository, for form pre-fill.
+    framework: Optional[str] = None
+    category: Optional[str] = None
     error: Optional[str] = None
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, get_args
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlmodel import select
@@ -46,10 +46,12 @@ from .schemas import (
     MarketPluginView,
     Page,
     PluginCategoryList,
+    PluginCategoryLiteral,
     PluginCategoryView,
     PluginConflictView,
     PluginDependencyOptionsView,
     PluginFrameworkCompatibilityView,
+    PluginFrameworkLiteral,
     PluginInstallPlanView,
     PluginInstallRequest,
     PluginInstallStep,
@@ -169,6 +171,21 @@ def _conflict_views(items: list[dict[str, Any]]) -> list[PluginConflictView]:
         )
         for item in items
     ]
+
+
+def _framework_literal(value: str | None) -> PluginFrameworkLiteral | None:
+    """Only pass through a runtime the contract actually declares."""
+    for allowed in get_args(PluginFrameworkLiteral):
+        if value == allowed:
+            return allowed
+    return None
+
+
+def _category_literal(value: str | None) -> PluginCategoryLiteral | None:
+    for allowed in get_args(PluginCategoryLiteral):
+        if value == allowed:
+            return allowed
+    return None
 
 
 def _framework_view(compatibility: dict[str, Any]) -> PluginFrameworkCompatibilityView:
@@ -324,6 +341,9 @@ async def fetch_market_repo_info(
         description=result.description,
         readme=result.readme,
         author=result.author,
+        topics=list(result.topics or [])[:50],
+        framework=_framework_literal(result.framework),
+        category=_category_literal(result.category),
         error=result.error,
     )
 

@@ -10214,6 +10214,17 @@
             ],
             "title": "Author"
           },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
           "description": {
             "anyOf": [
               {
@@ -10235,6 +10246,17 @@
               }
             ],
             "title": "Error"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
           },
           "readme": {
             "anyOf": [
@@ -10261,6 +10283,13 @@
           "success": {
             "title": "Success",
             "type": "boolean"
+          },
+          "topics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Topics",
+            "type": "array"
           }
         },
         "required": [
@@ -10287,7 +10316,7 @@
       },
       "GitHubRepoInfoView": {
         "additionalProperties": false,
-        "description": "Non-secret GitHub repository metadata returned by the auto-fill helper.",
+        "description": "Non-secret GitHub repository metadata returned by the auto-fill helper.\n\n``framework`` and ``category`` are guesses derived from the repository's\nname, description, topics and README; the add form pre-selects them and the\nadministrator can still override both before saving.",
         "properties": {
           "author": {
             "anyOf": [
@@ -10299,6 +10328,26 @@
               }
             ],
             "title": "Author"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "game_mode",
+                  "entertainment",
+                  "utility",
+                  "admin",
+                  "performance",
+                  "library",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
           },
           "description": {
             "anyOf": [
@@ -10321,6 +10370,22 @@
               }
             ],
             "title": "Error"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "enum": [
+                  "counterstrikesharp",
+                  "swiftly",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
           },
           "readme": {
             "anyOf": [
@@ -10348,6 +10413,14 @@
           "success": {
             "title": "Success",
             "type": "boolean"
+          },
+          "topics": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Topics",
+            "type": "array"
           }
         },
         "required": [
@@ -12861,7 +12934,7 @@
           },
           "framework": {
             "default": "counterstrikesharp",
-            "description": "Marketplace section: counterstrikesharp or swiftly",
+            "description": "Marketplace section: counterstrikesharp, swiftly, or other",
             "title": "Framework",
             "type": "string"
           },

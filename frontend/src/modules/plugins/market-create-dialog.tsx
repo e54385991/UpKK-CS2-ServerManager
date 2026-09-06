@@ -48,6 +48,10 @@ export function MarketPluginCreateDialog({
   const [framework, setFramework] = useState<PluginFramework>(
     DEFAULT_PLUGIN_FRAMEWORK,
   );
+  // Track manual edits so the GitHub auto-fill never overrides a deliberate
+  // classification.
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const [frameworkTouched, setFrameworkTouched] = useState(false);
   const [iconUrl, setIconUrl] = useState("");
   const [tags, setTags] = useState("");
   const [customInstallPath, setCustomInstallPath] = useState("");
@@ -90,6 +94,8 @@ export function MarketPluginCreateDialog({
     setVersion("");
     setCategory("other");
     setFramework(DEFAULT_PLUGIN_FRAMEWORK);
+    setCategoryTouched(false);
+    setFrameworkTouched(false);
     setIconUrl("");
     setTags("");
     setCustomInstallPath("");
@@ -139,10 +145,29 @@ export function MarketPluginCreateDialog({
     if (result.data.author) {
       setAuthor((current) => current.trim() || result.data.author || "");
     }
+    // The runtime and category guesses come from the repository's topics,
+    // description and README. They only replace an untouched selection, so a
+    // deliberate choice is never overwritten.
+    const detected: string[] = [];
+    if (result.data.framework && !frameworkTouched) {
+      setFramework(result.data.framework);
+      detected.push(t(`frameworks.${result.data.framework}`));
+    }
+    if (result.data.category && !categoryTouched) {
+      setCategory(result.data.category);
+      detected.push(t(`categories.${result.data.category}`));
+    }
     setNotice(
-      result.data.readme
-        ? t("create.autoFillReadmeSuccess")
-        : t("create.autoFillSuccess"),
+      [
+        result.data.readme
+          ? t("create.autoFillReadmeSuccess")
+          : t("create.autoFillSuccess"),
+        detected.length > 0
+          ? t("create.autoFillClassified", { values: detected.join(" · ") })
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
     );
   }
 
@@ -275,6 +300,7 @@ export function MarketPluginCreateDialog({
               onChange={(event) => {
                 if (isPluginCategory(event.target.value)) {
                   setCategory(event.target.value);
+                  setCategoryTouched(true);
                 }
               }}
             >
@@ -298,6 +324,7 @@ export function MarketPluginCreateDialog({
               onChange={(event) => {
                 if (isPluginFramework(event.target.value)) {
                   setFramework(event.target.value);
+                  setFrameworkTouched(true);
                 }
               }}
             >

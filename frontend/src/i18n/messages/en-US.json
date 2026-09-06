@@ -743,7 +743,8 @@
       "success": "{name} was added to the marketplace.",
       "failed": "Could not add the plugin.",
       "framework": "Runtime",
-      "frameworkHint": "Which runtime the plugin targets. Defaults to CounterStrikeSharp; pick SwiftlyS2 for Swiftly plugins, or “Other / any runtime” for a listing that is not tied to either and can be installed anywhere."
+      "frameworkHint": "Which runtime the plugin targets. Defaults to CounterStrikeSharp; pick SwiftlyS2 for Swiftly plugins, or “Other / any runtime” for a listing that is not tied to either and can be installed anywhere.",
+      "autoFillClassified": "Classified from the repository: {values} (adjust if needed)."
     },
     "installDialogTitle": "Install {title}",
     "installDialogHelp": "Same as the web installer: pick a server, release, and upgrade options, then watch live status here.",

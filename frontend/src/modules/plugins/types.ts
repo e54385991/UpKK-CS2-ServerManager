@@ -173,6 +173,11 @@ export type GitHubRepoInfo = {
   /** The repository's full README Markdown, capped at the description column. */
   readonly readme: string | null;
   readonly author: string | null;
+  readonly topics: readonly string[];
+  /** Runtime guessed from the repository, or null when it is not clear. */
+  readonly framework: PluginFramework | null;
+  /** Marketplace category guessed from the repository, or null. */
+  readonly category: PluginCategory | null;
   readonly error: string | null;
 };
 

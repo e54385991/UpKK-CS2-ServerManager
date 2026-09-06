@@ -10693,16 +10693,22 @@ export interface components {
         GitHubRepoInfo: {
             /** Author */
             author?: string | null;
+            /** Category */
+            category?: string | null;
             /** Description */
             description?: string | null;
             /** Error */
             error?: string | null;
+            /** Framework */
+            framework?: string | null;
             /** Readme */
             readme?: string | null;
             /** Repo Name */
             repo_name?: string | null;
             /** Success */
             success: boolean;
+            /** Topics */
+            topics?: string[];
         };
         /**
          * GitHubRepoInfoRequest
@@ -10715,20 +10721,30 @@ export interface components {
         /**
          * GitHubRepoInfoView
          * @description Non-secret GitHub repository metadata returned by the auto-fill helper.
+         *
+         *     ``framework`` and ``category`` are guesses derived from the repository's
+         *     name, description, topics and README; the add form pre-selects them and the
+         *     administrator can still override both before saving.
          */
         GitHubRepoInfoView: {
             /** Author */
             author?: string | null;
+            /** Category */
+            category?: ("game_mode" | "entertainment" | "utility" | "admin" | "performance" | "library" | "other") | null;
             /** Description */
             description?: string | null;
             /** Error */
             error?: string | null;
+            /** Framework */
+            framework?: ("counterstrikesharp" | "swiftly" | "other") | null;
             /** Readme */
             readme?: string | null;
             /** Repo Name */
             repo_name?: string | null;
             /** Success */
             success: boolean;
+            /** Topics */
+            topics?: string[];
         };
         /**
          * GitHubTokenStatusResponse
@@ -11632,7 +11648,7 @@ export interface components {
             description?: string | null;
             /**
              * Framework
-             * @description Marketplace section: counterstrikesharp or swiftly
+             * @description Marketplace section: counterstrikesharp, swiftly, or other
              * @default counterstrikesharp
              */
             framework: string;

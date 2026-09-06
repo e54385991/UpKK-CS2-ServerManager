@@ -219,13 +219,21 @@ class PluginDependencyOptionsView(V1Model):
 
 
 class GitHubRepoInfoView(V1Model):
-    """Non-secret GitHub repository metadata returned by the auto-fill helper."""
+    """Non-secret GitHub repository metadata returned by the auto-fill helper.
+
+    ``framework`` and ``category`` are guesses derived from the repository's
+    name, description, topics and README; the add form pre-selects them and the
+    administrator can still override both before saving.
+    """
 
     success: bool
     repo_name: str | None = None
     description: str | None = None
     readme: str | None = Field(default=None, max_length=10000)
     author: str | None = None
+    topics: list[str] = Field(default_factory=list, max_length=50)
+    framework: PluginFrameworkLiteral | None = None
+    category: PluginCategoryLiteral | None = None
     error: str | None = None
 
 

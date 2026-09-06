@@ -60,6 +60,9 @@ export async function fetchMarketRepoInfo(
       description: result.data.description ?? null,
       readme: result.data.readme ?? null,
       author: result.data.author ?? null,
+      topics: result.data.topics ?? [],
+      framework: result.data.framework ?? null,
+      category: result.data.category ?? null,
       error: result.data.error ?? null,
     },
   };

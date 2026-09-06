@@ -743,7 +743,8 @@
       "success": "已添加插件 {name}。",
       "failed": "添加插件失败。",
       "framework": "运行框架",
-      "frameworkHint": "插件属于哪套运行时。默认 CounterStrikeSharp；SwiftlyS2 插件请选 SwiftlyS2；选「其他 / 通用」表示不受框架限制，任何服务器都能安装。"
+      "frameworkHint": "插件属于哪套运行时。默认 CounterStrikeSharp；SwiftlyS2 插件请选 SwiftlyS2；选「其他 / 通用」表示不受框架限制，任何服务器都能安装。",
+      "autoFillClassified": "已按仓库信息识别分类：{values}（可手动调整）。"
     },
     "installDialogTitle": "安装 {title}",
     "installDialogHelp": "与网页版相同：选择服务器、发行版和升级选项，安装开始后在此查看实时状态。",

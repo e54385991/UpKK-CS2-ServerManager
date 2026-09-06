@@ -282,3 +282,57 @@ def test_market_description_sync_rejects_invalid_plugin_ids():
     response = client.post("/api/v1/plugins/market/descriptions/sync", json={"plugin_ids": [0]})
 
     assert response.status_code == 422
+
+
+def test_market_update_changes_both_classifications(monkeypatch):
+    """The edit dialog must be able to move a listing between category and runtime."""
+    client, _user = _client()
+    updated = _sample_market(category=PluginCategory.UTILITY, framework=PluginFramework.OTHER)
+    update = AsyncMock(return_value=updated)
+    monkeypatch.setattr("api.routes.v1.plugins.legacy.update_plugin", update)
+    monkeypatch.setattr("api.routes.v1.plugins._dependency_refs", AsyncMock(return_value=[[]]))
+    monkeypatch.setattr("api.routes.v1.plugins.record_audit_event", AsyncMock())
+
+    response = client.patch(
+        "/api/v1/plugins/market/11",
+        json={"category": "utility", "framework": "other"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["category"] == "utility"
+    assert response.json()["framework"] == "other"
+    body = update.await_args.args[1]
+    assert body.category == "utility"
+    assert body.framework == "other"
+
+
+def test_market_update_applies_classifications_to_the_row():
+    """`apply_market_plugin_update` is what the legacy handler runs for a PATCH."""
+    from modules.models.plugins import MarketPlugin
+    from modules.schemas.plugins import MarketPluginUpdate
+    from services.plugins.catalog_fields import apply_market_plugin_update
+
+    plugin = MarketPlugin(
+        id=11,
+        github_url="https://github.com/acme/plugin",
+        title="Plugin",
+        category=PluginCategory.GAME_MODE,
+        framework=PluginFramework.COUNTERSTRIKESHARP,
+    )
+
+    apply_market_plugin_update(plugin, MarketPluginUpdate(category="library", framework="swiftly"))
+
+    assert plugin.category is PluginCategory.LIBRARY
+    assert plugin.framework is PluginFramework.SWIFTLY
+    # Untouched fields keep their stored value.
+    assert plugin.title == "Plugin"
+
+
+def test_market_update_rejects_an_unknown_classification():
+    client, _user = _client()
+
+    bad_category = client.patch("/api/v1/plugins/market/11", json={"category": "nope"})
+    bad_framework = client.patch("/api/v1/plugins/market/11", json={"framework": "sourcemod"})
+
+    assert bad_category.status_code == 422
+    assert bad_framework.status_code == 422
