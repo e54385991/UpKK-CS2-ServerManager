@@ -219,7 +219,7 @@ async def test_network_json_redirect_and_response_size_fail_safely():
         raise httpx.ConnectError("private proxy credential", request=request)
 
     client = GitHubAIClient("token", interval=0, transport=httpx.MockTransport(network_error))
-    with pytest.raises(GitHubImportError, match="network request failed"):
+    with pytest.raises(GitHubImportError, match="Unable to connect to GitHub API"):
         await client.verify()
     await client.close()
 

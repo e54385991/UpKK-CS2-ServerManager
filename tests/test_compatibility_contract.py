@@ -5,8 +5,10 @@ from __future__ import annotations
 import importlib
 import inspect
 import json
+from difflib import unified_diff
 from pathlib import Path
 
+import pytest
 from fastapi.routing import iter_route_contexts
 from starlette.routing import Match
 
@@ -22,6 +24,21 @@ BASELINE_DIRECTORY = Path(__file__).with_name("baselines")
 
 def _load_json(name: str):
     return json.loads((BASELINE_DIRECTORY / name).read_text(encoding="utf-8"))
+
+
+def _assert_contract(actual: object, name: str) -> None:
+    expected = _load_json(name)
+    if actual == expected:
+        return
+    actual_text = json.dumps(actual, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+    expected_text = json.dumps(expected, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+    diff = "\n".join(
+        unified_diff(expected_text, actual_text, fromfile=f"baseline/{name}", tofile="actual")
+    )
+    pytest.fail(
+        f"{name} differs from the checked-in compatibility contract. "
+        f"If this change is intentional, run `uv run python scripts/update_contract_baselines.py`.\n{diff[:12000]}"
+    )
 
 
 def _iter_registered_routes(routes):
@@ -52,13 +69,13 @@ def _first_http_route_name(app, path: str, method: str = "GET") -> str | None:
 
 
 def test_openapi_contract_matches_the_pre_refactor_baseline():
-    assert create_app(lifespan=None).openapi() == _load_json("openapi.json")
+    _assert_contract(create_app(lifespan=None).openapi(), "openapi.json")
 
 
 def test_route_registration_order_matches_the_pre_refactor_baseline():
     actual = _route_manifest(create_app(lifespan=None))
 
-    assert actual == _load_json("routes.json")
+    _assert_contract(actual, "routes.json")
     assert [route for route in actual if route["kind"] == "APIWebSocketRoute"] == [
         {
             "kind": "APIWebSocketRoute",

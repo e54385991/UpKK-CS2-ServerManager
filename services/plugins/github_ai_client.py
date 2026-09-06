@@ -15,6 +15,8 @@ import httpx
 from modules.plugin_ai import DocumentationSource, GitHubVerification, ImportOptions, repository_url
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+NETWORK_RETRIES = 3
+NETWORK_RETRY_DELAYS = (0.5, 1.0)
 
 
 class GitHubImportError(RuntimeError):
@@ -119,10 +121,7 @@ class GitHubAIClient:
             self._last_request = time.monotonic()
             if search:
                 self._last_search = self._last_request
-            try:
-                response = await self._read_response(path, params)
-            except httpx.HTTPError as exc:
-                raise GitHubImportError("GitHub network request failed") from exc
+            response = await self._request_with_network_retries(path, params)
             error = response_error(response)
             if isinstance(error, GitHubRateLimitError):
                 self._blocked = error
@@ -132,6 +131,36 @@ class GitHubAIClient:
                 return response.json()
             except ValueError as exc:
                 raise GitHubImportError("GitHub returned invalid JSON") from exc
+
+    async def _request_with_network_retries(
+        self, path: str, params: dict[str, str | int] | None
+    ) -> httpx.Response:
+        """Retry transient transport failures while keeping API errors final."""
+        for attempt in range(NETWORK_RETRIES):
+            try:
+                return await self._read_response(path, params)
+            except httpx.TimeoutException as exc:
+                if attempt + 1 == NETWORK_RETRIES:
+                    raise GitHubImportError(
+                        f"GitHub API timeout while requesting {path}; check outbound network or proxy"
+                    ) from exc
+            except httpx.ProxyError as exc:
+                raise GitHubImportError(
+                    f"GitHub proxy connection failed while requesting {path}; check proxy settings"
+                ) from exc
+            except httpx.ConnectError as exc:
+                if attempt + 1 == NETWORK_RETRIES:
+                    raise GitHubImportError(
+                        f"Unable to connect to GitHub API while requesting {path}; check DNS, firewall, or proxy"
+                    ) from exc
+            except httpx.NetworkError as exc:
+                if attempt + 1 == NETWORK_RETRIES:
+                    raise GitHubImportError(
+                        f"GitHub network error while requesting {path}; check outbound network or proxy"
+                    ) from exc
+            if attempt < len(NETWORK_RETRY_DELAYS):
+                await asyncio.sleep(NETWORK_RETRY_DELAYS[attempt])
+        raise AssertionError("network retry loop exhausted")
 
     async def _read_response(
         self, path: str, params: dict[str, str | int] | None

@@ -2706,6 +2706,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "POST"
+    ],
+    "name": "clear_plugin_download_cache",
+    "path": "/api/v1/settings/plugin-download-cache/clear"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "GET"
     ],
     "name": "get_maps_workspace",

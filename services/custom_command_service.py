@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from modules.models import Server
 from services.game_session import (
@@ -13,7 +13,6 @@ from services.game_session import (
     send_keys_command,
     session_name,
 )
-from services.ssh_manager import SSHManager
 
 VALID_CUSTOM_COMMAND_TARGETS = frozenset({"game_process", "host"})
 GAME_CONSOLE_CAPTURE_LINES = 200
@@ -23,6 +22,19 @@ GAME_CONSOLE_OUTPUT_LIMIT = 12_000
 
 _ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 _UNSAFE_TERMINAL_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]")
+
+if TYPE_CHECKING:
+    from services.ssh_manager import SSHManager as SSHManagerType
+
+SSHManager = None
+
+
+def _ssh_manager():
+    if SSHManager is not None:
+        return SSHManager()
+    from services.ssh_manager import SSHManager as Manager
+
+    return Manager()
 
 
 class CustomCommandError(ValueError):
@@ -89,7 +101,7 @@ def _bounded_console_output(output: str) -> str:
 
 
 async def _capture_game_console_response(
-    ssh_manager: SSHManager,
+    ssh_manager: SSHManagerType,
     manager: str,
     name: str,
     baseline: str | None,
@@ -126,7 +138,7 @@ async def read_game_console(server: Server, *, lines: int = 120) -> Dict[str, An
     if not 10 <= lines <= 500:
         raise CustomCommandError("Game console lines must be between 10 and 500")
 
-    ssh_manager = SSHManager()
+    ssh_manager = _ssh_manager()
     connect_success, connect_message = await ssh_manager.connect(server)
     if not connect_success:
         raise RuntimeError(f"SSH connection failed: {connect_message}")
@@ -174,7 +186,7 @@ async def execute_custom_commands(
     if target not in VALID_CUSTOM_COMMAND_TARGETS:
         raise CustomCommandError(f"Invalid custom command target: {target}")
 
-    ssh_manager = SSHManager()
+    ssh_manager = _ssh_manager()
     connect_success, connect_message = await ssh_manager.connect(server)
     if not connect_success:
         return {

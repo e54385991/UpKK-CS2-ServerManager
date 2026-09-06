@@ -8,11 +8,11 @@ from collections import defaultdict
 from typing import Any, Iterable, Sequence
 
 from modules.models import Server
-from services.ssh_manager import SSHManager
 
 STEAM_RUNTIME_3 = "steamrt3"
 STEAM_RUNTIME_4 = "steamrt4"
 STEAM_RUNTIMES = (STEAM_RUNTIME_3, STEAM_RUNTIME_4)
+SSHManager = None
 
 _STEAM_RUNTIME_MARKER = re.compile(
     r"(?<![A-Za-z0-9])steam[-_.]?rt[-_.]?(?P<version>[34])(?![0-9])",
@@ -129,7 +129,10 @@ def unknown_linux_runtime_profile(reason: str) -> dict[str, Any]:
 
 async def detect_linux_runtime_profile(server: Server) -> dict[str, Any]:
     """Probe one authorized server without persisting potentially stale OS state."""
-    manager = SSHManager()
+    manager_class = SSHManager
+    if manager_class is None:
+        from services.ssh_manager import SSHManager as manager_class
+    manager = manager_class()
     try:
         connected, message = await manager.connect(server)
     except Exception as exc:

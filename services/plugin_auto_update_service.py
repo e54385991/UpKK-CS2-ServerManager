@@ -1,4 +1,6 @@
-"""Per-server automatic updates for tracked GitHub plugins and frameworks."""
+"""Automatic updates for tracked GitHub plugins and frameworks."""
+
+from __future__ import annotations
 
 import asyncio
 import fnmatch
@@ -40,9 +42,18 @@ from services.server_operation_hub import (
     ServerOperationConflict,
     server_operation_hub,
 )
-from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
+SSHManager = None
+
+
+def _ssh_manager():
+    if SSHManager is not None:
+        return SSHManager()
+    from services.ssh_manager import SSHManager as Manager
+
+    return Manager()
+
 
 CONFIG_EXCLUSIONS = ["*.cfg", "*.conf", "*.ini", "*.json", "*.toml", "*.yaml", "*.yml"]
 FRAMEWORKS = {
@@ -426,7 +437,7 @@ class PluginAutoUpdateService:
         )
 
     async def _latest_metamod(self, server: Server) -> Tuple[bool, Optional[Dict[str, Any]], str]:
-        manager = SSHManager()
+        manager = _ssh_manager()
         connected, message = await manager.connect(server)
         if not connected:
             return False, None, message
@@ -452,13 +463,10 @@ class PluginAutoUpdateService:
         self, server: Server, user: User, item: ManagedPlugin, latest: Dict[str, Any]
     ) -> Tuple[bool, str]:
         if item.framework_key == "metamod":
-            return await SSHManager().update_metamod(server)
+            return await _ssh_manager().update_metamod(server)
         if item.framework_key == "counterstrikesharp":
-            return await SSHManager().update_counterstrikesharp(server)
+            return await _ssh_manager().update_counterstrikesharp(server)
 
-        # Automatic updates operate on the selected managed item only.  Do not
-        # recurse through a market dependency graph; CONFIG_EXCLUSIONS plus the
-        # persisted rules below are the non-destructive upgrade-mode behavior.
         request = await managed_install_request(item, latest, CONFIG_EXCLUSIONS)
         async with async_session_maker() as db:
             result = await install_github_plugin(server.id, request, db, user)
@@ -924,7 +932,7 @@ class PluginAutoUpdateService:
                     total=len(candidates),
                     log="Checking whether the server is currently running",
                 )
-                status_check_ok, server_state = await SSHManager().get_server_status(server)
+                status_check_ok, server_state = await _ssh_manager().get_server_status(server)
                 was_running = status_check_ok and server_state == "running"
                 status_check_message = (
                     server_state if status_check_ok else "Could not determine server state"
@@ -969,7 +977,7 @@ class PluginAutoUpdateService:
                     log="Backup requested by: "
                     + ", ".join(item.display_name for item, _ in backup_items),
                 )
-                backup_success, backup_message = await SSHManager().backup_plugins(server)
+                backup_success, backup_message = await _ssh_manager().backup_plugins(server)
             if backup_items and not backup_success:
                 message = (
                     f"Plugin backup failed; plugins requiring backup were skipped: {backup_message}"
@@ -1092,7 +1100,7 @@ class PluginAutoUpdateService:
                         total=len(candidates),
                         log="Batch restart policy triggered one server restart",
                     )
-                    restart_manager = SSHManager()
+                    restart_manager = _ssh_manager()
                     (
                         manager_ready,
                         preflight_message,
