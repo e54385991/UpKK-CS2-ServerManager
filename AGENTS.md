@@ -186,6 +186,14 @@ HTTP request.
   service/repository。长 I/O 期间不得持有请求数据库 session。
 - 服务器长任务继续使用 `services.server_operation_hub` 的 202 + 每服务器 FIFO + 可回放 SSE；
   不使用 FastAPI `BackgroundTasks` 替代持久队列。生命周期后台循环由 `task_registry` 统一管理。
+- 同一授权批次的缓存读取优先使用 `redis_manager.get_many()`（一次 MGET），保持输入顺序、
+  key 前缀和缺失值语义；磁盘/A2S 概览默认只读缓存，缺失不得隐式触发远程探测。
+- 遥测只读 SSH 共用 `services.telemetry_runtime.ssh_probe_limiter`：进程内总并发 4，
+  同一规范化 host + SSH port 并发 1。A2S 前台刷新和后台扫描共用单例服务的 8/服务器 1
+  限流器；不得为每个请求新建限流器。保留单项超时、后台跳过策略和主机信息 Redis 去重锁。
+- 探测前用短事务读取授权快照并结束事务，禁止将请求数据库 session 传给并发子任务。
+  使用 `collect_ordered()` 收集有序批次，取消或异常必须取消并等待子任务清理，并释放 SSH
+  租约、Redis 锁和并发槽位。批次 DEBUG 日志只记录数量、命中、失败和耗时等聚合信息。
 - 新生产 Python/TypeScript 文件不超过 800 行，测试文件不超过 1200 行；应按领域和职责拆分，
   而不是通过 `Any`、`cast()` 或无理由 `type: ignore` 绕过类型检查。
 

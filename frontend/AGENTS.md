@@ -79,6 +79,12 @@ experimental flags required:
   (`typedRoutes: true`). Runtime path strings must be asserted `as Route`.
 
 Do not reintroduce blocking, all-or-nothing server waits at the layout level.
+Start independent requests together, then give slow optional data its own async
+Server Component and `Suspense` boundary. For example, overview host probes must
+not delay counters or recent servers; preserve per-section failure/empty states
+and locale behavior. Associate batches with a server-ID `Map`, preserving the
+response order. Guard streaming with a controlled mock-backend gate so tests
+prove the fast content is visible while slow data is still pending.
 
 ### Caching & navigation: why `cacheComponents` is off
 
@@ -94,10 +100,11 @@ Do not reintroduce blocking, all-or-nothing server waits at the layout level.
 - The agreed plan gates `cacheComponents` behind an upstream memory-growth
   report (a hard memory stress-test gate) that is unmet.
 
-Non-blocking, instant navigation is already delivered without these flags via
-the shared App Shell (persistent sidebar/topbar), per-route `loading.tsx`
-skeletons, `<Suspense>`-streamed server data, and `<Link>` prefetch. Verified
-with Lighthouse: Performance 100 and CLS 0 on `/login` and `/overview`. Revisit
+Navigation uses the shared App Shell (persistent sidebar/topbar), per-route
+`loading.tsx` skeletons, `<Suspense>`-streamed server data, and `<Link>` prefetch.
+Historical Lighthouse runs recorded Performance 100 and CLS 0 on `/login` and
+`/overview`; those observations are not a current performance guarantee. Measure
+the changed route under controlled delays and real browser navigation. Revisit
 `cacheComponents` once it is stable for cookie-driven apps and the memory gate
 is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-partial-prefetching.md`.
 
@@ -122,7 +129,7 @@ report that specific gap instead of inventing a passing threshold.
   `upkk_access_token_<SESSION_COOKIE_SUFFIX>` when two consoles share a
   host). Its value is
   the JWT. `src/modules/auth/session.ts` resolves the user via
-  `GET /api/auth/me` with a bearer header; `src/proxy.ts` cheaply guards console
+  `GET /api/v1/auth/me` with a bearer header; `src/proxy.ts` cheaply guards console
   routes on cookie presence; layouts validate for real.
 - Server-side calls use `src/shared/api/server-fetch.ts` (`apiFetch`), which
   attaches the bearer from the cookie and returns structured `ApiResult`
@@ -254,7 +261,8 @@ npm run build:start  # production build, then start
 npm run lint       # ESLint (flat config)
 npm run typecheck  # tsc --noEmit
 npm run test:unit  # TypeScript module tests (Node's built-in test runner)
-npm run gen:api    # regenerate OpenAPI types from ../openapi.json
+npm run gen:api    # regenerate OpenAPI types from ../tests/baselines/openapi.json
+npx playwright test --config=playwright.overview.config.ts # isolated streaming regression
 ```
 
 Completion scope is defined in the root `AGENTS.md` under **Task Completion
@@ -265,7 +273,11 @@ frontend changes separately during development, run the applicable commands
 and run `npm run check:bundle` after the production build. The bundle check
 checks the gzip size of every route's initial client
 chunks (250 KiB per route, 150 KiB per chunk). Heavy editors and terminal
-libraries must remain in lazy chunks.
+libraries must remain in lazy chunks. The CI `frontend-playwright-smoke` job also
+runs the isolated overview configuration after the public-page smoke. It starts
+its own mock backend and Next dev server on loopback ports 38121/31821 (override
+with `OVERVIEW_MOCK_PORT` / `OVERVIEW_TEST_PORT`); never point this fixture at a
+live backend or run a production build concurrently against the same `.next`.
 
 ## DTO and boundary rules
 

@@ -7,14 +7,14 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from time import monotonic
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VENV_BIN = Path(sys.executable).parent
 
-# The full-source suite currently covers the legacy monoliths at 86.74%. Keep
-# that measured value as a ratchet floor while those modules are split and
-# tested in smaller domains; this prevents regressions without pretending the
-# legacy coverage gap has already been eliminated.
+# The legacy full-source suite established this fixed ratchet floor. Keep it
+# while those modules are split and tested in smaller domains; a newer local
+# coverage measurement is evidence, not a reason to weaken this gate.
 FULL_PYTHON_COVERAGE_FLOOR = "86.70"
 
 
@@ -30,7 +30,9 @@ def executable(name: str) -> str:
 
 def run(label: str, command: list[str]) -> bool:
     print(f"\n==> {label}", flush=True)
+    started = monotonic()
     result = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
+    print(f"Completed: {label} ({monotonic() - started:.2f}s)", flush=True)
     if result.returncode:
         print(f"FAILED: {label} (exit code {result.returncode})", flush=True)
         return False
@@ -78,9 +80,8 @@ def main() -> None:
             "1Panel application package",
             [sys.executable, "scripts/check_1panel_package.py"],
         ),
-        ("Tests and compatibility contracts", [pytest, "-q"]),
         (
-            "Full Python coverage",
+            "Tests, compatibility contracts and full Python coverage",
             [
                 pytest,
                 "-q",
@@ -103,6 +104,7 @@ def main() -> None:
                 "tests/test_ai_domain_units.py",
                 "tests/test_discord_bot_agent_policy.py",
                 "tests/test_batch_performance_contracts.py",
+                "tests/test_telemetry_batches.py",
                 "--cov=services.ai",
                 "--cov=services.discord",
                 "--cov=services.servers",
@@ -138,7 +140,11 @@ def main() -> None:
             [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "run", "check:bundle"],
         ),
         ("Python dependency audit", [pip_audit, "-r", "requirements.txt"]),
-        ("Frontend dependency audit", [npm, "audit", "--omit=dev"]),
+        ("Legacy frontend dependency audit", [npm, "audit", "--omit=dev"]),
+        (
+            "Next.js dependency audit",
+            [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "audit", "--omit=dev"],
+        ),
     )
     failures: list[str] = []
     for label, command in checks:
