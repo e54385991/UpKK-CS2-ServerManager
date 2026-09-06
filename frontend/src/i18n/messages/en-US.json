@@ -741,7 +741,9 @@
       "submit": "Add plugin",
       "creating": "Adding…",
       "success": "{name} was added to the marketplace.",
-      "failed": "Could not add the plugin."
+      "failed": "Could not add the plugin.",
+      "framework": "Runtime",
+      "frameworkHint": "Which runtime the plugin targets. Defaults to CounterStrikeSharp; pick SwiftlyS2 for Swiftly plugins."
     },
     "installDialogTitle": "Install {title}",
     "installDialogHelp": "Same as the web installer: pick a server, release, and upgrade options, then watch live status here.",
@@ -873,6 +875,47 @@
       "result": {
         "imported": "Imported",
         "updated": "Updated",
+        "skipped": "Skipped",
+        "failed": "Failed"
+      }
+    },
+    "frameworkSections": "Plugin runtime sections",
+    "frameworks": {
+      "counterstrikesharp": "CounterStrikeSharp",
+      "swiftly": "SwiftlyS2"
+    },
+    "edit": {
+      "open": "Edit",
+      "hint": "Admin: edit this listing's description, category, runtime and dependencies.",
+      "title": "Edit {name}",
+      "description": "Update how this plugin appears in the plugin center. Only changed fields are submitted.",
+      "pullReadme": "Pull README from GitHub",
+      "noReadme": "This repository has no usable README or description.",
+      "installPathHint": "Leave blank to keep the current setting; a relative path overrides the extract target.",
+      "titleRequired": "Title must not be empty.",
+      "noChanges": "Nothing changed yet.",
+      "submit": "Save changes",
+      "saving": "Saving…",
+      "success": "Updated {name}.",
+      "failed": "Could not save the listing.",
+      "forbidden": "Only administrators can edit plugin center listings."
+    },
+    "sync": {
+      "open": "Sync descriptions",
+      "hint": "Admin: refresh every listing in this section from its GitHub README.",
+      "title": "Sync plugin descriptions",
+      "confirm": "Re-sync descriptions for every plugin in “{framework}” from its GitHub README? Existing descriptions are overwritten.",
+      "running": "Syncing…",
+      "resultTitle": "Sync result",
+      "summary": "{updated} updated, {unchanged} unchanged, {skipped} skipped, {failed} failed",
+      "remaining": "{count} listings were not processed yet. Run the sync again to continue.",
+      "empty": "No listings needed a sync.",
+      "close": "Close",
+      "failed": "Could not sync plugin descriptions.",
+      "forbidden": "Only administrators can sync plugin descriptions.",
+      "action": {
+        "updated": "Updated",
+        "unchanged": "Unchanged",
         "skipped": "Skipped",
         "failed": "Failed"
       }

@@ -32,6 +32,34 @@ def _canonical_github_repository(value: str) -> str:
     return f"https://github.com/{owner}/{repository.removesuffix('.git')}"
 
 
+PluginCategoryLiteral = Literal[
+    "game_mode",
+    "entertainment",
+    "utility",
+    "admin",
+    "performance",
+    "library",
+    "other",
+]
+
+# The marketplace is split into these two top-level sections. New listings
+# default to the CounterStrikeSharp stack, which is what most CS2 plugins
+# target.
+PluginFrameworkLiteral = Literal["counterstrikesharp", "swiftly"]
+
+DEFAULT_PLUGIN_FRAMEWORK: PluginFrameworkLiteral = "counterstrikesharp"
+
+
+def _dependency_id_list(value: str | None) -> str | None:
+    if value is None:
+        return None
+    parts = [item.strip() for item in value.split(",") if item.strip()]
+    if any(not item.isdigit() or int(item) <= 0 for item in parts):
+        raise ValueError("dependencies must contain positive plugin IDs")
+    unique = list(dict.fromkeys(parts))
+    return ",".join(unique) or None
+
+
 class MarketPluginCreateRequest(ApiRequest):
     """Strict administrator request for adding a marketplace listing."""
 
@@ -40,15 +68,8 @@ class MarketPluginCreateRequest(ApiRequest):
     description: str | None = Field(default=None, max_length=10000)
     author: str | None = Field(default=None, max_length=255)
     version: str | None = Field(default=None, max_length=50)
-    category: Literal[
-        "game_mode",
-        "entertainment",
-        "utility",
-        "admin",
-        "performance",
-        "library",
-        "other",
-    ] = "other"
+    category: PluginCategoryLiteral = "other"
+    framework: PluginFrameworkLiteral = DEFAULT_PLUGIN_FRAMEWORK
     tags: str | None = Field(default=None, max_length=1000)
     is_recommended: bool = False
     icon_url: str | None = Field(default=None, max_length=500)
@@ -63,13 +84,89 @@ class MarketPluginCreateRequest(ApiRequest):
     @field_validator("dependencies")
     @classmethod
     def validate_dependency_ids(cls, value: str | None) -> str | None:
+        return _dependency_id_list(value)
+
+
+class MarketPluginUpdateRequest(ApiRequest):
+    """Strict administrator request for editing an existing listing.
+
+    Only the fields present in the request body are applied, so an edit form
+    can send a partial payload. An omitted field — or an explicit ``null`` —
+    leaves the stored value alone; send an empty string to clear an optional
+    text field.
+    """
+
+    title: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    author: str | None = Field(default=None, max_length=255)
+    version: str | None = Field(default=None, max_length=50)
+    category: PluginCategoryLiteral | None = None
+    framework: PluginFrameworkLiteral | None = None
+    tags: str | None = Field(default=None, max_length=1000)
+    is_recommended: bool | None = None
+    icon_url: str | None = Field(default=None, max_length=500)
+    dependencies: str | None = Field(default=None, max_length=1000)
+    custom_install_path: str | None = Field(default=None, max_length=255)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        parts = [item.strip() for item in value.split(",") if item.strip()]
-        if any(not item.isdigit() or int(item) <= 0 for item in parts):
-            raise ValueError("dependencies must contain positive plugin IDs")
-        unique = list(dict.fromkeys(parts))
-        return ",".join(unique) or None
+        text = value.strip()
+        if not text:
+            raise ValueError("title must not be empty")
+        return text
+
+    @field_validator("dependencies")
+    @classmethod
+    def validate_dependency_ids(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        # An empty list stays an empty string so the edit actually clears the
+        # stored dependencies instead of being treated as "leave unchanged".
+        return _dependency_id_list(value) or ""
+
+
+class MarketPluginDescriptionSyncRequest(ApiRequest):
+    """Administrator request to refresh descriptions from GitHub READMEs."""
+
+    plugin_ids: list[int] = Field(default_factory=list, max_length=200)
+    framework: PluginFrameworkLiteral | None = None
+    overwrite: bool = True
+
+    @field_validator("plugin_ids")
+    @classmethod
+    def validate_plugin_ids(cls, values: list[int]) -> list[int]:
+        if any(item <= 0 for item in values):
+            raise ValueError("plugin_ids must contain positive plugin IDs")
+        return list(dict.fromkeys(values))
+
+
+class MarketPluginDescriptionSyncItemView(V1Model):
+    """What happened to one listing during a description sync."""
+
+    plugin_id: int
+    title: str
+    github_url: str
+    action: Literal["updated", "unchanged", "skipped", "failed"]
+    message: str | None = None
+
+
+class MarketPluginDescriptionSyncView(V1Model):
+    """Summary of a marketplace description sync.
+
+    ``remaining`` is non-zero when the marketplace holds more listings than one
+    request refreshes; run the sync again to continue.
+    """
+
+    total: int
+    updated: int
+    unchanged: int
+    skipped: int
+    failed: int
+    remaining: int = 0
+    items: list[MarketPluginDescriptionSyncItemView] = Field(default_factory=list)
 
 
 class GitHubRepoInfoRequest(ApiRequest):
@@ -92,10 +189,12 @@ class MarketPluginView(V1Model):
     author: str | None = None
     version: str | None = None
     category: str
+    framework: str = DEFAULT_PLUGIN_FRAMEWORK
     tags: str | None = None
     is_recommended: bool
     icon_url: str | None = None
     github_url: str
+    custom_install_path: str | None = None
     download_count: int
     install_count: int
     dependencies: list[PluginRef] = Field(default_factory=list)
@@ -486,7 +585,14 @@ class PluginCatalogImportRequest(ApiRequest):
 
 __all__ = [
     "PluginRef",
+    "PluginCategoryLiteral",
+    "PluginFrameworkLiteral",
+    "DEFAULT_PLUGIN_FRAMEWORK",
     "MarketPluginCreateRequest",
+    "MarketPluginUpdateRequest",
+    "MarketPluginDescriptionSyncRequest",
+    "MarketPluginDescriptionSyncItemView",
+    "MarketPluginDescriptionSyncView",
     "GitHubRepoInfoRequest",
     "MarketPluginView",
     "PluginCategoryView",

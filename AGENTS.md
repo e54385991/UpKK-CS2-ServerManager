@@ -114,6 +114,23 @@ HTTP request.
   install succeeds, never fails it, and must not fire for plugins that merely
   install *into* `addons/counterstrikesharp/plugins`.
 
+# 插件中心（marketplace）
+
+- 插件市场按运行框架分成两个一级分区：CounterStrikeSharp 与 SwiftlyS2
+  （`MarketPlugin.framework`，取值 `counterstrikesharp` / `swiftly`，与面板其余
+  地方的 framework key 一致）。新增插件默认落在 CounterStrikeSharp；控制台
+  `/plugins` 默认打开该分区，列表通过 `GET /api/v1/plugins/market?framework=`
+  过滤，可移植目录（导入/导出）也带上该字段。
+- 管理员编辑走 `PATCH /api/v1/plugins/market/{id}`：只应用请求体里出现的字段，
+  省略或 `null` 表示保持原值，空字符串表示清空可选文本字段。
+- 批量描述同步是 `POST /api/v1/plugins/market/descriptions/sync`（管理员）：
+  用仓库 README 覆盖 marketplace 描述。它只访问 GitHub、不做任何 SSH 操作，
+  因此**不进入**每服务器 FIFO，而是有界的同步 HTTP 调用——单次最多
+  `MAX_DESCRIPTION_SYNC_PLUGINS` 个插件、并发 `SYNC_CONCURRENCY`
+  （`services/plugins/description_sync.py`），剩余数量通过响应的 `remaining`
+  返回，由管理员再次触发。外部请求前必须先提交读事务，不得在 GitHub I/O 期间
+  持有请求数据库 session。
+
 # 维护与质量基线
 
 ## FastAPI、Pydantic 与配置

@@ -4,12 +4,15 @@ import { getTranslations } from "next-intl/server";
 import { requireSession } from "@/modules/auth/session";
 import { PluginCatalogButton } from "@/modules/plugins/catalog-button";
 import { GitHubInstallButton } from "@/modules/plugins/github-install-button";
+import { FrameworkTabs } from "@/modules/plugins/framework-tabs";
 import { MarketFilters } from "@/modules/plugins/market-filters";
 import { MarketPluginCreateButton } from "@/modules/plugins/market-create-button";
 import {
   MarketCatalog,
   MarketCatalogSkeleton,
 } from "@/modules/plugins/market-catalog";
+import { SyncDescriptionsButton } from "@/modules/plugins/sync-descriptions-button";
+import { toPluginFramework } from "@/modules/plugins/types";
 import { listServers } from "@/modules/servers/api";
 import { PageHeader } from "@/shared/ui/page-header";
 
@@ -23,6 +26,7 @@ const PAGE_SIZE = 20;
 type SearchParams = {
   q?: string;
   category?: string;
+  framework?: string;
   offset?: string;
   serverId?: string;
 };
@@ -40,9 +44,13 @@ export default async function PluginsPage({
   ]);
   const offset = Math.max(0, Number(sp.offset ?? 0)) || 0;
   const serverId = Number(sp.serverId);
+  // The marketplace opens on the CounterStrikeSharp section; SwiftlyS2 is the
+  // other top-level tab.
+  const framework = toPluginFramework(sp.framework?.trim());
   const query = {
     q: sp.q?.trim() || undefined,
     category: sp.category?.trim() || undefined,
+    framework,
     limit: PAGE_SIZE,
     offset,
   };
@@ -69,10 +77,18 @@ export default async function PluginsPage({
               defaultServerId={Number.isInteger(serverId) ? serverId : null}
             />
             {session.isAdmin ? <MarketPluginCreateButton /> : null}
+            {session.isAdmin ? (
+              <SyncDescriptionsButton framework={framework} />
+            ) : null}
             <PluginCatalogButton canImport={session.isAdmin} />
             <MarketFilters />
           </>
         }
+      />
+      <FrameworkTabs
+        active={framework}
+        query={query}
+        serverId={Number.isInteger(serverId) ? serverId : undefined}
       />
       <Suspense key={key} fallback={<MarketCatalogSkeleton />}>
         <MarketCatalog

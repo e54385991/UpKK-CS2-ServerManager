@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { Download, Puzzle } from "lucide-react";
 import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin-button";
+import { MarketPluginEditButton } from "@/modules/plugins/market-edit-button";
 import { MarketInstallDialog } from "@/modules/plugins/market-install-dialog";
 import {
   PLUGIN_CATEGORIES,
@@ -30,6 +31,7 @@ export function MarketPluginCard({
   servers,
   defaultServerId,
   canDelete = false,
+  canEdit = false,
 }: {
   plugin: MarketPlugin;
   /**
@@ -41,6 +43,7 @@ export function MarketPluginCard({
   servers: readonly MarketInstallServer[];
   defaultServerId?: number;
   canDelete?: boolean;
+  canEdit?: boolean;
 }) {
   const t = useTranslations("plugins");
   const [open, setOpen] = useState(false);
@@ -68,6 +71,7 @@ export function MarketPluginCard({
           {plugin.isRecommended ? (
             <Badge tone="primary">{t("recommended")}</Badge>
           ) : null}
+          <Badge tone="info">{t(`frameworks.${plugin.framework}`)}</Badge>
           <Badge tone="neutral">{categoryLabel}</Badge>
         </div>
       </div>
@@ -106,6 +110,7 @@ export function MarketPluginCard({
               </a>
             </Button>
           ) : null}
+          {canEdit ? <MarketPluginEditButton plugin={plugin} /> : null}
           {canDelete ? (
             <DeleteMarketPluginButton
               pluginId={plugin.id}

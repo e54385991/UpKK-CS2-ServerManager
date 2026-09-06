@@ -13,6 +13,7 @@ function pageHref(query: MarketQuery, offset: number, serverId?: number): Route 
   const params = new URLSearchParams();
   if (query.q) params.set("q", query.q);
   if (query.category) params.set("category", query.category);
+  if (query.framework) params.set("framework", query.framework);
   if (serverId) params.set("serverId", String(serverId));
   if (offset > 0) params.set("offset", String(offset));
   const qs = params.toString();
@@ -69,6 +70,7 @@ export async function MarketCatalog({
               servers={servers}
               defaultServerId={serverId}
               canDelete={canDelete}
+              canEdit={canDelete}
             />
           </li>
         ))}

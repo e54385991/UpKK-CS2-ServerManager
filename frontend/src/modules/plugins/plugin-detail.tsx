@@ -4,6 +4,7 @@ import { ExternalLink, TriangleAlert } from "lucide-react";
 import { getMarketPlugin } from "@/modules/plugins/api";
 import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin-button";
 import { InstallForm } from "@/modules/plugins/install-form";
+import { MarketPluginEditButton } from "@/modules/plugins/market-edit-button";
 import type { MarketInstallServer } from "@/modules/plugins/types";
 import { safeUrl } from "@/shared/lib/url";
 import { Badge } from "@/shared/ui/badge";
@@ -66,7 +67,9 @@ export async function PluginDetail({
             {plugin.isRecommended ? (
               <Badge tone="primary">{t("recommended")}</Badge>
             ) : null}
+            <Badge tone="info">{t(`frameworks.${plugin.framework}`)}</Badge>
             <Badge tone="neutral">{categoryLabel}</Badge>
+            {canDelete ? <MarketPluginEditButton plugin={plugin} /> : null}
             {canDelete ? (
               <DeleteMarketPluginButton
                 pluginId={plugin.id}

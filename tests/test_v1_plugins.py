@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from api.application import create_app
 from modules import get_current_active_user, get_current_user, get_db
-from modules.models.plugins import PluginCategory
+from modules.models.plugins import PluginCategory, PluginFramework
 from modules.models.servers import ServerStatus
 
 
@@ -40,10 +40,12 @@ def _sample_market(**overrides):
         "author": "shobhit",
         "version": "0.8.0",
         "category": PluginCategory.GAME_MODE,
+        "framework": PluginFramework.COUNTERSTRIKESHARP,
         "tags": "practice,match",
         "is_recommended": True,
         "icon_url": None,
         "github_url": "https://github.com/shobhit-pathak/MatchZy",
+        "custom_install_path": None,
         "download_count": 12,
         "install_count": 4,
         "dependencies": None,

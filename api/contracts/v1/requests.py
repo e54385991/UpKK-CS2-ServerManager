@@ -71,6 +71,8 @@ from .plugins import (
     GitHubRepoInfoRequest,
     GitHubUninstallRequest,
     MarketPluginCreateRequest,
+    MarketPluginDescriptionSyncRequest,
+    MarketPluginUpdateRequest,
     PluginCatalogImportRequest,
     PluginInstallRequest,
 )
@@ -147,6 +149,8 @@ __all__ = [
     "InitializedHostDeployRequest",
     "PluginInstallRequest",
     "MarketPluginCreateRequest",
+    "MarketPluginUpdateRequest",
+    "MarketPluginDescriptionSyncRequest",
     "GitHubRepoInfoRequest",
     "PluginCatalogImportRequest",
     "GitHubInstallPlanRequest",

@@ -63,6 +63,7 @@
     "DEFAULT_PLUGIN_CONFIG_SOURCE_PATH",
     "DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS",
     "PluginCategory",
+    "PluginFramework",
     "PluginConflictRule",
     "PluginDiagnosticRun",
     "PluginDiagnosticStep",

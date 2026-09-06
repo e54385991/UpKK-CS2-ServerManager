@@ -23,8 +23,11 @@ export function MarketFilters() {
       const q = String(form.get("q") ?? "").trim();
       const category = String(form.get("category") ?? "").trim();
       const serverId = params.get("serverId");
+      // Keep the active marketplace section; searching must not jump tabs.
+      const framework = params.get("framework");
       if (q) next.set("q", q);
       if (category) next.set("category", category);
+      if (framework) next.set("framework", framework);
       if (serverId) next.set("serverId", serverId);
       const query = next.toString();
       router.replace((query ? `/plugins?${query}` : "/plugins") as Route);

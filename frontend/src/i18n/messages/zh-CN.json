@@ -741,7 +741,9 @@
       "submit": "添加插件",
       "creating": "正在添加…",
       "success": "已添加插件 {name}。",
-      "failed": "添加插件失败。"
+      "failed": "添加插件失败。",
+      "framework": "运行框架",
+      "frameworkHint": "插件属于哪套运行时。默认 CounterStrikeSharp；SwiftlyS2 插件请切换到 SwiftlyS2。"
     },
     "installDialogTitle": "安装 {title}",
     "installDialogHelp": "与网页版相同：选择服务器、发行版和升级选项，安装开始后在此查看实时状态。",
@@ -873,6 +875,47 @@
       "result": {
         "imported": "已导入",
         "updated": "已更新",
+        "skipped": "已跳过",
+        "failed": "失败"
+      }
+    },
+    "frameworkSections": "插件运行框架",
+    "frameworks": {
+      "counterstrikesharp": "CounterStrikeSharp",
+      "swiftly": "SwiftlyS2"
+    },
+    "edit": {
+      "open": "编辑",
+      "hint": "管理员：编辑插件的描述、分类、运行框架和依赖等市场信息。",
+      "title": "编辑 {name}",
+      "description": "修改插件在插件中心展示的信息。只有改动过的字段会被提交。",
+      "pullReadme": "从 GitHub 拉取 README",
+      "noReadme": "该仓库没有可用的 README 或描述。",
+      "installPathHint": "留空表示保持当前设置；填写相对路径可覆盖解压目标。",
+      "titleRequired": "标题不能为空。",
+      "noChanges": "没有需要保存的改动。",
+      "submit": "保存修改",
+      "saving": "正在保存…",
+      "success": "已更新插件 {name}。",
+      "failed": "保存插件信息失败。",
+      "forbidden": "只有管理员可以编辑插件中心的插件。"
+    },
+    "sync": {
+      "open": "同步描述",
+      "hint": "管理员：批量把当前分类下所有插件的描述同步为 GitHub README。",
+      "title": "批量同步插件描述",
+      "confirm": "从 GitHub README 重新同步「{framework}」下所有插件的描述？现有描述会被覆盖。",
+      "running": "正在同步…",
+      "resultTitle": "同步结果",
+      "summary": "更新 {updated}，未变化 {unchanged}，跳过 {skipped}，失败 {failed}",
+      "remaining": "还有 {count} 个插件未处理，可再次运行同步。",
+      "empty": "没有需要同步的插件。",
+      "close": "关闭",
+      "failed": "批量同步插件描述失败。",
+      "forbidden": "只有管理员可以批量同步插件描述。",
+      "action": {
+        "updated": "已更新",
+        "unchanged": "无变化",
         "skipped": "已跳过",
         "failed": "失败"
       }

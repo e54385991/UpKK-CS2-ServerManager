@@ -45,6 +45,8 @@ from services.plugin_conflict_service import (
     validate_plugin_plan_acknowledgements,
 )
 from services.plugin_installation import install_github_plugin
+from services.plugins.catalog_fields import apply_market_plugin_update
+from services.plugins.common import parse_framework
 from services.plugins.github_readme import decode_readme, readme_excerpt
 from services.plugins.upgrade_exclusions import (
     CONFIG_FILE_EXTENSIONS,
@@ -549,6 +551,9 @@ async def list_plugins(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     category: Optional[str] = Query(None, description="Filter by category"),
+    framework: Optional[str] = Query(
+        None, description="Filter by marketplace section (counterstrikesharp or swiftly)"
+    ),
     search: Optional[str] = Query(None, description="Search query"),
     *,
     db: DatabaseSession,
@@ -561,6 +566,7 @@ async def list_plugins(
         page: Page number (starts from 1)
         page_size: Number of items per page
         category: Optional category filter
+        framework: Optional marketplace section filter
         search: Optional search query (searches in title, description, author)
 
     Returns:
@@ -577,12 +583,24 @@ async def list_plugins(
                 detail=f"Invalid category. Valid categories: {', '.join([c.value for c in PluginCategory])}",
             ) from None
 
+    framework_enum = None
+    if framework:
+        try:
+            framework_enum = parse_framework(framework)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
     # Calculate skip
     skip = (page - 1) * page_size
 
     # Search plugins
     plugins, total = await MarketPlugin.search_plugins(
-        db, category=category_enum, search_query=search, skip=skip, limit=page_size
+        db,
+        category=category_enum,
+        search_query=search,
+        skip=skip,
+        limit=page_size,
+        framework=framework_enum,
     )
 
     # Calculate total pages
@@ -677,6 +695,12 @@ async def create_plugin(
             detail=f"Invalid category. Valid categories: {', '.join([c.value for c in PluginCategory])}",
         ) from None
 
+    # Validate the marketplace section (CounterStrikeSharp / SwiftlyS2)
+    try:
+        framework_enum = parse_framework(request.framework)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
     # Validate dependencies if provided
     if request.dependencies:
         try:
@@ -693,6 +717,7 @@ async def create_plugin(
         author=author,
         version=request.version,
         category=category_enum,
+        framework=framework_enum,
         tags=request.tags,
         is_recommended=request.is_recommended,
         icon_url=request.icon_url,
@@ -730,40 +755,18 @@ async def update_plugin(
     if not plugin:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
 
-    # Update fields
-    if request.title is not None:
-        plugin.title = request.title
-    if request.description is not None:
-        plugin.description = request.description
-    if request.author is not None:
-        plugin.author = request.author
-    if request.version is not None:
-        plugin.version = request.version
-    if request.category is not None:
+    # Validate dependencies before touching the row
+    if request.dependencies:
         try:
-            plugin.category = PluginCategory(request.category)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid category. Valid categories: {', '.join([c.value for c in PluginCategory])}",
-            ) from None
-    if request.tags is not None:
-        plugin.tags = request.tags
-    if request.is_recommended is not None:
-        plugin.is_recommended = request.is_recommended
-    if request.icon_url is not None:
-        plugin.icon_url = request.icon_url
-    if request.custom_install_path is not None:
-        plugin.custom_install_path = request.custom_install_path
-    if request.dependencies is not None:
-        # Validate dependencies if provided
-        if request.dependencies:
-            try:
-                dep_ids = parse_dependency_ids(request.dependencies)
-                await validate_dependencies(db, dep_ids)
-            except ValueError as e:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-        plugin.dependencies = request.dependencies
+            dep_ids = parse_dependency_ids(request.dependencies)
+            await validate_dependencies(db, dep_ids)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+    try:
+        apply_market_plugin_update(plugin, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     db.add(plugin)
     await db.commit()

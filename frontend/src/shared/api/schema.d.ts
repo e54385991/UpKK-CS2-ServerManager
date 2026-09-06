@@ -1243,6 +1243,7 @@ export interface paths {
          *         page: Page number (starts from 1)
          *         page_size: Number of items per page
          *         category: Optional category filter
+         *         framework: Optional marketplace section filter
          *         search: Optional search query (searches in title, description, author)
          *
          *     Returns:
@@ -2765,6 +2766,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugins/market/descriptions/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Market Descriptions
+         * @description Refresh marketplace descriptions in bulk from the upstream READMEs.
+         */
+        post: operations["sync_market_descriptions_api_v1_plugins_market_descriptions_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plugins/market/repo-info": {
         parameters: {
             query?: never;
@@ -2806,7 +2827,11 @@ export interface paths {
         delete: operations["delete_market_plugin_api_v1_plugins_market__plugin_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Market Plugin
+         * @description Edit an existing marketplace listing. Only submitted fields change.
+         */
+        patch: operations["update_market_plugin_api_v1_plugins_market__plugin_id__patch"];
         trace?: never;
     };
     "/api/v1/profile": {
@@ -11606,6 +11631,12 @@ export interface components {
              */
             description?: string | null;
             /**
+             * Framework
+             * @description Marketplace section: counterstrikesharp or swiftly
+             * @default counterstrikesharp
+             */
+            framework: string;
+            /**
              * Github Url
              * @description GitHub repository URL
              */
@@ -11656,6 +11687,12 @@ export interface components {
             dependencies?: string | null;
             /** Description */
             description?: string | null;
+            /**
+             * Framework
+             * @default counterstrikesharp
+             * @enum {string}
+             */
+            framework: "counterstrikesharp" | "swiftly";
             /** Github Url */
             github_url: string;
             /** Icon Url */
@@ -11671,6 +11708,66 @@ export interface components {
             title?: string | null;
             /** Version */
             version?: string | null;
+        };
+        /**
+         * MarketPluginDescriptionSyncItemView
+         * @description What happened to one listing during a description sync.
+         */
+        MarketPluginDescriptionSyncItemView: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "updated" | "unchanged" | "skipped" | "failed";
+            /** Github Url */
+            github_url: string;
+            /** Message */
+            message?: string | null;
+            /** Plugin Id */
+            plugin_id: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * MarketPluginDescriptionSyncRequest
+         * @description Administrator request to refresh descriptions from GitHub READMEs.
+         */
+        MarketPluginDescriptionSyncRequest: {
+            /** Framework */
+            framework?: ("counterstrikesharp" | "swiftly") | null;
+            /**
+             * Overwrite
+             * @default true
+             */
+            overwrite: boolean;
+            /** Plugin Ids */
+            plugin_ids?: number[];
+        };
+        /**
+         * MarketPluginDescriptionSyncView
+         * @description Summary of a marketplace description sync.
+         *
+         *     ``remaining`` is non-zero when the marketplace holds more listings than one
+         *     request refreshes; run the sync again to continue.
+         */
+        MarketPluginDescriptionSyncView: {
+            /** Failed */
+            failed: number;
+            /** Items */
+            items?: components["schemas"]["MarketPluginDescriptionSyncItemView"][];
+            /**
+             * Remaining
+             * @default 0
+             */
+            remaining: number;
+            /** Skipped */
+            skipped: number;
+            /** Total */
+            total: number;
+            /** Unchanged */
+            unchanged: number;
+            /** Updated */
+            updated: number;
         };
         /**
          * MarketPluginListResponse
@@ -11714,6 +11811,11 @@ export interface components {
             description?: string | null;
             /** Download Count */
             download_count: number;
+            /**
+             * Framework
+             * @default counterstrikesharp
+             */
+            framework: string;
             /** Github Url */
             github_url: string;
             /** Icon Url */
@@ -11751,6 +11853,41 @@ export interface components {
             dependencies?: string | null;
             /** Description */
             description?: string | null;
+            /** Framework */
+            framework?: string | null;
+            /** Icon Url */
+            icon_url?: string | null;
+            /** Is Recommended */
+            is_recommended?: boolean | null;
+            /** Tags */
+            tags?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Version */
+            version?: string | null;
+        };
+        /**
+         * MarketPluginUpdateRequest
+         * @description Strict administrator request for editing an existing listing.
+         *
+         *     Only the fields present in the request body are applied, so an edit form
+         *     can send a partial payload. An omitted field — or an explicit ``null`` —
+         *     leaves the stored value alone; send an empty string to clear an optional
+         *     text field.
+         */
+        MarketPluginUpdateRequest: {
+            /** Author */
+            author?: string | null;
+            /** Category */
+            category?: ("game_mode" | "entertainment" | "utility" | "admin" | "performance" | "library" | "other") | null;
+            /** Custom Install Path */
+            custom_install_path?: string | null;
+            /** Dependencies */
+            dependencies?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Framework */
+            framework?: ("counterstrikesharp" | "swiftly") | null;
             /** Icon Url */
             icon_url?: string | null;
             /** Is Recommended */
@@ -11771,12 +11908,19 @@ export interface components {
             author?: string | null;
             /** Category */
             category: string;
+            /** Custom Install Path */
+            custom_install_path?: string | null;
             /** Dependencies */
             dependencies?: components["schemas"]["PluginRef"][];
             /** Description */
             description?: string | null;
             /** Download Count */
             download_count: number;
+            /**
+             * Framework
+             * @default counterstrikesharp
+             */
+            framework: string;
             /** Github Url */
             github_url: string;
             /** Icon Url */
@@ -12119,6 +12263,11 @@ export interface components {
             dependencies?: string[];
             /** Description */
             description?: string | null;
+            /**
+             * Framework
+             * @default counterstrikesharp
+             */
+            framework: string;
             /** Github Url */
             github_url: string;
             /** Icon Url */
@@ -18247,6 +18396,8 @@ export interface operations {
                 page_size?: number;
                 /** @description Filter by category */
                 category?: string | null;
+                /** @description Filter by marketplace section (counterstrikesharp or swiftly) */
+                framework?: string | null;
                 /** @description Search query */
                 search?: string | null;
             };
@@ -20861,6 +21012,8 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 category?: string | null;
+                /** @description Marketplace section: counterstrikesharp or swiftly */
+                framework?: string | null;
                 q?: string | null;
             };
             header?: never;
@@ -21001,6 +21154,48 @@ export interface operations {
             };
         };
     };
+    sync_market_descriptions_api_v1_plugins_market_descriptions_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketPluginDescriptionSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginDescriptionSyncView"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     fetch_market_repo_info_api_v1_plugins_market_repo_info_post: {
         parameters: {
             query?: never;
@@ -21092,6 +21287,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_market_plugin_api_v1_plugins_market__plugin_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketPluginUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
                 };
             };
             /** @description Validation Error */

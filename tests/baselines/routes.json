@@ -2362,9 +2362,25 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "POST"
+    ],
+    "name": "sync_market_descriptions",
+    "path": "/api/v1/plugins/market/descriptions/sync"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "GET"
     ],
     "name": "get_market_plugin",
+    "path": "/api/v1/plugins/market/{plugin_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PATCH"
+    ],
+    "name": "update_market_plugin",
     "path": "/api/v1/plugins/market/{plugin_id}"
   },
   {

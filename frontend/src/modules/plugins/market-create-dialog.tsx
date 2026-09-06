@@ -10,12 +10,16 @@ import {
   listPluginDependencyOptionsAction,
 } from "@/modules/plugins/actions";
 import {
+  DEFAULT_PLUGIN_FRAMEWORK,
   PLUGIN_CATEGORIES,
+  PLUGIN_FRAMEWORKS,
   isPluginCategory,
+  isPluginFramework,
   type GitHubRepoInfo,
   type MarketPluginCreateInput,
   type PluginCategory,
   type PluginDependencyOptions,
+  type PluginFramework,
 } from "@/modules/plugins/types";
 import { notify } from "@/shared/feedback/notify";
 import { Button } from "@/shared/ui/button";
@@ -41,6 +45,9 @@ export function MarketPluginCreateDialog({
   const [author, setAuthor] = useState("");
   const [version, setVersion] = useState("");
   const [category, setCategory] = useState<PluginCategory>("other");
+  const [framework, setFramework] = useState<PluginFramework>(
+    DEFAULT_PLUGIN_FRAMEWORK,
+  );
   const [iconUrl, setIconUrl] = useState("");
   const [tags, setTags] = useState("");
   const [customInstallPath, setCustomInstallPath] = useState("");
@@ -82,6 +89,7 @@ export function MarketPluginCreateDialog({
     setAuthor("");
     setVersion("");
     setCategory("other");
+    setFramework(DEFAULT_PLUGIN_FRAMEWORK);
     setIconUrl("");
     setTags("");
     setCustomInstallPath("");
@@ -153,6 +161,7 @@ export function MarketPluginCreateDialog({
       author: author.trim() || null,
       version: version.trim() || null,
       category,
+      framework,
       iconUrl: iconUrl.trim() || null,
       tags: tags.trim() || null,
       customInstallPath: customInstallPath.trim() || null,
@@ -275,6 +284,32 @@ export function MarketPluginCreateDialog({
                 </option>
               ))}
             </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="market-create-framework">
+              {t("create.framework")} *
+            </Label>
+            <Select
+              id="market-create-framework"
+              value={framework}
+              required
+              data-testid="market-create-framework"
+              aria-describedby="market-create-framework-hint"
+              onChange={(event) => {
+                if (isPluginFramework(event.target.value)) {
+                  setFramework(event.target.value);
+                }
+              }}
+            >
+              {PLUGIN_FRAMEWORKS.map((value) => (
+                <option key={value} value={value}>
+                  {t(`frameworks.${value}`)}
+                </option>
+              ))}
+            </Select>
+            <p id="market-create-framework-hint" className="text-xs text-fg-subtle">
+              {t("create.frameworkHint")}
+            </p>
           </div>
         </div>
 

@@ -1,14 +1,9 @@
 import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
 import type {
-  ActionResultDto,
-  GitHubRepoInfoRequestDto,
-  GitHubRepoInfoViewDto,
   ManagedPluginViewDto,
-  MarketPluginCreateRequestDto,
   MarketPluginPageDto,
   MarketPluginViewDto,
-  PluginDependencyOptionsDto,
   PluginCatalogExportDto,
   PluginCatalogImportResponseDto,
   PluginCategoryListDto,
@@ -33,44 +28,19 @@ const SERVER_STATUSES: readonly ServerStatus[] = [
 import type {
   ManagedPlugin,
   MarketPlugin,
-  MarketPluginCreateInput,
   MarketPluginPage,
   MarketQuery,
   GitHubArchive,
   GitHubInstallPlan,
   GitHubReleases,
-  GitHubRepoInfo,
   PluginCatalogBundle,
   PluginCatalogImportRequest,
   PluginCatalogImportSummary,
   PluginCategoryOption,
-  PluginDependencyOptions,
   PluginConflict,
   PluginInstallPlan,
-  PluginRef,
 } from "@/modules/plugins/types";
-
-function toRef(raw: { id: number; title: string }): PluginRef {
-  return { id: raw.id, title: raw.title };
-}
-
-function toMarketPlugin(raw: MarketPluginViewDto): MarketPlugin {
-  return {
-    id: raw.id,
-    title: raw.title,
-    description: raw.description ?? null,
-    author: raw.author ?? null,
-    version: raw.version ?? null,
-    category: raw.category,
-    tags: raw.tags ?? null,
-    isRecommended: raw.is_recommended,
-    iconUrl: raw.icon_url ?? null,
-    githubUrl: raw.github_url,
-    downloadCount: raw.download_count,
-    installCount: raw.install_count,
-    dependencies: (raw.dependencies ?? []).map(toRef),
-  };
-}
+import { toMarketPlugin, toRef } from "@/modules/plugins/market-mapper";
 
 export async function listMarketPlugins(
   query: MarketQuery = {},
@@ -78,6 +48,7 @@ export async function listMarketPlugins(
   const params = new URLSearchParams();
   if (query.q) params.set("q", query.q);
   if (query.category) params.set("category", query.category);
+  if (query.framework) params.set("framework", query.framework);
   params.set("limit", String(query.limit ?? 20));
   params.set("offset", String(query.offset ?? 0));
   const result = await apiFetch<MarketPluginPageDto>(
@@ -105,75 +76,8 @@ export async function listPluginCategories(): Promise<
   return { ok: true, data: result.data.items ?? [] };
 }
 
-export async function listPluginDependencyOptions(
-  search?: string,
-): Promise<ApiResult<PluginDependencyOptions[]>> {
-  const params = new URLSearchParams();
-  if (search?.trim()) params.set("search", search.trim());
-  const query = params.toString();
-  const result = await apiFetch<PluginDependencyOptionsDto>(
-    `/api/v1/plugins/market/dependency-options${query ? `?${query}` : ""}`,
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: result.data.items ?? [] };
-}
 
-export async function fetchMarketRepoInfo(
-  githubUrl: string,
-): Promise<ApiResult<GitHubRepoInfo>> {
-  const body: GitHubRepoInfoRequestDto = { github_url: githubUrl };
-  const result = await apiFetch<GitHubRepoInfoViewDto>(
-    "/api/v1/plugins/market/repo-info",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    },
-  );
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      success: result.data.success,
-      repoName: result.data.repo_name ?? null,
-      description: result.data.description ?? null,
-      readme: result.data.readme ?? null,
-      author: result.data.author ?? null,
-      error: result.data.error ?? null,
-    },
-  };
-}
 
-export async function createMarketPlugin(
-  input: MarketPluginCreateInput,
-): Promise<ApiResult<MarketPlugin>> {
-  const body: MarketPluginCreateRequestDto = {
-    github_url: input.githubUrl,
-    title: input.title ?? null,
-    description: input.description ?? null,
-    author: input.author ?? null,
-    version: input.version ?? null,
-    category: input.category,
-    tags: input.tags ?? null,
-    is_recommended: input.isRecommended ?? false,
-    icon_url: input.iconUrl ?? null,
-    dependencies:
-      input.dependencyIds && input.dependencyIds.length > 0
-        ? input.dependencyIds.join(",")
-        : null,
-    custom_install_path: input.customInstallPath ?? null,
-  };
-  const result = await apiFetch<MarketPluginViewDto>(
-    "/api/v1/plugins/market",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    },
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: toMarketPlugin(result.data) };
-}
 
 export async function getMarketPlugin(
   pluginId: number,
@@ -185,13 +89,8 @@ export async function getMarketPlugin(
   return { ok: true, data: toMarketPlugin(result.data) };
 }
 
-export async function deleteMarketPlugin(
-  pluginId: number,
-): Promise<ApiResult<ActionResultDto>> {
-  return apiFetch<ActionResultDto>(`/api/v1/plugins/market/${pluginId}`, {
-    method: "DELETE",
-  });
-}
+
+
 
 function toManaged(raw: ManagedPluginViewDto): ManagedPlugin {
   return {

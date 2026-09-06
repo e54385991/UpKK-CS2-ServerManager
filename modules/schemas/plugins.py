@@ -175,6 +175,10 @@ class MarketPluginCreate(SQLModel):
     author: Optional[str] = Field(None, max_length=255, description="Plugin author")
     version: Optional[str] = Field(None, max_length=50, description="Plugin version")
     category: str = Field(default="other", description="Plugin category")
+    framework: str = Field(
+        default="counterstrikesharp",
+        description="Marketplace section: counterstrikesharp or swiftly",
+    )
     tags: Optional[str] = Field(None, description="Comma-separated tags")
     is_recommended: bool = Field(default=False, description="Whether to mark as recommended")
     icon_url: Optional[str] = Field(None, max_length=500, description="Icon URL")
@@ -194,6 +198,7 @@ class MarketPluginUpdate(SQLModel):
     author: Optional[str] = Field(None, max_length=255)
     version: Optional[str] = Field(None, max_length=50)
     category: Optional[str] = None
+    framework: Optional[str] = None
     tags: Optional[str] = None
     is_recommended: Optional[bool] = None
     icon_url: Optional[str] = Field(None, max_length=500)
@@ -240,6 +245,7 @@ class MarketPluginResponse(SQLModel):
     author: Optional[str] = None
     version: Optional[str] = None
     category: str
+    framework: str = "counterstrikesharp"
     tags: Optional[str] = None
     is_recommended: bool
     icon_url: Optional[str] = None
@@ -642,6 +648,7 @@ class PluginCatalogEntry(SQLModel):
     author: Optional[str] = Field(None, max_length=255)
     version: Optional[str] = Field(None, max_length=50)
     category: str = Field(default="other")
+    framework: str = Field(default="counterstrikesharp")
     tags: Optional[str] = None
     is_recommended: bool = False
     icon_url: Optional[str] = Field(None, max_length=500)

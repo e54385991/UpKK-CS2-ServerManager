@@ -14,6 +14,25 @@ export function isPluginCategory(value: string): value is PluginCategory {
   return (PLUGIN_CATEGORIES as readonly string[]).includes(value);
 }
 
+/**
+ * The two top-level marketplace sections. They mirror the mutually exclusive
+ * CS2 plugin runtimes in `@/modules/servers/frameworks`; `swiftly` is the key
+ * the rest of the panel already uses for SwiftlyS2.
+ */
+export const PLUGIN_FRAMEWORKS = ["counterstrikesharp", "swiftly"] as const;
+
+export type PluginFramework = (typeof PLUGIN_FRAMEWORKS)[number];
+
+export const DEFAULT_PLUGIN_FRAMEWORK: PluginFramework = "counterstrikesharp";
+
+export function isPluginFramework(value: string): value is PluginFramework {
+  return (PLUGIN_FRAMEWORKS as readonly string[]).includes(value);
+}
+
+export function toPluginFramework(value: string | null | undefined): PluginFramework {
+  return value && isPluginFramework(value) ? value : DEFAULT_PLUGIN_FRAMEWORK;
+}
+
 export type PluginRef = {
   readonly id: number;
   readonly title: string;
@@ -33,10 +52,12 @@ export type MarketPlugin = {
   readonly author: string | null;
   readonly version: string | null;
   readonly category: string;
+  readonly framework: PluginFramework;
   readonly tags: string | null;
   readonly isRecommended: boolean;
   readonly iconUrl: string | null;
   readonly githubUrl: string;
+  readonly customInstallPath: string | null;
   readonly downloadCount: number;
   readonly installCount: number;
   readonly dependencies: readonly PluginRef[];
@@ -61,11 +82,63 @@ export type MarketPluginCreateInput = {
   readonly author?: string | null;
   readonly version?: string | null;
   readonly category: PluginCategory;
+  readonly framework: PluginFramework;
   readonly tags?: string | null;
   readonly isRecommended?: boolean;
   readonly iconUrl?: string | null;
   readonly dependencyIds?: readonly number[];
   readonly customInstallPath?: string | null;
+};
+
+/**
+ * Partial marketplace edit. Only the keys present are sent, so an omitted
+ * field keeps its stored value; an empty string clears an optional text field.
+ */
+export type MarketPluginUpdateInput = {
+  readonly title?: string;
+  readonly description?: string;
+  readonly author?: string;
+  readonly version?: string;
+  readonly category?: PluginCategory;
+  readonly framework?: PluginFramework;
+  readonly tags?: string;
+  readonly isRecommended?: boolean;
+  readonly iconUrl?: string;
+  readonly dependencyIds?: readonly number[];
+  readonly customInstallPath?: string;
+};
+
+export const DESCRIPTION_SYNC_ACTIONS = [
+  "updated",
+  "unchanged",
+  "skipped",
+  "failed",
+] as const;
+
+export type DescriptionSyncAction = (typeof DESCRIPTION_SYNC_ACTIONS)[number];
+
+export type DescriptionSyncItem = {
+  readonly pluginId: number;
+  readonly title: string;
+  readonly githubUrl: string;
+  readonly action: DescriptionSyncAction;
+  readonly message: string | null;
+};
+
+export type DescriptionSyncSummary = {
+  readonly total: number;
+  readonly updated: number;
+  readonly unchanged: number;
+  readonly skipped: number;
+  readonly failed: number;
+  readonly remaining: number;
+  readonly items: readonly DescriptionSyncItem[];
+};
+
+export type DescriptionSyncInput = {
+  readonly framework?: PluginFramework;
+  readonly overwrite?: boolean;
+  readonly pluginIds?: readonly number[];
 };
 
 export type GitHubRepoInfo = {
@@ -87,6 +160,7 @@ export type PluginDependencyOptions = {
 export type MarketQuery = {
   readonly q?: string;
   readonly category?: string;
+  readonly framework?: PluginFramework;
   readonly limit?: number;
   readonly offset?: number;
 };

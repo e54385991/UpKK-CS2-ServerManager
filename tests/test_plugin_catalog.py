@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from modules.models.plugins import MarketPlugin, PluginCategory, PluginConflictRule
+from modules.models.plugins import (
+    MarketPlugin,
+    PluginCategory,
+    PluginConflictRule,
+    PluginFramework,
+)
 from modules.schemas.plugins import (
     PluginCatalogConflict,
     PluginCatalogEntry,
@@ -79,6 +84,73 @@ def test_plugin_to_catalog_entry_uses_github_urls_not_ids():
     dumped = entry.model_dump()
     assert "id" not in dumped
     assert "11" not in dumped["dependencies"]
+
+
+def test_plugin_to_catalog_entry_carries_the_marketplace_section():
+    swiftly = MarketPlugin(
+        id=12,
+        github_url="https://github.com/example/swiftly-plugin",
+        title="Swiftly Plugin",
+        category=PluginCategory.UTILITY,
+        framework=PluginFramework.SWIFTLY,
+    )
+    entry = plugin_to_catalog_entry(swiftly, {12: swiftly})
+    assert entry is not None
+    assert entry.framework == "swiftly"
+
+
+def test_catalog_entry_defaults_to_counterstrikesharp():
+    assert _entry().framework == "counterstrikesharp"
+
+
+@pytest.mark.asyncio
+async def test_import_creates_and_updates_the_marketplace_section(monkeypatch):
+    existing = MarketPlugin(
+        id=9,
+        github_url="https://github.com/example/kept",
+        title="Kept",
+        category=PluginCategory.OTHER,
+    )
+    session = _FakeSession(plugins=[existing])
+    monkeypatch.setattr(
+        "services.plugin_catalog._load_market_plugins",
+        AsyncMock(side_effect=lambda _db: list(session.plugins)),
+    )
+    monkeypatch.setattr(
+        "services.plugin_catalog._load_conflict_rules",
+        AsyncMock(side_effect=lambda _db: list(session.rules)),
+    )
+
+    summary = await import_plugin_catalog(
+        session,
+        PluginCatalogImportRequest(
+            plugins=[
+                _entry(
+                    github_url="https://github.com/example/kept",
+                    title="Kept",
+                    framework="swiftly",
+                ),
+                _entry(
+                    github_url="https://github.com/example/fresh",
+                    title="Fresh",
+                    framework="swiftly",
+                ),
+                _entry(
+                    github_url="https://github.com/example/broken",
+                    title="Broken",
+                    framework="sourcemod",
+                ),
+            ],
+            conflict_strategy="update",
+        ),
+    )
+
+    assert existing.framework is PluginFramework.SWIFTLY
+    created = next(item for item in session.plugins if item.title == "Fresh")
+    assert created.framework is PluginFramework.SWIFTLY
+    failure = next(item for item in summary.results if item.name == "Broken")
+    assert failure.action == "failed"
+    assert failure.message == "Invalid framework: sourcemod"
 
 
 def test_conflict_to_catalog_item_uses_github_urls():

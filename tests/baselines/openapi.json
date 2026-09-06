@@ -12859,6 +12859,12 @@
             "description": "Plugin description (auto-filled if not provided)",
             "title": "Description"
           },
+          "framework": {
+            "default": "counterstrikesharp",
+            "description": "Marketplace section: counterstrikesharp or swiftly",
+            "title": "Framework",
+            "type": "string"
+          },
           "github_url": {
             "description": "GitHub repository URL",
             "maxLength": 500,
@@ -12995,6 +13001,15 @@
             ],
             "title": "Description"
           },
+          "framework": {
+            "default": "counterstrikesharp",
+            "enum": [
+              "counterstrikesharp",
+              "swiftly"
+            ],
+            "title": "Framework",
+            "type": "string"
+          },
           "github_url": {
             "maxLength": 500,
             "title": "Github Url",
@@ -13058,6 +13073,136 @@
           "github_url"
         ],
         "title": "MarketPluginCreateRequest",
+        "type": "object"
+      },
+      "MarketPluginDescriptionSyncItemView": {
+        "additionalProperties": false,
+        "description": "What happened to one listing during a description sync.",
+        "properties": {
+          "action": {
+            "enum": [
+              "updated",
+              "unchanged",
+              "skipped",
+              "failed"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "github_url": {
+            "title": "Github Url",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "plugin_id": {
+            "title": "Plugin Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "title",
+          "github_url",
+          "action"
+        ],
+        "title": "MarketPluginDescriptionSyncItemView",
+        "type": "object"
+      },
+      "MarketPluginDescriptionSyncRequest": {
+        "additionalProperties": false,
+        "description": "Administrator request to refresh descriptions from GitHub READMEs.",
+        "properties": {
+          "framework": {
+            "anyOf": [
+              {
+                "enum": [
+                  "counterstrikesharp",
+                  "swiftly"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "overwrite": {
+            "default": true,
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "plugin_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 200,
+            "title": "Plugin Ids",
+            "type": "array"
+          }
+        },
+        "title": "MarketPluginDescriptionSyncRequest",
+        "type": "object"
+      },
+      "MarketPluginDescriptionSyncView": {
+        "additionalProperties": false,
+        "description": "Summary of a marketplace description sync.\n\n``remaining`` is non-zero when the marketplace holds more listings than one\nrequest refreshes; run the sync again to continue.",
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MarketPluginDescriptionSyncItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "remaining": {
+            "default": 0,
+            "title": "Remaining",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "updated",
+          "unchanged",
+          "skipped",
+          "failed"
+        ],
+        "title": "MarketPluginDescriptionSyncView",
         "type": "object"
       },
       "MarketPluginListResponse": {
@@ -13175,6 +13320,11 @@
           "download_count": {
             "title": "Download Count",
             "type": "integer"
+          },
+          "framework": {
+            "default": "counterstrikesharp",
+            "title": "Framework",
+            "type": "string"
           },
           "github_url": {
             "title": "Github Url",
@@ -13309,6 +13459,17 @@
             ],
             "title": "Description"
           },
+          "framework": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
           "icon_url": {
             "anyOf": [
               {
@@ -13371,6 +13532,156 @@
         "title": "MarketPluginUpdate",
         "type": "object"
       },
+      "MarketPluginUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Strict administrator request for editing an existing listing.\n\nOnly the fields present in the request body are applied, so an edit form\ncan send a partial payload. An omitted field — or an explicit ``null`` —\nleaves the stored value alone; send an empty string to clear an optional\ntext field.",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "game_mode",
+                  "entertainment",
+                  "utility",
+                  "admin",
+                  "performance",
+                  "library",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "custom_install_path": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Install Path"
+          },
+          "dependencies": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependencies"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "enum": [
+                  "counterstrikesharp",
+                  "swiftly"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          },
+          "is_recommended": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Recommended"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "title": "MarketPluginUpdateRequest",
+        "type": "object"
+      },
       "MarketPluginView": {
         "additionalProperties": false,
         "description": "Non-secret marketplace listing. GitHub URLs are public repository links.",
@@ -13389,6 +13700,17 @@
           "category": {
             "title": "Category",
             "type": "string"
+          },
+          "custom_install_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Install Path"
           },
           "dependencies": {
             "items": {
@@ -13411,6 +13733,11 @@
           "download_count": {
             "title": "Download Count",
             "type": "integer"
+          },
+          "framework": {
+            "default": "counterstrikesharp",
+            "title": "Framework",
+            "type": "string"
           },
           "github_url": {
             "title": "Github Url",
@@ -14331,6 +14658,11 @@
               }
             ],
             "title": "Description"
+          },
+          "framework": {
+            "default": "counterstrikesharp",
+            "title": "Framework",
+            "type": "string"
           },
           "github_url": {
             "maxLength": 500,
@@ -28179,7 +28511,7 @@
     },
     "/api/plugin-market/plugins": {
       "get": {
-        "description": "List plugins from the market with pagination, filtering, and search.\n\nArgs:\n    page: Page number (starts from 1)\n    page_size: Number of items per page\n    category: Optional category filter\n    search: Optional search query (searches in title, description, author)\n\nReturns:\n    List of plugins with pagination info",
+        "description": "List plugins from the market with pagination, filtering, and search.\n\nArgs:\n    page: Page number (starts from 1)\n    page_size: Number of items per page\n    category: Optional category filter\n    framework: Optional marketplace section filter\n    search: Optional search query (searches in title, description, author)\n\nReturns:\n    List of plugins with pagination info",
         "operationId": "list_plugins_api_plugin_market_plugins_get",
         "parameters": [
           {
@@ -28225,6 +28557,24 @@
               ],
               "description": "Filter by category",
               "title": "Category"
+            }
+          },
+          {
+            "description": "Filter by marketplace section (counterstrikesharp or swiftly)",
+            "in": "query",
+            "name": "framework",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by marketplace section (counterstrikesharp or swiftly)",
+              "title": "Framework"
             }
           },
           {
@@ -32626,6 +32976,24 @@
             }
           },
           {
+            "description": "Marketplace section: counterstrikesharp or swiftly",
+            "in": "query",
+            "name": "framework",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Marketplace section: counterstrikesharp or swiftly",
+              "title": "Framework"
+            }
+          },
+          {
             "in": "query",
             "name": "q",
             "required": false,
@@ -32851,6 +33219,63 @@
         ]
       }
     },
+    "/api/v1/plugins/market/descriptions/sync": {
+      "post": {
+        "description": "Refresh marketplace descriptions in bulk from the upstream READMEs.",
+        "operationId": "sync_market_descriptions_api_v1_plugins_market_descriptions_sync_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketPluginDescriptionSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketPluginDescriptionSyncView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Sync Market Descriptions",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
     "/api/v1/plugins/market/repo-info": {
       "post": {
         "description": "Fetch non-secret GitHub metadata for the admin create form.",
@@ -32997,6 +33422,92 @@
           }
         ],
         "summary": "Get Market Plugin",
+        "tags": [
+          "v1-plugins"
+        ]
+      },
+      "patch": {
+        "description": "Edit an existing marketplace listing. Only submitted fields change.",
+        "operationId": "update_market_plugin_api_v1_plugins_market__plugin_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketPluginUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketPluginView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Market Plugin",
         "tags": [
           "v1-plugins"
         ]

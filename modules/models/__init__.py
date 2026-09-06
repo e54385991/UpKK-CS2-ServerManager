@@ -34,6 +34,7 @@ from .plugins import (
     PluginConflictRule,
     PluginDiagnosticRun,
     PluginDiagnosticStep,
+    PluginFramework,
     PluginQuarantineEntry,
 )
 from .servers import (

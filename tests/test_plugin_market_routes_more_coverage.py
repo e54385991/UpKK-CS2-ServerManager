@@ -96,6 +96,7 @@ async def test_market_list_get_and_crud_routes_cover_validation(monkeypatch):
         page=2,
         page_size=10,
         category="utility",
+        framework="counterstrikesharp",
         search="plugin",
         db=db,
         current_user=SimpleNamespace(id=1),
@@ -108,11 +109,23 @@ async def test_market_list_get_and_crud_routes_cover_validation(monkeypatch):
             page=1,
             page_size=10,
             category="invalid",
+            framework=None,
             search=None,
             db=db,
             current_user=SimpleNamespace(),
         )
     assert caught.value.status_code == 400
+    with pytest.raises(HTTPException) as bad_framework:
+        await plugin_market.list_plugins(
+            page=1,
+            page_size=10,
+            category=None,
+            framework="sourcemod",
+            search=None,
+            db=db,
+            current_user=SimpleNamespace(),
+        )
+    assert bad_framework.value.status_code == 400
 
     monkeypatch.setattr(MarketPlugin, "get_by_id", AsyncMock(return_value=plugin))
     monkeypatch.setattr(

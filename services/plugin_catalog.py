@@ -16,7 +16,12 @@ from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from modules.models.plugins import MarketPlugin, PluginCategory, PluginConflictRule
+from modules.models.plugins import (
+    MarketPlugin,
+    PluginCategory,
+    PluginConflictRule,
+    PluginFramework,
+)
 from modules.schemas.plugins import (
     PluginCatalogConflict,
     PluginCatalogEntry,
@@ -25,7 +30,12 @@ from modules.schemas.plugins import (
     PluginCatalogImportResponse,
     PluginCatalogImportResult,
 )
-from services.plugins.common import PluginPlanError, parse_dependency_ids
+from services.plugins.common import (
+    PluginPlanError,
+    framework_value,
+    parse_dependency_ids,
+    parse_framework,
+)
 
 DEFAULT_PLUGIN_CATALOG_PATH = Path(__file__).resolve().parent / "defaults" / "plugin-catalog.json"
 
@@ -67,6 +77,20 @@ def _parse_category(value: str) -> PluginCategory | None:
             return PluginCategory[value.upper()]
         except KeyError, ValueError:
             return None
+
+
+def _parse_entry_taxonomy(
+    entry: PluginCatalogEntry,
+) -> tuple[PluginCategory, PluginFramework] | str:
+    """Return the entry's ``(category, framework)`` or an error message."""
+    category = _parse_category(entry.category)
+    if category is None:
+        return f"Invalid category: {entry.category}"
+    try:
+        framework = parse_framework(entry.framework)
+    except PluginPlanError:
+        return f"Invalid framework: {entry.framework}"
+    return category, framework
 
 
 def _optional_text(value: str | None) -> str | None:
@@ -119,6 +143,7 @@ def plugin_to_catalog_entry(
         author=plugin.author,
         version=plugin.version,
         category=_category_value(plugin.category),
+        framework=framework_value(plugin.framework),
         tags=plugin.tags,
         is_recommended=bool(plugin.is_recommended),
         icon_url=plugin.icon_url,
@@ -207,13 +232,17 @@ async def collect_export_bundle(db: AsyncSession) -> PluginCatalogExport:
 
 
 def _apply_entry_fields(
-    plugin: MarketPlugin, entry: PluginCatalogEntry, category: PluginCategory
+    plugin: MarketPlugin,
+    entry: PluginCatalogEntry,
+    category: PluginCategory,
+    framework: PluginFramework,
 ) -> None:
     plugin.title = entry.title
     plugin.description = entry.description
     plugin.author = entry.author
     plugin.version = entry.version
     plugin.category = category
+    plugin.framework = framework
     plugin.tags = entry.tags
     plugin.is_recommended = entry.is_recommended
     plugin.icon_url = _optional_text(entry.icon_url)
@@ -294,18 +323,19 @@ async def _import_plugin_entries(
             )
             continue
         seen_keys.add(key)
-        category = _parse_category(entry.category)
-        if category is None:
+        taxonomy = _parse_entry_taxonomy(entry)
+        if isinstance(taxonomy, str):
             results.append(
                 PluginCatalogImportResult(
                     index=index,
                     kind="plugin",
                     name=entry.title,
                     action="failed",
-                    message=f"Invalid category: {entry.category}",
+                    message=taxonomy,
                 )
             )
             continue
+        category, framework = taxonomy
         current = by_key.get(key)
         if current is None:
             plugin = MarketPlugin(
@@ -315,6 +345,7 @@ async def _import_plugin_entries(
                 author=entry.author,
                 version=entry.version,
                 category=category,
+                framework=framework,
                 tags=entry.tags,
                 is_recommended=entry.is_recommended,
                 icon_url=_optional_text(entry.icon_url),
@@ -340,7 +371,7 @@ async def _import_plugin_entries(
                 )
             )
             continue
-        _apply_entry_fields(current, entry, category)
+        _apply_entry_fields(current, entry, category, framework)
         db.add(current)
         result = PluginCatalogImportResult(
             index=index, kind="plugin", name=entry.title, action="updated", plugin_id=current.id

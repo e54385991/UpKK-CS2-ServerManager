@@ -10,8 +10,12 @@ from sqlmodel import select
 
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession, require_server_access
 from api.routes import plugin_market as legacy
-from modules import ManagedPlugin, MarketPlugin, PluginCategory
-from modules.schemas.plugins import MarketPluginCreate, MarketPluginResponse
+from modules import ManagedPlugin, MarketPlugin, PluginCategory, PluginFramework
+from modules.schemas.plugins import (
+    MarketPluginCreate,
+    MarketPluginResponse,
+    MarketPluginUpdate,
+)
 from services.audit_log_service import record_audit_event
 from services.github_credentials import get_effective_github_token
 from services.plugin_catalog import delete_market_plugin as remove_catalog_plugin
@@ -20,7 +24,8 @@ from services.plugin_conflict_service import (
     build_plugin_install_plan,
     validate_plugin_plan_acknowledgements,
 )
-from services.plugins.common import parse_dependency_ids
+from services.plugins.common import framework_value, parse_dependency_ids, parse_framework
+from services.plugins.description_sync import sync_market_plugin_descriptions
 from services.server_operation_hub import ServerOperationConflict
 
 from .operation_locks import reject_stuck_lock_unless_active
@@ -33,6 +38,10 @@ from .schemas import (
     GitHubUninstallRequest,
     ManagedPluginView,
     MarketPluginCreateRequest,
+    MarketPluginDescriptionSyncItemView,
+    MarketPluginDescriptionSyncRequest,
+    MarketPluginDescriptionSyncView,
+    MarketPluginUpdateRequest,
     MarketPluginView,
     Page,
     PluginCategoryList,
@@ -56,6 +65,19 @@ server_router = APIRouter(
 
 def _category_value(category: PluginCategory | str) -> str:
     return category.value if isinstance(category, PluginCategory) else str(category)
+
+
+def _parse_framework_filter(framework: str | None) -> PluginFramework | None:
+    """Resolve the marketplace section filter, rejecting unknown sections."""
+    if not framework:
+        return None
+    try:
+        return parse_framework(framework)
+    except PluginPlanError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 def _to_plugin_ref(plugin: MarketPlugin) -> PluginRef:
@@ -102,10 +124,12 @@ def to_market_view(
         author=plugin.author,
         version=plugin.version,
         category=_category_value(plugin.category),
+        framework=framework_value(plugin.framework),
         tags=plugin.tags,
         is_recommended=bool(plugin.is_recommended),
         icon_url=plugin.icon_url,
         github_url=plugin.github_url,
+        custom_install_path=plugin.custom_install_path,
         download_count=int(plugin.download_count or 0),
         install_count=int(plugin.install_count or 0),
         dependencies=dependencies,
@@ -185,10 +209,15 @@ async def list_market_plugins(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     category: str | None = Query(None),
+    framework: str | None = Query(
+        None,
+        description="Marketplace section: counterstrikesharp or swiftly",
+    ),
     q: str | None = Query(None, max_length=200),
 ) -> Page[MarketPluginView]:
     """Browse the plugin marketplace with offset pagination."""
     del current_user
+    framework_enum = _parse_framework_filter(framework)
     category_enum = None
     if category:
         try:
@@ -208,6 +237,7 @@ async def list_market_plugins(
         search_query=q.strip() if q and q.strip() else None,
         skip=offset,
         limit=limit,
+        framework=framework_enum,
     )
     dependency_lists = await _dependency_refs(db, plugins)
     return Page(
@@ -321,6 +351,60 @@ async def create_market_plugin(
     return to_market_view(created, dependencies)
 
 
+@market_router.post(
+    "/market/descriptions/sync",
+    response_model=MarketPluginDescriptionSyncView,
+    responses={403: {"model": ProblemDetail}},
+)
+async def sync_market_descriptions(
+    body: MarketPluginDescriptionSyncRequest,
+    db: DatabaseSession,
+    current_user: AdminUser,
+    request: Request,
+) -> MarketPluginDescriptionSyncView:
+    """Refresh marketplace descriptions in bulk from the upstream READMEs."""
+    github_token = await get_effective_github_token(db, current_user)
+    result = await sync_market_plugin_descriptions(
+        db,
+        github_token=github_token,
+        plugin_ids=list(body.plugin_ids) or None,
+        framework=_parse_framework_filter(body.framework),
+        overwrite=body.overwrite,
+    )
+    await record_audit_event(
+        category="plugin",
+        action="plugin.catalog.sync_descriptions",
+        status="success" if result.failed == 0 else "partial",
+        user=current_user,
+        request=request,
+        details={
+            "total": result.total,
+            "updated": result.updated,
+            "failed": result.failed,
+            "framework": body.framework,
+            "overwrite": body.overwrite,
+        },
+    )
+    return MarketPluginDescriptionSyncView(
+        total=result.total,
+        updated=result.updated,
+        unchanged=result.unchanged,
+        skipped=result.skipped,
+        failed=result.failed,
+        remaining=result.remaining,
+        items=[
+            MarketPluginDescriptionSyncItemView(
+                plugin_id=item.plugin_id,
+                title=item.title,
+                github_url=item.github_url,
+                action=item.action,
+                message=item.message,
+            )
+            for item in result.items
+        ],
+    )
+
+
 @market_router.get("/market/{plugin_id}", response_model=MarketPluginView)
 async def get_market_plugin(
     plugin_id: int,
@@ -334,6 +418,52 @@ async def get_market_plugin(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
     dependencies = (await _dependency_refs(db, [plugin]))[0]
     return to_market_view(plugin, dependencies)
+
+
+@market_router.patch(
+    "/market/{plugin_id}",
+    response_model=MarketPluginView,
+    responses={
+        400: {"model": ProblemDetail},
+        403: {"model": ProblemDetail},
+        404: {"model": ProblemDetail},
+    },
+)
+async def update_market_plugin(
+    plugin_id: int,
+    body: MarketPluginUpdateRequest,
+    db: DatabaseSession,
+    current_user: AdminUser,
+    request: Request,
+) -> MarketPluginView:
+    """Edit an existing marketplace listing. Only submitted fields change."""
+    submitted = body.model_dump(include=body.model_fields_set)
+    changed = {key: value for key, value in submitted.items() if value is not None}
+    if not changed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one field to update",
+        )
+    updated = await legacy.update_plugin(
+        plugin_id,
+        MarketPluginUpdate(**changed),
+        db,
+        current_user,
+    )
+    dependencies = (await _dependency_refs(db, [updated]))[0]
+    await record_audit_event(
+        category="plugin",
+        action="plugin.catalog.update",
+        status="success",
+        user=current_user,
+        request=request,
+        details={
+            "plugin_id": plugin_id,
+            "title": updated.title,
+            "fields": sorted(changed),
+        },
+    )
+    return to_market_view(updated, dependencies)
 
 
 @market_router.delete("/market/{plugin_id}", response_model=ActionResult)

@@ -20,6 +20,23 @@ class PluginCategory(str, enum.Enum):
     OTHER = "other"
 
 
+class PluginFramework(str, enum.Enum):
+    """Runtime a marketplace plugin is written for.
+
+    The marketplace is split into these two top-level sections. They are the
+    two mutually exclusive CS2 plugin runtimes (see
+    ``frontend/src/modules/servers/frameworks.ts``), so a listing belongs to
+    exactly one of them. The ``swiftly`` value matches the framework key the
+    rest of the panel already uses for SwiftlyS2.
+    """
+
+    COUNTERSTRIKESHARP = "counterstrikesharp"
+    SWIFTLY = "swiftly"
+
+
+DEFAULT_PLUGIN_FRAMEWORK = PluginFramework.COUNTERSTRIKESHARP
+
+
 class PluginConflictRule(SQLModel, table=True):
     """A symmetric compatibility rule between two market plugins."""
 
@@ -68,6 +85,10 @@ class MarketPlugin(SQLModel, table=True):
             "'PERFORMANCE', 'LIBRARY', 'OTHER')",
             name="ck_market_plugins_plugin_category",
         ),
+        CheckConstraint(
+            "framework IN ('COUNTERSTRIKESHARP', 'SWIFTLY')",
+            name="ck_market_plugins_plugin_framework",
+        ),
     )
 
     id: int = Field(default=None, primary_key=True)
@@ -79,6 +100,14 @@ class MarketPlugin(SQLModel, table=True):
     category: PluginCategory = Field(
         default=PluginCategory.OTHER,
         sa_column=Column(portable_enum(PluginCategory, name="plugin_category"), nullable=False),
+    )
+    framework: PluginFramework = Field(
+        default=DEFAULT_PLUGIN_FRAMEWORK,
+        sa_column=Column(
+            portable_enum(PluginFramework, name="plugin_framework"),
+            nullable=False,
+            server_default=text(f"'{DEFAULT_PLUGIN_FRAMEWORK.name}'"),
+        ),
     )
     tags: Optional[str] = Field(
         default=None, sa_column=Column(Text, nullable=True)
@@ -141,6 +170,7 @@ class MarketPlugin(SQLModel, table=True):
         search_query: Optional[str] = None,
         skip: int = 0,
         limit: int = 20,
+        framework: Optional[PluginFramework] = None,
     ) -> tuple[list[Self], int]:
         """
         Search plugins with filters and pagination.
@@ -156,6 +186,11 @@ class MarketPlugin(SQLModel, table=True):
         if category:
             query = query.where(cls.category == category)
             count_query = count_query.where(cls.category == category)
+
+        # Apply framework (marketplace section) filter
+        if framework:
+            query = query.where(cls.framework == framework)
+            count_query = count_query.where(cls.framework == framework)
 
         # Apply search query (search in title, description, author)
         if search_query and search_query.strip():

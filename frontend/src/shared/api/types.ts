@@ -61,6 +61,11 @@ export type DeploymentLogEntryDto = Schemas["DeploymentLogEntry"];
 export type ServerOperationRequestDto = Schemas["ServerOperationRequest"];
 export type MarketPluginViewDto = Schemas["MarketPluginView"];
 export type MarketPluginCreateRequestDto = Schemas["MarketPluginCreateRequest"];
+export type MarketPluginUpdateRequestDto = Schemas["MarketPluginUpdateRequest"];
+export type MarketPluginDescriptionSyncRequestDto =
+  Schemas["MarketPluginDescriptionSyncRequest"];
+export type MarketPluginDescriptionSyncViewDto =
+  Schemas["MarketPluginDescriptionSyncView"];
 export type MarketPluginPageDto = Schemas["Page_MarketPluginView_"];
 export type PluginCategoryListDto = Schemas["PluginCategoryList"];
 export type PluginDependencyOptionsDto = Schemas["PluginDependencyOptionsView"];

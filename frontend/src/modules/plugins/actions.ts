@@ -6,27 +6,34 @@ import type { ActionResultDto } from "@/shared/api/types";
 import type { ApiResult } from "@/shared/api/server-fetch";
 import {
   analyzeGitHubArchive,
-  createMarketPlugin,
-  deleteMarketPlugin,
   exportPluginCatalog,
-  fetchMarketRepoInfo,
   getPluginInstallPlan,
   importPluginCatalog,
   installGitHubPlugin,
   installMarketPlugin,
   listGitHubReleases,
-  listPluginDependencyOptions,
   listServerPlugins,
   planGitHubPluginInstall,
   uninstallGitHubPlugin,
   uninstallMarketPlugin,
 } from "@/modules/plugins/api";
+import {
+  createMarketPlugin,
+  deleteMarketPlugin,
+  fetchMarketRepoInfo,
+  listPluginDependencyOptions,
+  syncMarketPluginDescriptions,
+  updateMarketPlugin,
+} from "@/modules/plugins/market-admin-api";
 import type {
+  DescriptionSyncInput,
+  DescriptionSyncSummary,
   GitHubArchive,
   GitHubInstallPlan,
   GitHubRepoInfo,
   MarketPlugin,
   MarketPluginCreateInput,
+  MarketPluginUpdateInput,
   GitHubReleases,
   PluginCatalogBundle,
   PluginCatalogImportRequest,
@@ -100,6 +107,34 @@ export async function createMarketPluginAction(
     return { ok: false, status: 403, error: "Not enough permissions" };
   }
   const result = await createMarketPlugin(input);
+  if (result.ok) revalidatePath("/plugins");
+  return result;
+}
+
+export async function updateMarketPluginAction(
+  pluginId: number,
+  input: MarketPluginUpdateInput,
+): Promise<ApiResult<MarketPlugin>> {
+  const session = await getSession();
+  if (!session?.isAdmin) {
+    return { ok: false, status: 403, error: "Not enough permissions" };
+  }
+  const result = await updateMarketPlugin(pluginId, input);
+  if (result.ok) {
+    revalidatePath("/plugins");
+    revalidatePath(`/plugins/${pluginId}`);
+  }
+  return result;
+}
+
+export async function syncMarketPluginDescriptionsAction(
+  input: DescriptionSyncInput = {},
+): Promise<ApiResult<DescriptionSyncSummary>> {
+  const session = await getSession();
+  if (!session?.isAdmin) {
+    return { ok: false, status: 403, error: "Not enough permissions" };
+  }
+  const result = await syncMarketPluginDescriptions(input);
   if (result.ok) revalidatePath("/plugins");
   return result;
 }
