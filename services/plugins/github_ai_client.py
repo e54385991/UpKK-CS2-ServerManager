@@ -94,6 +94,9 @@ class GitHubAIClient:
             transport=transport,
             headers={
                 "Accept": "application/vnd.github+json",
+                # Some upstream proxies advertise gzip while returning an
+                # uncompressed body. Avoid client-side decompression failures.
+                "Accept-Encoding": "identity",
                 "Authorization": f"Bearer {token.strip()}",
                 "User-Agent": "UpKK-CS2-ServerManager",
                 "X-GitHub-Api-Version": "2022-11-28",
@@ -158,6 +161,10 @@ class GitHubAIClient:
                     raise GitHubImportError(
                         f"GitHub network error while requesting {path}; check outbound network or proxy"
                     ) from exc
+            except httpx.DecodingError as exc:
+                raise GitHubImportError(
+                    f"GitHub response decompression failed while requesting {path}; check proxy configuration"
+                ) from exc
             if attempt < len(NETWORK_RETRY_DELAYS):
                 await asyncio.sleep(NETWORK_RETRY_DELAYS[attempt])
         raise AssertionError("network retry loop exhausted")
