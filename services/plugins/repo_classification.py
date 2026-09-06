@@ -135,15 +135,18 @@ def detect_plugin_framework(
     """
     haystack = _haystack(name=name, description=description, readme=readme, topics=topics)
     counterstrikesharp = _contains(haystack, _COUNTERSTRIKESHARP_MARKERS)
+    metamod = _contains(haystack, _METAMOD_MARKERS)
     swiftly = _contains(haystack, _SWIFTLY_MARKERS)
+    # Metamod markers identify a standalone runtime; incidental Swiftly mentions
+    # in compatibility notes must not move it into the Swiftly section.
+    if metamod and not counterstrikesharp:
+        return PluginFramework.OTHER
     if counterstrikesharp and swiftly:
         return PluginFramework.OTHER
     if counterstrikesharp:
         return PluginFramework.COUNTERSTRIKESHARP
     if swiftly:
         return PluginFramework.SWIFTLY
-    if _contains(haystack, _METAMOD_MARKERS):
-        return PluginFramework.OTHER
     return None
 
 

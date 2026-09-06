@@ -20,6 +20,12 @@ from services.audit_log_service import record_audit_event
 from services.client_ip import set_client_ip_header
 from services.email_service import email_service
 from services.log_output import apply_console_log_level, effective_console_log_level
+from services.plugin_download_cache import (
+    clear as clear_download_cache,
+)
+from services.plugin_download_cache import (
+    stats as download_cache_stats,
+)
 from services.plugins.ai_import_store import verify_token
 
 from .schemas import (
@@ -104,6 +110,14 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
     return SystemSettingsView(
         default_proxy_mode=proxy_mode,
         github_proxy_url=settings.github_proxy_url,
+        plugin_download_cache_enabled=settings.plugin_download_cache_enabled,
+        plugin_download_cache_path=settings.plugin_download_cache_path,
+        plugin_download_cache_files=download_cache_stats(settings.plugin_download_cache_path)[
+            "files"
+        ],
+        plugin_download_cache_bytes=download_cache_stats(settings.plugin_download_cache_path)[
+            "bytes"
+        ],
         captcha_enabled=bool(settings.captcha_enabled),
         client_ip_header=settings.client_ip_header,
         log_level=_log_level(settings.log_level),
@@ -344,3 +358,10 @@ async def test_assistant_system_settings(
 async def test_github_token(current_user: AdminUser) -> GitHubTokenVerificationView:
     result = await verify_token(current_user.id)
     return GitHubTokenVerificationView(**result.model_dump())
+
+
+@router.post("/plugin-download-cache/clear", response_model=ActionResult)
+async def clear_plugin_download_cache(db: DatabaseSession, current_user: AdminUser) -> ActionResult:
+    settings = await SystemSettings.get_or_create_settings(db)
+    count = clear_download_cache(settings.plugin_download_cache_path)
+    return ActionResult(success=True, message=f"Cleared {count} cached files")

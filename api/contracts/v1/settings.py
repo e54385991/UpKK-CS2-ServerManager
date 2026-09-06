@@ -33,6 +33,10 @@ class SystemSettingsView(V1Model):
 
     default_proxy_mode: ProxyMode
     github_proxy_url: str | None = None
+    plugin_download_cache_enabled: bool = True
+    plugin_download_cache_path: str | None = None
+    plugin_download_cache_files: int = 0
+    plugin_download_cache_bytes: int = 0
     captcha_enabled: bool = True
     client_ip_header: str | None = None
     # None means the console follows the LOG_LEVEL environment variable.
@@ -60,6 +64,8 @@ class SystemSettingsPatch(ApiRequest):
     """Partial admin update. Secret fields are write-only and never echoed."""
 
     default_proxy_mode: ProxyMode | None = None
+    plugin_download_cache_enabled: bool | None = None
+    plugin_download_cache_path: str | None = Field(default=None, max_length=1000)
     github_proxy_url: str | None = None
     captcha_enabled: bool | None = None
     client_ip_header: str | None = Field(default=None, max_length=64)

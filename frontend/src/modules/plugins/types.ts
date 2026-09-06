@@ -31,7 +31,7 @@ export const PLUGIN_FRAMEWORKS = [
 export type PluginFramework = (typeof PLUGIN_FRAMEWORKS)[number];
 
 /** The two sections the marketplace is browsed by. */
-export const PLUGIN_FRAMEWORK_SECTIONS = ["counterstrikesharp", "swiftly"] as const;
+export const PLUGIN_FRAMEWORK_SECTIONS = ["counterstrikesharp", "swiftly", "other"] as const;
 
 export type PluginFrameworkSection = (typeof PLUGIN_FRAMEWORK_SECTIONS)[number];
 

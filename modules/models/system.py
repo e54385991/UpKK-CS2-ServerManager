@@ -87,6 +87,10 @@ class SystemSettings(SQLModel, table=True):
     # Proxy configuration
     default_proxy_mode: str = Field(default="panel", max_length=50)  # direct, panel, github_url
     github_proxy_url: Optional[str] = Field(default=None, max_length=500)
+    plugin_download_cache_enabled: bool = Field(
+        default=True, sa_column_kwargs={"server_default": text("true")}
+    )
+    plugin_download_cache_path: Optional[str] = Field(default=None, max_length=1000)
 
     # Public and sensitive form protection. Keep enabled by default.
     captcha_enabled: bool = Field(

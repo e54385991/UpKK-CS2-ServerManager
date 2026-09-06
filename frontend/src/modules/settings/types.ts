@@ -40,6 +40,10 @@ export type EmailProvider = (typeof EMAIL_PROVIDERS)[number];
 export type SystemSettings = {
   readonly defaultProxyMode: ProxyMode;
   readonly githubProxyUrl: string | null;
+  readonly pluginDownloadCacheEnabled: boolean;
+  readonly pluginDownloadCachePath: string | null;
+  readonly pluginDownloadCacheFiles: number;
+  readonly pluginDownloadCacheBytes: number;
   readonly captchaEnabled: boolean;
   readonly clientIpHeader: string | null;
   readonly logLevel: LogLevel | null;
@@ -65,6 +69,8 @@ export type SystemSettings = {
 export type SettingsPatch = {
   readonly defaultProxyMode?: ProxyMode;
   readonly githubProxyUrl?: string | null;
+  readonly pluginDownloadCacheEnabled?: boolean;
+  readonly pluginDownloadCachePath?: string | null;
   readonly captchaEnabled?: boolean;
   readonly clientIpHeader?: string | null;
   readonly logLevel?: LogLevel | null;

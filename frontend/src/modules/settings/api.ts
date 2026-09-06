@@ -26,6 +26,10 @@ function toSettings(raw: SystemSettingsViewDto): SystemSettings {
   return {
     defaultProxyMode: toProxyMode(raw.default_proxy_mode),
     githubProxyUrl: raw.github_proxy_url ?? null,
+    pluginDownloadCacheEnabled: raw.plugin_download_cache_enabled ?? true,
+    pluginDownloadCachePath: raw.plugin_download_cache_path ?? null,
+    pluginDownloadCacheFiles: raw.plugin_download_cache_files ?? 0,
+    pluginDownloadCacheBytes: raw.plugin_download_cache_bytes ?? 0,
     captchaEnabled: raw.captcha_enabled ?? true,
     clientIpHeader: raw.client_ip_header ?? null,
     logLevel: toLogLevel(raw.log_level),
@@ -69,6 +73,8 @@ export function toWirePatch(patch: SettingsPatch): Record<string, unknown> {
     ...(patch.githubProxyUrl !== undefined
       ? { github_proxy_url: patch.githubProxyUrl }
       : {}),
+    ...(patch.pluginDownloadCacheEnabled !== undefined ? { plugin_download_cache_enabled: patch.pluginDownloadCacheEnabled } : {}),
+    ...(patch.pluginDownloadCachePath !== undefined ? { plugin_download_cache_path: patch.pluginDownloadCachePath } : {}),
     ...(patch.captchaEnabled !== undefined
       ? { captcha_enabled: patch.captchaEnabled }
       : {}),
