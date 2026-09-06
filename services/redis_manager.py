@@ -7,6 +7,7 @@ import json
 import logging
 import time
 import warnings
+from collections.abc import Sequence
 from typing import Any, Optional
 
 import redis.asyncio as aioredis
@@ -76,20 +77,34 @@ class RedisManager:
             print(f"Redis set error: {e}")
             return False
 
-    async def get(self, key: str) -> Optional[Any]:
-        """Get a value from Redis"""
-        key = self.prefixed_key(key)
-        try:
-            value = await self.client.get(key)
-            if value:
-                try:
-                    return json.loads(value)
-                except json.JSONDecodeError:
-                    return value
+    @staticmethod
+    def _decode_value(value: Any) -> Any | None:
+        """Preserve the single-key JSON/string/missing-value contract."""
+        if not value:
             return None
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+
+    async def get(self, key: str) -> Optional[Any]:
+        """Get a value from Redis."""
+        try:
+            return self._decode_value(await self.client.get(self.prefixed_key(key)))
         except Exception as e:
             print(f"Redis get error: {e}")
             return None
+
+    async def get_many(self, keys: Sequence[str]) -> list[Any | None]:
+        """Read ordered cache values in one MGET, including duplicate and missing keys."""
+        if not keys:
+            return []
+        try:
+            values = await self.client.mget([self.prefixed_key(key) for key in keys])
+            return [self._decode_value(value) for value in values]
+        except Exception:
+            logger.warning("Redis batch cache read failed (keys=%d)", len(keys))
+            return [None] * len(keys)
 
     async def delete(self, key: str) -> bool:
         """Delete a key from Redis"""

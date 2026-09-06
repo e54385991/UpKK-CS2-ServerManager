@@ -67,13 +67,8 @@ class SystemInfoHelper:
         Returns:
             Dict mapping server ID to disk space info
         """
-        result = {}
-
-        for server in servers:
-            disk_data = await self.get_disk_space(server, force_refresh)
-            result[server.id] = disk_data
-
-        return result
+        values = await disk_space_service.get_many_disk_space(servers, force_refresh=force_refresh)
+        return {server.id: value for server, value in zip(servers, values, strict=True)}
 
 
 # Global instance

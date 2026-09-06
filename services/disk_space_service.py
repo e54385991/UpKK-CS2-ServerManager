@@ -5,9 +5,12 @@ Provides cached disk space information for server directories
 
 import logging
 import shlex
+from collections.abc import Sequence
+from time import monotonic
 from typing import Dict, Optional, Tuple
 
 from modules.models import Server
+from services import telemetry_runtime
 from services.redis_manager import redis_manager
 from services.ssh_manager import SSHManager
 
@@ -67,7 +70,50 @@ class DiskSpaceService:
 
         return False, None
 
+    async def get_many_disk_space(
+        self,
+        servers: Sequence[Server],
+        *,
+        force_refresh: bool = False,
+        cache_only: bool = False,
+    ) -> list[Optional[Dict]]:
+        """Batch cache hits and limit only the misses that may probe over SSH."""
+        started = monotonic()
+        cached = (
+            [None] * len(servers)
+            if force_refresh
+            else await redis_manager.get_many([f"disk_space:{server.id}" for server in servers])
+        )
+        hits = sum(bool(value) and isinstance(value, dict) for value in cached)
+
+        async def read(server: Server, value: object) -> Optional[Dict]:
+            if isinstance(value, dict) and value:
+                return value
+            if cache_only and not force_refresh:
+                return None
+            _ok, info = await self.get_disk_space(server, force_refresh=force_refresh)
+            return info
+
+        values = await telemetry_runtime.collect_ordered(
+            read(server, value) for server, value in zip(servers, cached, strict=True)
+        )
+        telemetry_runtime.log_batch(
+            logger,
+            "disk",
+            started,
+            count=len(servers),
+            cache_hits=hits,
+            failures=sum(value is None for value in values),
+        )
+        return values
+
     async def _read_disk_space(self, server: Server) -> Tuple[bool, Optional[Dict]]:
+        async with telemetry_runtime.ssh_probe_limiter.slot(
+            (server.host.casefold(), server.ssh_port)
+        ):
+            return await self._read_disk_space_unlimited(server)
+
+    async def _read_disk_space_unlimited(self, server: Server) -> Tuple[bool, Optional[Dict]]:
         """
         Read disk space from system via SSH
 

@@ -63,7 +63,9 @@ async def test_cache_hit_does_not_connect_to_server(monkeypatch):
     monkeypatch.setattr("services.host_system_info_service.redis_manager", FakeRedis())
     monkeypatch.setattr("services.host_system_info_service.SSHManager", UnexpectedSSH)
 
-    result = await HostSystemInfoService().get_host_system_info(SimpleNamespace(id=7))
+    result = await HostSystemInfoService().get_host_system_info(
+        SimpleNamespace(id=7, host="host", ssh_port=22)
+    )
 
     assert result["cached"] is True
     assert result["success"] is True
@@ -106,7 +108,9 @@ async def test_cache_miss_collects_once_and_persists_snapshot(monkeypatch):
     monkeypatch.setattr("services.host_system_info_service.redis_manager", FakeRedis())
     monkeypatch.setattr("services.host_system_info_service.SSHManager", FakeSSH)
 
-    result = await HostSystemInfoService().get_host_system_info(SimpleNamespace(id=7))
+    result = await HostSystemInfoService().get_host_system_info(
+        SimpleNamespace(id=7, host="host", ssh_port=22)
+    )
 
     assert result["cached"] is False
     assert result["success"] is True

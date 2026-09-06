@@ -15,6 +15,7 @@ from services.host_system_info_service import (
     HostSystemInfoData,
     host_system_info_service,
 )
+from services.servers.telemetry import load_telemetry_servers
 
 from .schemas import (
     A2SCacheListView,
@@ -153,18 +154,14 @@ async def read_overview_disk_space(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions",
             )
-        servers = await Server.get_all(db, skip=0, limit=1000)
+        servers = await load_telemetry_servers(db, current_user.id, all_servers=True)
     else:
-        servers = await Server.get_all_by_user(db, current_user.id, skip=0, limit=1000)
+        servers = await load_telemetry_servers(db, current_user.id)
 
-    views: list[DiskSpaceView] = []
-    for server in servers:
-        _ok, info = await disk_space_service.get_disk_space(
-            server,
-            force_refresh=force_refresh,
-            cache_only=not force_refresh,
-        )
-        views.append(_disk_view(int(server.id), info if isinstance(info, dict) else None))
+    snapshots = await disk_space_service.get_many_disk_space(
+        servers, force_refresh=force_refresh, cache_only=not force_refresh
+    )
+    views = [_disk_view(server.id, info) for server, info in zip(servers, snapshots, strict=True)]
     return DiskSpaceListView(servers=views, timestamp=get_current_time())
 
 
@@ -182,19 +179,16 @@ async def read_overview_host_system_info(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions",
             )
-        servers = await Server.get_all(db, skip=0, limit=1000)
+        servers = await load_telemetry_servers(db, current_user.id, all_servers=True)
     else:
-        servers = await Server.get_all_by_user(db, current_user.id, skip=0, limit=1000)
+        servers = await load_telemetry_servers(db, current_user.id)
 
+    snapshots = await host_system_info_service.get_many_host_system_info(
+        servers, force_refresh=force_refresh
+    )
     views = [
-        _host_system_info_view(
-            int(server.id),
-            await host_system_info_service.get_host_system_info(
-                server,
-                force_refresh=force_refresh,
-            ),
-        )
-        for server in servers
+        _host_system_info_view(server.id, info)
+        for server, info in zip(servers, snapshots, strict=True)
     ]
     return HostSystemInfoListView(servers=views, timestamp=get_current_time())
 
@@ -213,16 +207,10 @@ async def read_overview_a2s_cache(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions",
             )
-        servers = await Server.get_all(db, skip=0, limit=1000)
+        servers = await load_telemetry_servers(db, current_user.id, all_servers=True)
     else:
-        servers = await Server.get_all_by_user(db, current_user.id, skip=0, limit=1000)
+        servers = await load_telemetry_servers(db, current_user.id)
 
-    views: list[A2SCacheView] = []
-    for server in servers:
-        cached = (
-            await a2s_cache_service.refresh_cached_info(server)
-            if force_refresh
-            else await a2s_cache_service.get_cached_info(int(server.id))
-        )
-        views.append(_a2s_view(int(server.id), cached if isinstance(cached, dict) else None))
+    snapshots = await a2s_cache_service.get_many_cached_info(servers, force_refresh=force_refresh)
+    views = [_a2s_view(server.id, info) for server, info in zip(servers, snapshots, strict=True)]
     return A2SCacheListView(servers=views, timestamp=get_current_time())

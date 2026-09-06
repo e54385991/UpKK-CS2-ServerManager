@@ -3,6 +3,7 @@
 # ruff: noqa: F403,F405
 
 from api.dependencies import ActiveUser, DatabaseSession
+from services.servers.telemetry import load_telemetry_servers
 
 from .common import *
 
@@ -30,7 +31,7 @@ async def get_all_servers_disk_space(
     from services.system_info_helper import system_info_helper
 
     # Get all servers for current user
-    servers = await Server.get_all_by_user(db, current_user.id)
+    servers = await load_telemetry_servers(db, current_user.id, limit=100)
 
     # Get disk space for all servers
     disk_space_map = await system_info_helper.get_all_servers_disk_space(

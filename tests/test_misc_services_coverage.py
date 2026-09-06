@@ -52,7 +52,7 @@ async def test_db_admin_run_and_main(monkeypatch, capsys):
 @pytest.mark.asyncio
 async def test_disk_space_cache_read_and_parse(monkeypatch):
     service = DiskSpaceService()
-    server = SimpleNamespace(id=4, game_directory="/srv/cs2")
+    server = SimpleNamespace(id=4, host="host", ssh_port=22, game_directory="/srv/cs2")
     redis = SimpleNamespace(
         get=AsyncMock(return_value={"used_gb": 1}), set=AsyncMock(), delete=AsyncMock()
     )

@@ -60,35 +60,30 @@ def test_v1_disk_space_requires_authentication():
 
 
 def test_v1_disk_space_is_cache_only_by_default(monkeypatch):
-    seen: list[dict] = []
+    seen: list[str] = []
 
     async def fake_servers(_db, _user_id, skip=0, limit=1000):
         return [SimpleNamespace(id=7, game_directory="/home/steam/cs2")]
 
-    async def fake_disk(server, force_refresh=False, cache_only=False):
-        seen.append(
-            {
-                "id": server.id,
-                "force_refresh": force_refresh,
-                "cache_only": cache_only,
-            }
-        )
-        return True, {
-            "used_gb": 12.5,
-            "total_gb": 100.0,
-            "available_gb": 80.0,
-            "used_percent": 12.5,
-        }
+    async def fake_cached(keys):
+        seen.extend(keys)
+        return [{"used_gb": 12.5, "total_gb": 100.0, "available_gb": 80.0, "used_percent": 12.5}]
+
+    async def unexpected_probe(*_args, **_kwargs):
+        raise AssertionError("default batch read must not connect to SSH")
 
     monkeypatch.setattr("api.routes.v1.overview.Server.get_all_by_user", fake_servers)
     monkeypatch.setattr(
-        "api.routes.v1.overview.disk_space_service.get_disk_space",
-        fake_disk,
+        "services.disk_space_service.redis_manager.get_many",
+        fake_cached,
+    )
+    monkeypatch.setattr(
+        "services.disk_space_service.disk_space_service._read_disk_space", unexpected_probe
     )
     response = _client().get("/api/v1/overview/disk-space")
     assert response.status_code == 200
     body = response.json()
-    assert seen == [{"id": 7, "force_refresh": False, "cache_only": True}]
+    assert seen == ["disk_space:7"]
     assert body["servers"][0]["server_id"] == 7
     assert body["servers"][0]["cached"] is True
     assert body["servers"][0]["used_gb"] == 12.5
@@ -109,8 +104,8 @@ def test_v1_disk_space_scope_all_uses_fleet_for_admin(monkeypatch):
     monkeypatch.setattr("api.routes.v1.overview.Server.get_all", fake_all)
     monkeypatch.setattr("api.routes.v1.overview.Server.get_all_by_user", fake_mine)
     monkeypatch.setattr(
-        "api.routes.v1.overview.disk_space_service.get_disk_space",
-        AsyncMock(return_value=(False, None)),
+        "services.disk_space_service.redis_manager.get_many",
+        AsyncMock(return_value=[None]),
     )
     response = _client(admin=True).get("/api/v1/overview/disk-space?scope=all")
     assert response.status_code == 200
@@ -144,32 +139,34 @@ def test_v1_a2s_cache_requires_authentication():
 
 
 def test_v1_a2s_cache_is_cache_only_by_default(monkeypatch):
-    seen: list[int] = []
+    seen: list[str] = []
 
     async def fake_servers(_db, _user_id, skip=0, limit=1000):
         return [SimpleNamespace(id=7, host="10.0.0.7", game_port=27015)]
 
-    async def fake_cached(server_id):
-        seen.append(server_id)
-        return {
-            "success": True,
-            "server_info": {
-                "server_name": "ops",
-                "map_name": "de_dust2",
-                "player_count": 3,
-                "max_players": 10,
-                "version": "1.41.2.3",
-            },
-            "last_updated": "2026-08-29T16:00:00+08:00",
-            "response_time_ms": 12,
-        }
+    async def fake_cached(keys):
+        seen.extend(keys)
+        return [
+            {
+                "success": True,
+                "server_info": {
+                    "server_name": "ops",
+                    "map_name": "de_dust2",
+                    "player_count": 3,
+                    "max_players": 10,
+                    "version": "1.41.2.3",
+                },
+                "last_updated": "2026-08-29T16:00:00+08:00",
+                "response_time_ms": 12,
+            }
+        ]
 
     async def fake_refresh(_server):
         raise AssertionError("default A2S list must not query live servers")
 
     monkeypatch.setattr("api.routes.v1.overview.Server.get_all_by_user", fake_servers)
     monkeypatch.setattr(
-        "api.routes.v1.overview.a2s_cache_service.get_cached_info",
+        "services.disk_space_service.redis_manager.get_many",
         fake_cached,
     )
     monkeypatch.setattr(
@@ -179,7 +176,7 @@ def test_v1_a2s_cache_is_cache_only_by_default(monkeypatch):
     response = _client().get("/api/v1/overview/a2s-cache")
     assert response.status_code == 200
     body = response.json()
-    assert seen == [7]
+    assert seen == ["a2s:server:7"]
     assert body["servers"][0]["server_id"] == 7
     assert body["servers"][0]["cached"] is True
     assert body["servers"][0]["player_count"] == 3

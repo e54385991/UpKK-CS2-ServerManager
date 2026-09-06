@@ -9,11 +9,13 @@ import logging
 import re
 import shlex
 from collections.abc import Callable
+from time import monotonic
 from typing import Any, Optional, Protocol, Tuple
 
 from sqlmodel import col
 
 from modules.models import Server
+from services import telemetry_runtime
 from services.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
@@ -120,35 +122,33 @@ class SteamInfService:
                 result = await db.execute(select(Server))
                 servers = result.scalars().all()
 
-            logger.info(f"Periodic refresh: Updating steam.inf version for {len(servers)} servers")
+            logger.debug(f"Periodic refresh: Updating steam.inf version for {len(servers)} servers")
 
-            # Refresh each server's version with timeout protection
-            # DB session is already closed, so SSH operations won't hold DB connections
-            for server in servers:
+            started = monotonic()
+
+            async def refresh(server: Server) -> bool:
+                if server.should_skip_background_checks():
+                    return True
                 try:
-                    # Skip servers that are marked as down due to SSH failures
-                    if server.should_skip_background_checks():
-                        logger.info(
-                            f"Skipping steam.inf refresh for server {server.id} - marked as SSH down for 3+ days"
-                        )
-                        continue
-
-                    # Wrap each server refresh in a timeout to prevent one slow server from blocking all others
-                    # Use 35 seconds timeout (slightly more than the _read_version_from_file timeout)
-                    async def _refresh_server(server=server):
-                        success, version = await self.get_version_from_steam_inf(
-                            server, force_refresh=True
-                        )
-                        if success:
-                            logger.debug(f"Refreshed version for server {server.id}: {version}")
-
-                    await asyncio.wait_for(_refresh_server(), timeout=35)
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        f"Timeout refreshing version for server {server.id} - skipping to prevent blocking"
+                    # get_steam_inf_details starts its timeout after admission,
+                    # so large batches do not time out while waiting for a slot.
+                    success, _version = await self.get_version_from_steam_inf(
+                        server, force_refresh=True
                     )
-                except Exception as e:
-                    logger.error(f"Error refreshing version for server {server.id}: {e}")
+                    return success
+                except Exception as exc:
+                    logger.warning("Error refreshing steam.inf for server %s: %s", server.id, exc)
+                    return False
+
+            results = await telemetry_runtime.collect_ordered(refresh(server) for server in servers)
+            telemetry_runtime.log_batch(
+                logger,
+                "steam_inf",
+                started,
+                count=len(servers),
+                cache_hits=0,
+                failures=results.count(False),
+            )
 
         except Exception as e:
             logger.error(f"Error in periodic refresh: {e}")
@@ -190,19 +190,33 @@ class SteamInfService:
             logger.info(f"Cache missing for server {server.id}, proactively refreshing...")
             force_refresh = True
 
-        if force_refresh:
-            success, version, build_id = await self._read_version_from_file(server, timeout=timeout)
-            if success and version:
-                await redis_manager.set(cache_key, version, expire=self.CACHE_TTL_SECONDS)
-                if build_id:
-                    await redis_manager.set(build_key, build_id, expire=self.CACHE_TTL_SECONDS)
-                else:
-                    await redis_manager.delete(build_key)
-                logger.info(
-                    f"Cached steam.inf version for server {server.id}: {version} (unlimited TTL, periodic refresh enabled)"
+        async with telemetry_runtime.ssh_probe_limiter.slot(
+            (server.host.casefold(), server.ssh_port)
+        ):
+            try:
+                return await asyncio.wait_for(
+                    self._refresh_and_cache(server, timeout=timeout), timeout=timeout + 5
                 )
-                return True, version, build_id
+            except TimeoutError:
+                logger.warning("Timed out refreshing steam.inf cache for server %s", server.id)
+                return False, None, None
 
+    async def _refresh_and_cache(
+        self, server: Server, *, timeout: float
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        success, version, build_id = await self._read_version_from_file(server, timeout=timeout)
+        if success and version:
+            await redis_manager.set(
+                f"steam_inf:version:{server.id}", version, expire=self.CACHE_TTL_SECONDS
+            )
+            if build_id:
+                await redis_manager.set(
+                    f"steam_inf:build:{server.id}", build_id, expire=self.CACHE_TTL_SECONDS
+                )
+            else:
+                await redis_manager.delete(f"steam_inf:build:{server.id}")
+            logger.debug("Refreshed steam.inf cache for server %s", server.id)
+            return True, version, build_id
         return False, None, None
 
     async def _read_version_from_file(

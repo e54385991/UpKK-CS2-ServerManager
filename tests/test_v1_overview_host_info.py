@@ -12,7 +12,7 @@ from modules import get_current_active_user, get_current_user, get_db
 
 
 def _database_session():
-    return SimpleNamespace()
+    return SimpleNamespace(commit=AsyncMock())
 
 
 async def _fake_db():
@@ -58,10 +58,10 @@ def test_v1_host_system_info_returns_cached_server_snapshots(monkeypatch):
     async def fake_servers(_db, _user_id, skip=0, limit=1000):
         return [server]
 
-    service = AsyncMock(return_value=_host_info())
+    service = AsyncMock(return_value=[_host_info()])
     monkeypatch.setattr("api.routes.v1.overview.Server.get_all_by_user", fake_servers)
     monkeypatch.setattr(
-        "api.routes.v1.overview.host_system_info_service.get_host_system_info",
+        "api.routes.v1.overview.host_system_info_service.get_many_host_system_info",
         service,
     )
 
@@ -71,7 +71,7 @@ def test_v1_host_system_info_returns_cached_server_snapshots(monkeypatch):
     body = response.json()
     assert body["servers"][0]["distribution"] == "debian"
     assert body["servers"][0]["memory_available_bytes"] == 8589934592
-    service.assert_awaited_once_with(server, force_refresh=False)
+    service.assert_awaited_once_with([server], force_refresh=False)
 
 
 def test_v1_host_system_info_scope_all_forbidden_for_non_admin():

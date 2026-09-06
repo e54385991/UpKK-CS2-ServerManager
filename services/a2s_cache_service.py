@@ -5,9 +5,13 @@ Periodically queries all servers using A2S protocol and caches results in Redis
 
 import asyncio
 import logging
+from collections.abc import Sequence
+from time import monotonic
 from typing import Dict, Optional
 
+from modules.models import Server
 from modules.utils import get_current_time
+from services import telemetry_runtime
 from services.a2s_query import a2s_service
 from services.concurrency_limiter import KeyedConcurrencyLimiter
 from services.redis_manager import redis_manager
@@ -22,6 +26,9 @@ class A2SCacheService:
     """Background service to query and cache A2S server information"""
 
     def __init__(self):
+        self._probe_limiter = KeyedConcurrencyLimiter[int](
+            global_limit=MAX_CONCURRENT_A2S_QUERIES, per_key_limit=1
+        )
         self.query_interval = 30  # Query every 30 seconds
         # A full scan is a bounded background operation.  A slow or unreachable
         # server must not defer the next scan indefinitely.
@@ -134,13 +141,7 @@ class A2SCacheService:
 
             logger.debug(f"Querying {len(servers)} servers for A2S info")
 
-            # The DB session is already closed. Query independent servers in
-            # parallel, with a conservative cap to avoid UDP/Redis bursts.
-            limiter = KeyedConcurrencyLimiter[int](
-                global_limit=MAX_CONCURRENT_A2S_QUERIES,
-                per_key_limit=1,
-            )
-
+            # Foreground refreshes and the background scan share the same limit.
             async def query(server) -> None:
                 # Skip servers that are marked as down due to SSH failures
                 if server.should_skip_background_checks():
@@ -149,15 +150,14 @@ class A2SCacheService:
                     )
                     return
 
-                async with limiter.slot(server.id):
-                    await self._query_and_cache_server(server)
+                await self._limited_query(server)
 
             scan_timeout = self.scan_timeout if timeout is None else timeout
             if scan_timeout is None:
-                await asyncio.gather(*(query(server) for server in servers))
+                await telemetry_runtime.collect_ordered(query(server) for server in servers)
             else:
                 async with asyncio.timeout(scan_timeout):
-                    await asyncio.gather(*(query(server) for server in servers))
+                    await telemetry_runtime.collect_ordered(query(server) for server in servers)
 
         except TimeoutError:
             logger.warning(
@@ -167,6 +167,45 @@ class A2SCacheService:
 
         except Exception as e:
             logger.error(f"Error querying servers: {e}")
+
+    async def _limited_query(self, server: Server) -> None:
+        async with self._probe_limiter.slot(server.id):
+            await self._query_and_cache_server(server)
+
+    async def get_many_cached_info(
+        self, servers: Sequence[Server], *, force_refresh: bool = False
+    ) -> list[Optional[Dict]]:
+        """One ordered cache read, optionally preceded by bounded live refreshes."""
+        started = monotonic()
+        if force_refresh:
+            await telemetry_runtime.collect_ordered(
+                self._limited_query(server) for server in servers
+            )
+        raw = await redis_manager.get_many([f"a2s:server:{server.id}" for server in servers])
+        values = [self._normalize_cached(value) if value else None for value in raw]
+        telemetry_runtime.log_batch(
+            logger,
+            "a2s",
+            started,
+            count=len(servers),
+            cache_hits=0 if force_refresh else sum(value is not None for value in values),
+            failures=sum(value is None or not value.get("success") for value in values),
+        )
+        return values
+
+    @staticmethod
+    def _normalize_cached(value: object) -> Optional[Dict]:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            import json
+
+            try:
+                decoded = json.loads(value)
+            except json.JSONDecodeError:
+                return None
+            return decoded if isinstance(decoded, dict) else None
+        return None
 
     async def _query_and_cache_server(self, server):
         """Query a single server and cache the result"""
@@ -262,7 +301,7 @@ class A2SCacheService:
 
     async def refresh_cached_info(self, server) -> Optional[Dict]:
         """Query one server over A2S and replace its Redis cache. Used by explicit refresh."""
-        await self._query_and_cache_server(server)
+        await self._limited_query(server)
         return await self.get_cached_info(int(server.id))
 
     async def get_cached_info(self, server_id: int) -> Optional[Dict]:
@@ -270,22 +309,7 @@ class A2SCacheService:
         cache_key = f"a2s:server:{server_id}"
         try:
             cached = await redis_manager.get(cache_key)
-            if cached:
-                # Ensure we return a dict, not a string (in case of corrupted data)
-                if isinstance(cached, dict):
-                    return cached
-                elif isinstance(cached, str):
-                    # Try to parse string as JSON (corrupted data from old bug)
-                    import json
-
-                    try:
-                        parsed = json.loads(cached)
-                        if isinstance(parsed, dict):
-                            return parsed
-                    except json.JSONDecodeError, TypeError:
-                        pass
-                logger.warning(f"Invalid cached data type for server {server_id}: {type(cached)}")
-            return None
+            return self._normalize_cached(cached) if cached else None
         except Exception as e:
             logger.error(f"Error getting cached A2S info for server {server_id}: {e}")
             return None

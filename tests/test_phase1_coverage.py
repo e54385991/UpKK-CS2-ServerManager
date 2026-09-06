@@ -219,7 +219,11 @@ async def test_system_info_helper_handles_success_failure_and_batches(monkeypatc
         "success": False,
     }
 
-    get_disk.side_effect = [(True, {"used_gb": 2}), (False, None)]
+    monkeypatch.setattr(
+        system_info_module.disk_space_service,
+        "get_many_disk_space",
+        AsyncMock(return_value=[{"used_gb": 2}, None]),
+    )
     servers = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
     assert await service.get_all_servers_disk_space(servers, force_refresh=True) == {
         1: {"used_gb": 2},

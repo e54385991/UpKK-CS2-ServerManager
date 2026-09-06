@@ -5,10 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+from collections.abc import Sequence
+from time import monotonic
 from typing import TypedDict
 
 from modules.models import Server
 from modules.utils import get_current_time
+from services import telemetry_runtime
 from services.redis_manager import redis_manager
 from services.ssh_manager import SSHManager
 
@@ -173,6 +176,17 @@ class HostSystemInfoService:
             if cached is not None:
                 return _mark_cached(cached, True)
 
+        # Admit before taking the distributed lock: queued work must not spend
+        # the lock TTL waiting for another host's probe to finish.
+        async with telemetry_runtime.ssh_probe_limiter.slot(
+            (server.host.casefold(), server.ssh_port)
+        ):
+            return await self._refresh_host_system_info(server, force_refresh=force_refresh)
+
+    async def _refresh_host_system_info(
+        self, server: Server, *, force_refresh: bool
+    ) -> HostSystemInfoData:
+        server_id = int(server.id)
         token = secrets.token_urlsafe(18)
         lock_acquired = await redis_manager.acquire_lock(
             _lock_key(server_id), token, _LOCK_TTL_SECONDS
@@ -208,6 +222,39 @@ class HostSystemInfoService:
         finally:
             if lock_acquired is True:
                 await redis_manager.release_lock(_lock_key(server_id), token)
+
+    async def get_many_host_system_info(
+        self, servers: Sequence[Server], *, force_refresh: bool = False
+    ) -> list[HostSystemInfoData]:
+        """Read all snapshots together; existing locking still coordinates cache misses."""
+        started = monotonic()
+        raw = (
+            [None] * len(servers)
+            if force_refresh
+            else await redis_manager.get_many([_cache_key(server.id) for server in servers])
+        )
+        cached = [
+            _snapshot_from_cache(value, server.id)
+            for server, value in zip(servers, raw, strict=True)
+        ]
+
+        async def read(server: Server, value: HostSystemInfoData | None) -> HostSystemInfoData:
+            if value is not None:
+                return value
+            return await self.get_host_system_info(server, force_refresh=force_refresh)
+
+        values = await telemetry_runtime.collect_ordered(
+            read(server, value) for server, value in zip(servers, cached, strict=True)
+        )
+        telemetry_runtime.log_batch(
+            logger,
+            "host",
+            started,
+            count=len(servers),
+            cache_hits=sum(value is not None for value in cached),
+            failures=sum(not value["success"] for value in values),
+        )
+        return values
 
     async def _collect(self, server: Server) -> HostSystemInfoData:
         collected_at = get_current_time().isoformat()
