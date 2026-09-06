@@ -2,9 +2,9 @@
 
 import { useTranslations } from "next-intl";
 import { TriangleAlert } from "lucide-react";
+import { runtimeMismatchValues } from "@/modules/plugins/runtime-labels";
 import {
   isPluginFramework,
-  type PluginFrameworkCompatibility,
   type PluginInstallPlan,
 } from "@/modules/plugins/types";
 import { Badge } from "@/shared/ui/badge";
@@ -18,22 +18,9 @@ export function useRuntimeLabel() {
   return (key: string) => (isPluginFramework(key) ? t(`frameworks.${key}`) : key);
 }
 
-/** "This server runs X; Y plugins do not load on it." */
-export function useRuntimeMismatchDetail() {
-  const t = useTranslations("plugins");
-  const label = useRuntimeLabel();
-  const mismatchDetail = useRuntimeMismatchDetail();
-  return (framework: PluginFrameworkCompatibility) =>
-    t("frameworkMismatch", {
-      server: framework.conflicting.map(label).join(", "),
-      plugin: label(framework.plugin),
-    });
-}
-
 export function PlanSummary({ plan }: { plan: PluginInstallPlan }) {
   const t = useTranslations("plugins");
   const label = useRuntimeLabel();
-  const mismatchDetail = useRuntimeMismatchDetail();
   return (
     <div className="space-y-3 rounded-md border border-line bg-surface-overlay/40 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -86,7 +73,9 @@ export function PlanSummary({ plan }: { plan: PluginInstallPlan }) {
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
           <div className="space-y-1">
             <p className="font-medium">{t("frameworkMismatchTitle")}</p>
-            <p>{mismatchDetail(plan.framework)}</p>
+            <p>
+              {t("frameworkMismatch", runtimeMismatchValues(plan.framework, label))}
+            </p>
           </div>
         </div>
       ) : null}

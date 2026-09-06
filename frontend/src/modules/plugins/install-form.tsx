@@ -25,10 +25,8 @@ import type {
   MarketInstallServer,
   PluginInstallPlan,
 } from "@/modules/plugins/types";
-import {
-  PlanSummary,
-  useRuntimeMismatchDetail,
-} from "@/modules/plugins/plan-summary";
+import { PlanSummary, useRuntimeLabel } from "@/modules/plugins/plan-summary";
+import { runtimeMismatchValues } from "@/modules/plugins/runtime-labels";
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { confirm, notify } from "@/shared/feedback";
 import {
@@ -66,7 +64,7 @@ export function InstallForm({
   onQueued?: () => void;
 }) {
   const t = useTranslations("plugins");
-  const mismatchDetail = useRuntimeMismatchDetail();
+  const runtimeLabel = useRuntimeLabel();
   const router = useRouter();
   const [serverId, setServerId] = useState<number | null>(
     defaultServerId ?? servers[0]?.id ?? null,
@@ -299,7 +297,10 @@ export function InstallForm({
       if (
         !(await confirm({
           title: t("frameworkMismatchTitle"),
-          description: `${mismatchDetail(plan.framework)}\n${t("frameworkMismatchConfirm")}`,
+          description: `${t(
+            "frameworkMismatch",
+            runtimeMismatchValues(plan.framework, runtimeLabel),
+          )}\n${t("frameworkMismatchConfirm")}`,
           confirmLabel: t("install"),
           tone: "danger",
         }))
