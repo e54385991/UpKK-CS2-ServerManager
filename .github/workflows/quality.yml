@@ -224,3 +224,6 @@ jobs:
 
       - name: Run public Next.js smoke flow
         run: npx playwright test e2e/tutorial.spec.ts --project=anon
+
+      - name: Verify isolated overview streaming and failure recovery
+        run: npx playwright test --config=playwright.overview.config.ts
