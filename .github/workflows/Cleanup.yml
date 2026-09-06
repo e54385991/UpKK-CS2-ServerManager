@@ -1,0 +1,146 @@
+name: Cleanup Workflow Runs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+permissions:  # 添加这一部分
+  actions: write  # 允许删除 workflow runs
+  contents: write  # 允许删除 releases 和 tags
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Cleanup old workflow runs
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        retention_days=1
+        cutoff_date=$(date -d "-${retention_days} days" --utc +%Y-%m-%dT%H:%M:%SZ)
+
+        echo "Cutoff date: $cutoff_date"
+
+        workflow_runs=$(gh api repos/${{ github.repository }}/actions/runs --paginate -q ".workflow_runs[] | select(.updated_at < \"$cutoff_date\") | .id")
+
+        for run_id in $workflow_runs; do
+          echo "Deleting workflow run ID: $run_id"
+          gh api repos/${{ github.repository }}/actions/runs/$run_id -X DELETE
+        done
+
+    - name: Cleanup old releases (keep latest 5)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "Fetching releases..."
+        releases=$(gh api repos/${{ github.repository }}/releases --paginate -q 'sort_by(.created_at) | reverse | .[].id')
+        
+        if [ -z "$releases" ]; then
+          echo "No releases found"
+          exit 0
+        fi
+        
+        release_count=$(echo "$releases" | wc -l)
+        keep_count=5
+        
+        echo "Total releases: $release_count"
+        
+        if [ "$release_count" -gt "$keep_count" ]; then
+          releases_to_delete=$(echo "$releases" | tail -n +$((keep_count + 1)))
+          for release_id in $releases_to_delete; do
+            echo "Deleting release ID: $release_id"
+            gh api repos/${{ github.repository }}/releases/$release_id -X DELETE
+          done
+        else
+          echo "No releases to delete (keeping latest $keep_count)"
+        fi
+
+    - name: Cleanup old tags (keep latest 5)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "Fetching tags..."
+        # GitHub API returns tags sorted by commit date (newest first) by default
+        tags=$(gh api repos/${{ github.repository }}/tags --paginate -q '.[].name')
+        
+        if [ -z "$tags" ]; then
+          echo "No tags found"
+          exit 0
+        fi
+        
+        tag_count=$(echo "$tags" | wc -l)
+        keep_count=5
+        
+        echo "Total tags: $tag_count"
+        
+        if [ "$tag_count" -gt "$keep_count" ]; then
+          tags_to_delete=$(echo "$tags" | tail -n +$((keep_count + 1)))
+          for tag_name in $tags_to_delete; do
+            echo "Deleting tag: $tag_name"
+            gh api repos/${{ github.repository }}/git/refs/tags/$tag_name -X DELETE
+          done
+        else
+          echo "No tags to delete (keeping latest $keep_count)"
+        fi
+
+    - name: Cleanup old copilot branches (keep latest 10)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "Fetching copilot/ branches..."
+        # Get all branches starting with copilot/ with their commit sha and date
+        # Use jq to get branch name and commit date together in a safe format
+        branches_json=$(gh api repos/${{ github.repository }}/branches --paginate -q '[.[] | select(.name | startswith("copilot/")) | {name: .name, sha: .commit.sha}]')
+        
+        if [ -z "$branches_json" ] || [ "$branches_json" = "[]" ]; then
+          echo "No copilot/ branches found"
+          exit 0
+        fi
+        
+        # Create a temporary file for branch data with dates
+        temp_file=$(mktemp)
+        trap "rm -f $temp_file" EXIT
+        
+        # Get commit dates for each branch
+        branch_count_raw=$(echo "$branches_json" | jq -r 'length')
+        echo "Found $branch_count_raw copilot/ branches"
+        
+        for row in $(echo "$branches_json" | jq -r '.[] | @base64'); do
+          _jq() {
+            echo ${row} | base64 --decode | jq -r ${1}
+          }
+          sha=$(_jq '.sha')
+          branch_name=$(_jq '.name')
+          if [ -n "$sha" ] && [ -n "$branch_name" ]; then
+            commit_date=$(gh api repos/${{ github.repository }}/commits/$sha -q '.commit.committer.date' 2>/dev/null || echo "1970-01-01T00:00:00Z")
+            printf "%s\t%s\n" "$commit_date" "$branch_name" >> "$temp_file"
+          fi
+        done
+        
+        # Sort by date (newest first) and extract branch names
+        sorted_branches=$(sort -r "$temp_file" | cut -f2)
+        
+        if [ -z "$sorted_branches" ]; then
+          echo "No copilot/ branches found after sorting"
+          exit 0
+        fi
+        
+        branch_count=$(echo "$sorted_branches" | grep -c . || echo 0)
+        keep_count=10
+        
+        echo "Total copilot/ branches: $branch_count"
+        
+        if [ "$branch_count" -gt "$keep_count" ]; then
+          echo "$sorted_branches" | tail -n +$((keep_count + 1)) | while read -r branch_name; do
+            if [ -n "$branch_name" ]; then
+              echo "Deleting branch: $branch_name"
+              gh api repos/${{ github.repository }}/git/refs/heads/$branch_name -X DELETE || echo "Failed to delete $branch_name"
+            fi
+          done
+        else
+          echo "No copilot/ branches to delete (keeping latest $keep_count)"
+        fi
