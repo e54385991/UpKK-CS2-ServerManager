@@ -16244,6 +16244,10 @@ export interface components {
             email_provider?: ("gmail" | "smtp") | null;
             /** Github Proxy Url */
             github_proxy_url?: string | null;
+            /** Plugin Download Cache Enabled */
+            plugin_download_cache_enabled?: boolean | null;
+            /** Plugin Download Cache Path */
+            plugin_download_cache_path?: string | null;
             /** Global Github Token */
             global_github_token?: string | null;
             /** Log Level */
@@ -16380,9 +16384,18 @@ export interface components {
              * @enum {string}
              */
             email_provider: "gmail" | "smtp";
+            /** Plugin Download Cache Bytes */
+            plugin_download_cache_bytes?: number;
+            /** Plugin Download Cache Enabled */
+            plugin_download_cache_enabled?: boolean;
+            /** Plugin Download Cache Files */
+            plugin_download_cache_files?: number;
+            /** Plugin Download Cache Path */
+            plugin_download_cache_path?: string | null;
             /** Github Proxy Url */
             github_proxy_url?: string | null;
-            github_token_verification?: components["schemas"]["GitHubTokenVerificationView"] | null;
+            github_token_verification?
+: components["schemas"]["GitHubTokenVerificationView"] | null;
             /** Global Github Token Prefix */
             global_github_token_prefix?: string | null;
             /** Gmail Ready */
