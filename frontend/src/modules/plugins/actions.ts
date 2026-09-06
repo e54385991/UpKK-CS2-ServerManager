@@ -59,6 +59,7 @@ export async function installMarketPluginAction(
   input: {
     readonly acknowledgeWarningRuleIds?: readonly number[];
     readonly acknowledgeFrameworkMismatch?: boolean;
+    readonly acknowledgeAIUnreviewed?: boolean;
     readonly planHash?: string;
     readonly downloadUrl?: string | null;
     readonly upgradeMode?: boolean;

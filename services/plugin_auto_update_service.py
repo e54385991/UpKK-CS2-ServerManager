@@ -12,7 +12,6 @@ from sqlmodel import col, select
 from modules.database import async_session_maker
 from modules.http_helper import http_helper
 from modules.models import CustomCommand, DeploymentLog, ManagedPlugin, Server, User
-from modules.schemas import GitHubPluginInstallRequest
 from modules.utils import get_current_time
 from services.custom_command_service import (
     CustomCommandError,
@@ -25,6 +24,10 @@ from services.discord_notification_service import (
 )
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.plugin_installation import install_github_plugin
+from services.plugins.ai_install_policy import (
+    managed_asset_candidates,
+    managed_install_request,
+)
 from services.plugins.tracking import (
     canonical_repo_url,
     derive_asset_glob,
@@ -336,7 +339,7 @@ class PluginAutoUpdateService:
         if data.get("draft") or data.get("prerelease"):
             return False, None, "GitHub latest release is not a stable release"
         assets = data.get("assets") or []
-        pattern = item.asset_glob or "*"
+        assets, pattern = await managed_asset_candidates(item, assets)
         matches = [
             asset for asset in assets if fnmatch.fnmatchcase(str(asset.get("name") or ""), pattern)
         ]
@@ -456,18 +459,7 @@ class PluginAutoUpdateService:
         # Automatic updates operate on the selected managed item only.  Do not
         # recurse through a market dependency graph; CONFIG_EXCLUSIONS plus the
         # persisted rules below are the non-destructive upgrade-mode behavior.
-        request = GitHubPluginInstallRequest(
-            download_url=latest["asset"]["browser_download_url"],
-            exclude_dirs=item.exclude_dirs or [],
-            exclude_files=list(dict.fromkeys((item.exclude_files or []) + CONFIG_EXCLUSIONS)),
-            custom_install_path=item.custom_install_path,
-            repo_url=item.repo_url,
-            release_id=latest["release_id"],
-            release_tag=latest["version"],
-            asset_name=latest["asset"].get("name"),
-            record_installation=False,
-            suppress_notification=True,
-        )
+        request = await managed_install_request(item, latest, CONFIG_EXCLUSIONS)
         async with async_session_maker() as db:
             result = await install_github_plugin(server.id, request, db, user)
         return result.success, result.message

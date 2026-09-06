@@ -1,3 +1,4 @@
+import { AIPluginReview } from "@/modules/plugins/ai-plugin-review";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ExternalLink, TriangleAlert } from "lucide-react";
@@ -80,6 +81,7 @@ export async function PluginDetail({
           </div>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-fg-muted">
+          {plugin.aiMetadata && <AIPluginReview pluginId={plugin.id} initial={plugin.aiMetadata} canEdit={canDelete} />}
           {plugin.description ? <Markdown source={plugin.description} /> : null}
           {repositoryHref ? (
             <a
@@ -128,6 +130,7 @@ export async function PluginDetail({
         </CardHeader>
         <CardContent>
           <InstallForm
+            aiUnreviewed={Boolean(plugin.aiMetadata && !plugin.aiMetadata.reviewed)}
             pluginId={plugin.id}
             pluginTitle={plugin.title}
             githubUrl={plugin.githubUrl}

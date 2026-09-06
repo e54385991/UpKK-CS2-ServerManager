@@ -8,6 +8,7 @@ export function toRef(raw: { id: number; title: string }): PluginRef {
 
 export function toMarketPlugin(raw: MarketPluginViewDto): MarketPlugin {
   return {
+    aiMetadata: raw.ai_metadata ?? null,
     id: raw.id,
     title: raw.title,
     description: raw.description ?? null,

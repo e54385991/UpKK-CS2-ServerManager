@@ -5,11 +5,13 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, field_validator
 
-from api.contracts.base import ApiRequest
+from api.contracts.base import ApiRequest, ApiResponse
 from api.contracts.v1.identity import V1Model
+from modules.plugin_ai import ImportEvent, ImportItem, ImportOptions, PluginAIInfo
 
 
 class PluginRef(V1Model):
@@ -87,6 +89,47 @@ class MarketPluginCreateRequest(ApiRequest):
     @classmethod
     def validate_dependency_ids(cls, value: str | None) -> str | None:
         return _dependency_id_list(value)
+
+
+class PluginAIImportRequest(ApiRequest):
+    request_id: UUID
+    options: ImportOptions
+    acknowledge_ai_warning: bool = False
+
+
+class PluginAIImportView(ApiResponse):
+    operation_id: str
+    status: str
+    command: str
+    options: ImportOptions
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    phase: str
+    message: str
+    current_repository: str | None = None
+    model: str | None = None
+    stop_reason: str | None = None
+    retry_at: int | None = None
+    cancel_requested: bool
+    items: list[ImportItem]
+    events: list[ImportEvent]
+
+
+class PluginAIReviewRequest(ApiRequest):
+    metadata: PluginAIInfo
+
+
+class PluginAIReviewView(ApiResponse):
+    metadata: PluginAIInfo
+
+
+class PluginAIReadinessView(ApiResponse):
+    token_valid: bool
+    token_account: str | None = None
+    token_message: str
+    ai_configured: bool
+    ai_model: str | None = None
 
 
 class MarketPluginUpdateRequest(ApiRequest):
@@ -200,6 +243,7 @@ class MarketPluginView(V1Model):
     custom_install_path: str | None = None
     download_count: int
     install_count: int
+    ai_metadata: PluginAIInfo | None = None
     dependencies: list[PluginRef] = Field(default_factory=list)
 
 
@@ -311,6 +355,7 @@ class PluginInstallPlanView(V1Model):
     hard_conflicts: list[PluginConflictView] = Field(default_factory=list)
     warnings: list[PluginConflictView] = Field(default_factory=list)
     framework: PluginFrameworkCompatibilityView
+    ai_unreviewed: list[int] = Field(default_factory=list)
     steps: list[PluginInstallStep] = Field(default_factory=list)
     blocked: bool
     plan_hash: str
@@ -326,6 +371,7 @@ class PluginInstallRequest(ApiRequest):
 
     acknowledge_warning_rule_ids: list[int] = Field(default_factory=list)
     acknowledge_framework_mismatch: bool = False
+    acknowledge_ai_unreviewed: bool = False
     plan_hash: str | None = Field(default=None, max_length=64)
     download_url: str | None = Field(default=None, max_length=2000)
     upgrade_mode: bool = False

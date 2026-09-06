@@ -132,6 +132,9 @@ class MarketPlugin(SQLModel, table=True):
         default=None, max_length=255
     )  # Custom extraction path for non-standard packages (e.g., "addons")
     download_count: int = Field(default=0)
+    ai_metadata: dict[str, object] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
     install_count: int = Field(default=0)
     created_at: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}

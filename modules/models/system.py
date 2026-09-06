@@ -112,6 +112,10 @@ class SystemSettings(SQLModel, table=True):
 
     # Shared GitHub API credential used only when a user has no personal token.
     global_github_token: Optional[str] = Field(default=None, max_length=255)
+    github_token_fingerprint: Optional[str] = Field(default=None, max_length=64)
+    github_token_verification: dict[str, object] | None = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
 
     # Email configuration
     email_enabled: bool = Field(default=False)

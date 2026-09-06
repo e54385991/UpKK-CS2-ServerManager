@@ -7,6 +7,7 @@ import { Dialog } from "@/shared/ui/dialog";
 
 export function MarketInstallDialog({
   open,
+  aiUnreviewed = false,
   pluginId,
   pluginTitle,
   githubUrl,
@@ -15,6 +16,7 @@ export function MarketInstallDialog({
   onClose,
 }: {
   open: boolean;
+  aiUnreviewed?: boolean;
   pluginId: number;
   pluginTitle: string;
   githubUrl: string;
@@ -35,6 +37,7 @@ export function MarketInstallDialog({
     >
       <div data-testid="market-install-dialog">
         <InstallForm
+          aiUnreviewed={aiUnreviewed}
           pluginId={pluginId}
           pluginTitle={pluginTitle}
           githubUrl={githubUrl}

@@ -172,6 +172,7 @@ function toPlan(raw: PluginInstallPlanViewDto): PluginInstallPlan {
     compatibilityUnknown: raw.compatibility_unknown ?? [],
     hardConflicts: (raw.hard_conflicts ?? []).map(toConflict),
     warnings: (raw.warnings ?? []).map(toConflict),
+    aiUnreviewed: raw.ai_unreviewed ?? [],
     framework: {
       plugin: raw.framework?.plugin ?? DEFAULT_PLUGIN_FRAMEWORK,
       installed: raw.framework?.installed ?? [],
@@ -214,6 +215,7 @@ export async function installMarketPlugin(
   input: {
     readonly acknowledgeWarningRuleIds?: readonly number[];
     readonly acknowledgeFrameworkMismatch?: boolean;
+    readonly acknowledgeAIUnreviewed?: boolean;
     readonly planHash?: string;
     readonly downloadUrl?: string | null;
     readonly upgradeMode?: boolean;
@@ -231,6 +233,7 @@ export async function installMarketPlugin(
       body: JSON.stringify({
         acknowledge_warning_rule_ids: input.acknowledgeWarningRuleIds ?? [],
         acknowledge_framework_mismatch: input.acknowledgeFrameworkMismatch ?? false,
+        acknowledge_ai_unreviewed: input.acknowledgeAIUnreviewed ?? false,
         plan_hash: input.planHash ?? null,
         download_url: input.downloadUrl ?? null,
         upgrade_mode: input.upgradeMode ?? false,

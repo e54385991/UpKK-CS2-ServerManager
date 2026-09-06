@@ -68,6 +68,7 @@ export function MarketPluginCard({
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+          {plugin.aiMetadata && <Badge tone={plugin.aiMetadata.reviewed ? "ok" : "warn"}>{t(plugin.aiMetadata.reviewed ? "aiImport.reviewed" : "aiImport.needsReview")}</Badge>}
           {plugin.isRecommended ? (
             <Badge tone="primary">{t("recommended")}</Badge>
           ) : null}
@@ -129,6 +130,7 @@ export function MarketPluginCard({
         </div>
       </div>
       <MarketInstallDialog
+        aiUnreviewed={Boolean(plugin.aiMetadata && !plugin.aiMetadata.reviewed)}
         open={open}
         pluginId={plugin.id}
         pluginTitle={plugin.title}

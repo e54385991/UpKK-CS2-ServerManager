@@ -1,3 +1,4 @@
+import { AIImportButton } from "@/modules/plugins/ai-import-button";
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
@@ -77,6 +78,7 @@ export default async function PluginsPage({
               defaultServerId={Number.isInteger(serverId) ? serverId : null}
             />
             {session.isAdmin ? <MarketPluginCreateButton /> : null}
+            {session.isAdmin ? <AIImportButton /> : null}
             {session.isAdmin ? (
               <SyncDescriptionsButton framework={framework} />
             ) : null}

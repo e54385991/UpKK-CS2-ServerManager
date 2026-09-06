@@ -61,6 +61,7 @@ def _plugin(plugin_id=1, *, deps=None, title=None, url=None, framework=None):
         download_count=0,
         install_count=0,
         custom_install_path=None,
+        ai_metadata=None,
         framework_key=framework,
         framework="counterstrikesharp",
         version="v1",
@@ -464,3 +465,70 @@ async def test_prepare_execution_and_lock_progress_error_paths(monkeypatch):
     called = AsyncMock()
     await module._emit_plan_progress(called, "message", step_id="x", step_status="failed")
     called.assert_awaited_once_with("message", "status")
+
+
+@pytest.mark.asyncio
+async def test_ai_import_metadata_flows_into_preflight_and_selected_install_asset(monkeypatch):
+    from modules.plugin_ai import InstallationConfig, PluginAIInfo
+    from services import linux_runtime_service as runtime
+    from services.plugins import release_archive as github
+
+    plugin = _plugin()
+    info = PluginAIInfo(
+        model="test",
+        installation=InstallationConfig(
+            asset_glob="*.zip",
+            source_prefix="dist",
+            target_path="addons/counterstrikesharp/plugins/Plugin",
+        ),
+    )
+    plugin.ai_metadata = info.model_dump()
+    monkeypatch.setattr(module.MarketPlugin, "get_by_id", AsyncMock(return_value=plugin))
+    monkeypatch.setattr(module.MarketPlugin, "get_by_ids", AsyncMock(return_value=[plugin]))
+    monkeypatch.setattr(
+        module,
+        "inspect_remote_plugin_inventory",
+        AsyncMock(
+            return_value={
+                "plugins": [],
+                "frameworks": {"counterstrikesharp": True},
+                "truncated": False,
+            }
+        ),
+    )
+    monkeypatch.setattr(runtime, "detect_linux_runtime_profile", AsyncMock(return_value={}))
+    monkeypatch.setattr(
+        github,
+        "inspect_release_asset_layout",
+        AsyncMock(
+            return_value={
+                "entries": [{"path": "dist/Plugin.dll"}],
+                "mapping": [],
+                "mapping_required": True,
+                "source_prefix": None,
+                "archive_sha256": "b" * 64,
+            }
+        ),
+    )
+    plan = await module.build_plugin_install_plan(_Db(), 7, 1, server=_server())
+    assert plan["ai_unreviewed"] == [1]
+    info.installation.source_prefix = "release"
+    plugin.ai_metadata = info.model_dump()
+    changed = await module.build_plugin_install_plan(_Db(), 7, 1, server=_server())
+    assert changed["plan_hash"] != plan["plan_hash"]
+    info.installation.source_prefix = "dist"
+    plugin.ai_metadata = info.model_dump()
+    _, _, _, assets, _ = await module._prepare_plugin_execution(
+        _Db(),
+        _server(),
+        SimpleNamespace(id=1),
+        1,
+        [],
+        plan["plan_hash"],
+        True,
+        plugin.github_url + "/releases/download/v1/plugin.zip",
+        acknowledge_ai_unreviewed=True,
+    )
+    assert assets[1]["source_prefix"] == "dist"
+    assert assets[1]["archive_sha256"] == "b" * 64
+    assert assets[1]["custom_install_path"] == info.installation.target_path

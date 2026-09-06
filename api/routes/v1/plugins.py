@@ -11,6 +11,7 @@ from sqlmodel import select
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession, require_server_access
 from api.routes import plugin_market as legacy
 from modules import ManagedPlugin, MarketPlugin, PluginCategory, PluginFramework
+from modules.plugin_ai import PluginAIInfo
 from modules.schemas.plugins import (
     MarketPluginCreate,
     MarketPluginResponse,
@@ -135,6 +136,7 @@ def to_market_view(
         icon_url=plugin.icon_url,
         github_url=plugin.github_url,
         custom_install_path=plugin.custom_install_path,
+        ai_metadata=PluginAIInfo.model_validate(plugin.ai_metadata) if plugin.ai_metadata else None,
         download_count=int(plugin.download_count or 0),
         install_count=int(plugin.install_count or 0),
         dependencies=dependencies,
@@ -217,6 +219,7 @@ def to_plan_view(plan: dict[str, Any]) -> PluginInstallPlanView:
         hard_conflicts=_conflict_views(list(plan.get("hard_conflicts") or [])),
         warnings=_conflict_views(list(plan.get("warnings") or [])),
         framework=_framework_view(plan.get("framework") or {}),
+        ai_unreviewed=plan.get("ai_unreviewed", []),
         steps=[
             PluginInstallStep(
                 order=int(step["order"]),
@@ -668,6 +671,7 @@ async def install_market_plugin(
             plan,
             body.acknowledge_warning_rule_ids,
             acknowledge_framework_mismatch=body.acknowledge_framework_mismatch,
+            acknowledge_ai_unreviewed=body.acknowledge_ai_unreviewed,
         )
     except PluginPlanError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -689,6 +693,7 @@ async def install_market_plugin(
             actor_user_id=current_user.id,
             acknowledge_warning_rule_ids=body.acknowledge_warning_rule_ids,
             acknowledge_framework_mismatch=body.acknowledge_framework_mismatch,
+            acknowledge_ai_unreviewed=body.acknowledge_ai_unreviewed,
             plan_hash=body.plan_hash or plan["plan_hash"],
             download_url=body.download_url,
             upgrade_mode=body.upgrade_mode,

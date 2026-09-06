@@ -7193,6 +7193,27 @@
         "title": "DiskSpaceView",
         "type": "object"
       },
+      "DocumentationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "commit": {
+            "pattern": "^[a-fA-F0-9]{40,64}$",
+            "title": "Commit",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 500,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "commit"
+        ],
+        "title": "DocumentationSource",
+        "type": "object"
+      },
       "DownloadTicketRequest": {
         "description": "Create a short-lived browser download ticket",
         "properties": {
@@ -10454,6 +10475,91 @@
         "title": "GitHubTokenStatusResponse",
         "type": "object"
       },
+      "GitHubTokenVerificationView": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "core_remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Core Remaining"
+          },
+          "core_reset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Core Reset"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "search_remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Remaining"
+          },
+          "search_reset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Reset"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "message"
+        ],
+        "title": "GitHubTokenVerificationView",
+        "type": "object"
+      },
       "GitHubUninstallRequest": {
         "additionalProperties": false,
         "description": "Delete selected plugin files under the server csgo directory.",
@@ -10879,6 +10985,158 @@
         "title": "HostSystemInfoView",
         "type": "object"
       },
+      "ImportEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "phase",
+          "message"
+        ],
+        "title": "ImportEvent",
+        "type": "object"
+      },
+      "ImportItem": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Message",
+            "type": "string"
+          },
+          "plugin_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Id"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "imported",
+              "skipped",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "status"
+        ],
+        "title": "ImportItem",
+        "type": "object"
+      },
+      "ImportOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "framework": {
+            "default": "all",
+            "enum": [
+              "counterstrikesharp",
+              "swiftly",
+              "all"
+            ],
+            "title": "Framework",
+            "type": "string"
+          },
+          "keywords": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Keywords",
+            "type": "string"
+          },
+          "max_plugins": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Plugins",
+            "type": "integer"
+          },
+          "min_forks": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Min Forks",
+            "type": "integer"
+          },
+          "min_stars": {
+            "default": 10,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Min Stars",
+            "type": "integer"
+          },
+          "minutes": {
+            "default": 15,
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Minutes",
+            "type": "integer"
+          },
+          "repositories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Repositories",
+            "type": "array"
+          },
+          "sort": {
+            "default": "stars",
+            "enum": [
+              "stars",
+              "forks",
+              "updated"
+            ],
+            "title": "Sort",
+            "type": "string"
+          },
+          "updated_within_days": {
+            "default": 365,
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Updated Within Days",
+            "type": "integer"
+          }
+        },
+        "title": "ImportOptions",
+        "type": "object"
+      },
       "InitializedHostBatchDeleteRequest": {
         "additionalProperties": false,
         "description": "Delete a bounded batch of saved initialized hosts owned by the caller.",
@@ -11200,6 +11458,38 @@
           "archive_path"
         ],
         "title": "InspectArchiveRequest",
+        "type": "object"
+      },
+      "InstallationConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_glob": {
+            "default": "*",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Asset Glob",
+            "type": "string"
+          },
+          "source_prefix": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Source Prefix",
+            "type": "string"
+          },
+          "target_path": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Path"
+          }
+        },
+        "title": "InstallationConfig",
         "type": "object"
       },
       "LinuxRuntimeProfile": {
@@ -13325,6 +13615,16 @@
       "MarketPluginResponse": {
         "description": "Schema for market plugin response",
         "properties": {
+          "ai_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginAIInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "author": {
             "anyOf": [
               {
@@ -13762,6 +14062,16 @@
         "additionalProperties": false,
         "description": "Non-secret marketplace listing. GitHub URLs are public repository links.",
         "properties": {
+          "ai_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginAIInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "author": {
             "anyOf": [
               {
@@ -14128,6 +14438,13 @@
               "$ref": "#/components/schemas/OperationInboxItem"
             },
             "title": "Items",
+            "type": "array"
+          },
+          "market_import_items": {
+            "items": {
+              "$ref": "#/components/schemas/PluginAIImportView"
+            },
+            "title": "Market Import Items",
             "type": "array"
           },
           "running_count": {
@@ -14556,6 +14873,281 @@
         "title": "PasswordResetEmailRequest",
         "type": "object"
       },
+      "PluginAIImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledge_ai_warning": {
+            "default": false,
+            "title": "Acknowledge Ai Warning",
+            "type": "boolean"
+          },
+          "options": {
+            "$ref": "#/components/schemas/ImportOptions"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "options"
+        ],
+        "title": "PluginAIImportRequest",
+        "type": "object"
+      },
+      "PluginAIImportView": {
+        "additionalProperties": false,
+        "properties": {
+          "cancel_requested": {
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Repository"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ImportEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImportItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/ImportOptions"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Reason"
+          }
+        },
+        "required": [
+          "operation_id",
+          "status",
+          "command",
+          "options",
+          "created_at",
+          "phase",
+          "message",
+          "cancel_requested",
+          "items",
+          "events"
+        ],
+        "title": "PluginAIImportView",
+        "type": "object"
+      },
+      "PluginAIInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "installation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "maxLength": 255,
+            "title": "Model",
+            "type": "string"
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Requirements",
+            "type": "array"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentationSource"
+            },
+            "maxItems": 10,
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "title": "PluginAIInfo",
+        "type": "object"
+      },
+      "PluginAIReadinessView": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_configured": {
+            "title": "Ai Configured",
+            "type": "boolean"
+          },
+          "ai_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Model"
+          },
+          "token_account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Account"
+          },
+          "token_message": {
+            "title": "Token Message",
+            "type": "string"
+          },
+          "token_valid": {
+            "title": "Token Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "token_valid",
+          "token_message",
+          "ai_configured"
+        ],
+        "title": "PluginAIReadinessView",
+        "type": "object"
+      },
+      "PluginAIReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/PluginAIInfo"
+          }
+        },
+        "required": [
+          "metadata"
+        ],
+        "title": "PluginAIReviewRequest",
+        "type": "object"
+      },
+      "PluginAIReviewView": {
+        "additionalProperties": false,
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/PluginAIInfo"
+          }
+        },
+        "required": [
+          "metadata"
+        ],
+        "title": "PluginAIReviewView",
+        "type": "object"
+      },
       "PluginAutoUpdateResponse": {
         "properties": {
           "enable_plugin_auto_update": {
@@ -14687,6 +15279,16 @@
       "PluginCatalogEntry": {
         "description": "One marketplace plugin in a portable catalog, keyed by GitHub URL.",
         "properties": {
+          "ai_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginAIInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "author": {
             "anyOf": [
               {
@@ -16112,6 +16714,13 @@
         "additionalProperties": false,
         "description": "Deterministic install preflight. Does not mutate the server.",
         "properties": {
+          "ai_unreviewed": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Ai Unreviewed",
+            "type": "array"
+          },
           "already_installed": {
             "items": {
               "type": "integer"
@@ -16201,6 +16810,11 @@
         "additionalProperties": false,
         "description": "Acknowledge warnings and optionally pin the preflight plan hash.\n\n``install_dependencies`` is opt-in, matching the legacy web installer.\n``acknowledge_framework_mismatch`` is required when the preflight reports\nthat the server runs the other plugin runtime.",
         "properties": {
+          "acknowledge_ai_unreviewed": {
+            "default": false,
+            "title": "Acknowledge Ai Unreviewed",
+            "type": "boolean"
+          },
           "acknowledge_framework_mismatch": {
             "default": false,
             "title": "Acknowledge Framework Mismatch",
@@ -24516,6 +25130,16 @@
               }
             ],
             "title": "Github Proxy Url"
+          },
+          "github_token_verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubTokenVerificationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "global_github_token_prefix": {
             "anyOf": [
@@ -33245,6 +33869,305 @@
         ]
       }
     },
+    "/api/v1/plugins/market/ai-imports": {
+      "get": {
+        "operationId": "list_imports_api_v1_plugins_market_ai_imports_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PluginAIImportView"
+                  },
+                  "title": "Response List Imports Api V1 Plugins Market Ai Imports Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Imports",
+        "tags": [
+          "v1-plugin-ai-imports"
+        ]
+      },
+      "post": {
+        "operationId": "submit_api_v1_plugins_market_ai_imports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginAIImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginAIImportView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Submit",
+        "tags": [
+          "v1-plugin-ai-imports"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/ai-imports/plugins/{plugin_id}/review": {
+      "patch": {
+        "operationId": "review_plugin_api_v1_plugins_market_ai_imports_plugins__plugin_id__review_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginAIReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginAIReviewView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Review Plugin",
+        "tags": [
+          "v1-plugin-ai-imports"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/ai-imports/readiness": {
+      "get": {
+        "operationId": "readiness_api_v1_plugins_market_ai_imports_readiness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginAIReadinessView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Readiness",
+        "tags": [
+          "v1-plugin-ai-imports"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/ai-imports/{operation_id}": {
+      "get": {
+        "operationId": "get_import_api_v1_plugins_market_ai_imports__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginAIImportView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Import",
+        "tags": [
+          "v1-plugin-ai-imports"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/ai-imports/{operation_id}/cancel": {
+      "post": {
+        "operationId": "cancel_import_api_v1_plugins_market_ai_imports__operation_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginAIImportView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Cancel Import",
+        "tags": [
+          "v1-plugin-ai-imports"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/ai-imports/{operation_id}/events": {
+      "get": {
+        "operationId": "events_api_v1_plugins_market_ai_imports__operation_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Events",
+        "tags": [
+          "v1-plugin-ai-imports"
+        ]
+      }
+    },
     "/api/v1/plugins/market/categories": {
       "get": {
         "description": "Return the stable marketplace category vocabulary.",
@@ -41435,6 +42358,32 @@
           }
         ],
         "summary": "Send Test Email",
+        "tags": [
+          "v1-settings"
+        ]
+      }
+    },
+    "/api/v1/settings/test-github-token": {
+      "post": {
+        "operationId": "test_github_token_api_v1_settings_test_github_token_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubTokenVerificationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Test Github Token",
         "tags": [
           "v1-settings"
         ]

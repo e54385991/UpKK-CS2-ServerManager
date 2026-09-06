@@ -79,6 +79,7 @@ def _item(**overrides):
         id=11,
         server_id=7,
         source_type="github",
+        market_plugin_id=None,
         display_name="Demo",
         repo_url="https://github.com/acme/demo",
         asset_glob="demo-*-linux.zip",

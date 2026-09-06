@@ -1,5 +1,6 @@
 "use client";
 
+import { AIImportTasks } from "@/modules/plugins/ai-import-tasks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -195,7 +196,7 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
   );
 }
 
-export function ActivityTray() {
+export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
   const t = useTranslations("shell");
   const tActions = useTranslations("serverDetail.actions");
   const tStatus = useTranslations("serverDetail");
@@ -223,9 +224,11 @@ export function ActivityTray() {
         ),
       );
   }, [dismissed, inbox?.failedItems, overlay]);
-  const remaining = queue.length;
+  const marketTasks = inbox?.marketImportItems ?? [];
+  const remaining = queue.length + marketTasks.filter(item => item.status === "queued" || item.status === "running").length;
   const failedCount = failed.length;
-  const running = queue.some((item) => item.status === "running");
+  const allFailedCount = failedCount + marketTasks.filter(item => item.status === "failed").length;
+  const running = queue.some((item) => item.status === "running") || marketTasks.some(item => item.status === "running");
   const selectedIsFailed = Boolean(
     selectedId && failed.some((item) => item.operationId === selectedId),
   );
@@ -241,6 +244,8 @@ export function ActivityTray() {
       const result = await loadOperationInboxFromBrowser();
       if (!cancelled && result.ok) setInbox(result.data);
     }
+    const onImport = () => { void load(); };
+    window.addEventListener("plugin-ai-import-submitted", onImport);
     void load();
     const stop = subscribeVisibleEventSource({
       url: OPERATION_INBOX_EVENTS_URL,
@@ -253,6 +258,7 @@ export function ActivityTray() {
     });
     return () => {
       cancelled = true;
+      window.removeEventListener("plugin-ai-import-submitted", onImport);
       stop();
     };
   }, []);
@@ -383,16 +389,16 @@ export function ActivityTray() {
             {remaining}
           </span>
         ) : null}
-        {failedCount > 0 ? (
+        {allFailedCount > 0 ? (
           <span
             data-testid="activity-tray-failed-count"
             className="inline-flex min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[11px] font-semibold text-white"
           >
-            {failedCount}
+            {allFailedCount}
           </span>
         ) : null}
         <StatusDot
-          tone={running ? "primary" : remaining > 0 ? "warn" : failedCount > 0 ? "danger" : "neutral"}
+          tone={running ? "primary" : remaining > 0 ? "warn" : allFailedCount > 0 ? "danger" : "neutral"}
           pulse={remaining > 0}
         />
       </Button>
@@ -404,6 +410,7 @@ export function ActivityTray() {
           data-testid="activity-tray-panel"
           className="absolute right-0 z-40 mt-2 flex w-[min(28rem,calc(100vw-2rem))] max-h-[min(36rem,70dvh)] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel"
         >
+          {isAdmin && <AIImportTasks initialTasks={marketTasks} />}
           <header className="space-y-3 border-b border-line px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <div>

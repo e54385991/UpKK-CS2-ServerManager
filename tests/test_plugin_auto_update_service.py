@@ -13,6 +13,13 @@ from services.plugin_auto_update_service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_market_lookup(monkeypatch):
+    monkeypatch.setattr(
+        "services.plugins.ai_install_policy.managed_market_plugin", AsyncMock(return_value=None)
+    )
+
+
 def test_repo_and_asset_metadata_are_normalized():
     assert canonical_repo_url("https://github.com/Owner/Repo/") == "https://github.com/Owner/Repo"
     assert derive_asset_glob("plugin-v1.2.3-linux.zip", "v1.2.3") == "plugin-*-linux.zip"

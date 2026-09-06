@@ -1,5 +1,6 @@
 "use client";
 
+import { GitHubTokenCheck } from "@/modules/settings/github-token-check";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -316,6 +317,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
                   placeholder={t("token.placeholder")}
                 />
               </Field>
+              <GitHubTokenCheck initial={settings.githubTokenVerification} key={`${settings.updatedAt ?? ""}:${Boolean(githubToken)}:${clearGithubToken}`} disabled={!settings.hasGlobalGithubToken || Boolean(githubToken) || clearGithubToken || saving} />
               {settings.hasGlobalGithubToken ? (
                 <label className="mt-3 flex items-center gap-2 text-sm text-fg-muted">
                   <input

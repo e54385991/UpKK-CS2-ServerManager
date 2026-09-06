@@ -37,6 +37,7 @@ type InboxItemDto = {
 };
 
 export type InboxSnapshotDto = {
+  market_import_items?: OperationInbox["marketImportItems"];
   items: InboxItemDto[];
   failed_items?: InboxItemDto[];
   active_count: number;
@@ -102,6 +103,7 @@ export function mapOperationInbox(raw: InboxSnapshotDto): OperationInbox {
   const failedItems = (raw.failed_items ?? []).map(toInboxItem);
   return {
     items: raw.items.map(toInboxItem),
+    marketImportItems: raw.market_import_items ?? [],
     failedItems,
     activeCount: raw.active_count,
     runningCount: raw.running_count,
@@ -118,6 +120,7 @@ export function parseOperationInboxPayload(raw: string): OperationInbox | null {
     }
     return mapOperationInbox({
       items: data.items,
+      market_import_items: data.market_import_items,
       failed_items: data.failed_items,
       active_count: data.active_count,
       running_count: data.running_count ?? 0,

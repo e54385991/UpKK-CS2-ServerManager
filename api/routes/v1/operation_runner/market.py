@@ -32,6 +32,7 @@ async def enqueue_plugin_install(
     actor_user_id: int,
     acknowledge_warning_rule_ids: list[int],
     acknowledge_framework_mismatch: bool = False,
+    acknowledge_ai_unreviewed: bool = False,
     plan_hash: str | None,
     download_url: str | None = None,
     upgrade_mode: bool = False,
@@ -55,6 +56,7 @@ async def enqueue_plugin_install(
             plugin_id=plugin_id,
             acknowledge_warning_rule_ids=list(acknowledge_warning_rule_ids),
             acknowledge_framework_mismatch=acknowledge_framework_mismatch,
+            acknowledge_ai_unreviewed=acknowledge_ai_unreviewed,
             plan_hash=plan_hash,
             download_url=download_url,
             upgrade_mode=upgrade_mode,
@@ -71,6 +73,7 @@ async def run_plugin_install(
     plugin_id: int,
     acknowledge_warning_rule_ids: list[int],
     acknowledge_framework_mismatch: bool = False,
+    acknowledge_ai_unreviewed: bool = False,
     plan_hash: str | None,
     download_url: str | None = None,
     upgrade_mode: bool = False,
@@ -124,6 +127,7 @@ async def run_plugin_install(
                 exclude_dirs=list(exclude_dirs or []),
                 exclude_files=list(exclude_files or []),
                 acknowledge_framework_mismatch=acknowledge_framework_mismatch,
+                acknowledge_ai_unreviewed=acknowledge_ai_unreviewed,
             )
             await server_operation_hub.finish(
                 operation_id,

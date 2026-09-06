@@ -24,6 +24,7 @@ from .identity import (
     User,
 )
 from .legacy import GlobalSettings, InstalledPlugin, Plugin, UserSettings
+from .plugin_imports import PluginImportJob
 from .plugins import (
     GitHubInstallRecipe,
     ManagedPlugin,

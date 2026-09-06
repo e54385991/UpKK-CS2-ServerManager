@@ -13,6 +13,7 @@ from sqlmodel import select
 from api.dependencies import ActiveUser, DatabaseSession, StreamUser
 from modules import Server
 from modules.database import async_session_maker
+from services.plugins.ai_import_store import check_administrator, list_jobs
 from services.server_operation_hub import (
     ACTIVE_STATUSES,
     FAILED_RETENTION_SECONDS,
@@ -20,6 +21,7 @@ from services.server_operation_hub import (
 )
 
 from .operations import to_view
+from .plugin_ai_imports import to_view as import_view
 from .schemas import ActionResult, OperationInboxItem, OperationInboxView
 
 router = APIRouter(prefix="/api/v1/operations", tags=["v1-operations"])
@@ -56,7 +58,9 @@ async def _to_inbox_item(
     )
 
 
-async def _build_inbox(servers: list[tuple[int, str]]) -> OperationInboxView:
+async def _build_inbox(
+    servers: list[tuple[int, str]], include_imports: bool = False
+) -> OperationInboxView:
     names = {server_id: name for server_id, name in servers}
     items: list[OperationInboxItem] = []
     failed_items: list[OperationInboxItem] = []
@@ -84,6 +88,9 @@ async def _build_inbox(servers: list[tuple[int, str]]) -> OperationInboxView:
     failed_items.sort(key=lambda item: item.completed_at or item.started_at, reverse=True)
     running = [item for item in items if item.status == "running"]
     return OperationInboxView(
+        market_import_items=[import_view(job) for job in await list_jobs(active_only=True)]
+        if include_imports
+        else [],
         items=items,
         failed_items=failed_items,
         active_count=len(items),
@@ -99,7 +106,7 @@ async def list_operation_inbox(
     current_user: ActiveUser,
 ) -> OperationInboxView:
     """Active jobs plus failed jobs retained for seven days."""
-    return await _build_inbox(await _accessible_servers(db, current_user))
+    return await _build_inbox(await _accessible_servers(db, current_user), current_user.is_admin)
 
 
 @router.get("/inbox/events", response_model=None)
@@ -115,7 +122,13 @@ async def stream_operation_inbox(
         last = ""
         idle_ticks = 0
         while not await request.is_disconnected():
-            view = await _build_inbox(servers)
+            include_imports = current_user.is_admin
+            if include_imports:
+                try:
+                    await check_administrator(current_user.id)
+                except PermissionError:
+                    include_imports = False
+            view = await _build_inbox(servers, include_imports)
             encoded = json.dumps(
                 view.model_dump(mode="json"),
                 ensure_ascii=False,

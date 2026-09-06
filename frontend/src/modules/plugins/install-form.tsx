@@ -48,6 +48,7 @@ import { Textarea } from "@/shared/ui/textarea";
 
 export function InstallForm({
   pluginId,
+  aiUnreviewed = false,
   pluginTitle,
   githubUrl,
   servers,
@@ -56,6 +57,7 @@ export function InstallForm({
   onQueued,
 }: {
   pluginId: number;
+  aiUnreviewed?: boolean;
   pluginTitle: string;
   githubUrl: string;
   servers: readonly MarketInstallServer[];
@@ -286,6 +288,7 @@ export function InstallForm({
   async function install() {
     if (serverId == null || !plan) return;
     if (plan.blocked) return;
+    if ((aiUnreviewed || (plan.aiUnreviewed?.length ?? 0) > 0) && !(await confirm({ title: t("aiImport.needsReview"), description: t("aiImport.warning") }))) return;
     if (!selectedAsset) {
       setError(t("needVersion"));
       return;
@@ -326,6 +329,7 @@ export function InstallForm({
     const result = await installMarketPluginAction(serverId, pluginId, {
       acknowledgeWarningRuleIds: plan.warnings.map((item) => item.ruleId),
       acknowledgeFrameworkMismatch: plan.framework.mismatch,
+      acknowledgeAIUnreviewed: aiUnreviewed || (plan.aiUnreviewed?.length ?? 0) > 0,
       planHash: plan.planHash,
       downloadUrl: selectedAsset.browserDownloadUrl,
       upgradeMode,

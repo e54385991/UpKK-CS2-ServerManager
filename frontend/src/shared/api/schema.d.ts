@@ -2726,6 +2726,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugins/market/ai-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Imports */
+        get: operations["list_imports_api_v1_plugins_market_ai_imports_get"];
+        put?: never;
+        /** Submit */
+        post: operations["submit_api_v1_plugins_market_ai_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/ai-imports/plugins/{plugin_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Review Plugin */
+        patch: operations["review_plugin_api_v1_plugins_market_ai_imports_plugins__plugin_id__review_patch"];
+        trace?: never;
+    };
+    "/api/v1/plugins/market/ai-imports/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readiness */
+        get: operations["readiness_api_v1_plugins_market_ai_imports_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/ai-imports/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Import */
+        get: operations["get_import_api_v1_plugins_market_ai_imports__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/ai-imports/{operation_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Import */
+        post: operations["cancel_import_api_v1_plugins_market_ai_imports__operation_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/ai-imports/{operation_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Events */
+        get: operations["events_api_v1_plugins_market_ai_imports__operation_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plugins/market/categories": {
         parameters: {
             query?: never;
@@ -5013,6 +5116,23 @@ export interface paths {
          * @description Send a test message using the currently saved email configuration.
          */
         post: operations["send_test_email_api_v1_settings_test_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/test-github-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Github Token */
+        post: operations["test_github_token_api_v1_settings_test_github_token_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9621,6 +9741,13 @@ export interface components {
             /** Used Percent */
             used_percent?: number | null;
         };
+        /** DocumentationSource */
+        DocumentationSource: {
+            /** Commit */
+            commit: string;
+            /** Path */
+            path: string;
+        };
         /**
          * DownloadTicketRequest
          * @description Create a short-lived browser download ticket
@@ -10780,6 +10907,25 @@ export interface components {
             /** Token Prefix */
             token_prefix?: string | null;
         };
+        /** GitHubTokenVerificationView */
+        GitHubTokenVerificationView: {
+            /** Account */
+            account?: string | null;
+            /** Checked At */
+            checked_at?: string | null;
+            /** Core Remaining */
+            core_remaining?: number | null;
+            /** Core Reset */
+            core_reset?: number | null;
+            /** Message */
+            message: string;
+            /** Search Remaining */
+            search_remaining?: number | null;
+            /** Search Reset */
+            search_reset?: number | null;
+            /** Valid */
+            valid: boolean;
+        };
         /**
          * GitHubUninstallRequest
          * @description Delete selected plugin files under the server csgo directory.
@@ -10946,6 +11092,81 @@ export interface components {
             /** System Type */
             system_type?: string | null;
         };
+        /** ImportEvent */
+        ImportEvent: {
+            /** Message */
+            message: string;
+            /** Phase */
+            phase: string;
+            /** Repository */
+            repository?: string | null;
+            /** Sequence */
+            sequence: number;
+        };
+        /** ImportItem */
+        ImportItem: {
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Plugin Id */
+            plugin_id?: number | null;
+            /** Repository */
+            repository: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "imported" | "skipped" | "failed";
+        };
+        /** ImportOptions */
+        ImportOptions: {
+            /**
+             * Framework
+             * @default all
+             * @enum {string}
+             */
+            framework: "counterstrikesharp" | "swiftly" | "all";
+            /**
+             * Keywords
+             * @default
+             */
+            keywords: string;
+            /**
+             * Max Plugins
+             * @default 20
+             */
+            max_plugins: number;
+            /**
+             * Min Forks
+             * @default 0
+             */
+            min_forks: number;
+            /**
+             * Min Stars
+             * @default 10
+             */
+            min_stars: number;
+            /**
+             * Minutes
+             * @default 15
+             */
+            minutes: number;
+            /** Repositories */
+            repositories?: string[];
+            /**
+             * Sort
+             * @default stars
+             * @enum {string}
+             */
+            sort: "stars" | "forks" | "updated";
+            /**
+             * Updated Within Days
+             * @default 365
+             */
+            updated_within_days: number;
+        };
         /**
          * InitializedHostBatchDeleteRequest
          * @description Delete a bounded batch of saved initialized hosts owned by the caller.
@@ -11084,6 +11305,21 @@ export interface components {
         InspectArchiveRequest: {
             /** Archive Path */
             archive_path: string;
+        };
+        /** InstallationConfig */
+        InstallationConfig: {
+            /**
+             * Asset Glob
+             * @default *
+             */
+            asset_glob: string;
+            /**
+             * Source Prefix
+             * @default
+             */
+            source_prefix: string;
+            /** Target Path */
+            target_path?: string | null;
         };
         /**
          * LinuxRuntimeProfile
@@ -11832,6 +12068,7 @@ export interface components {
          * @description Schema for market plugin response
          */
         MarketPluginResponse: {
+            ai_metadata?: components["schemas"]["PluginAIInfo"] | null;
             /** Author */
             author?: string | null;
             /** Category */
@@ -11944,6 +12181,7 @@ export interface components {
          * @description Non-secret marketplace listing. GitHub URLs are public repository links.
          */
         MarketPluginView: {
+            ai_metadata?: components["schemas"]["PluginAIInfo"] | null;
             /** Author */
             author?: string | null;
             /** Category */
@@ -12061,6 +12299,8 @@ export interface components {
             failed_retention_days: number;
             /** Items */
             items?: components["schemas"]["OperationInboxItem"][];
+            /** Market Import Items */
+            market_import_items?: components["schemas"]["PluginAIImportView"][];
             /**
              * Running Count
              * @default 0
@@ -12230,6 +12470,93 @@ export interface components {
              */
             email: string;
         };
+        /** PluginAIImportRequest */
+        PluginAIImportRequest: {
+            /**
+             * Acknowledge Ai Warning
+             * @default false
+             */
+            acknowledge_ai_warning: boolean;
+            options: components["schemas"]["ImportOptions"];
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** PluginAIImportView */
+        PluginAIImportView: {
+            /** Cancel Requested */
+            cancel_requested: boolean;
+            /** Command */
+            command: string;
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current Repository */
+            current_repository?: string | null;
+            /** Events */
+            events: components["schemas"]["ImportEvent"][];
+            /** Items */
+            items: components["schemas"]["ImportItem"][];
+            /** Message */
+            message: string;
+            /** Model */
+            model?: string | null;
+            /** Operation Id */
+            operation_id: string;
+            options: components["schemas"]["ImportOptions"];
+            /** Phase */
+            phase: string;
+            /** Retry At */
+            retry_at?: number | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Status */
+            status: string;
+            /** Stop Reason */
+            stop_reason?: string | null;
+        };
+        /** PluginAIInfo */
+        PluginAIInfo: {
+            installation?: components["schemas"]["InstallationConfig"] | null;
+            /** Model */
+            model: string;
+            /** Requirements */
+            requirements?: string[];
+            /**
+             * Reviewed
+             * @default false
+             */
+            reviewed: boolean;
+            /** Sources */
+            sources?: components["schemas"]["DocumentationSource"][];
+        };
+        /** PluginAIReadinessView */
+        PluginAIReadinessView: {
+            /** Ai Configured */
+            ai_configured: boolean;
+            /** Ai Model */
+            ai_model?: string | null;
+            /** Token Account */
+            token_account?: string | null;
+            /** Token Message */
+            token_message: string;
+            /** Token Valid */
+            token_valid: boolean;
+        };
+        /** PluginAIReviewRequest */
+        PluginAIReviewRequest: {
+            metadata: components["schemas"]["PluginAIInfo"];
+        };
+        /** PluginAIReviewView */
+        PluginAIReviewView: {
+            metadata: components["schemas"]["PluginAIInfo"];
+        };
         /** PluginAutoUpdateResponse */
         PluginAutoUpdateResponse: {
             /** Enable Plugin Auto Update */
@@ -12290,6 +12617,7 @@ export interface components {
          * @description One marketplace plugin in a portable catalog, keyed by GitHub URL.
          */
         PluginCatalogEntry: {
+            ai_metadata?: components["schemas"]["PluginAIInfo"] | null;
             /** Author */
             author?: string | null;
             /**
@@ -12889,6 +13217,8 @@ export interface components {
          * @description Deterministic install preflight. Does not mutate the server.
          */
         PluginInstallPlanView: {
+            /** Ai Unreviewed */
+            ai_unreviewed?: number[];
             /** Already Installed */
             already_installed?: number[];
             /** Blocked */
@@ -12923,6 +13253,11 @@ export interface components {
          *     that the server runs the other plugin runtime.
          */
         PluginInstallRequest: {
+            /**
+             * Acknowledge Ai Unreviewed
+             * @default false
+             */
+            acknowledge_ai_unreviewed: boolean;
             /**
              * Acknowledge Framework Mismatch
              * @default false
@@ -16047,6 +16382,7 @@ export interface components {
             email_provider: "gmail" | "smtp";
             /** Github Proxy Url */
             github_proxy_url?: string | null;
+            github_token_verification?: components["schemas"]["GitHubTokenVerificationView"] | null;
             /** Global Github Token Prefix */
             global_github_token_prefix?: string | null;
             /** Gmail Ready */
@@ -21169,6 +21505,207 @@ export interface operations {
             };
         };
     };
+    list_imports_api_v1_plugins_market_ai_imports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginAIImportView"][];
+                };
+            };
+        };
+    };
+    submit_api_v1_plugins_market_ai_imports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginAIImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginAIImportView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_plugin_api_v1_plugins_market_ai_imports_plugins__plugin_id__review_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginAIReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginAIReviewView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readiness_api_v1_plugins_market_ai_imports_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginAIReadinessView"];
+                };
+            };
+        };
+    };
+    get_import_api_v1_plugins_market_ai_imports__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginAIImportView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_import_api_v1_plugins_market_ai_imports__operation_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginAIImportView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    events_api_v1_plugins_market_ai_imports__operation_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_market_categories_api_v1_plugins_market_categories_get: {
         parameters: {
             query?: never;
@@ -26193,6 +26730,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_github_token_api_v1_settings_test_github_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubTokenVerificationView"];
                 };
             };
         };

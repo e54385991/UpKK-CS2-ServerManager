@@ -22,6 +22,7 @@ from modules.models.plugins import (
     PluginConflictRule,
     PluginFramework,
 )
+from modules.plugin_ai import PluginAIInfo
 from modules.schemas.plugins import (
     PluginCatalogConflict,
     PluginCatalogEntry,
@@ -148,6 +149,7 @@ def plugin_to_catalog_entry(
         is_recommended=bool(plugin.is_recommended),
         icon_url=plugin.icon_url,
         custom_install_path=plugin.custom_install_path,
+        ai_metadata=PluginAIInfo.model_validate(plugin.ai_metadata) if plugin.ai_metadata else None,
         dependencies=dependencies,
     )
 
@@ -247,6 +249,8 @@ def _apply_entry_fields(
     plugin.is_recommended = entry.is_recommended
     plugin.icon_url = _optional_text(entry.icon_url)
     plugin.custom_install_path = _optional_text(entry.custom_install_path)
+    if entry.ai_metadata is not None:
+        plugin.ai_metadata = entry.ai_metadata.model_dump(mode="json")
 
 
 def _apply_dependencies(
@@ -350,6 +354,9 @@ async def _import_plugin_entries(
                 is_recommended=entry.is_recommended,
                 icon_url=_optional_text(entry.icon_url),
                 custom_install_path=_optional_text(entry.custom_install_path),
+                ai_metadata=entry.ai_metadata.model_dump(mode="json")
+                if entry.ai_metadata
+                else None,
                 dependencies=None,
             )
             db.add(plugin)

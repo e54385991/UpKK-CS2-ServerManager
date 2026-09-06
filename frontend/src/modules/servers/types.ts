@@ -1,3 +1,4 @@
+import type { components } from "@/shared/api/schema";
 /**
  * Server status as reported by the backend. Kept as a string-literal union so
  * the UI can map each state to a status tone and label deterministically.
@@ -285,6 +286,7 @@ export type OperationInboxItem = ServerOperation & {
 };
 
 export type OperationInbox = {
+  readonly marketImportItems?: readonly components["schemas"]["PluginAIImportView"][];
   readonly items: readonly OperationInboxItem[];
   readonly failedItems: readonly OperationInboxItem[];
   readonly activeCount: number;

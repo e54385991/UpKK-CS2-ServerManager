@@ -35,6 +35,13 @@ from services.plugin_inventory_service import (
     installation_evidence,
     verified_market_plugin_ids,
 )
+from services.plugins.ai_install_policy import (
+    apply_layout,
+    metadata,
+    select_assets,
+    selected_asset_rules,
+    validate_installable,
+)
 from services.plugins.common import PluginPlanError, parse_dependency_ids
 from services.plugins.framework_compatibility import (
     evaluate_framework_compatibility,
@@ -87,6 +94,7 @@ def _plugin_plan_confirmation_payload(plan: dict[str, Any]) -> dict[str, Any]:
         # the detected runtime state is informational and stays out of the hash.
         "framework_mismatch": bool((plan.get("framework") or {}).get("mismatch")),
         "blocked": plan["blocked"],
+        "ai_revisions": plan.get("ai_revisions", {}),
     }
 
 
@@ -109,6 +117,7 @@ async def _resolve_dependency_order(
         plugin = cache.get(plugin_id) or await MarketPlugin.get_by_id(db, plugin_id)
         if plugin is None:
             raise PluginPlanError(f"Dependency plugin {plugin_id} does not exist")
+        validate_installable(plugin)
         cache[plugin_id] = plugin
         visiting.append(plugin_id)
         for dependency_id in parse_dependency_ids(plugin.dependencies):
@@ -248,6 +257,14 @@ async def build_plugin_install_plan(
         "framework": framework,
         "steps": steps,
         "blocked": bool(hard_conflicts),
+        "ai_unreviewed": [
+            plugin.id for plugin in ordered if (info := metadata(plugin)) and not info.reviewed
+        ],
+        "ai_revisions": {
+            str(plugin.id): info.revision()
+            for plugin in ordered
+            if (info := metadata(plugin)) is not None
+        },
     }
     confirmation_payload = _plugin_plan_confirmation_payload(plan)
     encoded = json.dumps(
@@ -265,7 +282,12 @@ def validate_plugin_plan_acknowledgements(
     acknowledged_warning_rule_ids: Iterable[int],
     *,
     acknowledge_framework_mismatch: bool = False,
+    acknowledge_ai_unreviewed: bool = False,
 ) -> None:
+    if plan.get("ai_unreviewed") and not acknowledge_ai_unreviewed:
+        raise PluginPlanError(
+            "AI-generated installation settings require explicit review acknowledgement"
+        )
     if plan["hard_conflicts"]:
         ids = ", ".join(str(item["rule_id"]) for item in plan["hard_conflicts"])
         raise PluginPlanError(f"Installation blocked by hard conflict rule(s): {ids}")
@@ -349,7 +371,7 @@ async def _latest_release_asset(
     )
     if not success or not isinstance(data, dict):
         raise PluginPlanError(f"Failed to fetch {plugin.title} release: {error}")
-    candidates = _release_asset_candidates(data)
+    candidates = select_assets(plugin, _release_asset_candidates(data))
     if not candidates:
         raise PluginPlanError(f"No suitable Linux release asset found for {plugin.title}")
 
@@ -380,8 +402,8 @@ async def _latest_release_asset(
     rejected: list[str] = []
     for asset in candidates:
         try:
-            layout = await inspect_release_asset_layout(asset, repository)
-        except GitHubPlanError as exc:
+            layout = apply_layout(plugin, await inspect_release_asset_layout(asset, repository))
+        except (GitHubPlanError, PluginPlanError) as exc:
             rejected.append(f"{asset['name']}: {exc}")
             continue
         mapping = layout["mapping"]
@@ -396,7 +418,12 @@ async def _latest_release_asset(
             or (mapping[0].get("source", ".") in {".", ""} and mapping[0]["target"] == "addons")
         ):
             inferred_custom_target = mapping[0]["target"]
-        custom_target = plugin.custom_install_path or inferred_custom_target
+        info = metadata(plugin)
+        custom_target = (
+            info.installation.target_path or inferred_custom_target
+            if info and info.installation
+            else plugin.custom_install_path or inferred_custom_target
+        )
         return {
             "download_url": asset["url"],
             "release_id": str(data.get("id") or ""),
@@ -616,6 +643,7 @@ async def _prepare_plugin_execution(
     include_dependencies: bool,
     download_url: str | None,
     acknowledge_framework_mismatch: bool = False,
+    acknowledge_ai_unreviewed: bool = False,
 ) -> tuple[
     dict[str, Any], set[int], dict[int, MarketPlugin], dict[int, dict[str, Any]], dict | None
 ]:
@@ -632,6 +660,7 @@ async def _prepare_plugin_execution(
         refreshed_plan,
         acknowledged_warning_rule_ids,
         acknowledge_framework_mismatch=acknowledge_framework_mismatch,
+        acknowledge_ai_unreviewed=acknowledge_ai_unreviewed,
     )
     installed = set(refreshed_plan["already_installed"])
     plugins = await MarketPlugin.get_by_ids(db, refreshed_plan["installation_order"])
@@ -657,6 +686,8 @@ async def _prepare_plugin_execution(
             raise PluginPlanError(f"Plugin {current_id} disappeared before execution")
         if current_id == plugin_id and download_url:
             resolved_assets[current_id] = _asset_from_download_url(plugin, download_url)
+            if metadata(plugin):
+                resolved_assets[current_id].update(await selected_asset_rules(plugin, download_url))
         elif current_id in ordinary_plugin_ids:
             resolved_assets[current_id] = await _latest_release_asset(
                 db, plugin, refreshed_server, user, linux_runtime_profile
@@ -682,6 +713,7 @@ async def execute_plugin_install_plan(
     exclude_dirs: list[str] | None = None,
     exclude_files: list[str] | None = None,
     acknowledge_framework_mismatch: bool = False,
+    acknowledge_ai_unreviewed: bool = False,
 ) -> dict[str, Any]:
     """Recompute and execute a plan, stopping immediately after any failure."""
     plan = await build_plugin_install_plan(
@@ -697,6 +729,7 @@ async def execute_plugin_install_plan(
         plan,
         acknowledged_warning_rule_ids,
         acknowledge_framework_mismatch=acknowledge_framework_mismatch,
+        acknowledge_ai_unreviewed=acknowledge_ai_unreviewed,
     )
     completed: list[dict[str, Any]] = []
 
@@ -726,6 +759,7 @@ async def execute_plugin_install_plan(
             include_dependencies,
             download_url,
             acknowledge_framework_mismatch,
+            acknowledge_ai_unreviewed,
         )
 
         for current_id in refreshed_plan["installation_order"]:
@@ -741,6 +775,7 @@ async def execute_plugin_install_plan(
                 latest_plan,
                 acknowledged_warning_rule_ids,
                 acknowledge_framework_mismatch=acknowledge_framework_mismatch,
+                acknowledge_ai_unreviewed=acknowledge_ai_unreviewed,
             )
             if latest_plan["installation_order"] != refreshed_plan["installation_order"]:
                 raise PluginPlanError(

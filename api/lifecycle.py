@@ -218,6 +218,11 @@ class ApplicationLifecycle:
                         server.name,
                     )
 
+            from services.plugins.ai_import_worker import plugin_import_worker
+
+            await self._start_service(
+                "plugin AI imports", plugin_import_worker.start, plugin_import_worker.stop
+            )
             self._started = True
             logger.info("CS2 Server Manager started successfully")
 

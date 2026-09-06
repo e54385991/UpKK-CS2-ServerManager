@@ -1,3 +1,4 @@
+import type { components } from "@/shared/api/schema";
 // Headers the common reverse proxies put the real client address in. The
 // backend accepts any header name; these are only shortcuts in the UI.
 export const CLIENT_IP_HEADER_PRESETS = [
@@ -44,6 +45,7 @@ export type SystemSettings = {
   readonly logLevel: LogLevel | null;
   readonly effectiveLogLevel: LogLevel;
   readonly hasGlobalGithubToken: boolean;
+  readonly githubTokenVerification?: components["schemas"]["GitHubTokenVerificationView"] | null;
   readonly globalGithubTokenPrefix: string | null;
   readonly emailEnabled: boolean;
   readonly emailProvider: EmailProvider;

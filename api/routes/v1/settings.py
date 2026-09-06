@@ -6,6 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from api.contracts.v1.settings import GitHubTokenVerificationView
 from api.dependencies import AdminUser, DatabaseSession
 from api.routes import ai as legacy_ai
 from api.routes.gmail_oauth import (
@@ -19,6 +20,7 @@ from services.audit_log_service import record_audit_event
 from services.client_ip import set_client_ip_header
 from services.email_service import email_service
 from services.log_output import apply_console_log_level, effective_console_log_level
+from services.plugins.ai_import_store import verify_token
 
 from .schemas import (
     ActionResult,
@@ -82,6 +84,12 @@ def _log_level(value: object) -> LogLevel | None:
     return None
 
 
+def _github_verification_view(settings: SystemSettings) -> GitHubTokenVerificationView:
+    from services.plugins.ai_import_store import verification_for
+
+    return GitHubTokenVerificationView(**verification_for(settings).model_dump())
+
+
 def to_view(settings: SystemSettings) -> SystemSettingsView:
     """Project the ORM row to the browser-facing, non-secret view."""
     has_gmail_credentials = bool((settings.gmail_credentials_json or "").strip())
@@ -100,6 +108,7 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
         client_ip_header=settings.client_ip_header,
         log_level=_log_level(settings.log_level),
         effective_log_level=_log_level(effective_console_log_level(settings.log_level)) or "INFO",
+        github_token_verification=_github_verification_view(settings),
         has_global_github_token=settings.has_global_github_token,
         global_github_token_prefix=settings.global_github_token_prefix,
         email_enabled=settings.email_enabled,
@@ -140,6 +149,10 @@ async def update_system_settings(
     global_github_token = update_data.pop("global_github_token", None)
     smtp_password = update_data.pop("smtp_password", None)
     settings.sqlmodel_update(update_data)
+
+    if clear_global_github_token or (global_github_token and global_github_token.strip()):
+        settings.github_token_fingerprint = None
+        settings.github_token_verification = None
 
     if clear_global_github_token:
         settings.global_github_token = None
@@ -325,3 +338,9 @@ async def test_assistant_system_settings(
         streaming_ok=bool(payload.streaming_ok),
         message=str(payload.message),
     )
+
+
+@router.post("/test-github-token", response_model=GitHubTokenVerificationView)
+async def test_github_token(current_user: AdminUser) -> GitHubTokenVerificationView:
+    result = await verify_token(current_user.id)
+    return GitHubTokenVerificationView(**result.model_dump())

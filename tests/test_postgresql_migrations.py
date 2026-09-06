@@ -36,8 +36,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_postgresql_models_and_static_baseline_are_the_schema_authority():
-    assert len(SQLModel.metadata.tables) == 30
-    assert code_heads() == ("0021_plugin_framework_other",)
+    assert len(SQLModel.metadata.tables) == 31
+    assert code_heads() == ("0022_plugin_ai_imports",)
     assert "create_all" not in (PROJECT_ROOT / "modules/database.py").read_text()
 
     revision = PROJECT_ROOT / "alembic/versions/0001_postgresql_baseline.py"
@@ -313,7 +313,7 @@ async def test_postgresql_18_empty_upgrade_concurrency_crud_and_drift_check():
                     "WHERE table_schema = 'public' AND data_type = 'jsonb'"
                 )
             )
-            assert application_table_count == 30
+            assert application_table_count == 31
             assert native_enum_count == 0
             assert jsonb_count and jsonb_count > 0
 
@@ -331,6 +331,8 @@ async def test_postgresql_18_empty_upgrade_concurrency_crud_and_drift_check():
             )
             session.add(user)
             await session.commit()
+            await session.refresh(user)
+            await _assert_plugin_ai_persistence(session, user.id)
             await session.refresh(user)
             assert user.id == 1
             assert await User.get_by_username(session, "caseuser") == user
@@ -394,3 +396,49 @@ async def test_postgresql_18_empty_upgrade_concurrency_crud_and_drift_check():
             )
             await connection.execute(text(f'DROP DATABASE IF EXISTS "{database_name}"'))
         await admin_engine.dispose()
+
+
+async def _assert_plugin_ai_persistence(session: AsyncSession, actor_id: int) -> None:
+    from datetime import datetime, timezone
+
+    from modules.models import MarketPlugin, PluginImportJob, SystemSettings
+    from modules.plugin_ai import ImportOptions, InstallationConfig, PluginAIInfo
+
+    metadata = PluginAIInfo(model="test-model", installation=InstallationConfig(asset_glob="*.zip"))
+    plugin = MarketPlugin(
+        title="AI import",
+        github_url="https://github.com/example/plugin",
+        ai_metadata=metadata.model_dump(mode="json"),
+    )
+    job = PluginImportJob(
+        actor_user_id=actor_id,
+        request_key="integration-request",
+        options=ImportOptions().model_dump(mode="json"),
+        command="AI import",
+        created_at=datetime.now(timezone.utc),
+    )
+    settings_row = await SystemSettings.get_or_create_settings(session)
+    settings_row.github_token_fingerprint = "a" * 64
+    settings_row.github_token_verification = {"valid": True, "account": "test"}
+    session.add_all([plugin, job, settings_row])
+    await session.flush()
+    job.items = [{"repository": plugin.github_url, "status": "imported", "plugin_id": plugin.id}]
+    await session.commit()
+    await session.refresh(job)
+    await session.refresh(plugin)
+    await session.refresh(settings_row)
+    assert job.items[0]["plugin_id"] == plugin.id
+    assert job.options["framework"] == "all"
+    assert PluginAIInfo.model_validate(plugin.ai_metadata).installation.asset_glob == "*.zip"
+    assert settings_row.github_token_verification["account"] == "test"
+    duplicate = PluginImportJob(
+        actor_user_id=actor_id,
+        request_key="integration-request",
+        options={},
+        command="duplicate",
+        created_at=datetime.now(timezone.utc),
+    )
+    session.add(duplicate)
+    with pytest.raises(IntegrityError):
+        await session.commit()
+    await session.rollback()

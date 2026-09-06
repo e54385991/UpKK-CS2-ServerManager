@@ -9,6 +9,7 @@ from pydantic import Field, field_validator
 
 from api.contracts.base import ApiRequest
 from api.contracts.v1.identity import V1Model
+from api.contracts.v1.plugins import PluginAIImportView
 from modules.models.servers import ServerStatus
 from services.apt_mirrors import normalize_apt_mirror
 
@@ -224,6 +225,7 @@ class OperationInboxItem(ServerOperationView):
 
 
 class OperationInboxView(V1Model):
+    market_import_items: list[PluginAIImportView] = Field(default_factory=list)
     items: list[OperationInboxItem] = Field(default_factory=list)
     failed_items: list[OperationInboxItem] = Field(default_factory=list)
     active_count: int = 0

@@ -46,6 +46,7 @@ def _sample_market(**overrides):
         "icon_url": None,
         "github_url": "https://github.com/shobhit-pathak/MatchZy",
         "custom_install_path": None,
+        "ai_metadata": None,
         "download_count": 12,
         "install_count": 4,
         "dependencies": None,

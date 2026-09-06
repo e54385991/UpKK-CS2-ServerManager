@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from modules.plugin_ai import PluginAIInfo
+
 from .common import *
 
 
@@ -251,6 +253,7 @@ class MarketPluginResponse(SQLModel):
     icon_url: Optional[str] = None
     dependencies: Optional[str] = None
     custom_install_path: Optional[str] = None
+    ai_metadata: PluginAIInfo | None = None
     dependency_details: Optional[List[DependencyInfo]] = None
     download_count: int
     install_count: int
@@ -657,6 +660,7 @@ class PluginCatalogEntry(SQLModel):
     is_recommended: bool = False
     icon_url: Optional[str] = Field(None, max_length=500)
     custom_install_path: Optional[str] = Field(None, max_length=255)
+    ai_metadata: PluginAIInfo | None = None
     dependencies: List[str] = Field(default_factory=list, max_length=50)
 
     @field_validator("github_url")

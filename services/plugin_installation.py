@@ -581,7 +581,7 @@ async def install_github_plugin(  # noqa: C901
             f"test -d {shlex.quote(f'{requested_source_dir}/addons')} && echo 'addons_found'"
         )
         success, addons_output, _ = await ssh_manager.execute_command(addons_check)
-        has_addons = "addons_found" in addons_output
+        has_addons = "addons_found" in addons_output and not request.custom_install_path
 
         # Determine source directory for copy
         if has_addons:
@@ -596,7 +596,7 @@ async def install_github_plugin(  # noqa: C901
             )
             success, find_output, _ = await ssh_manager.execute_command(find_cmd)
 
-            if find_output.strip():
+            if find_output.strip() and not request.custom_install_path:
                 # Found addons in subdirectory
                 addons_path = find_output.strip()
                 source_dir = addons_path.rsplit("/addons", 1)[0]

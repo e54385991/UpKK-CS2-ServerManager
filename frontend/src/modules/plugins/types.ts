@@ -1,3 +1,4 @@
+import type { components } from "@/shared/api/schema";
 export const PLUGIN_CATEGORIES = [
   "game_mode",
   "entertainment",
@@ -70,6 +71,7 @@ export type MarketInstallServer = {
 };
 
 export type MarketPlugin = {
+  readonly aiMetadata?: components["schemas"]["PluginAIInfo"] | null;
   readonly id: number;
   readonly title: string;
   readonly description: string | null;
@@ -364,6 +366,7 @@ export type PluginInstallPlan = {
   readonly hardConflicts: readonly PluginConflict[];
   readonly warnings: readonly PluginConflict[];
   readonly framework: PluginFrameworkCompatibility;
+  readonly aiUnreviewed?: readonly number[];
   readonly steps: readonly PluginInstallStep[];
   readonly blocked: boolean;
   readonly planHash: string;

@@ -1101,9 +1101,9 @@ def test_dependency_parser_and_warning_acknowledgements():
 @pytest.mark.asyncio
 async def test_recursive_dependencies_are_topological_and_cycles_stop(monkeypatch):
     plugins = {
-        1: SimpleNamespace(id=1, title="root", dependencies="2,3"),
-        2: SimpleNamespace(id=2, title="dep2", dependencies="3"),
-        3: SimpleNamespace(id=3, title="dep3", dependencies=None),
+        1: SimpleNamespace(id=1, title="root", dependencies="2,3", ai_metadata=None),
+        2: SimpleNamespace(id=2, title="dep2", dependencies="3", ai_metadata=None),
+        3: SimpleNamespace(id=3, title="dep3", dependencies=None, ai_metadata=None),
     }
     monkeypatch.setattr(
         MarketPlugin,

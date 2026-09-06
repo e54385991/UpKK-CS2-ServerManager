@@ -31,6 +31,7 @@ function toSettings(raw: SystemSettingsViewDto): SystemSettings {
     logLevel: toLogLevel(raw.log_level),
     effectiveLogLevel: toLogLevel(raw.effective_log_level) ?? "INFO",
     hasGlobalGithubToken: raw.has_global_github_token,
+    githubTokenVerification: raw.github_token_verification ?? null,
     globalGithubTokenPrefix: raw.global_github_token_prefix ?? null,
     emailEnabled: raw.email_enabled,
     emailProvider: toEmailProvider(raw.email_provider),

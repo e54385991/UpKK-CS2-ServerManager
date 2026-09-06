@@ -2324,6 +2324,62 @@
     "methods": [
       "GET"
     ],
+    "name": "readiness",
+    "path": "/api/v1/plugins/market/ai-imports/readiness"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "submit",
+    "path": "/api/v1/plugins/market/ai-imports"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_imports",
+    "path": "/api/v1/plugins/market/ai-imports"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_import",
+    "path": "/api/v1/plugins/market/ai-imports/{operation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "cancel_import",
+    "path": "/api/v1/plugins/market/ai-imports/{operation_id}/cancel"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "events",
+    "path": "/api/v1/plugins/market/ai-imports/{operation_id}/events"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PATCH"
+    ],
+    "name": "review_plugin",
+    "path": "/api/v1/plugins/market/ai-imports/plugins/{plugin_id}/review"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "list_market_plugins",
     "path": "/api/v1/plugins/market"
   },
@@ -2638,6 +2694,14 @@
     ],
     "name": "test_assistant_system_settings",
     "path": "/api/v1/settings/ai/test"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "test_github_token",
+    "path": "/api/v1/settings/test-github-token"
   },
   {
     "kind": "APIRoute",

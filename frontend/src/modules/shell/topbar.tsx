@@ -27,7 +27,7 @@ export async function Topbar({ user }: { user: SessionUser }) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <ActivityTray />
+        <ActivityTray isAdmin={user.isAdmin} />
         <LanguageSwitcher />
         <UserMenu user={user} />
       </div>

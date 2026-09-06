@@ -17,6 +17,17 @@ EmailProvider = Literal["gmail", "smtp"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
+class GitHubTokenVerificationView(V1Model):
+    valid: bool
+    account: str | None = None
+    checked_at: str | None = None
+    core_remaining: int | None = None
+    core_reset: int | None = None
+    search_remaining: int | None = None
+    search_reset: int | None = None
+    message: str
+
+
 class SystemSettingsView(V1Model):
     """Admin system settings with secrets replaced by presence flags."""
 
@@ -27,6 +38,7 @@ class SystemSettingsView(V1Model):
     # None means the console follows the LOG_LEVEL environment variable.
     log_level: LogLevel | None = None
     effective_log_level: LogLevel
+    github_token_verification: GitHubTokenVerificationView | None = None
     has_global_github_token: bool
     global_github_token_prefix: str | None = None
     email_enabled: bool
