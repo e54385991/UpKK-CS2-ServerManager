@@ -246,7 +246,7 @@ class ConnectionRuntimeMixin(SSHMixinBase):
             # Helper to send output via callback
             async def send_output(line: str):
                 if output_callback:
-                    if asyncio.iscoroutinefunction(output_callback):
+                    if inspect.iscoroutinefunction(output_callback):
                         await output_callback(line)
                     else:
                         output_callback(line)

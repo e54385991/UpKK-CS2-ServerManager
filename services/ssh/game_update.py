@@ -89,7 +89,7 @@ class GameUpdateMixin(SSHMixinBase):
         async def send_progress(message: str):
             """Helper to send progress updates"""
             if progress_callback:
-                if asyncio.iscoroutinefunction(progress_callback):
+                if inspect.iscoroutinefunction(progress_callback):
                     await progress_callback(message)
                 else:
                     progress_callback(message)
@@ -207,7 +207,7 @@ class GameUpdateMixin(SSHMixinBase):
         async def send_progress(message: str):
             """Helper to send progress updates"""
             if progress_callback:
-                if asyncio.iscoroutinefunction(progress_callback):
+                if inspect.iscoroutinefunction(progress_callback):
                     await progress_callback(message)
                 else:
                     progress_callback(message)

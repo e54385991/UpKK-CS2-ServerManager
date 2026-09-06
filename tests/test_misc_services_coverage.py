@@ -241,13 +241,13 @@ async def test_ssh_health_due_auth_and_lifecycle(monkeypatch):
     server.is_key_auth = False
     assert not await monitor._test_ssh_connection(server)
     monkeypatch.setattr(
-        "services.ssh_health_monitor.asyncio.wait_for",
+        "services.ssh_health_monitor.asyncssh.connect",
         AsyncMock(side_effect=asyncio.TimeoutError()),
     )
     server.is_password_auth = True
     assert not await monitor._test_ssh_connection(server)
     monkeypatch.setattr(
-        "services.ssh_health_monitor.asyncio.wait_for", AsyncMock(side_effect=PermissionError())
+        "services.ssh_health_monitor.asyncssh.connect", AsyncMock(side_effect=PermissionError())
     )
     assert not await monitor._test_ssh_connection(server)
 

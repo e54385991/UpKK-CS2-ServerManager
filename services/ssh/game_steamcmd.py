@@ -76,7 +76,7 @@ class GameSteamcmdMixin(SSHMixinBase):
             message: Progress message to send
         """
         if progress_callback:
-            if asyncio.iscoroutinefunction(progress_callback):
+            if inspect.iscoroutinefunction(progress_callback):
                 await progress_callback(message)
             else:
                 progress_callback(message)
@@ -437,7 +437,7 @@ class GameSteamcmdMixin(SSHMixinBase):
         async def send_progress(message: str):
             """Helper to send progress updates"""
             if progress_callback:
-                if asyncio.iscoroutinefunction(progress_callback):
+                if inspect.iscoroutinefunction(progress_callback):
                     await progress_callback(message)
                 else:
                     progress_callback(message)

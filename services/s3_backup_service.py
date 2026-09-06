@@ -3,6 +3,7 @@ S3-compatible storage service for plugin backups.
 """
 
 import asyncio
+import inspect
 import os
 import shutil
 import tempfile
@@ -257,7 +258,7 @@ class S3BackupService:
 
         async def send_progress(message: str):
             if progress_callback:
-                if asyncio.iscoroutinefunction(progress_callback):
+                if inspect.iscoroutinefunction(progress_callback):
                     await progress_callback(message)
                 else:
                     progress_callback(message)
@@ -328,7 +329,7 @@ class S3BackupService:
 
         async def send_progress(message: str):
             if progress_callback:
-                if asyncio.iscoroutinefunction(progress_callback):
+                if inspect.iscoroutinefunction(progress_callback):
                     await progress_callback(message)
                 else:
                     progress_callback(message)
