@@ -251,7 +251,7 @@ async def test_all_tables_copy_verify_sequences_and_roll_back_on_failures(monkey
             await _seed_every_table(connection, legacy_metadata)
 
         report = await migrate(source_engine, success_engine)
-        assert len(report.tables) == 30
+        assert len(report.tables) == len(SQLModel.metadata.tables)
         assert all(item.rows >= 1 and len(item.sha256) == 64 for item in report.tables)
         assert next(item.rows for item in report.tables if item.table == "market_plugins") == 2
         assert {item.table for item in report.deprecated_artifacts} == {
