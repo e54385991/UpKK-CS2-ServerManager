@@ -1,10 +1,11 @@
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { TriangleAlert } from "lucide-react";
+import { ExternalLink, TriangleAlert } from "lucide-react";
 import { getMarketPlugin } from "@/modules/plugins/api";
 import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin-button";
 import { InstallForm } from "@/modules/plugins/install-form";
 import type { MarketInstallServer } from "@/modules/plugins/types";
+import { safeUrl } from "@/shared/lib/url";
 import { Badge } from "@/shared/ui/badge";
 import {
   Card,
@@ -13,6 +14,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/ui/card";
+import { GithubIcon } from "@/shared/ui/github-icon";
+import { Markdown } from "@/shared/ui/markdown";
 import { isPluginCategory } from "@/modules/plugins/types";
 
 export async function PluginDetail({
@@ -46,6 +49,7 @@ export async function PluginDetail({
   const categoryLabel = isPluginCategory(plugin.category)
     ? t(`categories.${plugin.category}`)
     : plugin.category;
+  const repositoryHref = safeUrl(plugin.githubUrl);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]">
@@ -73,10 +77,28 @@ export async function PluginDetail({
           </div>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-fg-muted">
-          {plugin.description ? <p>{plugin.description}</p> : null}
-          <p className="font-mono text-xs break-all text-fg-subtle">
-            {plugin.githubUrl}
-          </p>
+          {plugin.description ? <Markdown source={plugin.description} /> : null}
+          {repositoryHref ? (
+            <a
+              href={repositoryHref}
+              target="_blank"
+              rel="noreferrer noopener"
+              title={t("openOnGithub")}
+              data-testid="plugin-github-link"
+              className="inline-flex max-w-full items-center gap-2 rounded-md border border-line bg-surface-overlay px-3 py-1.5 transition-colors hover:border-line-strong hover:text-primary"
+            >
+              <GithubIcon className="size-4 shrink-0" />
+              <span className="truncate font-mono text-xs">
+                {plugin.githubUrl}
+              </span>
+              <ExternalLink className="size-3.5 shrink-0 opacity-70" />
+              <span className="sr-only">{t("openOnGithub")}</span>
+            </a>
+          ) : (
+            <p className="font-mono text-xs break-all text-fg-subtle">
+              {plugin.githubUrl}
+            </p>
+          )}
           {plugin.dependencies.length > 0 ? (
             <div>
               <p className="mb-1 text-xs uppercase tracking-wide text-fg-subtle">

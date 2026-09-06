@@ -13,9 +13,11 @@ import {
   type MarketInstallServer,
   type MarketPlugin,
 } from "@/modules/plugins/types";
+import { safeUrl } from "@/shared/lib/url";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
+import { GithubIcon } from "@/shared/ui/github-icon";
 
 function hrefFor(pluginId: number, serverId?: number): Route {
   const query = serverId ? `?serverId=${serverId}` : "";
@@ -24,11 +26,18 @@ function hrefFor(pluginId: number, serverId?: number): Route {
 
 export function MarketPluginCard({
   plugin,
+  excerpt,
   servers,
   defaultServerId,
   canDelete = false,
 }: {
   plugin: MarketPlugin;
+  /**
+   * Description flattened to plain text by the catalog. A clamped card would
+   * otherwise spend its three visible lines on `#` and fence markers, and the
+   * remark pipeline stays out of the client bundle this way.
+   */
+  excerpt: string;
   servers: readonly MarketInstallServer[];
   defaultServerId?: number;
   canDelete?: boolean;
@@ -38,6 +47,7 @@ export function MarketPluginCard({
   const categoryLabel = isPluginCategory(plugin.category)
     ? t(`categories.${plugin.category}`)
     : plugin.category;
+  const repositoryHref = safeUrl(plugin.githubUrl);
 
   return (
     <Card className="flex h-full flex-col p-5 transition-colors hover:border-line-strong hover:bg-surface-raised">
@@ -61,10 +71,8 @@ export function MarketPluginCard({
           <Badge tone="neutral">{categoryLabel}</Badge>
         </div>
       </div>
-      {plugin.description ? (
-        <p className="mt-3 line-clamp-3 text-sm text-fg-muted">
-          {plugin.description}
-        </p>
+      {excerpt ? (
+        <p className="mt-3 line-clamp-3 text-sm text-fg-muted">{excerpt}</p>
       ) : null}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-subtle">
@@ -79,6 +87,25 @@ export function MarketPluginCard({
           ) : null}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {repositoryHref ? (
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              title={t("openOnGithub")}
+            >
+              <a
+                href={repositoryHref}
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label={t("openOnGithub")}
+                data-testid="market-github-link"
+              >
+                <GithubIcon />
+              </a>
+            </Button>
+          ) : null}
           {canDelete ? (
             <DeleteMarketPluginButton
               pluginId={plugin.id}

@@ -14,7 +14,7 @@
     "build:start": "npm run build && npm run start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --experimental-strip-types --test src/i18n/config.test.ts src/i18n/messages.test.ts src/modules/shell/runtime.test.ts src/shared/server/stream-proxy.test.ts",
+    "test:unit": "node --experimental-strip-types --test src/i18n/config.test.ts src/i18n/messages.test.ts src/modules/shell/runtime.test.ts src/shared/lib/markdown.test.ts src/shared/lib/markdown-safety.test.ts src/shared/lib/url.test.ts src/shared/server/stream-proxy.test.ts",
     "check:bundle": "node scripts/check-bundle.mjs",
     "gen:api": "npx -y openapi-typescript@7 ../tests/baselines/openapi.json -o src/shared/api/schema.d.ts",
     "test:e2e": "playwright test"
@@ -31,8 +31,14 @@
     "next-intl": "4.14.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-markdown": "10.1.0",
+    "rehype-raw": "7.0.0",
+    "rehype-sanitize": "6.0.0",
+    "remark": "15.0.1",
+    "remark-gfm": "4.0.1",
     "server-only": "0.0.1",
     "sonner": "2.0.8",
+    "strip-markdown": "6.0.0",
     "tailwind-merge": "3.6.0"
   },
   "devDependencies": {

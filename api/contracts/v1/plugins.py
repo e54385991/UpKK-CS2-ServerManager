@@ -122,6 +122,7 @@ class GitHubRepoInfoView(V1Model):
     success: bool
     repo_name: str | None = None
     description: str | None = None
+    readme: str | None = Field(default=None, max_length=10000)
     author: str | None = None
     error: str | None = None
 

@@ -71,7 +71,10 @@ export type MarketPluginCreateInput = {
 export type GitHubRepoInfo = {
   readonly success: boolean;
   readonly repoName: string | null;
+  /** The repository's one-line GitHub description. */
   readonly description: string | null;
+  /** The repository's full README Markdown, capped at the description column. */
+  readonly readme: string | null;
   readonly author: string | null;
   readonly error: string | null;
 };

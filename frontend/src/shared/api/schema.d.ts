@@ -10672,6 +10672,8 @@ export interface components {
             description?: string | null;
             /** Error */
             error?: string | null;
+            /** Readme */
+            readme?: string | null;
             /** Repo Name */
             repo_name?: string | null;
             /** Success */
@@ -10696,6 +10698,8 @@ export interface components {
             description?: string | null;
             /** Error */
             error?: string | null;
+            /** Readme */
+            readme?: string | null;
             /** Repo Name */
             repo_name?: string | null;
             /** Success */

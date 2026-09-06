@@ -404,6 +404,7 @@ class GitHubRepoInfo(SQLModel):
     success: bool
     repo_name: Optional[str] = None
     description: Optional[str] = None
+    readme: Optional[str] = None
     author: Optional[str] = None
     error: Optional[str] = None
 

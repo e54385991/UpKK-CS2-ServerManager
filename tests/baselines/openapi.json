@@ -10236,6 +10236,17 @@
             ],
             "title": "Error"
           },
+          "readme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readme"
+          },
           "repo_name": {
             "anyOf": [
               {
@@ -10310,6 +10321,18 @@
               }
             ],
             "title": "Error"
+          },
+          "readme": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readme"
           },
           "repo_name": {
             "anyOf": [

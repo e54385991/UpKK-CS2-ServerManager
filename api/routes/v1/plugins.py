@@ -278,6 +278,7 @@ async def fetch_market_repo_info(
         success=bool(result.success),
         repo_name=result.repo_name,
         description=result.description,
+        readme=result.readme,
         author=result.author,
         error=result.error,
     )

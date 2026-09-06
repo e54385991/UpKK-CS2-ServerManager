@@ -45,6 +45,7 @@ from services.plugin_conflict_service import (
     validate_plugin_plan_acknowledgements,
 )
 from services.plugin_installation import install_github_plugin
+from services.plugins.github_readme import decode_readme, readme_excerpt
 from services.plugins.upgrade_exclusions import (
     CONFIG_FILE_EXTENSIONS,
     apply_upgrade_mode_exclusions,
@@ -472,35 +473,26 @@ async def fetch_github_repo_info(
     repo_name = data.get("name", repo)
     description = data.get("description", "")
 
-    # Fetch README to get first 200 characters
+    # Fetch the README so the console can offer the full long-form Markdown.
     readme_url = f"https://api.github.com/repos/{owner}/{repo}/readme"
     readme_success, readme_data, _ = await http_helper.get(
         readme_url, headers=headers, timeout=30, proxy=github_proxy, github_token=github_token
     )
 
+    readme: Optional[str] = None
     if readme_success and isinstance(readme_data, dict):
-        # GitHub API returns base64-encoded content
-        import base64
+        readme = decode_readme(readme_data.get("content", ""))
 
-        content = readme_data.get("content", "")
-        if content:
-            try:
-                decoded = base64.b64decode(content).decode("utf-8")
-                # Remove markdown headers and extract first 200 chars
-                lines = [
-                    line.strip()
-                    for line in decoded.split("\n")
-                    if line.strip() and not line.strip().startswith("#")
-                ]
-                if lines:
-                    description = " ".join(lines)[:200]
-            except Exception as e:
-                logger.warning(f"Failed to decode README: {e}")
+    if not description and readme:
+        # No repository description: fall back to a short README excerpt so the
+        # legacy form still lands something usable in its single-line field.
+        description = readme_excerpt(readme)
 
     return GitHubRepoInfo(
         success=True,
         repo_name=repo_name,
         description=description if description else None,
+        readme=readme,
         author=owner,
     )
 

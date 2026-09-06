@@ -5,6 +5,7 @@ import { Package, TriangleAlert } from "lucide-react";
 import { listMarketPlugins } from "@/modules/plugins/api";
 import { MarketPluginCard } from "@/modules/plugins/market-plugin-card";
 import type { MarketInstallServer, MarketQuery } from "@/modules/plugins/types";
+import { markdownToPlainText } from "@/shared/lib/markdown";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 
@@ -64,6 +65,7 @@ export async function MarketCatalog({
           <li key={plugin.id}>
             <MarketPluginCard
               plugin={plugin}
+              excerpt={markdownToPlainText(plugin.description)}
               servers={servers}
               defaultServerId={serverId}
               canDelete={canDelete}

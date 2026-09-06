@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from api.routes import plugin_market
 from modules import MarketPlugin, PluginCategory
+from services.plugins import github_readme
 
 
 def _plugin(plugin_id=1, *, dependencies=None, **overrides):
@@ -123,6 +124,38 @@ async def test_market_repo_info_and_dependency_helpers_cover_external_response_s
     assert (
         info.success and info.description == "Useful details More details" and info.author == "acme"
     )
+    # The console renders Markdown, so the README comes back whole, not as the
+    # flattened excerpt the single-line legacy field falls back to.
+    assert info.readme == "# Header\nUseful details\nMore details"
+
+    described = base64.b64encode(b"# Header\nLong body").decode()
+    monkeypatch.setattr(
+        plugin_market.http_helper,
+        "get",
+        AsyncMock(
+            side_effect=[
+                (True, {"name": "Demo", "description": "Short summary"}, None),
+                (True, {"content": described}, None),
+            ]
+        ),
+    )
+    both = await plugin_market.fetch_github_repo_info("https://github.com/acme/demo")
+    assert both.description == "Short summary" and both.readme == "# Header\nLong body"
+
+    oversized = base64.b64encode(b"x" * (github_readme.README_MAX_CHARS + 500)).decode()
+    monkeypatch.setattr(
+        plugin_market.http_helper,
+        "get",
+        AsyncMock(
+            side_effect=[
+                (True, {"name": "Demo", "description": "Short summary"}, None),
+                (True, {"content": oversized}, None),
+            ]
+        ),
+    )
+    capped = await plugin_market.fetch_github_repo_info("https://github.com/acme/demo")
+    # Bounded by MarketPluginCreateRequest.description so auto-fill stays submittable.
+    assert capped.readme is not None and len(capped.readme) == github_readme.README_MAX_CHARS
 
     dep_a, dep_b = _plugin(2), _plugin(3)
     monkeypatch.setattr(MarketPlugin, "get_by_ids", AsyncMock(return_value=[dep_a, dep_b]))

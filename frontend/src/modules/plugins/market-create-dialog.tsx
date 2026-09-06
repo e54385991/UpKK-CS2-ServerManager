@@ -122,13 +122,20 @@ export function MarketPluginCreateDialog({
     if (result.data.repoName) {
       setTitle((current) => current.trim() || result.data.repoName || "");
     }
-    if (result.data.description) {
-      setDescription((current) => current.trim() || result.data.description || "");
+    // Prefer the full README over GitHub's one-line description: the console
+    // renders the description as Markdown, so the long form is the useful one.
+    const body = result.data.readme || result.data.description;
+    if (body) {
+      setDescription((current) => current.trim() || body);
     }
     if (result.data.author) {
       setAuthor((current) => current.trim() || result.data.author || "");
     }
-    setNotice(t("create.autoFillSuccess"));
+    setNotice(
+      result.data.readme
+        ? t("create.autoFillReadmeSuccess")
+        : t("create.autoFillSuccess"),
+    );
   }
 
   function selectedDependencies(event: ChangeEvent<HTMLSelectElement>) {
@@ -278,8 +285,14 @@ export function MarketPluginCreateDialog({
           <Textarea
             id="market-create-description"
             value={description}
+            rows={6}
+            maxLength={10000}
+            aria-describedby="market-create-description-hint"
             onChange={(event) => setDescription(event.target.value)}
           />
+          <p id="market-create-description-hint" className="text-xs text-fg-subtle">
+            {t("create.descriptionMarkdownHint")}
+          </p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

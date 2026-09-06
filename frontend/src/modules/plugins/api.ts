@@ -137,6 +137,7 @@ export async function fetchMarketRepoInfo(
       success: result.data.success,
       repoName: result.data.repo_name ?? null,
       description: result.data.description ?? null,
+      readme: result.data.readme ?? null,
       author: result.data.author ?? null,
       error: result.data.error ?? null,
     },

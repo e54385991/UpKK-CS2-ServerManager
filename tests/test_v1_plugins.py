@@ -290,6 +290,7 @@ def test_v1_plugins_market_repo_info_is_admin_only_and_maps_metadata(monkeypatch
             success=True,
             repo_name="Plugin",
             description="Repository description",
+            readme="# Plugin\n\nFull long-form Markdown.",
             author="example",
             error=None,
         )
@@ -303,6 +304,8 @@ def test_v1_plugins_market_repo_info_is_admin_only_and_maps_metadata(monkeypatch
     assert response.status_code == 200
     assert response.json()["repo_name"] == "Plugin"
     assert response.json()["author"] == "example"
+    # The console renders Markdown, so the full README crosses the contract too.
+    assert response.json()["readme"] == "# Plugin\n\nFull long-form Markdown."
     token.assert_awaited_once()
     fetch.assert_awaited_once_with("https://github.com/example/plugin", github_token="github-token")
 
