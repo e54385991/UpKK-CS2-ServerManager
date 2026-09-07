@@ -1,6 +1,7 @@
 # Alpine keeps the production image small and avoids shipping Debian's
 # perl/apt runtime packages.  The Python 3.14.7 wheels exported by uv include
 # musllinux artifacts for every native dependency used by the application.
+FROM ghcr.io/astral-sh/uv:0.12.3-alpine@sha256:5c122244bea9d255105d4d4400de450ec171296733a326eba624e0278cf0c75e AS uv
 FROM python:3.14.7-alpine3.24@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
 
 ARG GIT_SHA=unknown
@@ -8,7 +9,7 @@ ARG BUILD_TIME=unknown
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_LINK_MODE=copy \
     DEBUG=False \
     RUN_MODE=production \
     APP_GIT_SHA=${GIT_SHA} \
@@ -21,16 +22,20 @@ WORKDIR /app
 RUN apk upgrade --no-cache
 
 # The production export is hash-pinned, so the image build is reproducible
-# without installing the development toolchain or frontend dependencies.
+# without installing the development toolchain or frontend dependencies. uv is
+# build-time only; pip is removed from the runtime image afterwards.
+COPY --from=uv /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 COPY requirements.txt /tmp/requirements.txt
-# pip is only a build-time tool; removing it also removes its vendored
-# msgpack copy from the runtime vulnerability inventory.
-RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt \
+# Removing pip also removes its vendored msgpack copy from the runtime
+# vulnerability inventory.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --require-hashes -r /tmp/requirements.txt \
     && rm /tmp/requirements.txt \
     && rm -rf /usr/local/lib/python3.14/site-packages/pip \
         /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
         /usr/local/lib/python3.14/ensurepip \
-        /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
+        /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14 \
+    && rm -f /usr/local/bin/uv /usr/local/bin/uvx
 
 COPY . /app
 RUN mkdir -p /app/data \
