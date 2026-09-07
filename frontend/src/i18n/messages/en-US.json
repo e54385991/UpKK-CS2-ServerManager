@@ -1161,8 +1161,42 @@
     "description": "Panel-level configuration: download proxy, the global GitHub credential, outbound email, and system AI.",
     "forbidden": "Only administrators can view or change system settings.",
     "fetchError": "Unable to load system settings ({status}).",
-    "adminOnly": "Admin only",
-    "save": "Save settings",
+  "adminOnly": "Admin only",
+  "categoryNavLabel": "System settings categories",
+  "categories": {
+    "downloads": "Resources & downloads",
+    "notifications": "Email notifications",
+    "security": "Security & access",
+    "logging": "Logging",
+    "ai": "AI assistant"
+  },
+  "sections": {
+    "downloads": {
+      "title": "Resources & downloads",
+      "description": "Configure GitHub access, global credentials, and download behavior."
+    },
+    "notifications": {
+      "title": "Email notifications",
+      "description": "Configure delivery for password resets and operational notices."
+    },
+    "security": {
+      "title": "Security & access",
+      "description": "Control visitor identification and protection for sensitive actions."
+    },
+    "logging": {
+      "title": "Logging",
+      "description": "Control how much detail the panel prints to its console."
+    },
+    "downloadCache": {
+      "title": "Download cache",
+      "description": "Manage downloaded plugin and runtime archives to reduce repeat downloads."
+    },
+    "ai": {
+      "title": "AI assistant",
+      "description": "Configure the system AI provider, context, and tool-calling capabilities."
+    }
+  },
+  "save": "Save settings",
     "saving": "Saving…",
     "saved": "System settings saved.",
     "saveFailed": "Could not save settings. Check the inputs and try again.",

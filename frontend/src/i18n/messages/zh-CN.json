@@ -1161,8 +1161,42 @@
     "description": "面板级配置：下载代理、全局 GitHub 凭据、邮件投递与系统 AI。",
     "forbidden": "仅管理员可以查看或修改系统设置。",
     "fetchError": "暂时无法获取系统设置（{status}）。",
-    "adminOnly": "仅管理员",
-    "save": "保存设置",
+  "adminOnly": "仅管理员",
+  "categoryNavLabel": "系统设置分类",
+  "categories": {
+    "downloads": "资源下载",
+    "notifications": "邮件通知",
+    "security": "安全与访问",
+    "logging": "日志",
+    "ai": "AI 助手"
+  },
+  "sections": {
+    "downloads": {
+      "title": "资源下载",
+      "description": "配置 GitHub 资源的访问方式、全局凭据和下载行为。"
+    },
+    "notifications": {
+      "title": "邮件通知",
+      "description": "配置密码重置和运维通知的发信通道。"
+    },
+    "security": {
+      "title": "安全与访问",
+      "description": "控制访问者识别和敏感操作的保护措施。"
+    },
+    "logging": {
+      "title": "日志",
+      "description": "控制面板控制台输出的详细程度。"
+    },
+    "downloadCache": {
+      "title": "下载缓存",
+      "description": "管理已下载的插件和运行时压缩包，减少重复下载。"
+    },
+    "ai": {
+      "title": "AI 助手",
+      "description": "配置系统 AI 提供商、上下文和工具调用能力。"
+    }
+  },
+  "save": "保存设置",
     "saving": "保存中…",
     "saved": "系统设置已保存。",
     "saveFailed": "保存失败，请检查输入后重试。",

@@ -560,6 +560,34 @@ test("plugin catalog dialog opens without importing", async ({ page }) => {
 test("settings and profile render parity fields", async ({ page }) => {
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: /系统设置|Settings/ })).toBeVisible();
+  const settingsNav = page.getByTestId("settings-category-nav");
+  await expect(settingsNav).toBeVisible();
+  await expect(settingsNav.getByRole("link", { name: /资源下载|Resources & downloads/ })).toHaveAttribute(
+    "href",
+    "#settings-downloads",
+  );
+  await expect(settingsNav.getByRole("link", { name: /邮件通知|Email notifications/ })).toHaveAttribute(
+    "href",
+    "#settings-notifications",
+  );
+  await expect(settingsNav.getByRole("link", { name: /安全与访问|Security & access/ })).toHaveAttribute(
+    "href",
+    "#settings-security",
+  );
+  await expect(settingsNav.getByRole("link", { name: /日志|Logging/ })).toHaveAttribute(
+    "href",
+    "#settings-logging",
+  );
+  await expect(settingsNav.getByRole("link", { name: /AI 助手|AI assistant/ })).toHaveAttribute(
+    "href",
+    "#settings-ai",
+  );
+  await expect(page.getByTestId("settings-section-downloads")).toBeVisible();
+  await expect(page.getByTestId("settings-section-notifications")).toBeVisible();
+  await expect(page.getByTestId("settings-section-security")).toBeVisible();
+  await expect(page.getByTestId("settings-section-logging")).toBeVisible();
+  await expect(page.getByTestId("settings-section-download-cache")).toBeVisible();
+  await expect(page.getByTestId("settings-section-ai")).toBeVisible();
   await expect(page.getByText(/下载代理|Download proxy/)).toBeVisible();
   await expect(page.getByText(/全局 GitHub Token|Global GitHub token/)).toBeVisible();
   await expect(page.getByText(/密码重置|password resets|Outbound mail/)).toBeVisible();

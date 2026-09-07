@@ -36,6 +36,7 @@ import {
   customClientIpOf,
   logLevelOf,
 } from "@/modules/settings/runtime-cards";
+import { SettingsSection } from "@/modules/settings/settings-section";
 import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -250,7 +251,12 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
         </div>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <SettingsSection
+        id="settings-downloads"
+        title={t("sections.downloads.title")}
+        description={t("sections.downloads.description")}
+        testId="settings-section-downloads"
+      >
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -335,7 +341,14 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
             </div>
           </CardContent>
         </Card>
+      </SettingsSection>
 
+      <SettingsSection
+        id="settings-notifications"
+        title={t("sections.notifications.title")}
+        description={t("sections.notifications.description")}
+        testId="settings-section-notifications"
+      >
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
@@ -571,48 +584,62 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </SettingsSection>
 
-      <ClientIpCard
-        settings={settings}
-        choice={clientIpChoice}
-        onChoiceChange={setClientIpChoice}
-        custom={clientIpCustom}
-        onCustomChange={setClientIpCustom}
-      />
+      <SettingsSection
+        id="settings-security"
+        title={t("sections.security.title")}
+        description={t("sections.security.description")}
+        testId="settings-section-security"
+      >
+        <ClientIpCard
+          settings={settings}
+          choice={clientIpChoice}
+          onChoiceChange={setClientIpChoice}
+          custom={clientIpCustom}
+          onCustomChange={setClientIpCustom}
+        />
 
-      <LoggingCard
-        settings={settings}
-        level={logLevel}
-        onLevelChange={setLogLevel}
-      />
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="flex size-9 items-center justify-center rounded-md bg-warn-muted text-warn ring-1 ring-warn/30">
-                <ShieldCheck className="size-4" />
-              </span>
-              <div>
-                <CardTitle>{t("captcha.title")}</CardTitle>
-                <CardDescription>{t("captcha.description")}</CardDescription>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-md bg-warn-muted text-warn ring-1 ring-warn/30">
+                  <ShieldCheck className="size-4" />
+                </span>
+                <div>
+                  <CardTitle>{t("captcha.title")}</CardTitle>
+                  <CardDescription>{t("captcha.description")}</CardDescription>
+                </div>
               </div>
+              <Switch
+                id="captcha-enabled"
+                label={t("captcha.enabled")}
+                checked={captchaEnabled}
+                onCheckedChange={setCaptchaEnabled}
+              />
             </div>
-            <Switch
-              id="captcha-enabled"
-              label={t("captcha.enabled")}
-              checked={captchaEnabled}
-              onCheckedChange={setCaptchaEnabled}
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-fg-muted">
-            {captchaEnabled ? t("captcha.enabledHelp") : t("captcha.disabledHelp")}
-          </p>
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-fg-muted">
+              {captchaEnabled ? t("captcha.enabledHelp") : t("captcha.disabledHelp")}
+            </p>
+          </CardContent>
+        </Card>
+      </SettingsSection>
+
+      <SettingsSection
+        id="settings-logging"
+        title={t("sections.logging.title")}
+        description={t("sections.logging.description")}
+        testId="settings-section-logging"
+      >
+        <LoggingCard
+          settings={settings}
+          level={logLevel}
+          onLevelChange={setLogLevel}
+        />
+      </SettingsSection>
 
       <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
         <p className="text-xs text-fg-subtle">
