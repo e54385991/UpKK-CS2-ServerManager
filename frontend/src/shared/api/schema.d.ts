@@ -2531,6 +2531,10 @@ export interface paths {
         /**
          * Clear Failed Operations
          * @description Remove every retained failure the caller can see.
+         *
+         *     Administrators also see failed AI marketplace imports in the same tray, so
+         *     the one-click clear covers those too — they were otherwise undismissable
+         *     and kept the tray badge red for their full seven-day retention.
          */
         delete: operations["clear_failed_operations_api_v1_operations_inbox_failed_delete"];
         options?: never;
@@ -5096,6 +5100,23 @@ export interface paths {
          */
         put: operations["put_gmail_credentials_api_v1_settings_gmail_credentials_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/plugin-download-cache/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clear Plugin Download Cache */
+        post: operations["clear_plugin_download_cache_api_v1_settings_plugin_download_cache_clear_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -12200,6 +12221,8 @@ export interface components {
             author?: string | null;
             /** Category */
             category: string;
+            /** Created At */
+            created_at?: string | null;
             /** Custom Install Path */
             custom_install_path?: string | null;
             /** Dependencies */
@@ -12535,11 +12558,23 @@ export interface components {
             /** Stop Reason */
             stop_reason?: string | null;
         };
-        /** PluginAIInfo */
+        /**
+         * PluginAIInfo
+         * @description AI-derived marketplace metadata an administrator reviews before install.
+         *
+         *     ``requirements`` holds only prerequisites the panel recognizes precisely —
+         *     a named runtime such as Metamod:Source or CounterStrikeSharp (see
+         *     ``services.plugins.ai_requirements``). ``notes`` holds everything the model
+         *     said that could not be pinned to a known runtime, plus the importer's own
+         *     advisories. Notes are shown before an install and never block it, so a vague
+         *     model sentence cannot make a listing uninstallable.
+         */
         PluginAIInfo: {
             installation?: components["schemas"]["InstallationConfig"] | null;
             /** Model */
             model: string;
+            /** Notes */
+            notes?: string[];
             /** Requirements */
             requirements?: string[];
             /**
@@ -12549,6 +12584,30 @@ export interface components {
             reviewed: boolean;
             /** Sources */
             sources?: components["schemas"]["DocumentationSource"][];
+        };
+        /**
+         * PluginAINoticeView
+         * @description AI-derived prerequisites and notes to review before installing a listing.
+         *
+         *     Advisory only: the panel shows these before the install runs instead of
+         *     refusing the preflight, so an imprecise model sentence cannot make a listing
+         *     permanently uninstallable. ``requirements`` holds runtimes the panel
+         *     recognized by name; ``notes`` holds everything else.
+         */
+        PluginAINoticeView: {
+            /** Notes */
+            notes?: string[];
+            /** Plugin Id */
+            plugin_id: number;
+            /** Requirements */
+            requirements?: string[];
+            /**
+             * Reviewed
+             * @default false
+             */
+            reviewed: boolean;
+            /** Title */
+            title: string;
         };
         /** PluginAIReadinessView */
         PluginAIReadinessView: {
@@ -13231,6 +13290,8 @@ export interface components {
          * @description Deterministic install preflight. Does not mutate the server.
          */
         PluginInstallPlanView: {
+            /** Ai Notices */
+            ai_notices?: components["schemas"]["PluginAINoticeView"][];
             /** Ai Unreviewed */
             ai_unreviewed?: number[];
             /** Already Installed */
@@ -16258,14 +16319,14 @@ export interface components {
             email_provider?: ("gmail" | "smtp") | null;
             /** Github Proxy Url */
             github_proxy_url?: string | null;
-            /** Plugin Download Cache Enabled */
-            plugin_download_cache_enabled?: boolean | null;
-            /** Plugin Download Cache Path */
-            plugin_download_cache_path?: string | null;
             /** Global Github Token */
             global_github_token?: string | null;
             /** Log Level */
             log_level?: string | null;
+            /** Plugin Download Cache Enabled */
+            plugin_download_cache_enabled?: boolean | null;
+            /** Plugin Download Cache Path */
+            plugin_download_cache_path?: string | null;
             /** Smtp Host */
             smtp_host?: string | null;
             /** Smtp Password */
@@ -16398,18 +16459,9 @@ export interface components {
              * @enum {string}
              */
             email_provider: "gmail" | "smtp";
-            /** Plugin Download Cache Bytes */
-            plugin_download_cache_bytes?: number;
-            /** Plugin Download Cache Enabled */
-            plugin_download_cache_enabled?: boolean;
-            /** Plugin Download Cache Files */
-            plugin_download_cache_files?: number;
-            /** Plugin Download Cache Path */
-            plugin_download_cache_path?: string | null;
             /** Github Proxy Url */
             github_proxy_url?: string | null;
-            github_token_verification?
-: components["schemas"]["GitHubTokenVerificationView"] | null;
+            github_token_verification?: components["schemas"]["GitHubTokenVerificationView"] | null;
             /** Global Github Token Prefix */
             global_github_token_prefix?: string | null;
             /** Gmail Ready */
@@ -16424,6 +16476,23 @@ export interface components {
             has_smtp_password: boolean;
             /** Log Level */
             log_level?: ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL") | null;
+            /**
+             * Plugin Download Cache Bytes
+             * @default 0
+             */
+            plugin_download_cache_bytes: number;
+            /**
+             * Plugin Download Cache Enabled
+             * @default true
+             */
+            plugin_download_cache_enabled: boolean;
+            /**
+             * Plugin Download Cache Files
+             * @default 0
+             */
+            plugin_download_cache_files: number;
+            /** Plugin Download Cache Path */
+            plugin_download_cache_path?: string | null;
             /** Smtp Host */
             smtp_host?: string | null;
             /** Smtp Port */
@@ -21451,8 +21520,10 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 category?: string | null;
-                /** @description Marketplace section: counterstrikesharp or swiftly */
+                /** @description Marketplace section: counterstrikesharp, swiftly or other */
                 framework?: string | null;
+                /** @description Browse order: recommended, newest or oldest by creation time */
+                sort?: "recommended" | "newest" | "oldest";
                 q?: string | null;
             };
             header?: never;
@@ -26724,6 +26795,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_plugin_download_cache_api_v1_settings_plugin_download_cache_clear_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
                 };
             };
         };

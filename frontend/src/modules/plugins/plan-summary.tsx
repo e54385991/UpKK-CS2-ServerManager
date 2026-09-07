@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { TriangleAlert } from "lucide-react";
+import { Info, TriangleAlert } from "lucide-react";
 import { runtimeMismatchValues } from "@/modules/plugins/runtime-labels";
 import {
   isPluginFramework,
@@ -83,6 +83,32 @@ export function PlanSummary({ plan }: { plan: PluginInstallPlan }) {
         <p className="text-sm text-warn" data-testid="plan-framework-missing">
           {t("frameworkMissing", { plugin: label(plan.framework.plugin) })}
         </p>
+      ) : null}
+      {plan.aiNotices.length > 0 ? (
+        <div
+          data-testid="plan-ai-notices"
+          className="space-y-2 rounded-md border border-info/40 bg-info-muted/30 px-3 py-2 text-sm text-fg-muted"
+        >
+          <p className="flex items-center gap-2 font-medium text-fg">
+            <Info className="size-4 shrink-0" />
+            {t("aiNoticeTitle")}
+          </p>
+          {plan.aiNotices.map((notice) => (
+            <div key={notice.pluginId} className="space-y-1">
+              <p className="text-xs font-medium text-fg-subtle">{notice.title}</p>
+              <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                {notice.requirements.map((value) => (
+                  <li key={`req-${value}`} className="text-warn">
+                    {value}
+                  </li>
+                ))}
+                {notice.notes.map((value) => (
+                  <li key={`note-${value}`}>{value}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       ) : null}
     </div>
   );

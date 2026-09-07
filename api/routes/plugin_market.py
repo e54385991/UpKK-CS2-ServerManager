@@ -32,7 +32,6 @@ from modules import (
     PluginConflictRule,
     PluginConflictRuleResponse,
     PluginConflictRulesUpdate,
-    PluginFramework,
     PluginUninstallRequest,
     Server,
     User,
@@ -544,8 +543,6 @@ async def list_plugins(
         skip=skip,
         limit=page_size,
         framework=framework_enum,
-        include_framework_agnostic=framework_enum
-        in {PluginFramework.COUNTERSTRIKESHARP, PluginFramework.SWIFTLY},
     )
 
     # Calculate total pages

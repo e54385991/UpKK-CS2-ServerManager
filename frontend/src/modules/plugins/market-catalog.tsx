@@ -14,6 +14,7 @@ function pageHref(query: MarketQuery, offset: number, serverId?: number): Route 
   if (query.q) params.set("q", query.q);
   if (query.category) params.set("category", query.category);
   if (query.framework) params.set("framework", query.framework);
+  if (query.sort && query.sort !== "recommended") params.set("sort", query.sort);
   if (serverId) params.set("serverId", String(serverId));
   if (offset > 0) params.set("offset", String(offset));
   const qs = params.toString();

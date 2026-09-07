@@ -19,8 +19,8 @@ export function isPluginCategory(value: string): value is PluginCategory {
  * A listing's runtime. `counterstrikesharp` and `swiftly` mirror the mutually
  * exclusive CS2 plugin runtimes in `@/modules/servers/frameworks` (`swiftly` is
  * the key the rest of the panel already uses for SwiftlyS2). `other` marks a
- * listing that belongs to neither: it appears in both marketplace sections and
- * is exempt from the install-time runtime check.
+ * listing that belongs to neither: it has its own marketplace section and is
+ * exempt from the install-time runtime check.
  */
 export const PLUGIN_FRAMEWORKS = [
   "counterstrikesharp",
@@ -30,7 +30,11 @@ export const PLUGIN_FRAMEWORKS = [
 
 export type PluginFramework = (typeof PLUGIN_FRAMEWORKS)[number];
 
-/** The two sections the marketplace is browsed by. */
+/**
+ * The sections the marketplace is browsed by — one per framework value. A
+ * section lists exactly its own value, so `other` listings never show up under
+ * CounterStrikeSharp or SwiftlyS2.
+ */
 export const PLUGIN_FRAMEWORK_SECTIONS = ["counterstrikesharp", "swiftly", "other"] as const;
 
 export type PluginFrameworkSection = (typeof PLUGIN_FRAMEWORK_SECTIONS)[number];
@@ -86,6 +90,8 @@ export type MarketPlugin = {
   readonly customInstallPath: string | null;
   readonly downloadCount: number;
   readonly installCount: number;
+  /** When the listing entered the marketplace, for the time-ordered browse. */
+  readonly createdAt: string | null;
   readonly dependencies: readonly PluginRef[];
 };
 
@@ -188,10 +194,24 @@ export type PluginDependencyOptions = {
   readonly title: string;
 };
 
+/** Marketplace browse order. `newest`/`oldest` sort by creation time. */
+export const MARKET_SORTS = ["recommended", "newest", "oldest"] as const;
+
+export type MarketSort = (typeof MARKET_SORTS)[number];
+
+export const DEFAULT_MARKET_SORT: MarketSort = "recommended";
+
+export function toMarketSort(value: string | null | undefined): MarketSort {
+  return value && (MARKET_SORTS as readonly string[]).includes(value)
+    ? (value as MarketSort)
+    : DEFAULT_MARKET_SORT;
+}
+
 export type MarketQuery = {
   readonly q?: string;
   readonly category?: string;
   readonly framework?: PluginFrameworkSection;
+  readonly sort?: MarketSort;
   readonly limit?: number;
   readonly offset?: number;
 };
@@ -346,6 +366,18 @@ export type GitHubInstallPlan = {
   readonly dependencies: readonly PluginRef[];
 };
 
+/**
+ * AI-derived prerequisites and notes for one listing in the plan. Advisory
+ * only — they are shown before the install runs and never block it.
+ */
+export type PluginAINotice = {
+  readonly pluginId: number;
+  readonly title: string;
+  readonly reviewed: boolean;
+  readonly requirements: readonly string[];
+  readonly notes: readonly string[];
+};
+
 /** Whether the target server actually runs the plugin's runtime. */
 export type PluginFrameworkCompatibility = {
   readonly plugin: string;
@@ -367,6 +399,7 @@ export type PluginInstallPlan = {
   readonly warnings: readonly PluginConflict[];
   readonly framework: PluginFrameworkCompatibility;
   readonly aiUnreviewed?: readonly number[];
+  readonly aiNotices: readonly PluginAINotice[];
   readonly steps: readonly PluginInstallStep[];
   readonly blocked: boolean;
   readonly planHash: string;

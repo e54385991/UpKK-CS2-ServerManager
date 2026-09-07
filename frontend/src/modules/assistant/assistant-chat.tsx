@@ -46,10 +46,18 @@ type TokenUsage = {
   readonly input: number;
   readonly output: number;
   readonly total: number;
+  /** Input tokens the upstream prompt cache served; already inside `input`. */
+  readonly cached: number;
   readonly estimated: boolean;
 };
 
-const EMPTY_TOKEN_USAGE: TokenUsage = { input: 0, output: 0, total: 0, estimated: true };
+const EMPTY_TOKEN_USAGE: TokenUsage = {
+  input: 0,
+  output: 0,
+  total: 0,
+  cached: 0,
+  estimated: true,
+};
 
 function tokenCount(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
@@ -124,11 +132,14 @@ export function AssistantChat({
         const input = tokenCount(event.payload.input_tokens);
         const output = tokenCount(event.payload.output_tokens);
         const total = tokenCount(event.payload.total_tokens) || input + output;
+        const cached = tokenCount(event.payload.cached_input_tokens);
         const streaming = event.payload.streaming === true;
         setTokenUsage((current) => ({
           input: streaming ? Math.max(current.input, input) : input,
           output: streaming ? Math.max(current.output, output) : output,
           total: streaming ? Math.max(current.total, total) : total,
+          // Streaming rounds carry no usage block; keep the last real number.
+          cached: streaming ? current.cached : Math.max(current.cached, cached),
           estimated: event.payload.estimated !== false,
         }));
         return;
@@ -620,6 +631,11 @@ export function AssistantChat({
                   <span>{t("inputTokens", { count: format.number(tokenUsage.input) })}</span>
                   <span>{t("outputTokens", { count: format.number(tokenUsage.output) })}</span>
                   <span>{t("totalTokens", { count: format.number(tokenUsage.total) })}</span>
+                  {tokenUsage.cached > 0 ? (
+                    <span data-testid="assistant-cached-tokens">
+                      {t("cachedTokens", { count: format.number(tokenUsage.cached) })}
+                    </span>
+                  ) : null}
                   {tokenUsage.estimated ? <span className="text-fg-subtle">{t("estimated")}</span> : null}
                 </div>
                 {busy ? <p className="mt-1 text-fg-subtle">{t("thinkingHint")}</p> : null}

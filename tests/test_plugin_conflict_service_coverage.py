@@ -512,6 +512,29 @@ async def test_ai_import_metadata_flows_into_preflight_and_selected_install_asse
     )
     plan = await module.build_plugin_install_plan(_Db(), 7, 1, server=_server())
     assert plan["ai_unreviewed"] == [1]
+    # A reviewed install rule with no outstanding items produces no notice.
+    assert plan["ai_notices"] == []
+
+    # Outstanding prerequisites are advisory: the preflight still plans the
+    # install and reports them for the operator to check.
+    info.requirements = ["Requires Metamod:Source"]
+    info.notes = ["Configure the database manually"]
+    plugin.ai_metadata = info.model_dump()
+    advisory = await module.build_plugin_install_plan(_Db(), 7, 1, server=_server())
+    assert advisory["blocked"] is False
+    assert advisory["ai_notices"] == [
+        {
+            "plugin_id": 1,
+            "title": plugin.title,
+            "reviewed": False,
+            "requirements": ["Requires Metamod:Source"],
+            "notes": ["Configure the database manually"],
+        }
+    ]
+    info.requirements = []
+    info.notes = []
+    plugin.ai_metadata = info.model_dump()
+
     info.installation.source_prefix = "release"
     plugin.ai_metadata = info.model_dump()
     changed = await module.build_plugin_install_plan(_Db(), 7, 1, server=_server())

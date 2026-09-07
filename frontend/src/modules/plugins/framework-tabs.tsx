@@ -17,13 +17,15 @@ export function frameworkHref(
   params.set("framework", framework);
   if (query.q) params.set("q", query.q);
   if (query.category) params.set("category", query.category);
+  if (query.sort && query.sort !== "recommended") params.set("sort", query.sort);
   if (serverId) params.set("serverId", String(serverId));
   return `/plugins?${params.toString()}` as Route;
 }
 
 /**
- * The marketplace's two top-level sections. Switching sections resets paging
- * because offsets do not carry across a different result set.
+ * The marketplace's top-level sections, one per runtime plus the
+ * framework-agnostic "other" section. Switching sections resets paging because
+ * offsets do not carry across a different result set.
  */
 export async function FrameworkTabs({
   active,

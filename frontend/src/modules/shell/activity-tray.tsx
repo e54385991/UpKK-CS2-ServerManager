@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useFormatter, useTranslations } from "next-intl";
-import { Ban, ListTodo, LoaderCircle, X } from "lucide-react";
+import { Ban, ListTodo, LoaderCircle, Trash2, X } from "lucide-react";
 import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { OpenLiveTerminalButton } from "@/modules/console/open-live-terminal";
 import {
@@ -285,8 +285,11 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
     return isServerOperationAction(action) ? tActions(action) : action;
   };
 
+  // Clears retained server-operation failures *and*, for administrators, the
+  // failed AI marketplace imports listed above them — both feed the red badge,
+  // so clearing only one half left it lit.
   async function clearFailed() {
-    if (failedCount === 0) return;
+    if (allFailedCount === 0) return;
     if (
       !(await confirm({
         title: t("activityClearFailed"),
@@ -297,8 +300,12 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
       return;
     }
     const result = await clearFailedOperationsFromBrowser();
-    if (!result.ok) return;
+    if (!result.ok) {
+      notify.error(result.error || t("activityClearFailedError"));
+      return;
+    }
     dismissActivityOperations(failed.map((item) => item.operationId));
+    window.dispatchEvent(new Event("plugin-ai-import-refresh"));
     const inboxResult = await loadOperationInboxFromBrowser();
     if (inboxResult.ok) setInbox(inboxResult.data);
   }
@@ -425,15 +432,30 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
                       : t("activityFailedEmpty")}
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={t("activityClose")}
-                onClick={() => closeActivityTray()}
-              >
-                <X />
-              </Button>
+              <div className="flex shrink-0 items-center gap-1">
+                {allFailedCount > 0 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-danger hover:bg-danger/10"
+                    data-testid="activity-tray-clear-failed"
+                    onClick={() => void clearFailed()}
+                  >
+                    <Trash2 className="size-4" />
+                    {t("activityClearFailedAll", { count: allFailedCount })}
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("activityClose")}
+                  onClick={() => closeActivityTray()}
+                >
+                  <X />
+                </Button>
+              </div>
             </div>
             <div
               role="tablist"
@@ -552,19 +574,6 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
                 ))}
               </ul>
             )}
-            {activeTab === "failed" && failedCount > 0 ? (
-              <div className="border-t border-line px-4 py-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  data-testid="activity-tray-clear-failed"
-                  onClick={() => void clearFailed()}
-                >
-                  {t("activityClearFailed")}
-                </Button>
-              </div>
-            ) : null}
             {selected ? (
               <div className="space-y-3 border-t border-line px-4 py-3">
                 <div className="flex items-center justify-between gap-2">

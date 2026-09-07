@@ -20,11 +20,36 @@ def metadata(plugin: MarketPlugin) -> PluginAIInfo | None:
 
 
 def validate_installable(plugin: MarketPlugin) -> None:
+    """Reject only metadata the panel cannot parse at all.
+
+    Outstanding prerequisites and notes used to abort the preflight here, which
+    made most AI-imported listings permanently uninstallable ("AI installation
+    settings have unresolved requirements; administrator review required").
+    They are surfaced as install-time notices instead — see
+    ``install_notice`` and ``services.plugins.ai_requirements`` — while a
+    missing install rule simply falls back to the normal archive auto-detection
+    every non-AI listing already uses.
+    """
+    metadata(plugin)
+
+
+def install_notice(plugin: MarketPlugin) -> dict[str, object] | None:
+    """Prerequisites and notes to show before installing ``plugin``, if any."""
     info = metadata(plugin)
-    if info and (info.installation is None or info.requirements):
-        raise PluginPlanError(
-            f"{plugin.title}: AI installation settings have unresolved requirements; administrator review required"
-        )
+    if info is None:
+        return None
+    notes = list(info.notes)
+    if info.installation is None:
+        notes.append("No reviewed installation rule; the archive layout is detected automatically")
+    if not info.requirements and not notes:
+        return None
+    return {
+        "plugin_id": int(plugin.id or 0),
+        "title": plugin.title,
+        "reviewed": info.reviewed,
+        "requirements": list(info.requirements),
+        "notes": notes,
+    }
 
 
 def select_assets(plugin: MarketPlugin, candidates: list[dict]) -> list[dict]:

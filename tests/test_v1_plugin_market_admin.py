@@ -77,8 +77,36 @@ def test_market_list_filters_by_framework(monkeypatch):
     assert response.status_code == 200
     assert response.json()["items"][0]["framework"] == "swiftly"
     assert search.await_args.kwargs["framework"] is PluginFramework.SWIFTLY
-    # Runtime-agnostic listings belong to no section, so browsing shows them too.
-    assert search.await_args.kwargs["include_framework_agnostic"] is True
+    # `other` is its own browse section, so a runtime section is an exact match
+    # and framework-agnostic listings never leak into it.
+    assert "include_framework_agnostic" not in search.await_args.kwargs
+    assert search.await_args.kwargs["sort"] == "recommended"
+
+
+def test_market_list_supports_time_ordering(monkeypatch):
+    client, _user = _client(is_admin=False)
+    search = AsyncMock(return_value=([_sample_market()], 1))
+    monkeypatch.setattr("api.routes.v1.plugins.MarketPlugin.search_plugins", search)
+    monkeypatch.setattr("api.routes.v1.plugins.MarketPlugin.get_by_ids", AsyncMock(return_value=[]))
+
+    response = client.get("/api/v1/plugins/market?sort=newest")
+
+    assert response.status_code == 200
+    assert search.await_args.kwargs["sort"] == "newest"
+    assert client.get("/api/v1/plugins/market?sort=alphabetical").status_code == 422
+
+
+def test_market_list_keeps_other_section_separate(monkeypatch):
+    client, _user = _client(is_admin=False)
+    search = AsyncMock(return_value=([_sample_market(framework=PluginFramework.OTHER)], 1))
+    monkeypatch.setattr("api.routes.v1.plugins.MarketPlugin.search_plugins", search)
+    monkeypatch.setattr("api.routes.v1.plugins.MarketPlugin.get_by_ids", AsyncMock(return_value=[]))
+
+    response = client.get("/api/v1/plugins/market?framework=other")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["framework"] == "other"
+    assert search.await_args.kwargs["framework"] is PluginFramework.OTHER
 
 
 def test_market_list_rejects_unknown_framework():

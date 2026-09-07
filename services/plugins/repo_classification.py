@@ -28,10 +28,21 @@ _COUNTERSTRIKESHARP_MARKERS = (
     "css_plugin",
     "minimumapiversion",
 )
+# "swiftly" on its own is an ordinary English adverb ("restarts swiftly"), and
+# matching it dropped unrelated plugins into the SwiftlyS2 section. Every marker
+# below is a product name, namespace or install path instead.
 _SWIFTLY_MARKERS = (
     "swiftlys2",
     "swiftly-s2",
-    "swiftly",
+    "swiftly s2",
+    "swiftly-solution",
+    "swiftlycore",
+    "swiftly core",
+    "swiftlyplugin",
+    "swiftly plugin",
+    "swiftly-plugin",
+    "addons/swiftly",
+    "swiftly.json",
 )
 _METAMOD_MARKERS = (
     "metamod",

@@ -23,6 +23,7 @@ export function toMarketPlugin(raw: MarketPluginViewDto): MarketPlugin {
     customInstallPath: raw.custom_install_path ?? null,
     downloadCount: raw.download_count,
     installCount: raw.install_count,
+    createdAt: raw.created_at ?? null,
     dependencies: (raw.dependencies ?? []).map(toRef),
   };
 }

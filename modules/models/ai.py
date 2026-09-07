@@ -126,6 +126,15 @@ class AIConversation(SQLModel, table=True):
     external_actor_id: Optional[str] = Field(default=None, max_length=20, index=True)
     discord_guild_id: Optional[str] = Field(default=None, max_length=20)
     discord_channel_id: Optional[str] = Field(default=None, max_length=20)
+    # Rolling compaction state. Once the live history no longer fits the
+    # configured context window, everything up to and including
+    # ``summary_message_id`` is replaced by ``summary`` in the provider request.
+    # It is persisted so the compaction runs once instead of on every round,
+    # which also keeps the request prefix byte-stable for upstream prompt
+    # caches. See ``services.ai_context``.
+    summary: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    summary_message_id: Optional[int] = Field(default=None)
+    summary_tokens: int = Field(default=0, sa_column_kwargs={"server_default": text("0")})
     created_at: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
     )

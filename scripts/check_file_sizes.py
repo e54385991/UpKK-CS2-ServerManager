@@ -25,7 +25,7 @@ LEGACY_SIZE_LIMITS = {
     "services/github_plugin_plan_service.py": 1221,
     "services/discord_bot_manager.py": 2758,
     "services/plugin_diagnostic_service.py": 921,
-    "services/ai_orchestrator.py": 1283,
+    "services/ai_orchestrator.py": 1235,
     "services/plugin_conflict_service.py": 923,
     "services/plugin_installation.py": 991,
     "services/ai_tools.py": 2191,

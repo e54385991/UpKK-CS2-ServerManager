@@ -115,10 +115,14 @@ def test_operation_inbox_lists_and_clears_failures(monkeypatch):
         "api.routes.v1.operation_inbox.server_operation_hub.clear_failed",
         cleared,
     )
+    import_jobs = AsyncMock(return_value=2)
+    monkeypatch.setattr("api.routes.v1.operation_inbox.clear_failed_jobs", import_jobs)
     wipe = client.delete("/api/v1/operations/inbox/failed")
     assert wipe.status_code == 200
     assert wipe.json()["success"] is True
     cleared.assert_awaited_once_with([1])
+    # A member sees no AI import jobs, so none are cleared on their behalf.
+    import_jobs.assert_not_awaited()
 
     monkeypatch.setattr(
         "api.routes.v1.operation_inbox.server_operation_hub.get",
@@ -132,6 +136,28 @@ def test_operation_inbox_lists_and_clears_failures(monkeypatch):
     one = client.delete(f"/api/v1/operations/inbox/failed/{operation_id}")
     assert one.status_code == 200
     dismiss.assert_awaited_once()
+
+
+def test_clear_failed_also_clears_admin_visible_ai_imports(monkeypatch):
+    """A failed AI import shares the tray's red badge, so one click clears both."""
+    client = _client(monkeypatch, admin=True)
+    cleared = AsyncMock(return_value=1)
+    monkeypatch.setattr("api.routes.v1.operation_inbox.server_operation_hub.clear_failed", cleared)
+    import_jobs = AsyncMock(return_value=2)
+    monkeypatch.setattr("api.routes.v1.operation_inbox.clear_failed_jobs", import_jobs)
+
+    response = client.delete("/api/v1/operations/inbox/failed")
+
+    assert response.status_code == 200
+    assert "3" in response.json()["message"]
+    import_jobs.assert_awaited_once_with(1)
+
+    # Losing administrator rights mid-request must not fail the whole clear.
+    import_jobs.reset_mock()
+    import_jobs.side_effect = PermissionError("no longer an administrator")
+    revoked = client.delete("/api/v1/operations/inbox/failed")
+    assert revoked.status_code == 200
+    assert "1" in revoked.json()["message"]
 
 
 def test_operation_inbox_events_requires_authentication():

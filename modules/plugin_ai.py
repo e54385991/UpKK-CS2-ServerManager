@@ -70,13 +70,24 @@ class DocumentationSource(StrictValue):
 
 
 class PluginAIInfo(StrictValue):
+    """AI-derived marketplace metadata an administrator reviews before install.
+
+    ``requirements`` holds only prerequisites the panel recognizes precisely —
+    a named runtime such as Metamod:Source or CounterStrikeSharp (see
+    ``services.plugins.ai_requirements``). ``notes`` holds everything the model
+    said that could not be pinned to a known runtime, plus the importer's own
+    advisories. Notes are shown before an install and never block it, so a vague
+    model sentence cannot make a listing uninstallable.
+    """
+
     model: str = Field(max_length=255)
     reviewed: bool = False
     installation: InstallationConfig | None = None
     requirements: list[str] = Field(default_factory=list, max_length=50)
+    notes: list[str] = Field(default_factory=list, max_length=50)
     sources: list[DocumentationSource] = Field(default_factory=list, max_length=10)
 
-    @field_validator("requirements")
+    @field_validator("requirements", "notes")
     @classmethod
     def bounded_requirements(cls, values: list[str]) -> list[str]:
         if any(len(value) > 1000 for value in values):

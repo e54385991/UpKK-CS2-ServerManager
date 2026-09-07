@@ -33,8 +33,11 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
     };
     refresh();
     window.addEventListener("plugin-ai-import-submitted", onSubmit);
+    // The tray's one-click "clear failed" deletes failed import jobs too;
+    // re-read immediately instead of leaving them on screen for a poll cycle.
+    window.addEventListener("plugin-ai-import-refresh", refresh);
     const timer = window.setInterval(refresh, 5000);
-    return () => { mounted = false; clearInterval(timer); window.removeEventListener("plugin-ai-import-submitted", onSubmit); };
+    return () => { mounted = false; clearInterval(timer); window.removeEventListener("plugin-ai-import-submitted", onSubmit); window.removeEventListener("plugin-ai-import-refresh", refresh); };
   }, [initialTasks.length]);
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, []);

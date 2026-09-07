@@ -44,12 +44,17 @@ PluginCategoryLiteral = Literal[
     "other",
 ]
 
-# The marketplace is browsed by the two runtime sections; ``other`` marks a
-# listing that belongs to neither and is therefore shown in both and exempt
-# from the install-time runtime check. New listings default to the
-# CounterStrikeSharp stack, which is what most CS2 plugins target.
+# Every framework value is also a marketplace browse section, and a section
+# shows exactly its own value. ``other`` marks a listing that belongs to neither
+# runtime: it lives in its own section and is exempt from the install-time
+# runtime check. New listings default to the CounterStrikeSharp stack, which is
+# what most CS2 plugins target.
 PluginFrameworkLiteral = Literal["counterstrikesharp", "swiftly", "other"]
-PluginFrameworkSectionLiteral = Literal["counterstrikesharp", "swiftly"]
+PluginFrameworkSectionLiteral = PluginFrameworkLiteral
+
+# Marketplace browse order. The time orders exist so an operator can review what
+# was added recently, which matters after a bulk AI import.
+MarketSort = Literal["recommended", "newest", "oldest"]
 
 DEFAULT_PLUGIN_FRAMEWORK: PluginFrameworkLiteral = "counterstrikesharp"
 
@@ -244,6 +249,7 @@ class MarketPluginView(V1Model):
     download_count: int
     install_count: int
     ai_metadata: PluginAIInfo | None = None
+    created_at: datetime | None = None
     dependencies: list[PluginRef] = Field(default_factory=list)
 
 
@@ -342,6 +348,22 @@ class PluginFrameworkCompatibilityView(V1Model):
     mismatch: bool = False
 
 
+class PluginAINoticeView(V1Model):
+    """AI-derived prerequisites and notes to review before installing a listing.
+
+    Advisory only: the panel shows these before the install runs instead of
+    refusing the preflight, so an imprecise model sentence cannot make a listing
+    permanently uninstallable. ``requirements`` holds runtimes the panel
+    recognized by name; ``notes`` holds everything else.
+    """
+
+    plugin_id: int
+    title: str
+    reviewed: bool = False
+    requirements: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class PluginInstallPlanView(V1Model):
     """Deterministic install preflight. Does not mutate the server."""
 
@@ -356,6 +378,7 @@ class PluginInstallPlanView(V1Model):
     warnings: list[PluginConflictView] = Field(default_factory=list)
     framework: PluginFrameworkCompatibilityView
     ai_unreviewed: list[int] = Field(default_factory=list)
+    ai_notices: list[PluginAINoticeView] = Field(default_factory=list)
     steps: list[PluginInstallStep] = Field(default_factory=list)
     blocked: bool
     plan_hash: str
@@ -664,6 +687,7 @@ __all__ = [
     "PluginCategoryLiteral",
     "PluginFrameworkLiteral",
     "PluginFrameworkSectionLiteral",
+    "MarketSort",
     "DEFAULT_PLUGIN_FRAMEWORK",
     "MarketPluginCreateRequest",
     "MarketPluginUpdateRequest",
@@ -681,6 +705,7 @@ __all__ = [
     "PluginConflictView",
     "PluginInstallStep",
     "PluginFrameworkCompatibilityView",
+    "PluginAINoticeView",
     "PluginInstallPlanView",
     "PluginInstallRequest",
     "LinuxRuntimeProfileView",

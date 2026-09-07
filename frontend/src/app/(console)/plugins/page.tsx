@@ -13,7 +13,7 @@ import {
   MarketCatalogSkeleton,
 } from "@/modules/plugins/market-catalog";
 import { SyncDescriptionsButton } from "@/modules/plugins/sync-descriptions-button";
-import { toPluginFrameworkSection } from "@/modules/plugins/types";
+import { toMarketSort, toPluginFrameworkSection } from "@/modules/plugins/types";
 import { listServers } from "@/modules/servers/api";
 import { PageHeader } from "@/shared/ui/page-header";
 
@@ -28,6 +28,7 @@ type SearchParams = {
   q?: string;
   category?: string;
   framework?: string;
+  sort?: string;
   offset?: string;
   serverId?: string;
 };
@@ -45,13 +46,16 @@ export default async function PluginsPage({
   ]);
   const offset = Math.max(0, Number(sp.offset ?? 0)) || 0;
   const serverId = Number(sp.serverId);
-  // The marketplace opens on the CounterStrikeSharp section; SwiftlyS2 is the
-  // other top-level tab.
+  // The marketplace opens on the CounterStrikeSharp section; SwiftlyS2 and the
+  // framework-agnostic "other" section are the remaining top-level tabs. Each
+  // one lists exactly its own framework value.
   const framework = toPluginFrameworkSection(sp.framework?.trim());
+  const sort = toMarketSort(sp.sort?.trim());
   const query = {
     q: sp.q?.trim() || undefined,
     category: sp.category?.trim() || undefined,
     framework,
+    sort,
     limit: PAGE_SIZE,
     offset,
   };

@@ -50,6 +50,7 @@ class Database:
         self.plugin = MarketPlugin(id=12, title="Original", github_url="https://github.com/a/b")
         self.rows = []
         self.added = []
+        self.deleted = []
         self.execute = AsyncMock(side_effect=lambda _: Result(self.rows))
         self.scalar = AsyncMock(return_value=0)
         self.commit = AsyncMock()
@@ -70,6 +71,9 @@ class Database:
         if isinstance(value, MarketPlugin) and value.id is None:
             value.id = 15
         self.added.append(value)
+
+    async def delete(self, value):
+        self.deleted.append(value)
 
     @asynccontextmanager
     async def session(self):
@@ -182,6 +186,26 @@ async def test_cancel_pending_running_and_missing_tasks(env):
     db.rows = []
     with pytest.raises(LookupError):
         await store.cancel_job("missing", 1)
+
+
+@pytest.mark.asyncio
+async def test_clear_failed_jobs_needs_admin_and_reports_what_it_removed(env):
+    """The tray's one-click clear has to reach failed imports too."""
+    db, _ = env
+    db.job.status = "failed"
+    db.rows = [db.job]
+
+    assert await store.clear_failed_jobs(1) == 1
+    assert db.deleted == [db.job]
+    assert db.commit.await_count
+
+    db.deleted.clear()
+    db.rows = []
+    assert await store.clear_failed_jobs(1) == 0
+
+    db.user.is_admin = False
+    with pytest.raises(PermissionError):
+        await store.clear_failed_jobs(1)
 
 
 @pytest.mark.asyncio

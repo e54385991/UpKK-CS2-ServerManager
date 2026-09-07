@@ -14127,6 +14127,18 @@
             "title": "Category",
             "type": "string"
           },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
           "custom_install_path": {
             "anyOf": [
               {
@@ -15072,6 +15084,7 @@
       },
       "PluginAIInfo": {
         "additionalProperties": false,
+        "description": "AI-derived marketplace metadata an administrator reviews before install.\n\n``requirements`` holds only prerequisites the panel recognizes precisely —\na named runtime such as Metamod:Source or CounterStrikeSharp (see\n``services.plugins.ai_requirements``). ``notes`` holds everything the model\nsaid that could not be pinned to a known runtime, plus the importer's own\nadvisories. Notes are shown before an install and never block it, so a vague\nmodel sentence cannot make a listing uninstallable.",
         "properties": {
           "installation": {
             "anyOf": [
@@ -15087,6 +15100,14 @@
             "maxLength": 255,
             "title": "Model",
             "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Notes",
+            "type": "array"
           },
           "requirements": {
             "items": {
@@ -15114,6 +15135,45 @@
           "model"
         ],
         "title": "PluginAIInfo",
+        "type": "object"
+      },
+      "PluginAINoticeView": {
+        "additionalProperties": false,
+        "description": "AI-derived prerequisites and notes to review before installing a listing.\n\nAdvisory only: the panel shows these before the install runs instead of\nrefusing the preflight, so an imprecise model sentence cannot make a listing\npermanently uninstallable. ``requirements`` holds runtimes the panel\nrecognized by name; ``notes`` holds everything else.",
+        "properties": {
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "plugin_id": {
+            "title": "Plugin Id",
+            "type": "integer"
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirements",
+            "type": "array"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "title"
+        ],
+        "title": "PluginAINoticeView",
         "type": "object"
       },
       "PluginAIReadinessView": {
@@ -16754,6 +16814,13 @@
         "additionalProperties": false,
         "description": "Deterministic install preflight. Does not mutate the server.",
         "properties": {
+          "ai_notices": {
+            "items": {
+              "$ref": "#/components/schemas/PluginAINoticeView"
+            },
+            "title": "Ai Notices",
+            "type": "array"
+          },
           "ai_unreviewed": {
             "items": {
               "type": "integer"
@@ -33313,7 +33380,7 @@
     },
     "/api/v1/operations/inbox/failed": {
       "delete": {
-        "description": "Remove every retained failure the caller can see.",
+        "description": "Remove every retained failure the caller can see.\n\nAdministrators also see failed AI marketplace imports in the same tray, so\nthe one-click clear covers those too — they were otherwise undismissable\nand kept the tray badge red for their full seven-day retention.",
         "operationId": "clear_failed_operations_api_v1_operations_inbox_failed_delete",
         "responses": {
           "200": {
@@ -33825,7 +33892,7 @@
             }
           },
           {
-            "description": "Marketplace section: counterstrikesharp or swiftly",
+            "description": "Marketplace section: counterstrikesharp, swiftly or other",
             "in": "query",
             "name": "framework",
             "required": false,
@@ -33838,8 +33905,25 @@
                   "type": "null"
                 }
               ],
-              "description": "Marketplace section: counterstrikesharp or swiftly",
+              "description": "Marketplace section: counterstrikesharp, swiftly or other",
               "title": "Framework"
+            }
+          },
+          {
+            "description": "Browse order: recommended, newest or oldest by creation time",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "recommended",
+              "description": "Browse order: recommended, newest or oldest by creation time",
+              "enum": [
+                "recommended",
+                "newest",
+                "oldest"
+              ],
+              "title": "Sort",
+              "type": "string"
             }
           },
           {

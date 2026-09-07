@@ -37,6 +37,7 @@ from services.plugin_inventory_service import (
 )
 from services.plugins.ai_install_policy import (
     apply_layout,
+    install_notice,
     metadata,
     select_assets,
     selected_asset_rules,
@@ -259,6 +260,11 @@ async def build_plugin_install_plan(
         "blocked": bool(hard_conflicts),
         "ai_unreviewed": [
             plugin.id for plugin in ordered if (info := metadata(plugin)) and not info.reviewed
+        ],
+        # Advisory only. Outstanding prerequisites and notes are shown before
+        # the install instead of aborting the preflight.
+        "ai_notices": [
+            notice for plugin in ordered if (notice := install_notice(plugin)) is not None
         ],
         "ai_revisions": {
             str(plugin.id): info.revision()

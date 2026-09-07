@@ -28,7 +28,11 @@ export function AIPluginReview({ pluginId, initial, canEdit }: { pluginId: numbe
       <div><Label htmlFor="ai-rule-asset">{t("assetGlob")}</Label><Input id="ai-rule-asset" value={asset} onChange={e => setAsset(e.target.value)} /></div>
       <div><Label htmlFor="ai-rule-source">{t("source")}</Label><Input id="ai-rule-source" value={source} onChange={e => setSource(e.target.value)} /></div>
       <div><Label htmlFor="ai-rule-target">{t("target")}</Label><Input id="ai-rule-target" value={target} onChange={e => setTarget(e.target.value)} placeholder="addons/counterstrikesharp/plugins/..." /></div>
-      <div><Label htmlFor="ai-requirements">{t("requirements")}</Label><Textarea id="ai-requirements" value={requirements} onChange={e => setRequirements(e.target.value)} /></div>
+      <div>
+        <Label htmlFor="ai-requirements">{t("requirements")}</Label>
+        <Textarea id="ai-requirements" value={requirements} onChange={e => setRequirements(e.target.value)} aria-describedby="ai-requirements-hint" />
+        <p id="ai-requirements-hint" className="text-xs text-fg-subtle">{t("requirementsHint")}</p>
+      </div>
       <Button type="button" disabled={busy} onClick={async () => {
         setBusy(true); setError("");
         try {
@@ -37,6 +41,10 @@ export function AIPluginReview({ pluginId, initial, canEdit }: { pluginId: numbe
         } finally { setBusy(false); }
       }}>{t("saveReview")}</Button>
     </> : <><pre className="overflow-auto text-xs">{JSON.stringify(info.installation, null, 2)}</pre><ul>{info.requirements?.map((value,index) => <li key={index}>{value}</li>)}</ul></>}
+    <div className="space-y-1 text-xs" data-testid="ai-review-notes">
+      <p className="font-medium">{t("notes")}</p>
+      {info.notes?.length ? <ul className="list-disc pl-5">{info.notes.map((value, index) => <li key={index} className="break-all">{value}</li>)}</ul> : <p className="text-fg-subtle">{t("notesEmpty")}</p>}
+    </div>
     <div className="space-y-1 text-xs"><p>{t("sources")}</p>{info.sources?.map(item => <p key={item.path} className="break-all">{item.path} · {item.commit}</p>)}</div>
     {error && <p role="alert" className="text-danger">{error}</p>}
   </section>;

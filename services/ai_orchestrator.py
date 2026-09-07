@@ -33,11 +33,13 @@ from services.agent_policy_service import (
 )
 from services.ai.errors import AIPayloadTooLargeError
 from services.ai_access import audit_security_event, authorized_server
+from services.ai_context import compact_if_needed, load_history, summary_message
 from services.ai_events import ai_event_hub
 from services.ai_prompt import build_system_prompt
 from services.ai_provider import AIProviderError, create_chat_completion
 from services.ai_security import (
     AIConfigurationError,
+    AIProviderConfig,
     get_effective_provider,
     redact_sensitive_text,
     sanitize_tool_result,
@@ -50,6 +52,9 @@ from services.ai_tools import (
     execute_tool,
     tool_definitions,
 )
+from services.ai_usage import estimate_message_tokens as _estimate_message_tokens
+from services.ai_usage import estimate_response_tokens as _estimate_response_tokens
+from services.ai_usage import provider_token_usage as _provider_token_usage
 from services.maintenance_lock import maintenance_lock_service
 from services.redis_manager import redis_manager
 
@@ -293,58 +298,6 @@ class _AssistantDeltaEmitter:
                 "streaming": True,
             },
         )
-
-
-def _token_count(value: Any) -> int:
-    """Return a bounded, provider-independent token estimate for fallback display."""
-    if value is None:
-        return 0
-    if isinstance(value, str):
-        text = value
-    else:
-        try:
-            text = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
-        except TypeError, ValueError:
-            text = str(value)
-    return max(0, (len(text) + 3) // 4)
-
-
-def _estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
-    return max(1, sum(_token_count(message) for message in messages))
-
-
-def _estimate_response_tokens(response: dict[str, Any]) -> int:
-    return max(
-        1,
-        _token_count(response.get("content")) + _token_count(response.get("tool_calls")),
-    )
-
-
-def _provider_token_usage(response: dict[str, Any]) -> tuple[int, int] | None:
-    usage = response.get("usage")
-    if not isinstance(usage, dict):
-        return None
-
-    def first_int(*keys: str) -> int:
-        for key in keys:
-            value = usage.get(key)
-            if isinstance(value, bool):
-                continue
-            if not isinstance(value, (int, float, str)):
-                continue
-            try:
-                parsed = int(value)
-            except TypeError, ValueError:
-                continue
-            if parsed >= 0:
-                return min(parsed, 10_000_000)
-        return 0
-
-    input_tokens = first_int("prompt_tokens", "input_tokens")
-    output_tokens = first_int("completion_tokens", "output_tokens")
-    if not input_tokens and not output_tokens:
-        output_tokens = first_int("total_tokens")
-    return input_tokens, output_tokens
 
 
 def _retry_delay_seconds(retry_attempt: int) -> int:
@@ -595,35 +548,29 @@ def _validate_write_tool_batch(tool_names: list[str]) -> None:
 
 
 async def _load_provider_messages(
-    db, conversation: AIConversation, user: User, server: Server | None, admin_prompt: str
+    db,
+    conversation: AIConversation,
+    user: User,
+    server: Server | None,
+    admin_prompt: str,
+    provider: AIProviderConfig | None = None,
 ) -> list[dict[str, Any]]:
-    result = await db.execute(
-        select(AIMessage)
-        .where(AIMessage.conversation_id == conversation.id)
-        .order_by(col(AIMessage.id).desc())
-        .limit(120)
+    """Build the provider request history for one round.
+
+    With a provider config, history that no longer fits the configured context
+    window is folded into the conversation's persisted summary instead of being
+    dropped (``services.ai_context``). Without one — the Discord preview path
+    and tests — the raw tail is returned unchanged.
+    """
+    prefix = [{"role": "system", "content": build_system_prompt(user, server, admin_prompt)}]
+    history, truncated = await load_history(db, conversation)
+    if provider is None:
+        head = summary_message(conversation.summary)
+        return [*prefix, *([head] if head else []), *[message for _, message in history]]
+    result = await compact_if_needed(
+        db, conversation, provider, prefix, history, truncated=truncated
     )
-    stored = list(reversed(result.scalars().all()))
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": build_system_prompt(user, server, admin_prompt)}
-    ]
-    running_chars = 0
-    converted: list[dict[str, Any]] = []
-    for item in reversed(stored):
-        content = item.content or ""
-        running_chars += len(content)
-        if running_chars > 100_000:
-            break
-        message: dict[str, Any] = {"role": item.role, "content": item.content}
-        if item.tool_calls:
-            message["tool_calls"] = item.tool_calls
-        if item.tool_call_id:
-            message["tool_call_id"] = item.tool_call_id
-        if item.tool_name:
-            message["name"] = item.tool_name
-        converted.append(message)
-    messages.extend(reversed(converted))
-    return messages
+    return result.messages
 
 
 async def _execute_tool_run(
@@ -893,6 +840,7 @@ async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration sta
             }
             session_input_tokens = 0
             session_output_tokens = 0
+            session_cached_tokens = 0
 
             while rounds_used < max_rounds:
                 await db.refresh(run)
@@ -900,7 +848,7 @@ async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration sta
                     await _emit(run.id, "run_interrupted", {"error": run.error or "Interrupted"})
                     return
                 messages = await _load_provider_messages(
-                    db, conversation, user, server, provider.admin_prompt
+                    db, conversation, user, server, provider.admin_prompt, provider
                 )
                 round_index = rounds_used + 1
                 estimated_input_tokens = _estimate_message_tokens(messages)
@@ -941,6 +889,7 @@ async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration sta
                 else:
                     session_input_tokens += provider_usage[0]
                     session_output_tokens += provider_usage[1]
+                    session_cached_tokens += provider_usage[2]
                     usage_estimated = False
                 await _emit(
                     run.id,
@@ -950,6 +899,9 @@ async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration sta
                         "input_tokens": session_input_tokens,
                         "output_tokens": session_output_tokens,
                         "total_tokens": session_input_tokens + session_output_tokens,
+                        # Already included in input_tokens; shown so an operator
+                        # can see the upstream prompt cache working.
+                        "cached_input_tokens": session_cached_tokens,
                         "estimated": usage_estimated,
                     },
                 )

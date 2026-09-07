@@ -5,7 +5,7 @@ import { useCallback, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { Search } from "lucide-react";
-import { PLUGIN_CATEGORIES } from "@/modules/plugins/types";
+import { MARKET_SORTS, PLUGIN_CATEGORIES } from "@/modules/plugins/types";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
@@ -22,11 +22,13 @@ export function MarketFilters() {
       const next = new URLSearchParams();
       const q = String(form.get("q") ?? "").trim();
       const category = String(form.get("category") ?? "").trim();
+      const sort = String(form.get("sort") ?? "").trim();
       const serverId = params.get("serverId");
       // Keep the active marketplace section; searching must not jump tabs.
       const framework = params.get("framework");
       if (q) next.set("q", q);
       if (category) next.set("category", category);
+      if (sort && sort !== "recommended") next.set("sort", sort);
       if (framework) next.set("framework", framework);
       if (serverId) next.set("serverId", serverId);
       const query = next.toString();
@@ -54,6 +56,19 @@ export function MarketFilters() {
         {PLUGIN_CATEGORIES.map((value) => (
           <option key={value} value={value}>
             {t(`categories.${value}`)}
+          </option>
+        ))}
+      </Select>
+      <Select
+        name="sort"
+        defaultValue={params.get("sort") ?? "recommended"}
+        aria-label={t("filterSort")}
+        data-testid="market-sort"
+        className="w-40"
+      >
+        {MARKET_SORTS.map((value) => (
+          <option key={value} value={value}>
+            {t(`sorts.${value}`)}
           </option>
         ))}
       </Select>

@@ -46,7 +46,9 @@ from .schemas import (
     MarketPluginDescriptionSyncView,
     MarketPluginUpdateRequest,
     MarketPluginView,
+    MarketSort,
     Page,
+    PluginAINoticeView,
     PluginCategoryList,
     PluginCategoryLiteral,
     PluginCategoryView,
@@ -139,6 +141,7 @@ def to_market_view(
         ai_metadata=PluginAIInfo.model_validate(plugin.ai_metadata) if plugin.ai_metadata else None,
         download_count=int(plugin.download_count or 0),
         install_count=int(plugin.install_count or 0),
+        created_at=getattr(plugin, "created_at", None),
         dependencies=dependencies,
     )
 
@@ -201,6 +204,19 @@ def _framework_view(compatibility: dict[str, Any]) -> PluginFrameworkCompatibili
     )
 
 
+def _ai_notice_views(notices: list[dict[str, Any]]) -> list[PluginAINoticeView]:
+    return [
+        PluginAINoticeView(
+            plugin_id=int(item["plugin_id"]),
+            title=str(item["title"]),
+            reviewed=bool(item.get("reviewed")),
+            requirements=[str(value) for value in item.get("requirements") or []],
+            notes=[str(value) for value in item.get("notes") or []],
+        )
+        for item in notices
+    ]
+
+
 def to_plan_view(plan: dict[str, Any]) -> PluginInstallPlanView:
     plugin = plan["plugin"]
     return PluginInstallPlanView(
@@ -220,6 +236,7 @@ def to_plan_view(plan: dict[str, Any]) -> PluginInstallPlanView:
         warnings=_conflict_views(list(plan.get("warnings") or [])),
         framework=_framework_view(plan.get("framework") or {}),
         ai_unreviewed=plan.get("ai_unreviewed", []),
+        ai_notices=_ai_notice_views(list(plan.get("ai_notices") or [])),
         steps=[
             PluginInstallStep(
                 order=int(step["order"]),
@@ -245,7 +262,11 @@ async def list_market_plugins(
     category: str | None = Query(None),
     framework: str | None = Query(
         None,
-        description="Marketplace section: counterstrikesharp or swiftly",
+        description="Marketplace section: counterstrikesharp, swiftly or other",
+    ),
+    sort: MarketSort = Query(
+        "recommended",
+        description="Browse order: recommended, newest or oldest by creation time",
     ),
     q: str | None = Query(None, max_length=200),
 ) -> Page[MarketPluginView]:
@@ -272,7 +293,7 @@ async def list_market_plugins(
         skip=offset,
         limit=limit,
         framework=framework_enum,
-        include_framework_agnostic=True,
+        sort=sort,
     )
     dependency_lists = await _dependency_refs(db, plugins)
     return Page(

@@ -32,6 +32,21 @@ def test_swiftly_repository_is_detected():
     )
 
 
+def test_the_english_adverb_swiftly_is_not_a_runtime():
+    """框架无关（其他 / 通用）的条目不能被误判进 SwiftlyS2 分区。"""
+    assert (
+        detect_plugin_framework(
+            name="cfg-pack",
+            description="A Metamod:Source config pack that reloads swiftly",
+        )
+        is PluginFramework.OTHER
+    )
+    assert detect_plugin_framework(name="warmup", description="Ends the warmup swiftly") is None
+    # Product names, namespaces and install paths still resolve.
+    for hint in ("Swiftly Core", "addons/swiftly", "a swiftly-plugin", "swiftly.json"):
+        assert detect_plugin_framework(name="ranks", description=hint) is PluginFramework.SWIFTLY
+
+
 def test_topics_alone_are_enough():
     assert (
         detect_plugin_framework(name="ranks", topics=["cs2", "swiftlys2"])

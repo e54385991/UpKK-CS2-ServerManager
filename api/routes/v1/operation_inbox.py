@@ -13,7 +13,7 @@ from sqlmodel import select
 from api.dependencies import ActiveUser, DatabaseSession, StreamUser
 from modules import Server
 from modules.database import async_session_maker
-from services.plugins.ai_import_store import check_administrator, list_jobs
+from services.plugins.ai_import_store import check_administrator, clear_failed_jobs, list_jobs
 from services.server_operation_hub import (
     ACTIVE_STATUSES,
     FAILED_RETENTION_SECONDS,
@@ -162,9 +162,19 @@ async def clear_failed_operations(
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ActionResult:
-    """Remove every retained failure the caller can see."""
+    """Remove every retained failure the caller can see.
+
+    Administrators also see failed AI marketplace imports in the same tray, so
+    the one-click clear covers those too — they were otherwise undismissable
+    and kept the tray badge red for their full seven-day retention.
+    """
     servers = await _accessible_servers(db, current_user)
     cleared = await server_operation_hub.clear_failed([server_id for server_id, _name in servers])
+    if current_user.is_admin:
+        try:
+            cleared += await clear_failed_jobs(current_user.id)
+        except PermissionError:
+            pass
     return ActionResult(
         success=True,
         message=f"Cleared {cleared} failed operation(s)",

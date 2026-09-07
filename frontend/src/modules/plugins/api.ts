@@ -51,6 +51,7 @@ export async function listMarketPlugins(
   if (query.q) params.set("q", query.q);
   if (query.category) params.set("category", query.category);
   if (query.framework) params.set("framework", query.framework);
+  if (query.sort) params.set("sort", query.sort);
   params.set("limit", String(query.limit ?? 20));
   params.set("offset", String(query.offset ?? 0));
   const result = await apiFetch<MarketPluginPageDto>(
@@ -173,6 +174,13 @@ function toPlan(raw: PluginInstallPlanViewDto): PluginInstallPlan {
     hardConflicts: (raw.hard_conflicts ?? []).map(toConflict),
     warnings: (raw.warnings ?? []).map(toConflict),
     aiUnreviewed: raw.ai_unreviewed ?? [],
+    aiNotices: (raw.ai_notices ?? []).map((notice) => ({
+      pluginId: notice.plugin_id,
+      title: notice.title,
+      reviewed: notice.reviewed ?? false,
+      requirements: notice.requirements ?? [],
+      notes: notice.notes ?? [],
+    })),
     framework: {
       plugin: raw.framework?.plugin ?? DEFAULT_PLUGIN_FRAMEWORK,
       installed: raw.framework?.installed ?? [],

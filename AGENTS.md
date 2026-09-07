@@ -101,7 +101,12 @@ HTTP request.
   days** (`failed_items`). Each item includes `server_name`, `command`, and
   `latest_message`. Operators can clear one failure with
   `DELETE /api/v1/operations/inbox/failed/{operation_id}` or all visible
-  failures with `DELETE /api/v1/operations/inbox/failed`.
+  failures with `DELETE /api/v1/operations/inbox/failed`. The clear-all also
+  removes an administrator's **failed AI marketplace imports**
+  (`services.plugins.ai_import_store.clear_failed_jobs`): they share the tray's
+  failure badge, so clearing only server operations left it permanently lit.
+  The console exposes it as one button in the tray header whenever any failure
+  is visible, not only inside the failed tab.
 - After a process restart, in-memory runners for **pending** (not yet
   started) jobs are gone; those records must fail cleanly instead of hanging
   as “queued” forever.
@@ -116,13 +121,18 @@ HTTP request.
 
 # 插件中心（marketplace）
 
-- 插件市场按运行框架分成两个一级分区：CounterStrikeSharp 与 SwiftlyS2
-  （`MarketPlugin.framework`，取值 `counterstrikesharp` / `swiftly`，与面板其余
-  地方的 framework key 一致）。新增插件默认落在 CounterStrikeSharp；控制台
-  `/plugins` 默认打开该分区，列表通过 `GET /api/v1/plugins/market?framework=`
-  过滤，可移植目录（导入/导出）也带上该字段。第三个取值 `other` 表示插件不属于
-  任何一套运行时：它同时出现在两个分区（`search_plugins(include_framework_agnostic=True)`），
-  也不受下面的运行时校验限制。
+- 插件市场按 `MarketPlugin.framework` 分成三个一级分区：CounterStrikeSharp、
+  SwiftlyS2 与「其他 / 通用」（取值 `counterstrikesharp` / `swiftly` / `other`，
+  前两个与面板其余地方的 framework key 一致）。新增插件默认落在
+  CounterStrikeSharp；控制台 `/plugins` 默认打开该分区，列表通过
+  `GET /api/v1/plugins/market?framework=` 过滤，可移植目录（导入/导出）也带上该
+  字段。**分区是精确匹配**：`search_plugins(framework=...)` 只返回该取值，
+  `other` 只出现在自己的分区，不会混进两个运行时分区（那会让「其他 / 通用」的
+  条目看起来被归到了 SwiftlyS2）。`other` 表示插件不属于任何一套运行时，仍不受
+  下面的运行时校验限制。
+- 列表还支持按时间浏览：`GET /api/v1/plugins/market?sort=recommended|newest|oldest`
+  （默认 `recommended`，即推荐优先→安装量→创建时间）。时间序以 `created_at` 加
+  主键兜底，AI 批量导入后管理员可以直接看最近收录的条目；卡片显示收录日期。
 - **安装防呆（运行时校验）**：`build_plugin_install_plan` 会把插件的 framework 与
   远端实际检测到的运行时（`inspect_remote_plugin_inventory` 的
   `frameworks.counterstrikesharp` / `frameworks.swiftly`）比对，结果放在 plan 的
@@ -141,7 +151,9 @@ HTTP request.
   `README_SCAN_CHARS` 个字符推断 `framework` 与 `category`，随
   `GET/POST .../market/repo-info` 一起返回。两套运行时都提到、或只是 Metamod 插件时
   归为 `other`；识别不出时返回 `null`，表单保持原选择。这只是预填，管理员可覆盖，
-  且不会覆盖用户已手动改过的下拉。
+  且不会覆盖用户已手动改过的下拉。运行时标记必须是产品名、命名空间或安装路径
+  （`swiftlys2`、`addons/swiftly`、`swiftly core` 等），不得用裸词 `swiftly`——它同时
+  是英文副词，会把无关插件误判进 SwiftlyS2 分区。
 - 批量描述同步是 `POST /api/v1/plugins/market/descriptions/sync`（管理员）：
   用仓库 README 覆盖 marketplace 描述。它只访问 GitHub、不做任何 SSH 操作，
   因此**不进入**每服务器 FIFO，而是有界的同步 HTTP 调用——单次最多
@@ -149,6 +161,17 @@ HTTP request.
   （`services/plugins/description_sync.py`），剩余数量通过响应的 `remaining`
   返回，由管理员再次触发。外部请求前必须先提交读事务，不得在 GitHub I/O 期间
   持有请求数据库 session。
+- **AI 采集的依赖要求不阻止安装**。`PluginAIInfo.requirements` 只写入能精确识别
+  的运行依赖（`services/plugins/ai_requirements.py` 的固定词表：Metamod:Source、
+  CounterStrikeSharp、SwiftlyS2、CS2Fixes、MultiAddonManager），写成规范的
+  `Requires <runtime>`；模型给出的其他句子和导入器自己的告警（没有发行包、依赖
+  未解析、文档不可验证等）落到 `PluginAIInfo.notes`。`validate_installable` 只在
+  元数据无法解析时报错，不再因为 `requirements` 非空或缺少安装规则而拒绝预检
+  （那会让整批 AI 采集的条目永久不可安装：`AI installation settings have
+  unresolved requirements`）。预检把两者放进 plan 的 `ai_notices`
+  （`PluginInstallPlanView.ai_notices`），控制台在安装前作为提示展示；缺少安装
+  规则时按普通条目的压缩包自动识别流程安装。未核对仍需要
+  `acknowledge_ai_unreviewed`。
 
 # 维护与质量基线
 
@@ -174,8 +197,17 @@ HTTP request.
   保留 system 前缀和完整的 assistant tool-call/tool-result 组，丢弃最旧历史并对单条工具输出做有界截断。
   上游返回 413 时只允许一次自适应重试（紧凑工具 schema、短历史、512 输出预留），禁止原样指数重试，
   最终错误必须包含请求字节数、消息/工具字节数和估算 token 数。
-- 助手 SSE 的 `token_usage` 事件可展示输入/输出/合计 token 的实时估算或最终计量；前端只显示当前
-  处理阶段和安全进度，不展示模型私有 chain-of-thought 或未脱敏工具参数。
+- **上下文自动压缩**（`services/ai_context.py`）在到达上面这道字节级兜底之前先把装不下的旧历史
+  交给同一个供应商做摘要，写回 `ai_conversations.summary` / `summary_message_id` /
+  `summary_tokens`，下一轮以一条 system 摘要消息替代它覆盖的那些消息。触发线是输入预算的
+  `COMPACTION_TRIGGER_RATIO`，一次压到 `COMPACTION_TARGET_RATIO`：**两条线之间要留足距离**，
+  因为上游提示词缓存按最长公共前缀命中，每轮重切前缀等于每轮缓存全失效。切点只能落在
+  assistant tool-call/tool-result 组的边界；历史按最新的 `HISTORY_ROW_LIMIT` 行读取，
+  本轮要回答的消息永远不会被切掉；摘要调用失败时不写库、不丢历史，交回字节级兜底。
+- 助手 SSE 的 `token_usage` 事件可展示输入/输出/合计 token 的实时估算或最终计量，以及供应商上报的
+  `cached_input_tokens`（`prompt_tokens_details.cached_tokens` 等，属于 input 的一部分，仅供展示
+  上游提示词缓存命中情况）。token 计量集中在 `services/ai_usage.py`。前端只显示当前处理阶段和安全
+  进度，不展示模型私有 chain-of-thought 或未脱敏工具参数。
 
 ## 模块与 I/O 边界
 

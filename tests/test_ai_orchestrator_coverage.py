@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from services import ai_orchestrator as orchestrator
+from services import ai_usage
 from services.ai_provider import AIProviderError
 
 
@@ -60,15 +61,25 @@ def test_approval_labels_snapshots_and_token_helpers(monkeypatch):
     orchestrator._finalize_progress_snapshot(
         SimpleNamespace(progress_snapshot=None), success=True, message="ok"
     )
-    assert orchestrator._token_count(None) == 0
-    assert orchestrator._token_count("abcd") == 1
+    assert ai_usage.token_count(None) == 0
+    assert ai_usage.token_count("abcd") == 1
     assert orchestrator._estimate_message_tokens([]) == 1
     assert orchestrator._estimate_response_tokens({"content": "abc", "tool_calls": []}) >= 1
     assert orchestrator._provider_token_usage(
         {"usage": {"prompt_tokens": "4", "completion_tokens": 5}}
-    ) == (4, 5)
-    assert orchestrator._provider_token_usage({"usage": {"total_tokens": 7}}) == (0, 7)
+    ) == (4, 5, 0)
+    assert orchestrator._provider_token_usage({"usage": {"total_tokens": 7}}) == (0, 7, 0)
     assert orchestrator._provider_token_usage({}) is None
+    # Cached prompt tokens are reported by several spellings and are capped at
+    # the prompt tokens they are part of.
+    assert orchestrator._provider_token_usage(
+        {"usage": {"prompt_tokens": 40, "prompt_tokens_details": {"cached_tokens": 32}}}
+    ) == (40, 0, 32)
+    assert orchestrator._provider_token_usage(
+        {"usage": {"prompt_tokens": 40, "prompt_cache_hit_tokens": 90}}
+    ) == (40, 0, 40)
+    assert ai_usage.cached_input_tokens({"cached_tokens": True}) == 0
+    assert ai_usage.cached_input_tokens({"cached_tokens": "bad"}) == 0
     assert orchestrator._retry_delay_seconds(2) == 30
     assert orchestrator._approval_is_expired(
         SimpleNamespace(approval_expires_at=None), datetime.now(timezone.utc)

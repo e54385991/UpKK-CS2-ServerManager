@@ -10,7 +10,11 @@ import pytest
 
 from modules.models import AIMessage
 from services import ai_orchestrator as orchestrator
+from services import ai_usage
 from services.ai_security import AIConfigurationError
+
+# Compaction state every conversation row carries (see services.ai_context).
+_COMPACTION_FIELDS = {"summary": None, "summary_message_id": None, "summary_tokens": 0}
 
 
 class _Rows:
@@ -101,7 +105,7 @@ async def test_process_ai_run_early_failures_and_provider_configuration(monkeypa
     assert "Conversation owner" in run.error
 
     run = _run(server_id=4)
-    conversation = SimpleNamespace(id="conv-1", user_id=1)
+    conversation = SimpleNamespace(id="conv-1", user_id=1, **_COMPACTION_FIELDS)
     user = SimpleNamespace(id=1, is_admin=False, is_active=True)
     db = _Session([run, conversation, user])
     monkeypatch.setattr(orchestrator, "async_session_maker", _SessionFactory(db))
@@ -131,7 +135,7 @@ async def test_process_ai_run_early_failures_and_provider_configuration(monkeypa
 @pytest.mark.asyncio
 async def test_process_ai_run_completes_text_response(monkeypatch):
     run = _run()
-    conversation = SimpleNamespace(id="conv-1", user_id=1, updated_at=None)
+    conversation = SimpleNamespace(id="conv-1", user_id=1, updated_at=None, **_COMPACTION_FIELDS)
     user = SimpleNamespace(id=1, is_admin=False, is_active=True)
     provider = SimpleNamespace(admin_prompt="")
     settings = SimpleNamespace(max_provider_rounds=2, max_tool_calls_per_round=2)
@@ -168,7 +172,15 @@ async def test_process_ai_run_completes_text_response(monkeypatch):
 @pytest.mark.asyncio
 async def test_load_messages_resume_rejected_tools_and_tool_failure(monkeypatch):
     user = SimpleNamespace(id=1)
-    conversation = SimpleNamespace(id="c", user_id=1)
+    conversation = SimpleNamespace(id="c", user_id=1, **_COMPACTION_FIELDS)
+    call = AIMessage(
+        id=2,
+        conversation_id="c",
+        role="assistant",
+        content="",
+        visible=False,
+        tool_calls=[{"id": "call", "type": "function"}],
+    )
     message = AIMessage(
         id=3,
         conversation_id="c",
@@ -178,11 +190,26 @@ async def test_load_messages_resume_rejected_tools_and_tool_failure(monkeypatch)
         tool_name="read",
         tool_call_id="call",
     )
-    db = _Session(results=[_Rows(rows=[message])])
+    # The loader reads newest-first and reverses, so the fake yields that order.
+    db = _Session(results=[_Rows(rows=[message, call])])
     monkeypatch.setattr(orchestrator, "build_system_prompt", lambda *_args: "system")
     messages = await orchestrator._load_provider_messages(db, conversation, user, None, "admin")
     assert messages[0] == {"role": "system", "content": "system"}
-    assert messages[1]["tool_call_id"] == "call"
+    assert messages[2]["tool_call_id"] == "call"
+
+    # A tool result whose assistant call fell outside the retained window would
+    # be rejected by every provider, so it is trimmed rather than sent.
+    db = _Session(results=[_Rows(rows=[message])])
+    orphan = await orchestrator._load_provider_messages(db, conversation, user, None, "admin")
+    assert orphan == [{"role": "system", "content": "system"}]
+
+    # A stored summary replaces the messages it already covers.
+    summarized = SimpleNamespace(
+        id="c", user_id=1, summary="earlier facts", summary_message_id=1, summary_tokens=3
+    )
+    db = _Session(results=[_Rows(rows=[])])
+    messages = await orchestrator._load_provider_messages(db, summarized, user, None, "admin")
+    assert "earlier facts" in messages[1]["content"]
 
     run = _run(status="running")
     rejected = SimpleNamespace(
@@ -340,11 +367,11 @@ def test_orchestrator_labels_snapshots_and_usage_edge_cases(monkeypatch):
                 "total_tokens": 6,
             }
         }
-    ) == (0, 6)
+    ) == (0, 6, 0)
     assert orchestrator._provider_token_usage(
         {"usage": {"prompt_tokens": 20_000_000, "completion_tokens": 3}}
-    ) == (10_000_000, 3)
-    assert orchestrator._token_count(object()) >= 1
+    ) == (10_000_000, 3, 0)
+    assert ai_usage.token_count(object()) >= 1
 
 
 @pytest.mark.asyncio
@@ -520,7 +547,7 @@ async def test_execute_tool_run_auth_lock_precomputed_and_events(monkeypatch):
 @pytest.mark.asyncio
 async def test_process_ai_run_waits_for_write_approval_and_handles_policy(monkeypatch):
     run = _run()
-    conversation = SimpleNamespace(id="conv-1", user_id=1, updated_at=None)
+    conversation = SimpleNamespace(id="conv-1", user_id=1, updated_at=None, **_COMPACTION_FIELDS)
     user = SimpleNamespace(id=1, is_admin=False, is_active=True)
     provider = SimpleNamespace(admin_prompt="")
     settings = SimpleNamespace(max_provider_rounds=2, max_tool_calls_per_round=2)
@@ -568,7 +595,7 @@ async def test_process_ai_run_waits_for_write_approval_and_handles_policy(monkey
     assert any(getattr(item, "status", None) == "pending_approval" for item in db.added)
 
     run = _run(server_id=4)
-    conversation = SimpleNamespace(id="conv-1", user_id=1, updated_at=None)
+    conversation = SimpleNamespace(id="conv-1", user_id=1, updated_at=None, **_COMPACTION_FIELDS)
     server = SimpleNamespace(id=4)
     db = _Session(
         [run, conversation, user],

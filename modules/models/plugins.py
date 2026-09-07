@@ -24,12 +24,14 @@ class PluginFramework(str, enum.Enum):
     """Runtime a marketplace plugin is written for.
 
     ``counterstrikesharp`` and ``swiftly`` are the two mutually exclusive CS2
-    plugin runtimes (see ``frontend/src/modules/servers/frameworks.ts``) and the
-    marketplace's two top-level sections; ``swiftly`` matches the framework key
-    the rest of the panel already uses for SwiftlyS2. ``other`` marks a listing
-    that does not belong to either runtime (a Metamod-only plugin, a config
-    pack, …): it is listed in both sections and is exempt from the install-time
-    runtime check.
+    plugin runtimes (see ``frontend/src/modules/servers/frameworks.ts``);
+    ``swiftly`` matches the framework key the rest of the panel already uses for
+    SwiftlyS2. ``other`` marks a listing that does not belong to either runtime
+    (a Metamod-only plugin, a config pack, …). Every value is also one of the
+    marketplace's browse sections, and a section shows exactly its own value —
+    ``other`` listings stay in the "其他 / 通用" section instead of leaking into
+    the two runtime sections. They remain exempt from the install-time runtime
+    check.
     """
 
     COUNTERSTRIKESHARP = "counterstrikesharp"
@@ -37,8 +39,8 @@ class PluginFramework(str, enum.Enum):
     OTHER = "other"
 
 
-# Sections the marketplace is browsed by. ``OTHER`` is deliberately not one:
-# those listings surface inside whichever section is open.
+# The two mutually exclusive CS2 plugin runtimes. ``OTHER`` is deliberately not
+# one of them: it declares no runtime, so it never conflicts with either.
 PLUGIN_FRAMEWORK_SECTIONS: tuple[PluginFramework, ...] = (
     PluginFramework.COUNTERSTRIKESHARP,
     PluginFramework.SWIFTLY,
@@ -186,16 +188,20 @@ class MarketPlugin(SQLModel, table=True):
         skip: int = 0,
         limit: int = 20,
         framework: Optional[PluginFramework] = None,
-        include_framework_agnostic: bool = False,
+        sort: str = "recommended",
     ) -> tuple[list[Self], int]:
         """
         Search plugins with filters and pagination.
         Returns tuple of (plugins, total_count)
 
-        ``include_framework_agnostic`` also returns ``OTHER`` listings, which
-        belong to no runtime and are therefore shown in both marketplace
-        sections. Callers that need an exact section (bulk description sync)
-        leave it off.
+        ``framework`` selects exactly one marketplace section. ``OTHER`` is a
+        section of its own, so framework-agnostic listings are never mixed into
+        the CounterStrikeSharp or SwiftlyS2 results.
+
+        ``sort`` is the browse order: ``recommended`` (the default catalogue
+        order), ``newest`` or ``oldest``. The time orders let an operator review
+        freshly added listings — an AI import can add dozens at once — and every
+        order ends on the primary key so paging stays stable.
         """
         from sqlalchemy import func as sqlfunc
         from sqlalchemy import or_
@@ -210,12 +216,8 @@ class MarketPlugin(SQLModel, table=True):
 
         # Apply framework (marketplace section) filter
         if framework:
-            wanted = [framework]
-            if include_framework_agnostic and framework != PluginFramework.OTHER:
-                wanted.append(PluginFramework.OTHER)
-            framework_condition = col(cls.framework).in_(wanted)
-            query = query.where(framework_condition)
-            count_query = count_query.where(framework_condition)
+            query = query.where(cls.framework == framework)
+            count_query = count_query.where(cls.framework == framework)
 
         # Apply search query (search in title, description, author)
         if search_query and search_query.strip():
@@ -232,12 +234,21 @@ class MarketPlugin(SQLModel, table=True):
         count_result = await session.execute(count_query)
         total_count = count_result.scalar()
 
-        # Apply ordering (recommended first, then by install count)
-        query = query.order_by(
-            col(cls.is_recommended).desc(),
-            col(cls.install_count).desc(),
-            col(cls.created_at).desc(),
-        )
+        # Apply ordering. `created_at` is only second-resolution and is NULL on
+        # rows created before the column existed, so the id tiebreaker carries
+        # the actual insertion order.
+        if sort == "newest":
+            query = query.order_by(col(cls.created_at).desc(), col(cls.id).desc())
+        elif sort == "oldest":
+            query = query.order_by(col(cls.created_at).asc(), col(cls.id).asc())
+        else:
+            # Recommended first, then by install count.
+            query = query.order_by(
+                col(cls.is_recommended).desc(),
+                col(cls.install_count).desc(),
+                col(cls.created_at).desc(),
+                col(cls.id).desc(),
+            )
 
         # Apply pagination
         query = query.offset(skip).limit(limit)

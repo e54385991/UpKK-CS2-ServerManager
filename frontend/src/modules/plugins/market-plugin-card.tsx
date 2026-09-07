@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { useTranslations } from "next-intl";
-import { Download, Puzzle } from "lucide-react";
+import { useFormatter, useTranslations } from "next-intl";
+import { CalendarClock, Download, Puzzle } from "lucide-react";
 import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin-button";
 import { MarketPluginEditButton } from "@/modules/plugins/market-edit-button";
 import { MarketInstallDialog } from "@/modules/plugins/market-install-dialog";
@@ -46,11 +46,17 @@ export function MarketPluginCard({
   canEdit?: boolean;
 }) {
   const t = useTranslations("plugins");
+  const format = useFormatter();
   const [open, setOpen] = useState(false);
   const categoryLabel = isPluginCategory(plugin.category)
     ? t(`categories.${plugin.category}`)
     : plugin.category;
   const repositoryHref = safeUrl(plugin.githubUrl);
+  const addedAt = plugin.createdAt ? new Date(plugin.createdAt) : null;
+  const addedLabel =
+    addedAt && !Number.isNaN(addedAt.getTime())
+      ? format.dateTime(addedAt, { dateStyle: "medium" })
+      : null;
 
   return (
     <Card className="flex h-full flex-col p-5 transition-colors hover:border-line-strong hover:bg-surface-raised">
@@ -88,6 +94,15 @@ export function MarketPluginCard({
           {plugin.dependencies.length > 0 ? (
             <span>
               {t("dependencyCount", { count: plugin.dependencies.length })}
+            </span>
+          ) : null}
+          {addedLabel ? (
+            <span
+              className="inline-flex items-center gap-1.5"
+              data-testid="market-added-at"
+            >
+              <CalendarClock className="size-3.5" />
+              {t("addedAt", { date: addedLabel })}
             </span>
           ) : null}
         </div>

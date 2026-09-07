@@ -244,6 +244,26 @@ async def list_jobs(*, active_only: bool = False) -> list[JobSnapshot]:
         return [snapshot(job) for job in jobs]
 
 
+async def clear_failed_jobs(actor_id: int) -> int:
+    """Drop retained failed import jobs so the tray can be emptied in one click.
+
+    Failed jobs stay listed for seven days next to the failed server
+    operations. Without this they were the one kind of failure an operator
+    could not dismiss, so the tray kept a permanent red badge.
+    """
+    async with async_session_maker() as db:
+        await authorize(db, actor_id)
+        jobs = (
+            await db.execute(select(PluginImportJob).where(PluginImportJob.status == "failed"))
+        ).scalars()
+        cleared = 0
+        for job in jobs:
+            await db.delete(job)
+            cleared += 1
+        await db.commit()
+        return cleared
+
+
 async def cancel_job(job_id: str, actor_id: int) -> JobSnapshot:
     async with async_session_maker() as db:
         await authorize(db, actor_id)

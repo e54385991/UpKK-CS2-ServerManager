@@ -322,8 +322,11 @@ async def test_dependency_cycles_and_undocumented_urls_become_manual_requirement
     try:
         assert await instance.visit(URL) == 11
         child, parent = [call.args for call in store.insert_plugin.call_args_list]
-        assert "Unresolved dependency" in child[4].requirements[0]
-        assert "not supported" in parent[4].requirements[0]
+        # Advisories are notes, never blocking requirements.
+        assert "Unresolved dependency" in child[4].notes[0]
+        assert not child[4].requirements
+        assert "not supported" in parent[4].notes[0]
+        assert not parent[4].requirements
         assert parent[5] == [10]
         assert instance.analyzed == 2
         assert await instance.visit(URL) == 11
@@ -370,7 +373,11 @@ async def test_missing_release_blocks_installation_and_framework_filter_skips(ru
     try:
         await instance.visit(URL)
         info = store.insert_plugin.call_args.args[4]
-        assert info.installation is None and info.requirements
+        # No install rule can be derived, but that is an advisory note: the
+        # listing still installs through the normal archive auto-detection.
+        assert info.installation is None
+        assert not info.requirements
+        assert any("No stable release archive" in note for note in info.notes)
         incompatible = runner.ImportRunner(job(framework="swiftly"), "token", config())
         try:
             assert await incompatible.visit(URL) is None
@@ -455,9 +462,18 @@ async def test_selected_asset_rules_read_real_archive_and_block_rule_bypass(monk
         [],
         acknowledge_ai_unreviewed=True,
     )
-    info.requirements = ["Install database manually"]
+    # Outstanding prerequisites are advisory: the preflight surfaces them as a
+    # notice instead of refusing to plan the install.
+    info.requirements = ["Requires Metamod:Source"]
+    info.notes = ["Install the database manually"]
     plugin.ai_metadata = info.model_dump()
-    with pytest.raises(PluginPlanError, match="unresolved"):
+    policy.validate_installable(plugin)
+    notice = policy.install_notice(plugin)
+    assert notice is not None
+    assert notice["requirements"] == ["Requires Metamod:Source"]
+    assert notice["notes"] == ["Install the database manually"]
+    plugin.ai_metadata = {"model": "test", "requirements": [{"bad": True}]}
+    with pytest.raises(PluginPlanError, match="invalid AI installation settings"):
         policy.validate_installable(plugin)
 
 
