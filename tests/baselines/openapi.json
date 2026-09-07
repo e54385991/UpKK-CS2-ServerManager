@@ -11332,6 +11332,16 @@
         "additionalProperties": false,
         "description": "One submitted AI marketplace sweep.\n\n``sort_priority`` is the ordered tie-breaker chain applied to the merged\ncandidate list; ``sort`` mirrors its first key because that is the single\nvalue GitHub's search API accepts, and it keeps jobs and clients that were\nwritten before the chain existed valid.",
         "properties": {
+          "description_language": {
+            "default": "original",
+            "enum": [
+              "original",
+              "zh-CN",
+              "en-US"
+            ],
+            "title": "Description Language",
+            "type": "string"
+          },
           "expand_search": {
             "default": true,
             "title": "Expand Search",
@@ -14043,6 +14053,16 @@
             ],
             "title": "Description"
           },
+          "description_i18n": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginDescriptionI18n"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "download_count": {
             "title": "Download Count",
             "type": "integer"
@@ -14499,6 +14519,16 @@
               }
             ],
             "title": "Description"
+          },
+          "description_i18n": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginDescriptionI18n"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "download_count": {
             "title": "Download Count",
@@ -15769,6 +15799,16 @@
             ],
             "title": "Description"
           },
+          "description_i18n": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginDescriptionI18n"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "framework": {
             "default": "counterstrikesharp",
             "title": "Framework",
@@ -16644,6 +16684,50 @@
           }
         },
         "title": "PluginDependencyOptionsView",
+        "type": "object"
+      },
+      "PluginDescriptionI18n": {
+        "additionalProperties": false,
+        "description": "Optional descriptions collected for the supported console locales.\n\n``original`` is always the source-language AI summary. The locale fields\nare populated only when an administrator requests a translation during an\nAI import, so the default import does not spend an extra translation call.",
+        "properties": {
+          "en_us": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "En Us"
+          },
+          "original": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original"
+          },
+          "zh_cn": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zh Cn"
+          }
+        },
+        "title": "PluginDescriptionI18n",
         "type": "object"
       },
       "PluginDiagnosticExecuteBody": {

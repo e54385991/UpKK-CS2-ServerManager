@@ -22,7 +22,7 @@ from modules.models.plugins import (
     PluginConflictRule,
     PluginFramework,
 )
-from modules.plugin_ai import PluginAIInfo
+from modules.plugin_ai import PluginAIInfo, PluginDescriptionI18n
 from modules.schemas.plugins import (
     PluginCatalogConflict,
     PluginCatalogEntry,
@@ -141,6 +141,11 @@ def plugin_to_catalog_entry(
         github_url=github_url,
         title=plugin.title,
         description=plugin.description,
+        description_i18n=(
+            PluginDescriptionI18n.model_validate(plugin.description_i18n)
+            if plugin.description_i18n
+            else None
+        ),
         author=plugin.author,
         version=plugin.version,
         category=_category_value(plugin.category),
@@ -241,6 +246,9 @@ def _apply_entry_fields(
 ) -> None:
     plugin.title = entry.title
     plugin.description = entry.description
+    plugin.description_i18n = (
+        entry.description_i18n.model_dump(exclude_none=True) if entry.description_i18n else None
+    )
     plugin.author = entry.author
     plugin.version = entry.version
     plugin.category = category
@@ -346,6 +354,11 @@ async def _import_plugin_entries(
                 github_url=url,
                 title=entry.title,
                 description=entry.description,
+                description_i18n=(
+                    entry.description_i18n.model_dump(exclude_none=True)
+                    if entry.description_i18n
+                    else None
+                ),
                 author=entry.author,
                 version=entry.version,
                 category=category,

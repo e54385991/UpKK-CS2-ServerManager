@@ -108,6 +108,9 @@ class MarketPlugin(SQLModel, table=True):
     github_url: str = Field(max_length=500, nullable=False, unique=True, index=True)
     title: str = Field(max_length=255, nullable=False, index=True)
     description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    description_i18n: dict[str, str] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
     author: Optional[str] = Field(default=None, max_length=255)
     version: Optional[str] = Field(default=None, max_length=50)
     category: PluginCategory = Field(

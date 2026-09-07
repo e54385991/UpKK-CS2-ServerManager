@@ -15,6 +15,7 @@ from modules.plugin_ai import (
     ImportOptions,
     InstallationConfig,
     PluginAIInfo,
+    PluginDescriptionI18n,
     RepositoryAnalysis,
 )
 from services.plugins import ai_import_store as store
@@ -315,6 +316,7 @@ async def test_insert_and_dependencies_commit_atomically_existing_entries_preser
         is_plugin=True,
         title="New",
         description="Description",
+        description_i18n=PluginDescriptionI18n(zh_cn="描述"),
         category="utility",
         framework="swiftly",
     )
@@ -330,6 +332,7 @@ async def test_insert_and_dependencies_commit_atomically_existing_entries_preser
     assert added == 15
     plugin = next(value for value in db.added if isinstance(value, MarketPlugin))
     assert plugin.dependencies == "2,3" and not plugin.ai_metadata["reviewed"]
+    assert plugin.description_i18n == {"original": "Description", "zh_cn": "描述"}
     assert db.job.items[-1]["plugin_id"] == plugin.id
     assert db.commit.await_count == 1
     db.execute.side_effect = [Result([db.job]), Result([db.plugin])]

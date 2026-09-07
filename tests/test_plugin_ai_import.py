@@ -38,6 +38,13 @@ SHA = "a" * 40
 def test_import_maintenance_window_defaults_and_override():
     assert ImportOptions().updated_within_days == 90
     assert ImportOptions(updated_within_days=365).updated_within_days == 365
+    assert ImportOptions().description_language == "original"
+    assert ImportOptions(description_language="zh-CN").description_language == "zh-CN"
+
+
+def test_import_description_language_rejects_unknown_values():
+    with pytest.raises(ValueError):
+        ImportOptions(description_language="ja")
 
 
 def job(**options):
@@ -300,6 +307,27 @@ async def test_recursive_dependencies_reuse_existing_and_do_not_overwrite(runner
         assert args[4].sources[0].commit == SHA
         assert instance.analyzed == 1
         store.insert_plugin.assert_awaited_once()
+    finally:
+        await instance.client.close()
+
+
+@pytest.mark.asyncio
+async def test_description_prompt_defaults_to_original_and_adds_only_selected_translation(
+    runner_env,
+):
+    instance = runner.ImportRunner(job(description_language="zh-CN"), "token", config())
+    try:
+        await instance.analyze({"html_url": URL, "description": "A plugin"}, [], None)
+        prompt = runner.create_chat_completion.call_args.args[1][0]["content"]
+        assert "Simplified Chinese translation" in prompt
+        assert "description_i18n.zh_cn" in prompt
+
+        runner.create_chat_completion.reset_mock()
+        instance.job = replace(instance.job, options=ImportOptions())
+        await instance.analyze({"html_url": URL, "description": "A plugin"}, [], None)
+        prompt = runner.create_chat_completion.call_args.args[1][0]["content"]
+        assert "Keep description_i18n empty" in prompt
+        assert "do not translate" in prompt
     finally:
         await instance.client.close()
 

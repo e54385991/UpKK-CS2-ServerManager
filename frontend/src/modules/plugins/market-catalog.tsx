@@ -1,10 +1,15 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { Package, TriangleAlert } from "lucide-react";
 import { listMarketPlugins } from "@/modules/plugins/api";
 import { MarketCatalogItems } from "@/modules/plugins/market-catalog-items";
-import type { MarketInstallServer, MarketQuery } from "@/modules/plugins/types";
+import {
+  localizedPluginDescription,
+  type MarketInstallServer,
+  type MarketQuery,
+} from "@/modules/plugins/types";
+import { DEFAULT_LOCALE, isLocale } from "@/i18n/config";
 import { markdownToPlainText } from "@/shared/lib/markdown";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -33,6 +38,8 @@ export async function MarketCatalog({
   canDelete?: boolean;
 }) {
   const t = await getTranslations("plugins");
+  const requestLocale = await getLocale();
+  const locale = isLocale(requestLocale) ? requestLocale : DEFAULT_LOCALE;
   const result = await listMarketPlugins(query);
 
   if (!result.ok) {
@@ -65,7 +72,9 @@ export async function MarketCatalog({
       <MarketCatalogItems
         items={items}
         total={total}
-        excerpts={items.map((plugin) => markdownToPlainText(plugin.description))}
+        excerpts={items.map((plugin) =>
+          markdownToPlainText(localizedPluginDescription(plugin, locale)),
+        )}
         servers={servers}
         defaultServerId={serverId}
         canDelete={canDelete}

@@ -31,6 +31,26 @@ class StrictValue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PluginDescriptionI18n(StrictValue):
+    """Optional descriptions collected for the supported console locales.
+
+    ``original`` is always the source-language AI summary. The locale fields
+    are populated only when an administrator requests a translation during an
+    AI import, so the default import does not spend an extra translation call.
+    """
+
+    original: str | None = Field(default=None, max_length=10000)
+    zh_cn: str | None = Field(default=None, max_length=10000)
+    en_us: str | None = Field(default=None, max_length=10000)
+
+    @field_validator("original", "zh_cn", "en_us")
+    @classmethod
+    def non_blank_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value if value.strip() else None
+
+
 class InstallationMapping(StrictValue):
     """Copy a real archive file or directory into a game-relative directory."""
 
@@ -139,6 +159,7 @@ class ImportOptions(StrictValue):
     """
 
     framework: Literal["counterstrikesharp", "swiftly", "other", "all"] = "all"
+    description_language: Literal["original", "zh-CN", "en-US"] = "original"
     keywords: str = Field(default="", max_length=200)
     min_stars: int = Field(default=10, ge=0, le=1_000_000)
     min_forks: int = Field(default=0, ge=0, le=1_000_000)
@@ -183,6 +204,7 @@ class RepositoryAnalysis(StrictValue):
     is_plugin: bool
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(max_length=10000)
+    description_i18n: PluginDescriptionI18n | None = None
     category: Literal[
         "game_mode", "entertainment", "utility", "admin", "performance", "library", "other"
     ]

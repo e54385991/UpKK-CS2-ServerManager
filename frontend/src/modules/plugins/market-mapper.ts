@@ -12,6 +12,7 @@ export function toMarketPlugin(raw: MarketPluginViewDto): MarketPlugin {
     id: raw.id,
     title: raw.title,
     description: raw.description ?? null,
+    descriptionI18n: raw.description_i18n ?? null,
     author: raw.author ?? null,
     version: raw.version ?? null,
     category: raw.category,

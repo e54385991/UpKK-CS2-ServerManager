@@ -28,6 +28,7 @@ from modules.plugin_ai import (
     ImportItem,
     ImportOptions,
     PluginAIInfo,
+    PluginDescriptionI18n,
     RepositoryAnalysis,
     repository_url,
 )
@@ -60,6 +61,15 @@ def now() -> datetime:
 
 def fingerprint(token: str) -> str:
     return hashlib.sha256(token.strip().encode()).hexdigest()
+
+
+def _description_i18n(analysis: RepositoryAnalysis) -> dict[str, str]:
+    """Persist the source summary plus any translation requested by the job."""
+    values = (
+        analysis.description_i18n.model_dump(exclude_none=True) if analysis.description_i18n else {}
+    )
+    values["original"] = analysis.description
+    return PluginDescriptionI18n.model_validate(values).model_dump(exclude_none=True)
 
 
 async def authorize(db: AsyncSession, actor_id: int) -> User:
@@ -461,6 +471,7 @@ async def insert_plugin(
             github_url=url,
             title=analysis.title,
             description=analysis.description,
+            description_i18n=_description_i18n(analysis),
             author=author,
             category=PluginCategory(analysis.category),
             framework=PluginFramework(analysis.framework),

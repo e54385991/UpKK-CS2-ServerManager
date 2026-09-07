@@ -2,7 +2,12 @@
 
 # ruff: noqa: F403,F405
 
-from modules.plugin_ai import InstallationConfig, InstallationMapping, PluginAIInfo
+from modules.plugin_ai import (
+    InstallationConfig,
+    InstallationMapping,
+    PluginAIInfo,
+    PluginDescriptionI18n,
+)
 
 from .common import *
 
@@ -246,6 +251,7 @@ class MarketPluginResponse(SQLModel):
     github_url: str
     title: str
     description: Optional[str] = None
+    description_i18n: PluginDescriptionI18n | None = None
     author: Optional[str] = None
     version: Optional[str] = None
     category: str
@@ -654,6 +660,7 @@ class PluginCatalogEntry(SQLModel):
     github_url: str = Field(..., max_length=500)
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
+    description_i18n: PluginDescriptionI18n | None = None
     author: Optional[str] = Field(None, max_length=255)
     version: Optional[str] = Field(None, max_length=50)
     category: str = Field(default="other")

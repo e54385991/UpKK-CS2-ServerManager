@@ -18,7 +18,7 @@ type Options = components["schemas"]["ImportOptions"];
 type Readiness = components["schemas"]["PluginAIReadinessView"];
 type SortKey = "stars" | "updated" | "forks";
 const SORT_KEYS: readonly SortKey[] = ["stars", "updated", "forks"];
-const defaults: Options = { framework: "all", keywords: "", min_stars: 10, min_forks: 0, sort: "stars", sort_priority: [...SORT_KEYS], updated_within_days: 90, expand_search: true, require_dependencies: true, minutes: 15, max_plugins: 20, repositories: [] };
+const defaults: Options = { framework: "all", description_language: "original", keywords: "", min_stars: 10, min_forks: 0, sort: "stars", sort_priority: [...SORT_KEYS], updated_within_days: 90, expand_search: true, require_dependencies: true, minutes: 15, max_plugins: 20, repositories: [] };
 
 /** Move `key` to `rank`, pushing whatever sat there aside, so the three keys
  *  always stay a complete ordering rather than collapsing to duplicates. */
@@ -75,6 +75,11 @@ export function AIImportButton() {
           <div><Label htmlFor="ai-framework">{t("framework")}</Label><Select id="ai-framework" value={options.framework} onChange={e => setOptions({ ...options, framework: e.target.value as Options["framework"] })}>
             <option value="all">{t("allFrameworks")}</option><option value="counterstrikesharp">CounterStrikeSharp</option><option value="swiftly">SwiftlyS2</option><option value="other">{t("otherFramework")}</option>
           </Select></div>
+          <div><Label htmlFor="ai-description-language">{t("descriptionLanguage")}</Label><Select id="ai-description-language" value={options.description_language ?? "original"} onChange={e => setOptions({ ...options, description_language: e.target.value as Options["description_language"] })}>
+            <option value="original">{t("descriptionLanguageOriginal")}</option>
+            <option value="zh-CN">{t("descriptionLanguageChinese")}</option>
+            <option value="en-US">{t("descriptionLanguageEnglish")}</option>
+          </Select><p className="mt-1 text-xs text-fg-subtle">{t("descriptionLanguageHelp")}</p></div>
           {[0, 1, 2].map(rank => <div key={rank}><Label htmlFor={`ai-sort-${rank}`}>{t("sortRank", { rank: rank + 1 })}</Label><Select id={`ai-sort-${rank}`} value={(options.sort_priority ?? defaults.sort_priority)?.[rank] ?? SORT_KEYS[rank]} onChange={e => setOptions({ ...options, sort_priority: reorder((options.sort_priority ?? SORT_KEYS) as SortKey[], rank, e.target.value as SortKey) })}>
             <option value="stars">Star</option><option value="forks">Fork</option><option value="updated">{t("updated")}</option>
           </Select></div>)}

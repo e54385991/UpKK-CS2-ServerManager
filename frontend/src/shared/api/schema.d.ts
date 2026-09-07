@@ -11370,6 +11370,12 @@ export interface components {
          */
         ImportOptions: {
             /**
+             * Description Language
+             * @default original
+             * @enum {string}
+             */
+            description_language: "original" | "zh-CN" | "en-US";
+            /**
              * Expand Search
              * @default true
              */
@@ -12375,6 +12381,7 @@ export interface components {
             dependency_details?: components["schemas"]["DependencyInfo"][] | null;
             /** Description */
             description?: string | null;
+            description_i18n?: components["schemas"]["PluginDescriptionI18n"] | null;
             /** Download Count */
             download_count: number;
             /**
@@ -12486,6 +12493,7 @@ export interface components {
             dependencies?: components["schemas"]["PluginRef"][];
             /** Description */
             description?: string | null;
+            description_i18n?: components["schemas"]["PluginDescriptionI18n"] | null;
             /** Download Count */
             download_count: number;
             /**
@@ -12961,6 +12969,7 @@ export interface components {
             dependencies?: string[];
             /** Description */
             description?: string | null;
+            description_i18n?: components["schemas"]["PluginDescriptionI18n"] | null;
             /**
              * Framework
              * @default counterstrikesharp
@@ -13321,6 +13330,22 @@ export interface components {
         PluginDependencyOptionsView: {
             /** Items */
             items?: components["schemas"]["PluginRef"][];
+        };
+        /**
+         * PluginDescriptionI18n
+         * @description Optional descriptions collected for the supported console locales.
+         *
+         *     ``original`` is always the source-language AI summary. The locale fields
+         *     are populated only when an administrator requests a translation during an
+         *     AI import, so the default import does not spend an extra translation call.
+         */
+        PluginDescriptionI18n: {
+            /** En Us */
+            en_us?: string | null;
+            /** Original */
+            original?: string | null;
+            /** Zh Cn */
+            zh_cn?: string | null;
         };
         /** PluginDiagnosticExecuteBody */
         PluginDiagnosticExecuteBody: {

@@ -62,7 +62,9 @@ def _http_get(responses: dict[str, tuple[bool, object, str | None]]):
 
 @pytest.mark.asyncio
 async def test_sync_writes_readme_into_description(monkeypatch):
-    session = _Session([_plugin(1, "https://github.com/acme/one", "old")])
+    plugin = _plugin(1, "https://github.com/acme/one", "old")
+    plugin.description_i18n = {"original": "old", "zh_cn": "旧描述"}
+    session = _Session([plugin])
     monkeypatch.setattr(
         description_sync.http_helper,
         "get",
@@ -82,6 +84,7 @@ async def test_sync_writes_readme_into_description(monkeypatch):
     assert result.updated == 1
     assert result.total == 1
     assert session.added[0].description == "# One\n\nDetailed docs."
+    assert session.added[0].description_i18n is None
     # One commit releases the read transaction before GitHub, one persists.
     assert session.commits == 2
 

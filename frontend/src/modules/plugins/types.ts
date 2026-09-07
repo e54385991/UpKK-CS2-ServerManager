@@ -1,4 +1,5 @@
 import type { components } from "@/shared/api/schema";
+import type { Locale } from "@/i18n/config";
 export const PLUGIN_CATEGORIES = [
   "game_mode",
   "entertainment",
@@ -79,6 +80,7 @@ export type MarketPlugin = {
   readonly id: number;
   readonly title: string;
   readonly description: string | null;
+  readonly descriptionI18n: components["schemas"]["PluginDescriptionI18n"] | null;
   readonly author: string | null;
   readonly version: string | null;
   readonly category: string;
@@ -94,6 +96,17 @@ export type MarketPlugin = {
   readonly createdAt: string | null;
   readonly dependencies: readonly PluginRef[];
 };
+
+/** Prefer an AI translation for the active locale, then the collected source. */
+export function localizedPluginDescription(
+  plugin: Pick<MarketPlugin, "description" | "descriptionI18n">,
+  locale: Locale,
+): string | null {
+  const localized = locale === "zh-CN"
+    ? plugin.descriptionI18n?.zh_cn
+    : plugin.descriptionI18n?.en_us;
+  return localized?.trim() || plugin.descriptionI18n?.original?.trim() || plugin.description;
+}
 
 export type PluginCategoryOption = {
   readonly value: string;

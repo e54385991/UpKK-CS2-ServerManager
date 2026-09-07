@@ -1,5 +1,5 @@
 import { AIPluginReview } from "@/modules/plugins/ai-plugin-review";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ExternalLink, TriangleAlert } from "lucide-react";
 import { getMarketPlugin } from "@/modules/plugins/api";
@@ -18,7 +18,11 @@ import {
 } from "@/shared/ui/card";
 import { GithubIcon } from "@/shared/ui/github-icon";
 import { Markdown } from "@/shared/ui/markdown";
-import { isPluginCategory } from "@/modules/plugins/types";
+import {
+  isPluginCategory,
+  localizedPluginDescription,
+} from "@/modules/plugins/types";
+import { DEFAULT_LOCALE, isLocale } from "@/i18n/config";
 
 export async function PluginDetail({
   pluginId,
@@ -32,6 +36,8 @@ export async function PluginDetail({
   canDelete?: boolean;
 }) {
   const t = await getTranslations("plugins");
+  const requestLocale = await getLocale();
+  const locale = isLocale(requestLocale) ? requestLocale : DEFAULT_LOCALE;
   const pluginResult = await getMarketPlugin(pluginId);
 
   if (!pluginResult.ok && pluginResult.status === 404) notFound();
@@ -51,6 +57,7 @@ export async function PluginDetail({
   const categoryLabel = isPluginCategory(plugin.category)
     ? t(`categories.${plugin.category}`)
     : plugin.category;
+  const description = localizedPluginDescription(plugin, locale);
   const repositoryHref = safeUrl(plugin.githubUrl);
 
   return (
@@ -82,7 +89,7 @@ export async function PluginDetail({
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-fg-muted">
           {plugin.aiMetadata && <AIPluginReview pluginId={plugin.id} initial={plugin.aiMetadata} canEdit={canDelete} />}
-          {plugin.description ? <Markdown source={plugin.description} /> : null}
+          {description ? <Markdown source={description} /> : null}
           {repositoryHref ? (
             <a
               href={repositoryHref}

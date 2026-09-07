@@ -17,6 +17,7 @@ from modules.plugin_ai import (
     ImportOptions,
     InstallationConfig,
     PluginAIInfo,
+    PluginDescriptionI18n,
 )
 
 
@@ -272,6 +273,7 @@ class MarketPluginView(V1Model):
     id: int
     title: str
     description: str | None = None
+    description_i18n: PluginDescriptionI18n | None = None
     author: str | None = None
     version: str | None = None
     category: str

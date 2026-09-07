@@ -51,6 +51,9 @@ def apply_market_plugin_update(plugin: MarketPlugin, request: MarketPluginUpdate
         value = getattr(request, name)
         if value is not None:
             setattr(plugin, name, value)
+    if request.description is not None:
+        # A manual description edit supersedes any AI-generated translations.
+        plugin.description_i18n = None
     if request.installation is not None:
         try:
             info = (

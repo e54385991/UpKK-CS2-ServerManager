@@ -11,7 +11,7 @@ from sqlmodel import select
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession, require_server_access
 from api.routes import plugin_market as legacy
 from modules import ManagedPlugin, MarketPlugin, PluginCategory, PluginFramework
-from modules.plugin_ai import PluginAIInfo
+from modules.plugin_ai import PluginAIInfo, PluginDescriptionI18n
 from modules.schemas.plugins import (
     MarketPluginCreate,
     MarketPluginResponse,
@@ -125,10 +125,19 @@ async def _dependency_refs(
 def to_market_view(
     plugin: MarketPlugin | MarketPluginResponse, dependencies: list[PluginRef]
 ) -> MarketPluginView:
+    try:
+        description_i18n = plugin.description_i18n
+    except AttributeError:
+        # Lightweight test doubles and older integrations may not expose the
+        # optional column yet; the canonical description remains sufficient.
+        description_i18n = None
     return MarketPluginView(
         id=int(plugin.id),
         title=plugin.title,
         description=plugin.description,
+        description_i18n=(
+            PluginDescriptionI18n.model_validate(description_i18n) if description_i18n else None
+        ),
         author=plugin.author,
         version=plugin.version,
         category=_category_value(plugin.category),

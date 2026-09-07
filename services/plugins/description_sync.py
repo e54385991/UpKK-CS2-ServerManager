@@ -165,6 +165,9 @@ async def sync_market_plugin_descriptions(
             )
             continue
         plugin.description = readme
+        # A README refresh is authoritative; do not show stale AI translations
+        # beside the newly fetched source text.
+        plugin.description_i18n = None
         db.add(plugin)
         changed += 1
         items.append(
