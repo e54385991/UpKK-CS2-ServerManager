@@ -49,6 +49,7 @@ def client(monkeypatch):
             (GitHubVerification(valid=True, account="admin"), SimpleNamespace(model="test-model")),
         ),
         ("check_administrator", None),
+        ("delete_job", None),
     ]:
         monkeypatch.setattr(store, method, AsyncMock(return_value=value))
     return TestClient(app), user, job
@@ -135,3 +136,21 @@ async def test_activity_inbox_removes_catalog_tasks_after_admin_revocation(monke
     chunks = [chunk async for chunk in response.body_iterator]
     assert len(chunks) == 2
     build.assert_awaited_once_with([], False)
+
+
+def test_delete_terminal_import_api(client):
+    api, user, job = client
+    url = BASE + f"/{job.operation_id}"
+    assert api.delete(url).json()["success"] is True
+    store.delete_job.assert_awaited_once_with(job.operation_id, user.id)
+    for error, status in [
+        (LookupError("missing"), 404),
+        (ValueError("active"), 409),
+        (PermissionError("revoked"), 403),
+    ]:
+        store.delete_job.side_effect = error
+        assert api.delete(url).status_code == status
+    user.is_admin = False
+    store.delete_job.reset_mock()
+    assert api.delete(url).status_code == 403
+    store.delete_job.assert_not_awaited()

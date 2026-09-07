@@ -216,6 +216,24 @@ async def test_release_assets_latest_and_install_one_paths(monkeypatch):
         _Db(), plugin, _server(), SimpleNamespace(id=3), {"reason": "x"}
     )
     assert latest["asset_name"] == "demo-linux.zip"
+    from modules.plugin_ai import InstallationConfig, PluginAIInfo
+
+    github.inspect_release_asset_layout.return_value["source_prefix"] = None
+    plugin.custom_install_path = "addons/counterstrikesharp"
+    for ai_metadata in [
+        None,
+        PluginAIInfo(
+            model="test", installation=InstallationConfig(target_path="addons/counterstrikesharp")
+        ).model_dump(),
+    ]:
+        plugin.ai_metadata = ai_metadata
+        standard = await module._latest_release_asset(
+            _Db(), plugin, _server(), SimpleNamespace(id=3)
+        )
+        assert standard["custom_install_path"] is None
+        assert standard["allowed_roots"] == ["addons"]
+    plugin.ai_metadata = None
+    plugin.custom_install_path = None
     plugin.github_url = "invalid"
     with pytest.raises(module.PluginPlanError, match="Invalid GitHub"):
         await module._latest_release_asset(_Db(), plugin, _server(), SimpleNamespace(id=3))

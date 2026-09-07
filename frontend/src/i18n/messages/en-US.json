@@ -990,6 +990,8 @@
       "requestFailed": "Request failed. Check the configuration or try again later.",
       "elapsed": "Elapsed: {seconds} seconds",
       "tasks": "AI plugin import jobs",
+      "deleteTask": "Delete task history",
+      "mappingHint": "Source is relative to the archive; target is relative to game/csgo. With an empty source, packages containing addons, counterstrikesharp or plugins keep their detected structure; the target is a fallback for nonstandard packages. Example: RetakesPlugin → addons/counterstrikesharp/plugins/RetakesPlugin.",
       "results": "Imported {imported} · Skipped {skipped} · Failed {failed}",
       "retryAt": "Quota reset",
       "cancel": "Cancel job",

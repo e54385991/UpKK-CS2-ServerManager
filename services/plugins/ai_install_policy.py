@@ -72,6 +72,15 @@ def apply_layout(plugin: MarketPlugin, layout: dict) -> dict:
         if rule.source_prefix:
             raise PluginPlanError("An explicit source prefix requires an installation target")
         return layout
+    # A target alone is a fallback for flat archives, not a wrapper around
+    # an already complete game/framework tree. Keep sibling runtime files.
+    if not rule.source_prefix and any(
+        item["target"]
+        in {"addons", "addons/counterstrikesharp", "addons/counterstrikesharp/plugins"}
+        and item["source"] not in {".", ""}
+        for item in layout["mapping"]
+    ):
+        return layout
     source = rule.source_prefix
     entries = layout["entries"]
     if source and not any(
@@ -122,9 +131,11 @@ async def selected_asset_rules(plugin: MarketPlugin, download_url: str) -> dict:
     if layout["mapping_required"]:
         raise PluginPlanError("Release archive needs an explicit installation mapping")
     mapping = layout["mapping"]
-    info = metadata(plugin)
-    target = info.installation.target_path if info and info.installation else None
-    if target is None and len(mapping) == 1 and mapping[0]["target"] not in {"addons", "cfg"}:
+    target = None
+    if len(mapping) == 1 and (
+        mapping[0]["target"] not in {"addons", "cfg"}
+        or mapping[0]["source"] == (layout["source_prefix"] or ".")
+    ):
         target = mapping[0]["target"]
     return {
         "archive_sha256": layout["archive_sha256"],

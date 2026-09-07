@@ -48,6 +48,12 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await expect(page.getByText("Searching maintained CS2 plugins").first()).toBeVisible();
       await page.getByRole("button", { name: locale === "zh-CN" ? "取消任务" : "Cancel job", exact: true }).click();
       await expect(page.getByRole("button", { name: locale === "zh-CN" ? "取消任务" : "Cancel job", exact: true })).toBeHidden();
+      const deleteTask = page.getByRole("button", { name: locale === "zh-CN" ? "删除任务记录" : "Delete task history", exact: true });
+      await expect(deleteTask).toBeVisible();
+      await deleteTask.click();
+      await expect(deleteTask).toBeHidden();
+      await page.reload();
+      await expect(page.getByText("Searching maintained CS2 plugins")).toHaveCount(0);
       await page.goto("/settings");
       await expect(page.getByText("test-admin").last()).toBeVisible();
       await page.getByRole("button", { name: locale === "zh-CN" ? "验证已保存的全局 GitHub Token" : "Verify saved global GitHub token", exact: true }).click();

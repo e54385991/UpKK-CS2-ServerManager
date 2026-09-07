@@ -29,6 +29,10 @@ export async function cancelAIImport(id: string) {
   return apiFetch<Schema["PluginAIImportView"]>(`${base}/${encodeURIComponent(id)}/cancel`, { method: "POST" });
 }
 
+export async function deleteAIImport(id: string) {
+  return apiFetch<Schema["ActionResult"]>(`${base}/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export async function verifyGitHubToken() {
   return apiFetch<Schema["GitHubTokenVerificationView"]>("/api/v1/settings/test-github-token", { method: "POST" });
 }

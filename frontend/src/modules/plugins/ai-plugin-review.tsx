@@ -28,6 +28,7 @@ export function AIPluginReview({ pluginId, initial, canEdit }: { pluginId: numbe
       <div><Label htmlFor="ai-rule-asset">{t("assetGlob")}</Label><Input id="ai-rule-asset" value={asset} onChange={e => setAsset(e.target.value)} /></div>
       <div><Label htmlFor="ai-rule-source">{t("source")}</Label><Input id="ai-rule-source" value={source} onChange={e => setSource(e.target.value)} /></div>
       <div><Label htmlFor="ai-rule-target">{t("target")}</Label><Input id="ai-rule-target" value={target} onChange={e => setTarget(e.target.value)} placeholder="addons/counterstrikesharp/plugins/..." /></div>
+      <p className="text-xs text-fg-subtle">{t("mappingHint")}</p>
       <div>
         <Label htmlFor="ai-requirements">{t("requirements")}</Label>
         <Textarea id="ai-requirements" value={requirements} onChange={e => setRequirements(e.target.value)} aria-describedby="ai-requirements-hint" />

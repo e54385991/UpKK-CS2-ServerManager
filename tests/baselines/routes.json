@@ -2354,6 +2354,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "DELETE"
+    ],
+    "name": "delete_import",
+    "path": "/api/v1/plugins/market/ai-imports/{operation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "cancel_import",

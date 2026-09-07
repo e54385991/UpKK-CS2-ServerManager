@@ -117,21 +117,30 @@ class _InstallSSH:
 
 
 @pytest.mark.asyncio
-async def test_install_github_plugin_remote_success(monkeypatch):
+@pytest.mark.parametrize("custom_path", [None, "addons/counterstrikesharp"])
+async def test_install_github_plugin_remote_success(monkeypatch, custom_path):
     server = _server(github_proxy="https://proxy.example")
     db = SimpleNamespace(commit=AsyncMock())
     user = SimpleNamespace(id=7, is_admin=True)
-    monkeypatch.setattr(installation, "SSHManager", _InstallSSH)
+    ssh = _InstallSSH()
+    monkeypatch.setattr(installation, "SSHManager", lambda **_kwargs: ssh)
     monkeypatch.setattr(installation, "get_server_for_user", AsyncMock(return_value=server))
     monkeypatch.setattr(installation, "send_deployment_update", AsyncMock())
     result = await installation.install_github_plugin(
         3,
-        _request(exclude_dirs=["cfg"], exclude_files=["addons/plugin.cfg"]),
+        _request(
+            exclude_dirs=["cfg"],
+            exclude_files=["addons/plugin.cfg"],
+            custom_install_path=custom_path,
+        ),
         db,
         user,
         operation_id="safe-op",
     )
     assert result.success and result.installed_files == 3
+    copies = [cmd for cmd in ssh.commands if cmd.startswith(("rsync ", "cp -r "))]
+    assert copies
+    assert all("game/csgo/addons/counterstrikesharp" not in cmd for cmd in copies)
 
 
 @pytest.mark.asyncio

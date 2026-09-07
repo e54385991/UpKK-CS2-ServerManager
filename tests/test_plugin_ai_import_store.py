@@ -375,3 +375,32 @@ async def test_worker_lifecycle_and_lost_lease_cancel_current_run(env, monkeypat
     await asyncio.sleep(0)
     await instance.stop()
     assert instance.task is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["completed", "failed", "cancelled", "queued", "running"])
+async def test_delete_import_history_only_after_completion(env, status):
+    db, _ = env
+    db.job.status = status
+    db.rows = [db.job]
+    if status in store.ACTIVE:
+        with pytest.raises(ValueError, match="wait"):
+            await store.delete_job(db.job.id, 1)
+        assert db.deleted == []
+        db.commit.assert_not_awaited()
+    else:
+        await store.delete_job(db.job.id, 1)
+        assert db.deleted == [db.job]
+        db.commit.assert_awaited_once()
+    assert db.plugin not in db.deleted
+
+
+@pytest.mark.asyncio
+async def test_delete_import_missing_and_revoked_admin(env):
+    db, _ = env
+    with pytest.raises(LookupError):
+        await store.delete_job(str(uuid4()), 1)
+    db.user.is_admin = False
+    with pytest.raises(PermissionError):
+        await store.delete_job(db.job.id, 1)
+    assert db.deleted == []

@@ -737,3 +737,78 @@ async def test_non_plugin_minimal_response_is_skipped_without_insert(runner_env)
         store.insert_plugin.assert_not_awaited()
     finally:
         await instance.client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["", "release/", "game/csgo/"])
+async def test_standard_archive_overrides_target_only_ai_rule(monkeypatch, prefix):
+    from services.plugins import release_archive
+
+    info = PluginAIInfo(
+        model="test", installation=InstallationConfig(target_path="addons/counterstrikesharp")
+    )
+    plugin = MarketPlugin(
+        title="Retakes",
+        github_url=URL,
+        ai_metadata=info.model_dump(),
+        custom_install_path="addons/counterstrikesharp",
+    )
+    entries = [
+        {"path": prefix + path, "is_dir": False}
+        for path in [
+            "addons/counterstrikesharp/plugins/RetakesPlugin/RetakesPlugin.dll",
+            "cfg/retakes/settings.cfg",
+        ]
+    ]
+    source, mapping, required = release_archive._detect_mapping(entries, "Retakes")
+    layout = {
+        "entries": entries,
+        "source_prefix": source,
+        "mapping": mapping,
+        "mapping_required": required,
+        "archive_sha256": "a" * 64,
+    }
+    monkeypatch.setattr(
+        release_archive, "inspect_release_asset_layout", AsyncMock(return_value=layout)
+    )
+    assert policy.apply_layout(plugin, layout) == layout
+    rules = await policy.selected_asset_rules(plugin, URL + "/releases/download/v1/linux.zip")
+    assert rules["source_prefix"] == (prefix.rstrip("/") or None)
+    assert rules["custom_install_path"] is None
+    assert rules["allowed_roots"] == ["addons", "cfg"]
+
+
+@pytest.mark.parametrize(
+    "source,target",
+    [
+        ("counterstrikesharp", "addons/counterstrikesharp"),
+        ("plugins", "addons/counterstrikesharp/plugins"),
+    ],
+)
+def test_framework_subtree_keeps_detected_source(source, target):
+    from services.plugins.release_archive import _detect_mapping
+
+    entries = [
+        {
+            "path": source
+            + ("/plugins" if source == "counterstrikesharp" else "")
+            + "/RetakesPlugin/RetakesPlugin.dll",
+            "is_dir": False,
+        }
+    ]
+    prefix, mapping, required = _detect_mapping(entries, "RetakesPlugin")
+    layout = {
+        "entries": entries,
+        "source_prefix": prefix,
+        "mapping": mapping,
+        "mapping_required": required,
+    }
+    plugin = MarketPlugin(
+        title="Retakes",
+        github_url=URL,
+        ai_metadata=PluginAIInfo(
+            model="test", installation=InstallationConfig(target_path=target)
+        ).model_dump(),
+    )
+    assert policy.apply_layout(plugin, layout) == layout
+    assert mapping == [{"source": source, "target": target}]

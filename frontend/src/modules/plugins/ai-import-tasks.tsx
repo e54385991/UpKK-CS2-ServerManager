@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { components } from "@/shared/api/schema";
-import { cancelAIImport, getAIImport, listAIImports } from "@/modules/plugins/ai-import-actions";
+import { cancelAIImport, deleteAIImport, getAIImport, listAIImports } from "@/modules/plugins/ai-import-actions";
 import { latestSubmittedAIImport } from "@/modules/plugins/ai-import-activity";
 import { Button } from "@/shared/ui/button";
 
@@ -22,6 +22,7 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
   };
   const [tasks, setTasks] = useState<Task[]>([...initialTasks]);
   const [selected, setSelected] = useState<Task | null>(() => latestSubmittedAIImport() ?? initialTasks[0] ?? null);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     let mounted = true;
@@ -72,6 +73,18 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
       <p className="text-xs">{selected.message}</p>
       {selected.retry_at && <p>{t("retryAt")}: {new Date(selected.retry_at * 1000).toLocaleString()}</p>}
       {active(selected) && <Button variant="outline" size="sm" disabled={selected.cancel_requested} onClick={() => { void cancelAIImport(selected.operation_id).then(result => { if (result.ok) setSelected(result.data); else setError(t("requestFailed")); }); }}>{t("cancel")}</Button>}
+      {!active(selected) && <Button variant="outline" size="sm" disabled={deleting} onClick={async () => {
+        const id = selected.operation_id;
+        setDeleting(true); setError("");
+        try {
+          const result = await deleteAIImport(id);
+          if (result.ok) {
+            setTasks(current => current.filter(task => task.operation_id !== id));
+            setSelected(current => current?.operation_id === id ? null : current);
+            window.dispatchEvent(new Event("plugin-ai-import-refresh"));
+          } else setError(t("requestFailed"));
+        } finally { setDeleting(false); }
+      }}>{t("deleteTask")}</Button>}
       <ul className="max-h-36 overflow-auto text-xs">{selected.items.map((item,index) => <li key={index} className="mb-2 break-all">{item.repository} · {t(`status.${item.status}`)}<p>{item.message}</p></li>)}</ul>
       <pre className="max-h-28 overflow-auto whitespace-pre-wrap text-xs text-fg-muted">{selected.events.map(event => event.message).join("\n")}</pre>
     </div>}

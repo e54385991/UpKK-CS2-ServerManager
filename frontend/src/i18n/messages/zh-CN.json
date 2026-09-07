@@ -990,6 +990,8 @@
       "requestFailed": "请求失败，请检查配置或稍后重试",
       "elapsed": "已用时间：{seconds} 秒",
       "tasks": "AI 插件导入任务",
+      "deleteTask": "删除任务记录",
+      "mappingHint": "源目录相对于压缩包，目标目录相对于 game/csgo。源目录留空时，已包含 addons、counterstrikesharp 或 plugins 的标准包自动保留目录结构；目标目录仅用于非标准包。手动映射示例：RetakesPlugin → addons/counterstrikesharp/plugins/RetakesPlugin。",
       "results": "已导入 {imported} · 跳过 {skipped} · 失败 {failed}",
       "retryAt": "额度恢复时间",
       "cancel": "取消任务",

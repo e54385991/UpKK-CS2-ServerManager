@@ -271,6 +271,27 @@ async def clear_failed_jobs(actor_id: int) -> int:
         return cleared
 
 
+async def delete_job(job_id: str, actor_id: int) -> None:
+    """Delete a terminal job's history without changing imported plugins."""
+    async with async_session_maker() as db:
+        await authorize(db, actor_id)
+        job = (
+            (
+                await db.execute(
+                    select(PluginImportJob).where(PluginImportJob.id == job_id).with_for_update()
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if job is None:
+            raise LookupError("Import task not found")
+        if job.status in ACTIVE:
+            raise ValueError("Cancel the import task and wait for it to finish before deleting")
+        await db.delete(job)
+        await db.commit()
+
+
 async def cancel_job(job_id: str, actor_id: int) -> JobSnapshot:
     async with async_session_maker() as db:
         await authorize(db, actor_id)

@@ -421,13 +421,14 @@ async def _latest_release_asset(
         inferred_custom_target = None
         if len(mapping) == 1 and (
             mapping[0]["target"] not in {"addons", "cfg"}
-            or (mapping[0].get("source", ".") in {".", ""} and mapping[0]["target"] == "addons")
+            or mapping[0].get("source", ".") == (layout["source_prefix"] or ".")
         ):
             inferred_custom_target = mapping[0]["target"]
         info = metadata(plugin)
         custom_target = (
-            info.installation.target_path or inferred_custom_target
-            if info and info.installation
+            inferred_custom_target
+            if (info and info.installation)
+            or (not layout["mapping_required"] and inferred_custom_target is None)
             else plugin.custom_install_path or inferred_custom_target
         )
         return {

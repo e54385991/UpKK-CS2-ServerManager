@@ -55,6 +55,11 @@ createServer(async (req, res) => {
   if (path.includes("/ai-imports/")) {
     const task = tasks.find(item => path.includes(item.operation_id));
     if (path.endsWith("/cancel") && task) { task.status = "cancelled"; task.cancel_requested = true; task.completed_at = new Date().toISOString(); }
+    if (req.method === "DELETE" && task) {
+      if (["queued", "running"].includes(task.status)) return json({ detail: "Task is active" }, 409);
+      tasks.splice(tasks.indexOf(task), 1);
+      return json({ success: true, message: "Import task deleted" });
+    }
     return json(task ?? {}, task ? 200 : 404);
   }
   if (path === "/api/v1/plugins/market/categories") return json({ items: [] });

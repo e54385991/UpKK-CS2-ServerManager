@@ -16,6 +16,7 @@ from api.contracts.v1.plugins import (
     PluginAIReviewRequest,
     PluginAIReviewView,
 )
+from api.contracts.v1.settings import ActionResult
 from api.dependencies import AdminUser, StreamUser
 from services.plugins import ai_import_store as store
 
@@ -81,6 +82,19 @@ async def get_import(operation_id: UUID, current_user: AdminUser) -> PluginAIImp
     if job is None:
         raise HTTPException(404, "Import task not found")
     return to_view(job)
+
+
+@router.delete("/{operation_id}", response_model=ActionResult)
+async def delete_import(operation_id: UUID, current_user: AdminUser) -> ActionResult:
+    try:
+        await store.delete_job(str(operation_id), current_user.id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    return ActionResult(success=True, message="Import task deleted")
 
 
 @router.post("/{operation_id}/cancel", response_model=PluginAIImportView)
