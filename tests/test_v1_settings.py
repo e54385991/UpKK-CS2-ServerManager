@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from api.application import create_app
 from modules import (
+    AISystemSettings,
     SystemSettings,
     get_current_active_user,
     get_current_admin_user,
@@ -123,6 +124,176 @@ def test_v1_settings_get_exposes_presence_flags_not_secrets(monkeypatch):
         "gmail_token_json",
     ):
         assert secret_key not in body
+
+
+def test_v1_settings_export_redacts_secrets_and_excludes_discord(monkeypatch):
+    client, _settings, _user = _client(monkeypatch=monkeypatch)
+    ai_settings = AISystemSettings()
+    monkeypatch.setattr(
+        "api.routes.v1.settings.AISystemSettings.get_or_create",
+        AsyncMock(return_value=ai_settings),
+    )
+
+    response = client.get("/api/v1/settings/export")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["format"] == "upkk-system-settings"
+    assert body["include_secrets"] is False
+    assert body["secrets"] is None
+    assert body["system"]["default_proxy_mode"] == "panel"
+    assert body["ai"]["context_window_tokens"] == 262144
+    assert "discord" not in response.text.lower()
+    assert "github_pat_secret123456" not in response.text
+    assert "smtp-secret" not in response.text
+
+
+def test_v1_settings_export_can_include_credentials_explicitly(monkeypatch):
+    client, _settings, _user = _client(monkeypatch=monkeypatch)
+    ai_settings = AISystemSettings()
+    monkeypatch.setattr(
+        "api.routes.v1.settings.AISystemSettings.get_or_create",
+        AsyncMock(return_value=ai_settings),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.settings.decrypt_credential",
+        lambda _value: "ai-secret",
+    )
+
+    response = client.get("/api/v1/settings/export?include_secrets=true")
+
+    assert response.status_code == 200
+    secrets = response.json()["secrets"]
+    assert secrets["global_github_token"] == "github_pat_secret123456"
+    assert secrets["smtp_password"] == "smtp-secret"
+    assert secrets["gmail_credentials_json"] == '{"web": {"client_id": "abc"}}'
+    assert secrets["gmail_token_json"] == '{"token": "hidden"}'
+    assert secrets["ai_api_key"] == "ai-secret"
+
+
+def test_v1_settings_import_updates_system_and_ai_but_preserves_redacted_secrets(monkeypatch):
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    ai_settings = AISystemSettings()
+    monkeypatch.setattr(
+        "api.routes.v1.settings.AISystemSettings.get_or_create",
+        AsyncMock(return_value=ai_settings),
+    )
+
+    response = client.post(
+        "/api/v1/settings/import",
+        json={
+            "format": "upkk-system-settings",
+            "version": 1,
+            "include_secrets": False,
+            "system": {
+                "default_proxy_mode": "direct",
+                "captcha_enabled": False,
+                "email_enabled": False,
+            },
+            "ai": {
+                "enabled": False,
+                "model": "migrated-model",
+                "requests_per_minute": 17,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert settings.default_proxy_mode == "direct"
+    assert settings.captcha_enabled is False
+    assert settings.global_github_token == "github_pat_secret123456"
+    assert settings.smtp_password == "smtp-secret"
+    assert ai_settings.model == "migrated-model"
+    assert ai_settings.requests_per_minute == 17
+    assert response.json()["imported_secret_fields"] == []
+    assert set(response.json()["preserved_secret_fields"]) == {
+        "global_github_token",
+        "smtp_password",
+        "gmail_credentials_json",
+        "gmail_token_json",
+        "ai_api_key",
+    }
+
+
+def test_v1_settings_import_can_write_validated_credentials(monkeypatch):
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    ai_settings = AISystemSettings()
+    monkeypatch.setattr(
+        "api.routes.v1.settings.AISystemSettings.get_or_create",
+        AsyncMock(return_value=ai_settings),
+    )
+
+    response = client.post(
+        "/api/v1/settings/import",
+        json={
+            "format": "upkk-system-settings",
+            "version": 1,
+            "include_secrets": True,
+            "system": {},
+            "ai": {},
+            "secrets": {
+                "global_github_token": "ghp_importedtoken1",
+                "smtp_password": "smtp-imported",
+                "gmail_credentials_json": '{"installed": {"client_id": "new"}}',
+                "gmail_token_json": '{"token": "new"}',
+                "ai_api_key": "ai-imported",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert settings.global_github_token == "ghp_importedtoken1"
+    assert settings.smtp_password == "smtp-imported"
+    assert settings.gmail_credentials_json == '{"installed": {"client_id": "new"}}'
+    assert settings.gmail_token_json == '{"token": "new"}'
+    assert ai_settings.api_key_encrypted is not None
+    assert set(response.json()["imported_secret_fields"]) == {
+        "global_github_token",
+        "smtp_password",
+        "gmail_credentials_json",
+        "gmail_token_json",
+        "ai_api_key",
+    }
+
+
+def test_v1_settings_import_disables_ai_when_redacted_bundle_has_no_key(monkeypatch):
+    client, _settings, _user = _client(monkeypatch=monkeypatch)
+    ai_settings = AISystemSettings()
+    monkeypatch.setattr(
+        "api.routes.v1.settings.AISystemSettings.get_or_create",
+        AsyncMock(return_value=ai_settings),
+    )
+
+    response = client.post(
+        "/api/v1/settings/import",
+        json={
+            "format": "upkk-system-settings",
+            "version": 1,
+            "include_secrets": False,
+            "system": {},
+            "ai": {"enabled": True},
+        },
+    )
+
+    assert response.status_code == 200
+    assert ai_settings.enabled is False
+    assert response.json()["ai_enabled_without_key"] is True
+
+
+def test_v1_settings_import_rejects_secret_fields_without_explicit_flag(monkeypatch):
+    client, _settings, _user = _client(monkeypatch=monkeypatch)
+    response = client.post(
+        "/api/v1/settings/import",
+        json={
+            "format": "upkk-system-settings",
+            "version": 1,
+            "include_secrets": False,
+            "system": {},
+            "ai": {},
+            "secrets": {"smtp_password": "should-not-apply"},
+        },
+    )
+    assert response.status_code == 422
 
 
 def test_v1_settings_put_keeps_token_when_omitted(monkeypatch):

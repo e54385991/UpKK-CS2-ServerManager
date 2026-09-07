@@ -6,6 +6,9 @@ import type {
   AssistantSystemSettingsViewDto,
   EmailTestResultDto,
   GmailAuthorizeResultDto,
+  SystemSettingsExportDto,
+  SystemSettingsImportRequestDto,
+  SystemSettingsImportResultDto,
   SystemSettingsViewDto,
 } from "@/shared/api/types";
 import { toAiSettings, toAiSettingsWire } from "@/modules/settings/ai-wire";
@@ -197,6 +200,23 @@ export async function putAiSettings(
   });
   if (!result.ok) return result;
   return { ok: true, data: toAiSettings(result.data) };
+}
+
+export async function exportSettings(
+  includeSecrets: boolean,
+): Promise<ApiResult<SystemSettingsExportDto>> {
+  const query = includeSecrets ? "?include_secrets=true" : "";
+  return apiFetch<SystemSettingsExportDto>(`/api/v1/settings/export${query}`);
+}
+
+export async function importSettings(
+  bundle: SystemSettingsImportRequestDto,
+): Promise<ApiResult<SystemSettingsImportResultDto>> {
+  return apiFetch<SystemSettingsImportResultDto>("/api/v1/settings/import", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(bundle),
+  });
 }
 
 export async function testAiSettings(): Promise<ApiResult<AssistantProviderTestViewDto>> {

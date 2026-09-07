@@ -5,6 +5,7 @@ import { AiSettingsForm } from "@/modules/settings/ai-settings-form";
 import { DownloadCacheCard } from "@/modules/settings/download-cache-card";
 import { SettingsForm } from "@/modules/settings/settings-form";
 import { SettingsSection } from "@/modules/settings/settings-section";
+import { SettingsTransferCard } from "@/modules/settings/settings-transfer-card";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 
@@ -14,6 +15,7 @@ const SETTINGS_SECTIONS = [
   { id: "settings-security", key: "security" },
   { id: "settings-logging", key: "logging" },
   { id: "settings-ai", key: "ai" },
+  { id: "settings-transfer", key: "transfer" },
 ] as const;
 
 export async function SettingsPanel() {
@@ -70,6 +72,14 @@ export async function SettingsPanel() {
         testId="settings-section-ai"
       >
         <AiSettingsForm initial={ai.ok ? ai.data : null} />
+      </SettingsSection>
+      <SettingsSection
+        id="settings-transfer"
+        title={t("sections.transfer.title")}
+        description={t("sections.transfer.description")}
+        testId="settings-section-transfer"
+      >
+        <SettingsTransferCard />
       </SettingsSection>
     </div>
   );

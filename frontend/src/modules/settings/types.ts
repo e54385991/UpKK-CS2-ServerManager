@@ -1,3 +1,8 @@
+import type {
+  SystemSettingsExportDto,
+  SystemSettingsImportRequestDto,
+  SystemSettingsImportResultDto,
+} from "@/shared/api/types";
 import type { components } from "@/shared/api/schema";
 // Headers the common reverse proxies put the real client address in. The
 // backend accepts any header name; these are only shortcuts in the UI.
@@ -90,6 +95,10 @@ export type SettingsPatch = {
   readonly smtpPassword?: string;
   readonly smtpUseTls?: boolean;
 };
+
+export type SystemSettingsBundle = SystemSettingsExportDto;
+export type SystemSettingsImportRequest = SystemSettingsImportRequestDto;
+export type SystemSettingsImportSummary = SystemSettingsImportResultDto;
 
 export function isProxyMode(value: string): value is ProxyMode {
   return (PROXY_MODES as readonly string[]).includes(value);

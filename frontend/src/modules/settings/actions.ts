@@ -2,12 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import type { ApiResult } from "@/shared/api/server-fetch";
-import type { ActionResultDto, EmailTestResultDto } from "@/shared/api/types";
+import type {
+  ActionResultDto,
+  EmailTestResultDto,
+  SystemSettingsExportDto,
+  SystemSettingsImportRequestDto,
+  SystemSettingsImportResultDto,
+} from "@/shared/api/types";
 import {
   deleteGmailAuthorization,
+  exportSettings,
   getAiSettings,
   getGmailAuthorize,
   getSettings,
+  importSettings,
   postPluginDownloadCache,
   postTestEmail,
   putAiSettings,
@@ -84,6 +92,23 @@ export async function saveAiSettingsAction(
   patch: AiSystemPatch,
 ): Promise<ApiResult<AiSystemSettings>> {
   const result = await putAiSettings(patch);
+  if (result.ok) {
+    revalidatePath("/settings");
+    revalidatePath("/assistant");
+  }
+  return result;
+}
+
+export async function exportSettingsAction(
+  includeSecrets: boolean,
+): Promise<ApiResult<SystemSettingsExportDto>> {
+  return exportSettings(includeSecrets);
+}
+
+export async function importSettingsAction(
+  bundle: SystemSettingsImportRequestDto,
+): Promise<ApiResult<SystemSettingsImportResultDto>> {
+  const result = await importSettings(bundle);
   if (result.ok) {
     revalidatePath("/settings");
     revalidatePath("/assistant");

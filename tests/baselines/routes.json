@@ -2652,6 +2652,22 @@
     "methods": [
       "GET"
     ],
+    "name": "export_system_settings",
+    "path": "/api/v1/settings/export"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "import_system_settings",
+    "path": "/api/v1/settings/import"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "read_system_settings",
     "path": "/api/v1/settings"
   },

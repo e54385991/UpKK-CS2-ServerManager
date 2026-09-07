@@ -5087,6 +5087,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export System Settings
+         * @description Return global system and AI settings without any Discord data.
+         */
+        get: operations["export_system_settings_api_v1_settings_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/gmail": {
         parameters: {
             query?: never;
@@ -5141,6 +5161,26 @@ export interface paths {
          */
         put: operations["put_gmail_credentials_api_v1_settings_gmail_credentials_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import System Settings
+         * @description Import global system and AI settings; server, user, and Discord data stay untouched.
+         */
+        post: operations["import_system_settings_api_v1_settings_import_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7695,6 +7735,87 @@ export interface components {
             top_p?: number | null;
             /** Verbosity */
             verbosity?: ("low" | "medium" | "high") | null;
+        };
+        /**
+         * AISystemSettingsTransfer
+         * @description Portable non-secret global AI settings; the API key is separate.
+         */
+        AISystemSettingsTransfer: {
+            /** Admin Prompt */
+            admin_prompt?: string | null;
+            /**
+             * Api Protocol
+             * @default chat_completions
+             * @enum {string}
+             */
+            api_protocol: "chat_completions" | "responses";
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Context Window Tokens
+             * @default 262144
+             * @enum {integer}
+             */
+            context_window_tokens: 8192 | 16384 | 32768 | 65536 | 131072 | 262144 | 393216 | 1048576;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Frequency Penalty */
+            frequency_penalty?: number | null;
+            /**
+             * History Retention Days
+             * @default 7
+             */
+            history_retention_days: number;
+            /**
+             * Max Completion Tokens
+             * @default 2048
+             */
+            max_completion_tokens: number;
+            /**
+             * Max Provider Rounds
+             * @default 200
+             */
+            max_provider_rounds: number;
+            /**
+             * Max Tool Calls Per Round
+             * @default 200
+             */
+            max_tool_calls_per_round: number;
+            /** Model */
+            model?: string | null;
+            /** Parallel Tool Calls */
+            parallel_tool_calls?: boolean | null;
+            /** Presence Penalty */
+            presence_penalty?: number | null;
+            /** Private Endpoint Allowlist */
+            private_endpoint_allowlist?: string[];
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            /**
+             * Request Timeout Seconds
+             * @default 60
+             */
+            request_timeout_seconds: number;
+            /**
+             * Requests Per Minute
+             * @default 60
+             */
+            requests_per_minute: number;
+            /** Temperature */
+            temperature?: number | null;
+            /**
+             * Token Limit Parameter
+             * @default max_completion_tokens
+             * @enum {string}
+             */
+            token_limit_parameter: "max_completion_tokens" | "max_tokens" | "omit";
+            /** Top P */
+            top_p?: number | null;
+            /** Verbosity */
+            verbosity?: string | null;
         };
         /** AISystemSettingsUpdate */
         AISystemSettingsUpdate: {
@@ -16410,6 +16531,78 @@ export interface components {
             version?: string | null;
         };
         /**
+         * SystemSettingsExport
+         * @description Portable system-settings bundle. It never contains Discord records.
+         */
+        SystemSettingsExport: {
+            ai: components["schemas"]["AISystemSettingsTransfer"];
+            /** Exported At */
+            exported_at?: string | null;
+            /**
+             * Format
+             * @default upkk-system-settings
+             * @constant
+             */
+            format: "upkk-system-settings";
+            /**
+             * Include Secrets
+             * @default false
+             */
+            include_secrets: boolean;
+            secrets?: components["schemas"]["SystemSettingsSecretTransfer"] | null;
+            system: components["schemas"]["SystemSettingsTransfer"];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /**
+         * SystemSettingsImportRequest
+         * @description Import a system-settings bundle without touching servers or Discord.
+         */
+        SystemSettingsImportRequest: {
+            ai: components["schemas"]["AISystemSettingsTransfer"];
+            /** Exported At */
+            exported_at?: string | null;
+            /**
+             * Format
+             * @constant
+             */
+            format: "upkk-system-settings";
+            /**
+             * Include Secrets
+             * @default false
+             */
+            include_secrets: boolean;
+            secrets?: components["schemas"]["SystemSettingsSecretTransfer"] | null;
+            system: components["schemas"]["SystemSettingsTransfer"];
+            /**
+             * Version
+             * @constant
+             */
+            version: 1;
+        };
+        /** SystemSettingsImportResult */
+        SystemSettingsImportResult: {
+            /**
+             * Ai Enabled Without Key
+             * @default false
+             */
+            ai_enabled_without_key: boolean;
+            /** Imported Secret Fields */
+            imported_secret_fields?: string[];
+            /** Message */
+            message: string;
+            /** Preserved Secret Fields */
+            preserved_secret_fields?: string[];
+            /** Success */
+            success: boolean;
+            /** Updated Fields */
+            updated_fields?: string[];
+        };
+        /**
          * SystemSettingsPatch
          * @description Partial admin update. Secret fields are write-only and never echoed.
          */
@@ -16502,6 +16695,91 @@ export interface components {
             smtp_username: string | null;
             /** Updated At */
             updated_at: string | null;
+        };
+        /**
+         * SystemSettingsSecretTransfer
+         * @description Optional credentials included only after an explicit export choice.
+         */
+        SystemSettingsSecretTransfer: {
+            /** Ai Api Key */
+            ai_api_key?: string | null;
+            /** Global Github Token */
+            global_github_token?: string | null;
+            /** Gmail Credentials Json */
+            gmail_credentials_json?: string | null;
+            /** Gmail Token Json */
+            gmail_token_json?: string | null;
+            /** Smtp Password */
+            smtp_password?: string | null;
+        };
+        /**
+         * SystemSettingsTransfer
+         * @description Portable non-secret global settings; Discord data is intentionally absent.
+         */
+        SystemSettingsTransfer: {
+            /**
+             * Captcha Enabled
+             * @default true
+             */
+            captcha_enabled: boolean;
+            /** Client Ip Header */
+            client_ip_header?: string | null;
+            /**
+             * Default Proxy Mode
+             * @default panel
+             * @enum {string}
+             */
+            default_proxy_mode: "direct" | "panel" | "github_url";
+            /**
+             * Email Enabled
+             * @default false
+             */
+            email_enabled: boolean;
+            /** Email From Address */
+            email_from_address?: string | null;
+            /** Email From Name */
+            email_from_name?: string | null;
+            /**
+             * Email Provider
+             * @default gmail
+             * @enum {string}
+             */
+            email_provider: "gmail" | "smtp";
+            /** Github Proxy Url */
+            github_proxy_url?: string | null;
+            /** Log Level */
+            log_level?: ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL") | null;
+            /**
+             * Plugin Download Cache Enabled
+             * @default true
+             */
+            plugin_download_cache_enabled: boolean;
+            /**
+             * Plugin Download Cache Max Age Days
+             * @default 30
+             */
+            plugin_download_cache_max_age_days: number;
+            /**
+             * Plugin Download Cache Max Megabytes
+             * @default 4096
+             */
+            plugin_download_cache_max_megabytes: number;
+            /** Plugin Download Cache Path */
+            plugin_download_cache_path?: string | null;
+            /** Smtp Host */
+            smtp_host?: string | null;
+            /**
+             * Smtp Port
+             * @default 587
+             */
+            smtp_port: number | null;
+            /**
+             * Smtp Use Tls
+             * @default true
+             */
+            smtp_use_tls: boolean;
+            /** Smtp Username */
+            smtp_username?: string | null;
         };
         /**
          * SystemSettingsUpdate
@@ -26940,6 +27218,38 @@ export interface operations {
             };
         };
     };
+    export_system_settings_api_v1_settings_export_get: {
+        parameters: {
+            query?: {
+                /** @description Include global credentials explicitly requested by the administrator. */
+                include_secrets?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsExport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_gmail_authorization_api_v1_settings_gmail_delete: {
         parameters: {
             query?: never;
@@ -27000,6 +27310,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_system_settings_api_v1_settings_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemSettingsImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsImportResult"];
                 };
             };
             /** @description Validation Error */

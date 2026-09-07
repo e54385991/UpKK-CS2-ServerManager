@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import suppress
-from typing import Literal
+from datetime import datetime, timezone
+from typing import Literal, cast
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from api.contracts.v1.settings import GitHubTokenVerificationView
 from api.dependencies import AdminUser, DatabaseSession
 from api.routes import ai as legacy_ai
+from api.routes.ai_helpers import (
+    _apply_system_enabled,
+    _apply_system_provider_fields,
+    _apply_system_runtime_limits,
+)
 from api.routes.gmail_oauth import (
     gmail_oauth_authorize,
     revoke_gmail_authorization,
     upload_gmail_credentials,
 )
-from modules import GmailCredentialsUploadRequest, SystemSettings
+from modules import AISystemSettings, GmailCredentialsUploadRequest, SystemSettings
 from modules.schemas.ai import AIProviderTestRequest, AISystemSettingsUpdate
+from services.ai_security import AIConfigurationError, decrypt_credential
 from services.audit_log_service import record_audit_event
 from services.client_ip import set_client_ip_header
 from services.email_service import email_service
@@ -37,6 +45,7 @@ from services.plugins.ai_import_store import verify_token
 
 from .schemas import (
     ActionResult,
+    AISystemSettingsTransfer,
     AssistantProviderTestBody,
     AssistantProviderTestView,
     AssistantSystemSettingsPatch,
@@ -46,7 +55,13 @@ from .schemas import (
     GmailAuthorizeResult,
     GmailCredentialsUpload,
     LogLevel,
+    ProxyMode,
+    SystemSettingsExport,
+    SystemSettingsImportRequest,
+    SystemSettingsImportResult,
     SystemSettingsPatch,
+    SystemSettingsSecretTransfer,
+    SystemSettingsTransfer,
     SystemSettingsView,
 )
 
@@ -97,6 +112,24 @@ def _log_level(value: object) -> LogLevel | None:
     return None
 
 
+def _proxy_mode(value: object) -> ProxyMode:
+    if value == "direct":
+        return "direct"
+    if value == "github_url":
+        return "github_url"
+    return "panel"
+
+
+def _ai_protocol(value: object) -> Literal["chat_completions", "responses"]:
+    return "responses" if value == "responses" else "chat_completions"
+
+
+def _token_limit_parameter(value: object) -> Literal["max_completion_tokens", "max_tokens", "omit"]:
+    if value in {"max_completion_tokens", "max_tokens", "omit"}:
+        return cast(Literal["max_completion_tokens", "max_tokens", "omit"], value)
+    return "max_completion_tokens"
+
+
 def _github_verification_view(settings: SystemSettings) -> GitHubTokenVerificationView:
     from services.plugins.ai_import_store import verification_for
 
@@ -144,6 +177,233 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
         has_gmail_token=has_gmail_token,
         gmail_ready=has_gmail_credentials and has_gmail_token,
         updated_at=settings.updated_at,
+    )
+
+
+def _system_transfer(settings: SystemSettings) -> SystemSettingsTransfer:
+    return SystemSettingsTransfer(
+        default_proxy_mode=_proxy_mode(settings.default_proxy_mode),
+        github_proxy_url=settings.github_proxy_url,
+        plugin_download_cache_enabled=settings.plugin_download_cache_enabled,
+        plugin_download_cache_path=settings.plugin_download_cache_path,
+        plugin_download_cache_max_age_days=settings.plugin_download_cache_max_age_days,
+        plugin_download_cache_max_megabytes=settings.plugin_download_cache_max_megabytes,
+        captcha_enabled=settings.captcha_enabled,
+        client_ip_header=settings.client_ip_header,
+        log_level=_log_level(settings.log_level),
+        email_enabled=settings.email_enabled,
+        email_provider="gmail" if settings.email_provider == "gmail" else "smtp",
+        email_from_address=settings.email_from_address,
+        email_from_name=settings.email_from_name,
+        smtp_host=settings.smtp_host,
+        smtp_port=settings.smtp_port,
+        smtp_username=settings.smtp_username,
+        smtp_use_tls=settings.smtp_use_tls,
+    )
+
+
+def _ai_transfer(settings: AISystemSettings) -> AISystemSettingsTransfer:
+    return AISystemSettingsTransfer(
+        enabled=settings.enabled,
+        base_url=settings.base_url,
+        model=settings.model,
+        api_protocol=_ai_protocol(settings.api_protocol),
+        admin_prompt=settings.admin_prompt,
+        private_endpoint_allowlist=list(settings.private_endpoint_allowlist or []),
+        reasoning_effort=settings.reasoning_effort,
+        temperature=settings.temperature,
+        top_p=settings.top_p,
+        max_completion_tokens=settings.max_completion_tokens,
+        token_limit_parameter=_token_limit_parameter(settings.token_limit_parameter),
+        frequency_penalty=settings.frequency_penalty,
+        presence_penalty=settings.presence_penalty,
+        verbosity=settings.verbosity,
+        parallel_tool_calls=settings.parallel_tool_calls,
+        context_window_tokens=_context_window_tokens(settings.context_window_tokens),
+        requests_per_minute=settings.requests_per_minute,
+        request_timeout_seconds=settings.request_timeout_seconds,
+        history_retention_days=settings.history_retention_days,
+        max_provider_rounds=settings.max_provider_rounds,
+        max_tool_calls_per_round=settings.max_tool_calls_per_round,
+    )
+
+
+def _secret_transfer(
+    settings: SystemSettings,
+    ai_settings: AISystemSettings,
+) -> SystemSettingsSecretTransfer:
+    try:
+        ai_api_key = decrypt_credential(ai_settings.api_key_encrypted)
+    except AIConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The saved AI API key cannot be decrypted; re-enter it before exporting secrets",
+        ) from exc
+    return SystemSettingsSecretTransfer(
+        global_github_token=settings.global_github_token,
+        smtp_password=settings.smtp_password,
+        gmail_credentials_json=settings.gmail_credentials_json,
+        gmail_token_json=settings.gmail_token_json,
+        ai_api_key=ai_api_key,
+    )
+
+
+def _validate_json_secret(value: str, *, credentials: bool) -> None:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        label = "Gmail credentials" if credentials else "Gmail token"
+        raise HTTPException(status_code=422, detail=f"{label} must be valid JSON") from exc
+    if not isinstance(parsed, dict) or (credentials and not {"web", "installed"} & parsed.keys()):
+        label = "credentials" if credentials else "token"
+        raise HTTPException(status_code=422, detail=f"Invalid Gmail {label} JSON structure")
+
+
+def _ai_import_request(
+    body: SystemSettingsImportRequest,
+) -> AISystemSettingsUpdate:
+    values = body.ai.model_dump()
+    values["api_key"] = body.secrets.ai_api_key if body.secrets else None
+    return AISystemSettingsUpdate(**values)
+
+
+@router.get("/export", response_model=SystemSettingsExport)
+async def export_system_settings(
+    db: DatabaseSession,
+    current_user: AdminUser,
+    include_secrets: bool = Query(
+        default=False,
+        description="Include global credentials explicitly requested by the administrator.",
+    ),
+) -> SystemSettingsExport:
+    """Return global system and AI settings without any Discord data."""
+    settings = await SystemSettings.get_or_create_settings(db)
+    ai_settings = await AISystemSettings.get_or_create(db)
+    return SystemSettingsExport(
+        exported_at=datetime.now(timezone.utc),
+        include_secrets=include_secrets,
+        system=_system_transfer(settings),
+        ai=_ai_transfer(ai_settings),
+        secrets=_secret_transfer(settings, ai_settings) if include_secrets else None,
+    )
+
+
+@router.post("/import", response_model=SystemSettingsImportResult)
+async def import_system_settings(
+    body: SystemSettingsImportRequest,
+    db: DatabaseSession,
+    current_user: AdminUser,
+    request: Request,
+) -> SystemSettingsImportResult:
+    """Import global system and AI settings; server, user, and Discord data stay untouched."""
+    settings = await SystemSettings.get_or_create_settings(db)
+    ai_settings = await AISystemSettings.get_or_create(db)
+    system_data = body.system.model_dump()
+    old_cache_policy = (
+        settings.plugin_download_cache_path,
+        settings.plugin_download_cache_max_age_days,
+        settings.plugin_download_cache_max_megabytes,
+    )
+    imported_secret_fields: list[str] = []
+    preserved_secret_fields: list[str] = []
+    ai_enabled_without_key = False
+    try:
+        settings.sqlmodel_update(system_data)
+        secrets = body.secrets
+        if secrets is None:
+            preserved_secret_fields = [
+                "global_github_token",
+                "smtp_password",
+                "gmail_credentials_json",
+                "gmail_token_json",
+                "ai_api_key",
+            ]
+        else:
+            if secrets.global_github_token:
+                settings.global_github_token = secrets.global_github_token
+                settings.github_token_fingerprint = None
+                settings.github_token_verification = None
+                imported_secret_fields.append("global_github_token")
+            else:
+                preserved_secret_fields.append("global_github_token")
+            if secrets.smtp_password:
+                settings.smtp_password = secrets.smtp_password
+                imported_secret_fields.append("smtp_password")
+            else:
+                preserved_secret_fields.append("smtp_password")
+            if secrets.gmail_credentials_json:
+                _validate_json_secret(secrets.gmail_credentials_json, credentials=True)
+                settings.gmail_credentials_json = secrets.gmail_credentials_json
+                imported_secret_fields.append("gmail_credentials_json")
+            else:
+                preserved_secret_fields.append("gmail_credentials_json")
+            if secrets.gmail_token_json:
+                _validate_json_secret(secrets.gmail_token_json, credentials=False)
+                settings.gmail_token_json = secrets.gmail_token_json
+                imported_secret_fields.append("gmail_token_json")
+            else:
+                preserved_secret_fields.append("gmail_token_json")
+            if not secrets.ai_api_key:
+                preserved_secret_fields.append("ai_api_key")
+
+        ai_request = _ai_import_request(body)
+        ai_enabled_without_key = bool(
+            ai_request.enabled
+            and not ai_settings.api_key_encrypted
+            and not (secrets and secrets.ai_api_key)
+        )
+        if ai_enabled_without_key:
+            # A redacted export must remain importable on a fresh instance;
+            # keep the provider configuration but do not create an unusable enabled state.
+            ai_request.enabled = False
+        changed_provider = _apply_system_provider_fields(ai_settings, ai_request)
+        _apply_system_runtime_limits(ai_settings, ai_request)
+        if changed_provider:
+            ai_settings.provider_tested = False
+            ai_settings.tool_calling_tested = False
+            ai_settings.streaming_tested = False
+        _apply_system_enabled(ai_settings, ai_request)
+        if secrets and secrets.ai_api_key:
+            imported_secret_fields.append("ai_api_key")
+
+        db.add(settings)
+        db.add(ai_settings)
+        await db.commit()
+        await db.refresh(settings)
+        await db.refresh(ai_settings)
+    except Exception:
+        await db.rollback()
+        raise
+
+    set_client_ip_header(settings.client_ip_header)
+    apply_console_log_level(settings.log_level)
+    new_cache_policy = (
+        settings.plugin_download_cache_path,
+        settings.plugin_download_cache_max_age_days,
+        settings.plugin_download_cache_max_megabytes,
+    )
+    if new_cache_policy != old_cache_policy:
+        with suppress(OSError):
+            prune_download_cache(CachePolicy.from_settings(settings))
+    updated_fields = list(system_data) + list(body.ai.model_dump())
+    await record_audit_event(
+        category="settings",
+        action="system.import",
+        status="success",
+        user=current_user,
+        request=request,
+        details={
+            "updated_fields": updated_fields,
+            "imported_secret_fields": imported_secret_fields,
+        },
+    )
+    return SystemSettingsImportResult(
+        success=True,
+        message="System and AI settings imported successfully; Discord data was not included.",
+        ai_enabled_without_key=ai_enabled_without_key,
+        updated_fields=updated_fields,
+        imported_secret_fields=imported_secret_fields,
+        preserved_secret_fields=preserved_secret_fields,
     )
 
 

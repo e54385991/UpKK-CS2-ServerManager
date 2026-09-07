@@ -1346,6 +1346,225 @@
         "title": "AISystemSettingsResponse",
         "type": "object"
       },
+      "AISystemSettingsTransfer": {
+        "additionalProperties": false,
+        "description": "Portable non-secret global AI settings; the API key is separate.",
+        "properties": {
+          "admin_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Prompt"
+          },
+          "api_protocol": {
+            "default": "chat_completions",
+            "enum": [
+              "chat_completions",
+              "responses"
+            ],
+            "title": "Api Protocol",
+            "type": "string"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "context_window_tokens": {
+            "default": 262144,
+            "enum": [
+              8192,
+              16384,
+              32768,
+              65536,
+              131072,
+              262144,
+              393216,
+              1048576
+            ],
+            "title": "Context Window Tokens",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "frequency_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": -2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Penalty"
+          },
+          "history_retention_days": {
+            "default": 7,
+            "maximum": 7.0,
+            "minimum": 1.0,
+            "title": "History Retention Days",
+            "type": "integer"
+          },
+          "max_completion_tokens": {
+            "default": 2048,
+            "maximum": 32768.0,
+            "minimum": 256.0,
+            "title": "Max Completion Tokens",
+            "type": "integer"
+          },
+          "max_provider_rounds": {
+            "default": 200,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Provider Rounds",
+            "type": "integer"
+          },
+          "max_tool_calls_per_round": {
+            "default": 200,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Tool Calls Per Round",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "parallel_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parallel Tool Calls"
+          },
+          "presence_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": -2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence Penalty"
+          },
+          "private_endpoint_allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Private Endpoint Allowlist",
+            "type": "array"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "request_timeout_seconds": {
+            "default": 60,
+            "maximum": 120.0,
+            "minimum": 5.0,
+            "title": "Request Timeout Seconds",
+            "type": "integer"
+          },
+          "requests_per_minute": {
+            "default": 60,
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Requests Per Minute",
+            "type": "integer"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "token_limit_parameter": {
+            "default": "max_completion_tokens",
+            "enum": [
+              "max_completion_tokens",
+              "max_tokens",
+              "omit"
+            ],
+            "title": "Token Limit Parameter",
+            "type": "string"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top P"
+          },
+          "verbosity": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verbosity"
+          }
+        },
+        "title": "AISystemSettingsTransfer",
+        "type": "object"
+      },
       "AISystemSettingsUpdate": {
         "properties": {
           "admin_prompt": {
@@ -24706,6 +24925,165 @@
         "title": "SteamLatestVersionView",
         "type": "object"
       },
+      "SystemSettingsExport": {
+        "additionalProperties": false,
+        "description": "Portable system-settings bundle. It never contains Discord records.",
+        "properties": {
+          "ai": {
+            "$ref": "#/components/schemas/AISystemSettingsTransfer"
+          },
+          "exported_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exported At"
+          },
+          "format": {
+            "const": "upkk-system-settings",
+            "default": "upkk-system-settings",
+            "title": "Format",
+            "type": "string"
+          },
+          "include_secrets": {
+            "default": false,
+            "title": "Include Secrets",
+            "type": "boolean"
+          },
+          "secrets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SystemSettingsSecretTransfer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemSettingsTransfer"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "system",
+          "ai"
+        ],
+        "title": "SystemSettingsExport",
+        "type": "object"
+      },
+      "SystemSettingsImportRequest": {
+        "additionalProperties": false,
+        "description": "Import a system-settings bundle without touching servers or Discord.",
+        "properties": {
+          "ai": {
+            "$ref": "#/components/schemas/AISystemSettingsTransfer"
+          },
+          "exported_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exported At"
+          },
+          "format": {
+            "const": "upkk-system-settings",
+            "title": "Format",
+            "type": "string"
+          },
+          "include_secrets": {
+            "default": false,
+            "title": "Include Secrets",
+            "type": "boolean"
+          },
+          "secrets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SystemSettingsSecretTransfer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemSettingsTransfer"
+          },
+          "version": {
+            "const": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "system",
+          "ai"
+        ],
+        "title": "SystemSettingsImportRequest",
+        "type": "object"
+      },
+      "SystemSettingsImportResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_enabled_without_key": {
+            "default": false,
+            "title": "Ai Enabled Without Key",
+            "type": "boolean"
+          },
+          "imported_secret_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Imported Secret Fields",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "preserved_secret_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Preserved Secret Fields",
+            "type": "array"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "updated_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Updated Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "SystemSettingsImportResult",
+        "type": "object"
+      },
       "SystemSettingsPatch": {
         "additionalProperties": false,
         "description": "Partial admin update. Secret fields are write-only and never echoed.",
@@ -25122,6 +25500,251 @@
           "updated_at"
         ],
         "title": "SystemSettingsResponse",
+        "type": "object"
+      },
+      "SystemSettingsSecretTransfer": {
+        "additionalProperties": false,
+        "description": "Optional credentials included only after an explicit export choice.",
+        "properties": {
+          "ai_api_key": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Api Key"
+          },
+          "global_github_token": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Global Github Token"
+          },
+          "gmail_credentials_json": {
+            "anyOf": [
+              {
+                "maxLength": 100000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gmail Credentials Json"
+          },
+          "gmail_token_json": {
+            "anyOf": [
+              {
+                "maxLength": 100000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gmail Token Json"
+          },
+          "smtp_password": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Password"
+          }
+        },
+        "title": "SystemSettingsSecretTransfer",
+        "type": "object"
+      },
+      "SystemSettingsTransfer": {
+        "additionalProperties": false,
+        "description": "Portable non-secret global settings; Discord data is intentionally absent.",
+        "properties": {
+          "captcha_enabled": {
+            "default": true,
+            "title": "Captcha Enabled",
+            "type": "boolean"
+          },
+          "client_ip_header": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip Header"
+          },
+          "default_proxy_mode": {
+            "default": "panel",
+            "enum": [
+              "direct",
+              "panel",
+              "github_url"
+            ],
+            "title": "Default Proxy Mode",
+            "type": "string"
+          },
+          "email_enabled": {
+            "default": false,
+            "title": "Email Enabled",
+            "type": "boolean"
+          },
+          "email_from_address": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email From Address"
+          },
+          "email_from_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email From Name"
+          },
+          "email_provider": {
+            "default": "gmail",
+            "enum": [
+              "gmail",
+              "smtp"
+            ],
+            "title": "Email Provider",
+            "type": "string"
+          },
+          "github_proxy_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Proxy Url"
+          },
+          "log_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "DEBUG",
+                  "INFO",
+                  "WARNING",
+                  "ERROR",
+                  "CRITICAL"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Level"
+          },
+          "plugin_download_cache_enabled": {
+            "default": true,
+            "title": "Plugin Download Cache Enabled",
+            "type": "boolean"
+          },
+          "plugin_download_cache_max_age_days": {
+            "default": 30,
+            "maximum": 3650.0,
+            "minimum": 0.0,
+            "title": "Plugin Download Cache Max Age Days",
+            "type": "integer"
+          },
+          "plugin_download_cache_max_megabytes": {
+            "default": 4096,
+            "maximum": 1048576.0,
+            "minimum": 0.0,
+            "title": "Plugin Download Cache Max Megabytes",
+            "type": "integer"
+          },
+          "plugin_download_cache_path": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Download Cache Path"
+          },
+          "smtp_host": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Host"
+          },
+          "smtp_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 587,
+            "title": "Smtp Port"
+          },
+          "smtp_use_tls": {
+            "default": true,
+            "title": "Smtp Use Tls",
+            "type": "boolean"
+          },
+          "smtp_username": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smtp Username"
+          }
+        },
+        "title": "SystemSettingsTransfer",
         "type": "object"
       },
       "SystemSettingsUpdate": {
@@ -42657,6 +43280,57 @@
         ]
       }
     },
+    "/api/v1/settings/export": {
+      "get": {
+        "description": "Return global system and AI settings without any Discord data.",
+        "operationId": "export_system_settings_api_v1_settings_export_get",
+        "parameters": [
+          {
+            "description": "Include global credentials explicitly requested by the administrator.",
+            "in": "query",
+            "name": "include_secrets",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include global credentials explicitly requested by the administrator.",
+              "title": "Include Secrets",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsExport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Export System Settings",
+        "tags": [
+          "v1-settings"
+        ]
+      }
+    },
     "/api/v1/settings/gmail": {
       "delete": {
         "description": "Clear the stored Gmail OAuth token (credentials JSON is kept).",
@@ -42753,6 +43427,53 @@
           }
         ],
         "summary": "Put Gmail Credentials",
+        "tags": [
+          "v1-settings"
+        ]
+      }
+    },
+    "/api/v1/settings/import": {
+      "post": {
+        "description": "Import global system and AI settings; server, user, and Discord data stay untouched.",
+        "operationId": "import_system_settings_api_v1_settings_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemSettingsImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Import System Settings",
         "tags": [
           "v1-settings"
         ]

@@ -1168,7 +1168,8 @@
     "notifications": "邮件通知",
     "security": "安全与访问",
     "logging": "日志",
-    "ai": "AI 助手"
+    "ai": "AI 助手",
+    "transfer": "迁移"
   },
   "sections": {
     "downloads": {
@@ -1194,6 +1195,10 @@
     "ai": {
       "title": "AI 助手",
       "description": "配置系统 AI 提供商、上下文和工具调用能力。"
+    },
+    "transfer": {
+      "title": "设置迁移",
+      "description": "导出或导入系统与 AI 设置，方便在面板实例之间迁移；此文件不包含 Discord 数据。"
     }
   },
   "save": "保存设置",
@@ -1347,6 +1352,36 @@
       "prune": "立即执行清理策略",
       "clear": "清空缓存",
       "clearConfirm": "确定删除所有缓存压缩包？下次安装将重新下载。"
+    },
+    "transfer": {
+      "title": "设置迁移",
+      "description": "导出或导入系统与 AI 设置，方便迁移到另一套面板。服务器、用户和 Discord 数据不会被包含或修改。",
+      "exportTitle": "导出",
+      "importTitle": "导入",
+      "exportHelp": "默认导出不包含任何凭据。迁移后请在目标实例单独补充缺失的密钥。",
+      "importHelp": "选择由本面板导出的 JSON 文件。导入会覆盖系统与 AI 设置，但不会处理服务器、用户或 Discord 数据。",
+      "includeSecrets": "包含敏感凭据",
+      "includeSecretsWarn": "文件会包含 GitHub Token、SMTP 密码、Gmail 凭据和 AI API Key，请妥善保管。",
+      "includeSecretsConfirmTitle": "导出敏感凭据？",
+      "includeSecretsConfirmDescription": "导出的文件包含可直接使用的系统凭据。只通过安全渠道传输，并在迁移后删除临时文件。",
+      "includeSecretsConfirm": "继续导出",
+      "cancel": "取消",
+      "exportRedacted": "导出脱敏设置",
+      "exportWithSecrets": "导出设置和凭据",
+      "exporting": "导出中…",
+      "exportSuccessRedacted": "脱敏设置已下载。",
+      "exportSuccessWithSecrets": "包含凭据的设置已下载，请妥善保管。",
+      "settingsFile": "设置 JSON 文件",
+      "selectFile": "请先选择设置 JSON 文件。",
+      "invalidFile": "文件格式无效，请选择本面板导出的系统设置 JSON。",
+      "importAction": "导入设置",
+      "importing": "导入中…",
+      "importConfirmTitle": "确认导入系统设置？",
+      "importConfirmRedacted": "导入会覆盖当前系统与 AI 设置；脱敏文件中的凭据会保留目标实例现有值。",
+      "importConfirmWithSecrets": "导入会覆盖当前系统与 AI 设置，并写入文件中的凭据；服务器、用户和 Discord 数据不受影响。",
+      "importConfirm": "确认导入",
+      "aiDisabledWithoutKey": "源文件要求启用 AI，但目标实例没有可用 API Key，因此已保留配置并关闭 AI；补充密钥后即可启用。",
+      "importSummary": "已更新 {updated} 项设置，导入 {imported} 项凭据，保留 {preserved} 项现有凭据。"
     }
   },
   "serverWorkspace": {

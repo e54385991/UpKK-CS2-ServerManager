@@ -47,6 +47,9 @@ SECRET_RESPONSE_ALLOWLIST: dict[str, frozenset[str]] = {
     "/api/v1/setup/initialized-servers/{server_key:path}/credentials": frozenset({"ssh_password"}),
     "/api/v1/setup/manual-script": frozenset({"password"}),
     "/api/v1/server-configs": SENSITIVE_FIELDS,
+    "/api/v1/settings/export": frozenset(
+        {"smtp_password", "gmail_credentials_json", "gmail_token_json", "global_github_token"}
+    ),
 }
 
 

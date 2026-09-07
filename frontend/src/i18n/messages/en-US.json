@@ -1168,7 +1168,8 @@
     "notifications": "Email notifications",
     "security": "Security & access",
     "logging": "Logging",
-    "ai": "AI assistant"
+    "ai": "AI assistant",
+    "transfer": "Migration"
   },
   "sections": {
     "downloads": {
@@ -1194,6 +1195,10 @@
     "ai": {
       "title": "AI assistant",
       "description": "Configure the system AI provider, context, and tool-calling capabilities."
+    },
+    "transfer": {
+      "title": "Settings migration",
+      "description": "Export or import system and AI settings between panel instances; Discord data is not included."
     }
   },
   "save": "Save settings",
@@ -1347,6 +1352,36 @@
       "prune": "Apply cleanup policy now",
       "clear": "Clear cache",
       "clearConfirm": "Delete every cached archive? The next install downloads them again."
+    },
+    "transfer": {
+      "title": "Settings migration",
+      "description": "Export or import system and AI settings to another panel. Server, user, and Discord data are never included or changed.",
+      "exportTitle": "Export",
+      "importTitle": "Import",
+      "exportHelp": "Exports are redacted by default. Add missing credentials separately on the destination instance after migration.",
+      "importHelp": "Choose a JSON file exported by this panel. Import overwrites system and AI settings, but never touches servers, users, or Discord data.",
+      "includeSecrets": "Include sensitive credentials",
+      "includeSecretsWarn": "The file will contain the GitHub token, SMTP password, Gmail credentials, and AI API key. Store it securely.",
+      "includeSecretsConfirmTitle": "Export sensitive credentials?",
+      "includeSecretsConfirmDescription": "The exported file contains credentials that can be used directly. Transfer it only through a secure channel and delete temporary copies after migration.",
+      "includeSecretsConfirm": "Continue export",
+      "cancel": "Cancel",
+      "exportRedacted": "Export redacted settings",
+      "exportWithSecrets": "Export settings and credentials",
+      "exporting": "Exporting…",
+      "exportSuccessRedacted": "Redacted settings downloaded.",
+      "exportSuccessWithSecrets": "Settings with credentials downloaded. Store the file securely.",
+      "settingsFile": "Settings JSON file",
+      "selectFile": "Choose a settings JSON file first.",
+      "invalidFile": "Invalid file format. Choose a system-settings JSON exported by this panel.",
+      "importAction": "Import settings",
+      "importing": "Importing…",
+      "importConfirmTitle": "Import system settings?",
+      "importConfirmRedacted": "This overwrites the current system and AI settings; credentials omitted from a redacted file remain on the destination instance.",
+      "importConfirmWithSecrets": "This overwrites the current system and AI settings and writes credentials from the file; servers, users, and Discord data are unaffected.",
+      "importConfirm": "Confirm import",
+      "aiDisabledWithoutKey": "The source enabled AI, but the destination has no usable API key, so the configuration was kept disabled until you add one.",
+      "importSummary": "Updated {updated} settings, imported {imported} credentials, and preserved {preserved} existing credentials."
     }
   },
   "serverWorkspace": {
