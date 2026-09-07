@@ -94,7 +94,7 @@ class ImportOptions(StrictValue):
     min_stars: int = Field(default=10, ge=0, le=1_000_000)
     min_forks: int = Field(default=0, ge=0, le=1_000_000)
     sort: Literal["stars", "forks", "updated"] = "stars"
-    updated_within_days: int = Field(default=365, ge=1, le=3650)
+    updated_within_days: int = Field(default=90, ge=1, le=3650)
     repositories: list[str] = Field(default_factory=list, max_length=10)
     minutes: int = Field(default=15, ge=1, le=120)
     max_plugins: int = Field(default=20, ge=1, le=100)

@@ -7,6 +7,7 @@ import { Sparkles } from "lucide-react";
 import type { components } from "@/shared/api/schema";
 import { aiImportReadiness, submitAIImport } from "@/modules/plugins/ai-import-actions";
 import { trackAIImport } from "@/modules/plugins/ai-import-activity";
+import { randomId } from "@/shared/lib/random-id";
 import { Button } from "@/shared/ui/button";
 import { Dialog } from "@/shared/ui/dialog";
 import { Input, Label } from "@/shared/ui/input";
@@ -15,7 +16,7 @@ import { Textarea } from "@/shared/ui/textarea";
 
 type Options = components["schemas"]["ImportOptions"];
 type Readiness = components["schemas"]["PluginAIReadinessView"];
-const defaults: Options = { framework: "all", keywords: "", min_stars: 10, min_forks: 0, sort: "stars", updated_within_days: 365, minutes: 15, max_plugins: 20, repositories: [] };
+const defaults: Options = { framework: "all", keywords: "", min_stars: 10, min_forks: 0, sort: "stars", updated_within_days: 90, minutes: 15, max_plugins: 20, repositories: [] };
 
 export function AIImportButton() {
   const t = useTranslations("plugins.aiImport");
@@ -34,6 +35,8 @@ export function AIImportButton() {
       if (!active) return;
       if (result.ok) setReady(result.data);
       else setError(t("requestFailed"));
+    }).catch(() => {
+      if (active) setError(t("requestFailed"));
     });
     return () => { active = false; };
   }, [open, t]);
@@ -41,10 +44,12 @@ export function AIImportButton() {
     event.preventDefault();
     setBusy(true); setError("");
     try {
-      const result = await submitAIImport({ request_id: requestId.current ??= crypto.randomUUID(), options: { ...options, repositories: repositories.split(/\s+/).filter(Boolean) }, acknowledge_ai_warning: ack });
+      const result = await submitAIImport({ request_id: requestId.current ??= randomId(), options: { ...options, repositories: repositories.split(/\s+/).filter(Boolean) }, acknowledge_ai_warning: ack });
       if (!result.ok) { setError(result.error || t("requestFailed")); return; }
       setOpen(false);
       trackAIImport(result.data);
+    } catch {
+      setError(t("requestFailed"));
     } finally { setBusy(false); }
   }
   return <>

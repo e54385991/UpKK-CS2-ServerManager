@@ -34,6 +34,11 @@ URL = "https://github.com/example/plugin"
 SHA = "a" * 40
 
 
+def test_import_maintenance_window_defaults_and_override():
+    assert ImportOptions().updated_within_days == 90
+    assert ImportOptions(updated_within_days=365).updated_within_days == 365
+
+
 def job(**options):
     return store.snapshot(
         PluginImportJob(

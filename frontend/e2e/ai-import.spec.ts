@@ -8,6 +8,10 @@ for (const locale of ["zh-CN", "en-US"] as const) {
         { name: "upkk_access_token", value: "isolated-test-session", domain: "localhost", path: "/" },
         { name: "locale", value: locale, domain: "localhost", path: "/" },
       ]);
+      // Ordinary HTTP LAN origins do not expose crypto.randomUUID.
+      if (width === 390) await page.addInitScript(() => {
+        Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true });
+      });
       await page.setViewportSize({ width, height: 900 });
       const errors: string[] = [];
       page.on("pageerror", error => errors.push(error.message));
@@ -17,12 +21,20 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await expect(dialog).toContainText("test-model");
       await expect(dialog.locator("#ai-framework")).toHaveValue("all");
       await expect(dialog.locator("#ai-min_stars")).toHaveValue("10");
+      await expect(dialog.locator("#ai-updated_within_days")).toHaveValue("90");
       const submit = dialog.locator('button[type="submit"]');
       await expect(submit).toBeDisabled();
       await dialog.getByRole("checkbox").check();
       await expect(submit).toBeEnabled();
       await page.screenshot({ path: `/tmp/plugin-ai-modal-${locale}-${width}.png`, fullPage: true });
       expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBeTruthy();
+      if (locale === "en-US" && width === 1440) {
+        await page.route("**/plugins", route => route.request().headers()["next-action"] ? route.abort("failed") : route.continue());
+        await submit.click();
+        await expect(dialog.getByRole("alert")).toHaveText("Request failed. Check the configuration or try again later.");
+        await expect(submit).toBeEnabled();
+        await page.unroute("**/plugins");
+      }
       await submit.click();
       await expect(dialog).toBeHidden();
       await expect(page.getByText("Searching maintained CS2 plugins").first()).toBeVisible();

@@ -11163,7 +11163,7 @@ export interface components {
             sort: "stars" | "forks" | "updated";
             /**
              * Updated Within Days
-             * @default 365
+             * @default 90
              */
             updated_within_days: number;
         };

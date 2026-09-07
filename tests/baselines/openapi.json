@@ -11127,7 +11127,7 @@
             "type": "string"
           },
           "updated_within_days": {
-            "default": 365,
+            "default": 90,
             "maximum": 3650.0,
             "minimum": 1.0,
             "title": "Updated Within Days",
