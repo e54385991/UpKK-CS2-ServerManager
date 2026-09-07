@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import time
+from collections import deque
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -17,6 +21,36 @@ class AIProviderTransport:
         self._client: httpx.AsyncClient | None = None
         self._client_factory: Callable[..., httpx.AsyncClient] | None = None
         self._lock = asyncio.Lock()
+        self._rpm_windows: dict[str, deque[float]] = {}
+        self._last_rpm_cleanup = 0.0
+        self._rpm_lock = asyncio.Lock()
+
+    async def acquire_rpm(self, limit: int, base_url: str, api_key: str | None) -> None:
+        """Share a rolling minute per origin/credential in this API process."""
+        if not 1 <= limit <= 10_000:
+            raise ValueError("AI RPM must be between 1 and 10000")
+        origin = urlsplit(base_url)
+        port = origin.port or (443 if origin.scheme == "https" else 80)
+        identity = f"{origin.scheme}://{origin.hostname}:{port}\n{api_key or ''}"
+        key = hashlib.sha256(identity.encode()).hexdigest()
+        while True:
+            async with self._rpm_lock:
+                now = time.monotonic()
+                if now - self._last_rpm_cleanup >= 60:
+                    self._rpm_windows = {
+                        key: window
+                        for key, window in self._rpm_windows.items()
+                        if window and now - window[-1] < 60
+                    }
+                    self._last_rpm_cleanup = now
+                window = self._rpm_windows.setdefault(key, deque())
+                while window and now - window[0] >= 60:
+                    window.popleft()
+                if len(window) < limit:
+                    window.append(now)
+                    return
+                wait = max(0.01, 60 - (now - window[0]))
+            await asyncio.sleep(wait)
 
     async def _get_client(self) -> httpx.AsyncClient:
         factory = httpx.AsyncClient

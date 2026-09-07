@@ -7593,6 +7593,11 @@ export interface components {
             reasoning_effort?: ("none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra") | null;
             /** Request Timeout Seconds */
             request_timeout_seconds: number;
+            /**
+             * Requests Per Minute
+             * @default 60
+             */
+            requests_per_minute: number;
             /** Streaming Tested */
             streaming_tested: boolean;
             /** Temperature */
@@ -7650,6 +7655,8 @@ export interface components {
             reasoning_effort?: ("none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra") | null;
             /** Request Timeout Seconds */
             request_timeout_seconds?: number | null;
+            /** Requests Per Minute */
+            requests_per_minute?: number | null;
             /** Temperature */
             temperature?: number | null;
             /** Token Limit Parameter */
@@ -7994,6 +8001,8 @@ export interface components {
             reasoning_effort?: string | null;
             /** Request Timeout Seconds */
             request_timeout_seconds?: number | null;
+            /** Requests Per Minute */
+            requests_per_minute?: number | null;
             /** Temperature */
             temperature?: number | null;
             /** Token Limit Parameter */
@@ -8054,6 +8063,11 @@ export interface components {
             reasoning_effort?: string | null;
             /** Request Timeout Seconds */
             request_timeout_seconds: number;
+            /**
+             * Requests Per Minute
+             * @default 60
+             */
+            requests_per_minute: number;
             /** Streaming Tested */
             streaming_tested: boolean;
             /** Temperature */

@@ -42,6 +42,9 @@ class AISystemSettings(SQLModel, table=True):
         default=262_144,
         sa_column_kwargs={"server_default": text("262144")},
     )
+    requests_per_minute: int = Field(
+        default=60, ge=1, le=10000, sa_column_kwargs={"server_default": text("60")}
+    )
     request_timeout_seconds: int = Field(default=60)
     history_retention_days: int = Field(default=7)
     max_provider_rounds: int = Field(default=200, ge=1, le=1000)

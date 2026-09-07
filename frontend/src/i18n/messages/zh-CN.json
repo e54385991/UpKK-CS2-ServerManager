@@ -2461,6 +2461,8 @@
     },
     "maxTokens": "最大补全 token",
     "contextWindow": "上下文窗口",
+    "requestsPerMinute": "每分钟最大请求数（RPM）",
+    "requestsPerMinuteHint": "默认 60，范围 1–10,000。同一供应商地址和 API Key 的请求共享额度，失败重试也计入；达到上限后自动等待。",
     "contextWindowHint": "默认 256K；可按模型能力调整为 8K–1M。窗口越大，供应商请求和费用可能越高。",
     "tokenField": "Token 上限字段",
     "omit": "不发送",

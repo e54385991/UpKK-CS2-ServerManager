@@ -62,6 +62,7 @@ class AISystemSettingsResponse(SQLModel):
     verbosity: Optional[Verbosity] = None
     parallel_tool_calls: Optional[bool] = None
     context_window_tokens: AIContextWindowTokens = 262_144
+    requests_per_minute: int = Field(default=60, ge=1, le=10000)
     request_timeout_seconds: int
     history_retention_days: int
     max_provider_rounds: int
@@ -85,6 +86,7 @@ class AISystemSettingsUpdate(AIModelParameters):
     max_provider_rounds: Optional[int] = Field(default=None, ge=1, le=1000)
     max_tool_calls_per_round: Optional[int] = Field(default=None, ge=1, le=1000)
     context_window_tokens: Optional[AIContextWindowTokens] = None
+    requests_per_minute: Optional[int] = Field(default=None, ge=1, le=10000)
 
 
 class UserAISettingsResponse(SQLModel):

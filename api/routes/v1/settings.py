@@ -306,6 +306,7 @@ def _ai_view(payload) -> AssistantSystemSettingsView:
         context_window_tokens=_context_window_tokens(
             getattr(payload, "context_window_tokens", 262_144)
         ),
+        requests_per_minute=int(getattr(payload, "requests_per_minute", 60) or 60),
         provider_tested=bool(payload.provider_tested),
         tool_calling_tested=bool(payload.tool_calling_tested),
         streaming_tested=bool(payload.streaming_tested),

@@ -2461,6 +2461,8 @@
     },
     "maxTokens": "Maximum completion tokens",
     "contextWindow": "Context window",
+    "requestsPerMinute": "Maximum requests per minute (RPM)",
+    "requestsPerMinuteHint": "Default 60; range 1–10,000. Requests sharing a provider origin and API key share the quota, including retries. Requests wait when the limit is reached.",
     "contextWindowHint": "Default 256K; choose 8K–1M to match the model. Larger windows can increase provider payloads and cost.",
     "tokenField": "Token limit field",
     "omit": "Do not send",

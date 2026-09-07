@@ -136,8 +136,11 @@ async def test_system_ai_settings(
             api_protocol=request.api_protocol or item.api_protocol,
             admin_prompt=item.admin_prompt or "",
             context_window_tokens=getattr(item, "context_window_tokens", 262_144),
+            requests_per_minute=getattr(item, "requests_per_minute", 60),
             **_test_model_parameters(request, item),
         )
+        # RPM waits and provider I/O must not keep a database transaction open.
+        await db.commit()
         text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
     except (AIConfigurationError, ValueError) as exc:
         text_ok, tool_ok, streaming_ok, message = False, False, False, str(exc)
@@ -239,8 +242,11 @@ async def test_user_ai_settings(
             api_protocol=request.api_protocol or item.api_protocol,
             admin_prompt=system.admin_prompt or "",
             context_window_tokens=getattr(system, "context_window_tokens", 262_144),
+            requests_per_minute=getattr(system, "requests_per_minute", 60),
             **_test_model_parameters(request, item),
         )
+        # RPM waits and provider I/O must not keep a database transaction open.
+        await db.commit()
         text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
     except (AIConfigurationError, ValueError) as exc:
         text_ok, tool_ok, streaming_ok, message = False, False, False, str(exc)

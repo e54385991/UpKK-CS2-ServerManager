@@ -1266,6 +1266,13 @@
             "title": "Request Timeout Seconds",
             "type": "integer"
           },
+          "requests_per_minute": {
+            "default": 60,
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Requests Per Minute",
+            "type": "integer"
+          },
           "streaming_tested": {
             "title": "Streaming Tested",
             "type": "boolean"
@@ -1577,6 +1584,19 @@
               }
             ],
             "title": "Request Timeout Seconds"
+          },
+          "requests_per_minute": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Minute"
           },
           "temperature": {
             "anyOf": [
@@ -2683,6 +2703,19 @@
             ],
             "title": "Request Timeout Seconds"
           },
+          "requests_per_minute": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Minute"
+          },
           "temperature": {
             "anyOf": [
               {
@@ -2882,6 +2915,13 @@
           },
           "request_timeout_seconds": {
             "title": "Request Timeout Seconds",
+            "type": "integer"
+          },
+          "requests_per_minute": {
+            "default": 60,
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Requests Per Minute",
             "type": "integer"
           },
           "streaming_tested": {

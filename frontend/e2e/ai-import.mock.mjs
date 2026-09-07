@@ -2,6 +2,7 @@
 import { createServer } from "node:http";
 
 const tasks = [];
+const aiSettings = { enabled: false, base_url: "https://provider.example/v1", model: "test-model", api_protocol: "chat_completions", api_key_configured: true, private_endpoint_allowlist: [], max_completion_tokens: 2048, token_limit_parameter: "max_completion_tokens", context_window_tokens: 262144, requests_per_minute: 60, request_timeout_seconds: 60, history_retention_days: 7, max_provider_rounds: 200, max_tool_calls_per_round: 200, provider_tested: true, tool_calling_tested: true, streaming_tested: true };
 const verification = { valid: true, account: "test-admin", checked_at: new Date().toISOString(), core_remaining: 4900, search_remaining: 29, core_reset: 2000000000, search_reset: 2000000000, message: "GitHub token verified" };
 const plugin = { id: 1, title: "AI Test Plugin", description: "Test installation documentation", author: "example", version: "1.0", category: "utility", framework: "counterstrikesharp", tags: null, is_recommended: false, icon_url: null, github_url: "https://github.com/example/plugin", custom_install_path: null, download_count: 0, install_count: 0, dependencies: [], ai_metadata: { model: "test-model", reviewed: false, installation: { asset_glob: "*.zip", source_prefix: "", target_path: null }, requirements: [], sources: [{ path: "README.md", commit: "a".repeat(40) }] } };
 
@@ -34,6 +35,13 @@ createServer(async (req, res) => {
   if (path === "/api/v1/operations/inbox") return json(inbox());
   if (path === "/api/v1/settings") return json({ default_proxy_mode: "direct", effective_log_level: "INFO", has_global_github_token: true, global_github_token_prefix: "ghp_…", github_token_verification: verification, email_enabled: false, email_provider: "smtp", smtp_use_tls: true, has_smtp_password: false, has_gmail_credentials: false, has_gmail_token: false, gmail_ready: false });
   if (path === "/api/v1/settings/test-github-token") return json(verification);
+  if (path === "/api/v1/settings/ai") {
+    if (req.method === "PUT") {
+      if (!Number.isInteger(input.requests_per_minute) || input.requests_per_minute < 1 || input.requests_per_minute > 10000) return json({ detail: "RPM must be between 1 and 10000" }, 422);
+      Object.assign(aiSettings, input);
+    }
+    return json(aiSettings);
+  }
   if (path === "/api/v1/plugins/market/ai-imports/readiness") return json({ token_valid: true, token_account: "test-admin", token_message: "Verified", ai_configured: true, ai_model: "test-model" });
   if (path === "/api/v1/plugins/market/ai-imports") {
     if (req.method === "POST") {

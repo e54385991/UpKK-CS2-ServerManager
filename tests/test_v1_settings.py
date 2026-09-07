@@ -334,6 +334,7 @@ def test_v1_settings_ai_get_hides_api_key(monkeypatch):
                 admin_prompt=None,
                 private_endpoint_allowlist=[],
                 request_timeout_seconds=30,
+                requests_per_minute=17,
                 history_retention_days=7,
                 max_provider_rounds=8,
                 max_tool_calls_per_round=20,
@@ -348,6 +349,7 @@ def test_v1_settings_ai_get_hides_api_key(monkeypatch):
     body = response.json()
     assert body["api_key_configured"] is True
     assert body["model"] == "gpt-4.1"
+    assert body["requests_per_minute"] == 17
     assert "api_key" not in body
     assert "sk-" not in response.text
 
@@ -372,3 +374,37 @@ def test_v1_settings_ai_test_accepts_empty_body(monkeypatch):
     assert response.json()["success"] is True
     assert response.json()["message"] == "Provider ready"
     probe.assert_awaited_once()
+
+
+def test_v1_settings_ai_rpm_patch_persists_validated_value(monkeypatch):
+    from api.routes.ai_helpers import _system_response
+    from modules.models import AISystemSettings
+
+    client, _settings, _user = _client(monkeypatch=monkeypatch)
+    item = AISystemSettings()
+    captured = []
+
+    async def update(request, db, current_user):
+        captured.append(request)
+        if request.requests_per_minute is not None:
+            item.requests_per_minute = request.requests_per_minute
+        return _system_response(item)
+
+    monkeypatch.setattr("api.routes.v1.settings.legacy_ai.update_system_ai_settings", update)
+    for value in [1, 17, 10000]:
+        response = client.put("/api/v1/settings/ai", json={"requests_per_minute": value})
+        assert response.status_code == 200
+        assert response.json()["requests_per_minute"] == value
+        assert captured[-1].requests_per_minute == value
+    response = client.put("/api/v1/settings/ai", json={"requests_per_minute": None})
+    assert response.json()["requests_per_minute"] == 10000
+    for value in [0, -1, 10001, 1.5]:
+        assert (
+            client.put("/api/v1/settings/ai", json={"requests_per_minute": value}).status_code
+            == 422
+        )
+
+
+def test_v1_settings_ai_rpm_patch_requires_admin(monkeypatch):
+    client, _settings, _user = _client(admin=False, monkeypatch=monkeypatch)
+    assert client.put("/api/v1/settings/ai", json={"requests_per_minute": 100}).status_code == 403

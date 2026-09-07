@@ -95,6 +95,7 @@ async def test_system_settings_get_update_and_enable_guard(monkeypatch):
     db = _DB()
     response = await routes.get_system_ai_settings(db, _user(is_admin=True))
     assert response.enabled is False
+    assert response.requests_per_minute == 60
 
     updated = await routes.update_system_ai_settings(
         AISystemSettingsUpdate(
@@ -107,11 +108,13 @@ async def test_system_settings_get_update_and_enable_guard(monkeypatch):
             max_provider_rounds=4,
             max_tool_calls_per_round=5,
             context_window_tokens=65_536,
+            requests_per_minute=17,
         ),
         db,
         _user(is_admin=True),
     )
     assert updated.model == "test-model"
+    assert updated.requests_per_minute == item.requests_per_minute == 17
     assert item.admin_prompt == "hello"
     assert item.provider_tested is False
 

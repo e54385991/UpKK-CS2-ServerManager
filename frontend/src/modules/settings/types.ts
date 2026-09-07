@@ -137,6 +137,7 @@ export type AiSystemSettings = {
   readonly verbosity: string | null;
   readonly parallelToolCalls: boolean | null;
   readonly contextWindowTokens: AiContextWindowTokens;
+  readonly requestsPerMinute: number;
   readonly requestTimeoutSeconds: number;
   readonly historyRetentionDays: number;
   readonly maxProviderRounds: number;
@@ -165,6 +166,7 @@ export type AiSystemPatch = {
   readonly verbosity?: string | null;
   readonly parallelToolCalls?: boolean | null;
   readonly contextWindowTokens?: AiContextWindowTokens;
+  readonly requestsPerMinute?: number;
   readonly requestTimeoutSeconds?: number;
   readonly historyRetentionDays?: number;
   readonly maxProviderRounds?: number;

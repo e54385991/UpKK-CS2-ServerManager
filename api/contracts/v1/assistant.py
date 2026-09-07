@@ -255,6 +255,7 @@ class AssistantSystemSettingsView(V1Model):
         393216,
         1048576,
     ] = 262144
+    requests_per_minute: int = Field(default=60, ge=1, le=10000)
     request_timeout_seconds: int
     history_retention_days: int
     max_provider_rounds: int
@@ -299,6 +300,7 @@ class AssistantSystemSettingsPatch(ApiRequest):
         ]
         | None
     ) = None
+    requests_per_minute: int | None = Field(default=None, ge=1, le=10000)
 
 
 class AssistantProviderTestBody(ApiRequest):

@@ -553,6 +553,9 @@ async def _request_message(
     stream: bool,
     on_text_delta: TextDeltaCallback | None,
 ) -> dict[str, Any]:
+    await ai_provider_transport.acquire_rpm(
+        config.requests_per_minute, config.base_url, config.api_key
+    )
     async with ai_provider_transport.stream(
         "POST",
         endpoint,

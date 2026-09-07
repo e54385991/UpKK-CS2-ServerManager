@@ -24,6 +24,7 @@ export const EMPTY_AI_SYSTEM_SETTINGS: AiSystemSettings = {
   verbosity: null,
   parallelToolCalls: null,
   contextWindowTokens: 262144,
+  requestsPerMinute: 60,
   requestTimeoutSeconds: 60,
   historyRetentionDays: 7,
   maxProviderRounds: 200,
@@ -56,6 +57,7 @@ export function toAiSettings(raw: AssistantSystemSettingsViewDto): AiSystemSetti
     verbosity: raw.verbosity ?? null,
     parallelToolCalls: raw.parallel_tool_calls ?? null,
     contextWindowTokens: toAiContextWindowTokens(raw.context_window_tokens),
+    requestsPerMinute: raw.requests_per_minute,
     requestTimeoutSeconds: raw.request_timeout_seconds,
     historyRetentionDays: raw.history_retention_days,
     maxProviderRounds: raw.max_provider_rounds,
@@ -101,6 +103,9 @@ export function toAiSettingsWire(patch: AiSystemPatch): Record<string, unknown> 
       : {}),
     ...(patch.contextWindowTokens !== undefined
       ? { context_window_tokens: patch.contextWindowTokens }
+      : {}),
+    ...(patch.requestsPerMinute !== undefined
+      ? { requests_per_minute: patch.requestsPerMinute }
       : {}),
     ...(patch.requestTimeoutSeconds !== undefined
       ? { request_timeout_seconds: patch.requestTimeoutSeconds }

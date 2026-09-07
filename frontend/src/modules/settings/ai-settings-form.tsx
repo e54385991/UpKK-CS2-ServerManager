@@ -76,6 +76,7 @@ export function AiSettingsForm({
     seed.parallelToolCalls == null ? "" : String(seed.parallelToolCalls),
   );
   const [contextWindow, setContextWindow] = useState(String(seed.contextWindowTokens));
+  const [requestsPerMinute, setRequestsPerMinute] = useState(String(seed.requestsPerMinute));
   const [timeout, setTimeoutSeconds] = useState(String(seed.requestTimeoutSeconds));
   const [retention, setRetention] = useState(String(seed.historyRetentionDays));
   const [rounds, setRounds] = useState(String(seed.maxProviderRounds));
@@ -108,6 +109,7 @@ export function AiSettingsForm({
       verbosity: verbosity || null,
       parallelToolCalls: parallelTools === "" ? null : parallelTools === "true",
       contextWindowTokens: toAiContextWindowTokens(Number(contextWindow)),
+      requestsPerMinute: Number(requestsPerMinute),
       requestTimeoutSeconds: Number(timeout) || settings.requestTimeoutSeconds,
       historyRetentionDays: Number(retention) || settings.historyRetentionDays,
       maxProviderRounds: Number(rounds) || settings.maxProviderRounds,
@@ -135,6 +137,7 @@ export function AiSettingsForm({
     setPresence(next.presencePenalty == null ? "" : String(next.presencePenalty));
     setParallelTools(next.parallelToolCalls == null ? "" : String(next.parallelToolCalls));
     setContextWindow(String(next.contextWindowTokens));
+    setRequestsPerMinute(String(next.requestsPerMinute));
     setTimeoutSeconds(String(next.requestTimeoutSeconds));
     setRetention(String(next.historyRetentionDays));
     setRounds(String(next.maxProviderRounds));
@@ -361,6 +364,11 @@ export function AiSettingsForm({
                 ))}
               </Select>
               <p className="mt-1 text-xs text-fg-subtle">{t("contextWindowHint")}</p>
+            </div>
+            <div>
+              <Label htmlFor="ai-rpm">{t("requestsPerMinute")}</Label>
+              <Input id="ai-rpm" type="number" min={1} max={10000} step={1} value={requestsPerMinute} onChange={(event) => setRequestsPerMinute(event.target.value)} aria-describedby="ai-rpm-hint" />
+              <p id="ai-rpm-hint" className="mt-1 text-xs text-fg-subtle">{t("requestsPerMinuteHint")}</p>
             </div>
             <div>
               <Label htmlFor="ai-token-field">{t("tokenField")}</Label>

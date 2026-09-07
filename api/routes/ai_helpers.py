@@ -119,6 +119,7 @@ def _system_response(item: AISystemSettings) -> AISystemSettingsResponse:
         max_provider_rounds=item.max_provider_rounds,
         max_tool_calls_per_round=getattr(item, "max_tool_calls_per_round", 200),
         context_window_tokens=getattr(item, "context_window_tokens", 262_144),
+        requests_per_minute=getattr(item, "requests_per_minute", 60),
         provider_tested=item.provider_tested,
         tool_calling_tested=item.tool_calling_tested,
         streaming_tested=item.streaming_tested,
@@ -266,6 +267,7 @@ def _apply_system_runtime_limits(item: AISystemSettings, request: AISystemSettin
         "max_tool_calls_per_round",
         "history_retention_days",
         "context_window_tokens",
+        "requests_per_minute",
     ):
         value = getattr(request, field)
         if value is not None:
