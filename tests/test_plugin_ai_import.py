@@ -567,10 +567,14 @@ async def test_search_paginates_both_frameworks_sorts_and_deduplicates(runner_en
         # Each framework sweeps its full deterministic term list, two pages deep.
         terms_per_framework = len(discovery.FRAMEWORK_TERMS["counterstrikesharp"])
         assert len(candidates) == 52
-        assert search.await_count == 2 * terms_per_framework * discovery.SEARCH_PAGES
+        assert (
+            search.await_count
+            == len(discovery.FRAMEWORK_TERMS) * terms_per_framework * discovery.SEARCH_PAGES
+        )
         assert {call.args[1] for call in search.call_args_list} == {
             *discovery.FRAMEWORK_TERMS["counterstrikesharp"],
             *discovery.FRAMEWORK_TERMS["swiftly"],
+            *discovery.FRAMEWORK_TERMS["other"],
         }
     finally:
         await instance.client.close()
@@ -796,7 +800,7 @@ def test_framework_subtree_keeps_detected_source(source, target):
             "is_dir": False,
         }
     ]
-    prefix, mapping, required = _detect_mapping(entries, "RetakesPlugin")
+    prefix, mapping, required = _detect_mapping(entries, "RetakesPlugin", "counterstrikesharp")
     layout = {
         "entries": entries,
         "source_prefix": prefix,

@@ -827,6 +827,10 @@ async def _execute_github_install_plan_locked(
     user_exclude_dirs = list(plan.get("exclude_dirs") or request.exclude_dirs or [])
     user_exclude_files = list(plan.get("exclude_files") or request.exclude_files or [])
     install_request = GitHubPluginInstallRequest(
+        archive_mappings=plan["mapping"]
+        if len(plan["mapping"]) > 1
+        and any(item["target"] not in {"addons", "cfg"} for item in plan["mapping"])
+        else [],
         download_url=plan["asset"]["url"],
         exclude_dirs=user_exclude_dirs,
         exclude_files=config_exclusions + user_exclude_files + user_exclude_dirs,

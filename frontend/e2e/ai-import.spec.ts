@@ -20,6 +20,9 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       const dialog = page.getByRole("dialog", { name: locale === "zh-CN" ? "AI 智能导入" : "AI discovery" });
       await expect(dialog).toContainText("test-model");
       await expect(dialog.locator("#ai-framework")).toHaveValue("all");
+      await dialog.locator("#ai-framework").selectOption("other");
+      await expect(dialog.locator("#ai-framework")).toHaveValue("other");
+      await dialog.locator("#ai-framework").selectOption("all");
       await expect(dialog.locator("#ai-min_stars")).toHaveValue("10");
       await expect(dialog.locator("#ai-updated_within_days")).toHaveValue("90");
       // Default ordering is stars, then most recently updated, then forks.
@@ -62,6 +65,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await page.locator("#ai-rule-asset").fill("plugin-*.zip");
       await page.getByRole("button", { name: locale === "zh-CN" ? "保存配置并标记已核对" : "Save and mark reviewed", exact: true }).click();
       await expect(page.locator("#ai-rule-asset")).toHaveValue("plugin-*.zip");
+      await expect(page.getByText("publish/Plugin → addons/counterstrikesharp/plugins/Plugin", { exact: true })).toBeVisible();
       if (locale === "zh-CN" && width === 390) {
         for (const name of ["get_compilation_issues", "get_errors"]) {
           const response = await page.request.post("/_next/mcp", { headers: { accept: "application/json, text/event-stream" }, data: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } } });

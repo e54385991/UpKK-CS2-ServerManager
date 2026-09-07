@@ -41,13 +41,19 @@ FRAMEWORK_TERMS: dict[str, tuple[str, ...]] = {
         "CounterStrikeSharp",
         "topic:counterstrikesharp",
         "CounterStrikeSharp plugin cs2",
-        "CSSharp cs2 server plugin",
+        "CounterStrikeSharp in:name,description,readme",
     ),
     "swiftly": (
         "SwiftlyS2",
         "topic:swiftlys2",
         "SwiftlyS2 plugin cs2",
-        "swiftly-solution cs2 plugin",
+        "SwiftlyS2 in:name,description,readme",
+    ),
+    "other": (
+        "Metamod cs2",
+        "topic:cs2-plugin metamod",
+        "Source2 Metamod in:name,description,readme",
+        "CS2 SourceHook in:name,description,readme",
     ),
 }
 
@@ -73,7 +79,7 @@ RESERVED_QUALIFIERS = frozenset(
 RUNTIME_REPOSITORIES: dict[str, str] = {
     "Metamod:Source": "https://github.com/alliedmodders/metamod-source",
     "CounterStrikeSharp": "https://github.com/roflmuffin/counterstrikesharp",
-    "SwiftlyS2": "https://github.com/swiftly-solution/swiftly",
+    "SwiftlyS2": "https://github.com/swiftly-solution/swiftlys2",
     "CS2Fixes": "https://github.com/source2ze/cs2fixes",
     "MultiAddonManager": "https://github.com/source2ze/multiaddonmanager",
 }
@@ -106,7 +112,9 @@ def sanitize_term(value: object) -> str | None:
     kept: list[str] = []
     for token in " ".join(str(value).split())[:200].split(" "):
         head, separator, _ = token.partition(":")
-        if separator and head.casefold() in RESERVED_QUALIFIERS:
+        if separator and head.lstrip("-").casefold() in RESERVED_QUALIFIERS:
+            continue
+        if token.upper() in {"OR", "AND", "NOT"}:
             continue
         cleaned = " ".join(_TERM_NOISE.sub(" ", token).split())
         if cleaned:
@@ -116,7 +124,7 @@ def sanitize_term(value: object) -> str | None:
 
 def search_terms(framework: str, keywords: str, proposed: list[str] | None = None) -> list[str]:
     """Build the bounded, deduplicated query sweep for one framework."""
-    suffix = keywords.strip()
+    suffix = sanitize_term(keywords) or ""
     terms = [f"{base} {suffix}".strip() for base in FRAMEWORK_TERMS.get(framework, ())]
     extra: list[str] = []
     for candidate in proposed or []:

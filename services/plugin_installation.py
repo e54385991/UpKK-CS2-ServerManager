@@ -40,6 +40,7 @@ from services.plugins.install_commands import (
 from services.plugins.install_commands import (
     remote_plugin_temp_dir as _remote_plugin_temp_dir,
 )
+from services.plugins.install_mapping import stage_mapping
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
@@ -518,6 +519,14 @@ async def install_github_plugin(  # noqa: C901
             )
 
         await progress("Extraction complete, analyzing archive structure...")
+
+        if request.archive_mappings:
+            extract_dir = await stage_mapping(
+                ssh_manager, extract_dir, f"{remote_temp_dir}/mapped-tree", request.archive_mappings
+            )
+            request = request.model_copy(
+                update={"source_prefix": None, "custom_install_path": None, "allowed_roots": []}
+            )
 
         source_prefix = request.source_prefix or ""
         requested_source_dir = f"{extract_dir}/{source_prefix}" if source_prefix else extract_dir

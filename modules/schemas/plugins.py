@@ -2,7 +2,7 @@
 
 # ruff: noqa: F403,F405
 
-from modules.plugin_ai import PluginAIInfo
+from modules.plugin_ai import InstallationMapping, PluginAIInfo
 
 from .common import *
 
@@ -99,6 +99,7 @@ class GitHubPluginInstallRequest(SQLModel):
     record_installation: bool = True
     suppress_notification: bool = False
     source_prefix: Optional[str] = Field(default=None, max_length=500)
+    archive_mappings: List[InstallationMapping] = Field(default_factory=list, max_length=20)
     allowed_roots: List[Literal["addons", "cfg"]] = Field(default_factory=list)
     expected_archive_sha256: Optional[str] = Field(default=None, min_length=64, max_length=64)
     installation_plan_hash: Optional[str] = Field(default=None, min_length=64, max_length=64)

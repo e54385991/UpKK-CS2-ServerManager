@@ -9673,6 +9673,14 @@
             "title": "Allowed Roots",
             "type": "array"
           },
+          "archive_mappings": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationMapping"
+            },
+            "maxItems": 20,
+            "title": "Archive Mappings",
+            "type": "array"
+          },
           "asset_glob": {
             "anyOf": [
               {
@@ -11115,6 +11123,7 @@
             "enum": [
               "counterstrikesharp",
               "swiftly",
+              "other",
               "all"
             ],
             "title": "Framework",
@@ -11535,6 +11544,19 @@
             "title": "Asset Glob",
             "type": "string"
           },
+          "automatic": {
+            "default": false,
+            "title": "Automatic",
+            "type": "boolean"
+          },
+          "mappings": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationMapping"
+            },
+            "maxItems": 20,
+            "title": "Mappings",
+            "type": "array"
+          },
           "source_prefix": {
             "default": "",
             "maxLength": 500,
@@ -11555,6 +11577,30 @@
           }
         },
         "title": "InstallationConfig",
+        "type": "object"
+      },
+      "InstallationMapping": {
+        "additionalProperties": false,
+        "description": "Copy a real archive file or directory into a game-relative directory.",
+        "properties": {
+          "source": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          },
+          "target": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "InstallationMapping",
         "type": "object"
       },
       "LinuxRuntimeProfile": {

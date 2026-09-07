@@ -73,7 +73,7 @@ export function AIImportButton() {
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><Label htmlFor="ai-framework">{t("framework")}</Label><Select id="ai-framework" value={options.framework} onChange={e => setOptions({ ...options, framework: e.target.value as Options["framework"] })}>
-            <option value="all">{t("allFrameworks")}</option><option value="counterstrikesharp">CounterStrikeSharp</option><option value="swiftly">SwiftlyS2</option>
+            <option value="all">{t("allFrameworks")}</option><option value="counterstrikesharp">CounterStrikeSharp</option><option value="swiftly">SwiftlyS2</option><option value="other">{t("otherFramework")}</option>
           </Select></div>
           {[0, 1, 2].map(rank => <div key={rank}><Label htmlFor={`ai-sort-${rank}`}>{t("sortRank", { rank: rank + 1 })}</Label><Select id={`ai-sort-${rank}`} value={(options.sort_priority ?? defaults.sort_priority)?.[rank] ?? SORT_KEYS[rank]} onChange={e => setOptions({ ...options, sort_priority: reorder((options.sort_priority ?? SORT_KEYS) as SortKey[], rank, e.target.value as SortKey) })}>
             <option value="stars">Star</option><option value="forks">Fork</option><option value="updated">{t("updated")}</option>

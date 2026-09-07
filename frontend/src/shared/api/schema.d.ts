@@ -10688,6 +10688,8 @@ export interface components {
             acknowledge_warning_rule_ids?: number[];
             /** Allowed Roots */
             allowed_roots?: ("addons" | "cfg")[];
+            /** Archive Mappings */
+            archive_mappings?: components["schemas"]["InstallationMapping"][];
             /** Asset Glob */
             asset_glob?: string | null;
             /** Asset Name */
@@ -11196,7 +11198,7 @@ export interface components {
              * @default all
              * @enum {string}
              */
-            framework: "counterstrikesharp" | "swiftly" | "all";
+            framework: "counterstrikesharp" | "swiftly" | "other" | "all";
             /**
              * Keywords
              * @default
@@ -11390,12 +11392,29 @@ export interface components {
              */
             asset_glob: string;
             /**
+             * Automatic
+             * @default false
+             */
+            automatic: boolean;
+            /** Mappings */
+            mappings?: components["schemas"]["InstallationMapping"][];
+            /**
              * Source Prefix
              * @default
              */
             source_prefix: string;
             /** Target Path */
             target_path?: string | null;
+        };
+        /**
+         * InstallationMapping
+         * @description Copy a real archive file or directory into a game-relative directory.
+         */
+        InstallationMapping: {
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
         };
         /**
          * LinuxRuntimeProfile

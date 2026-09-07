@@ -5,7 +5,8 @@ from fnmatch import fnmatchcase
 from modules.models import ManagedPlugin, MarketPlugin
 from modules.plugin_ai import PluginAIInfo
 from modules.schemas.plugins import GitHubPluginInstallRequest
-from services.plugins.common import PluginPlanError
+from services.plugins.archive_mapping import detect_mapping, validate_mapping
+from services.plugins.common import PluginPlanError, framework_value
 
 
 def metadata(plugin: MarketPlugin) -> PluginAIInfo | None:
@@ -65,27 +66,45 @@ def select_assets(plugin: MarketPlugin, candidates: list[dict]) -> list[dict]:
 
 def apply_layout(plugin: MarketPlugin, layout: dict) -> dict:
     info = metadata(plugin)
-    if not info or not info.installation:
+    rule = info.installation if info else None
+    if layout.get("entries") and (layout["mapping_required"] or (rule and rule.automatic)):
+        source, mapping, required = detect_mapping(
+            layout["entries"],
+            plugin.github_url.rsplit("/", 1)[-1],
+            framework_value(plugin.framework),
+        )
+        layout = {
+            **layout,
+            "source_prefix": source,
+            "mapping": mapping,
+            "mapping_required": required,
+        }
+    if not rule:
         return layout
-    rule = info.installation
+    if rule.automatic or rule.mappings:
+        mapping = (
+            layout["mapping"]
+            if rule.automatic and not layout["mapping_required"]
+            else [item.model_dump() for item in rule.mappings]
+        )
+        mapping = validate_mapping(layout["entries"], mapping)
+        return {
+            **layout,
+            "source_prefix": None,
+            "mapping": mapping,
+            "mapping_required": False,
+            "archive_mappings": mapping,
+        }
     if rule.target_path is None:
         if rule.source_prefix:
             raise PluginPlanError("An explicit source prefix requires an installation target")
         return layout
-    # A target alone is a fallback for flat archives, not a wrapper around
-    # an already complete game/framework tree. Keep sibling runtime files.
-    if not rule.source_prefix and any(
-        item["target"]
-        in {"addons", "addons/counterstrikesharp", "addons/counterstrikesharp/plugins"}
-        and item["source"] not in {".", ""}
-        for item in layout["mapping"]
-    ):
+    if not rule.source_prefix and not layout["mapping_required"]:
         return layout
     source = rule.source_prefix
-    entries = layout["entries"]
     if source and not any(
         str(item["path"]) == source or str(item["path"]).startswith(source + "/")
-        for item in entries
+        for item in layout["entries"]
     ):
         raise PluginPlanError("AI installation source prefix is absent from the release archive")
     return {
@@ -137,7 +156,10 @@ async def selected_asset_rules(plugin: MarketPlugin, download_url: str) -> dict:
         or mapping[0]["source"] == (layout["source_prefix"] or ".")
     ):
         target = mapping[0]["target"]
+    if layout.get("archive_mappings"):
+        target = None
     return {
+        "archive_mappings": layout.get("archive_mappings", []),
         "archive_sha256": layout["archive_sha256"],
         "source_prefix": layout["source_prefix"],
         "custom_install_path": target,

@@ -24,6 +24,7 @@ export function AIPluginReview({ pluginId, initial, canEdit }: { pluginId: numbe
     <h3 className="font-semibold">{info.reviewed ? t("reviewed") : t("needsReview")}</h3>
     <p className="text-sm text-warn">{t("warning")}</p>
     <p className="text-xs">{t("model")}: {info.model}</p>
+    {!!info.installation?.mappings?.length && <ul className="space-y-1 font-mono text-xs">{info.installation.mappings.map((rule, index) => <li key={index} className="break-all">{rule.source} → {rule.target}</li>)}</ul>}
     {canEdit ? <>
       <div><Label htmlFor="ai-rule-asset">{t("assetGlob")}</Label><Input id="ai-rule-asset" value={asset} onChange={e => setAsset(e.target.value)} /></div>
       <div><Label htmlFor="ai-rule-source">{t("source")}</Label><Input id="ai-rule-source" value={source} onChange={e => setSource(e.target.value)} /></div>
@@ -37,7 +38,7 @@ export function AIPluginReview({ pluginId, initial, canEdit }: { pluginId: numbe
       <Button type="button" disabled={busy} onClick={async () => {
         setBusy(true); setError("");
         try {
-          const response = await reviewAIPlugin(pluginId, { ...info, reviewed: true, installation: { asset_glob: asset, source_prefix: source, target_path: target || null }, requirements: requirements.split("\n").map(v => v.trim()).filter(Boolean) });
+          const response = await reviewAIPlugin(pluginId, { ...info, reviewed: true, installation: { ...info.installation, asset_glob: asset, source_prefix: source, target_path: target || null, ...(source !== (info.installation?.source_prefix ?? "") || target !== (info.installation?.target_path ?? "") ? { automatic: false, mappings: [] } : {}) }, requirements: requirements.split("\n").map(v => v.trim()).filter(Boolean) });
           if (response.ok) { setInfo(response.data.metadata); router.refresh(); } else setError(t("requestFailed"));
         } finally { setBusy(false); }
       }}>{t("saveReview")}</Button>

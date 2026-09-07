@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import PurePosixPath
 from typing import Any
 
+from services.plugins.archive_mapping import detect_mapping as _detect_mapping
 from services.plugins.github_assets import GitHubPlanError, download_release_asset
 
 MAX_EXPANDED_BYTES = 2 * 1024 * 1024 * 1024
@@ -64,7 +65,19 @@ def _stream_sha256(handle: Any) -> str:
 def _zip_entries(path: str) -> list[dict[str, Any]]:
     entries = []
     with zipfile.ZipFile(path) as archive:
-        for item in archive.infolist():
+        members = archive.infolist()
+        _validate_archive_entries(
+            [
+                {
+                    "path": _safe_entry_name(item.filename),
+                    "size": item.file_size,
+                    "is_dir": item.is_dir(),
+                }
+                for item in members
+            ],
+            os.path.getsize(path),
+        )
+        for item in members:
             mode = item.external_attr >> 16
             if any(
                 predicate(mode)
@@ -85,13 +98,22 @@ def _zip_entries(path: str) -> list[dict[str, Any]]:
                     "sha256": None if item.is_dir() else _stream_sha256(archive.open(item, "r")),
                 }
             )
+            _add_manifest(entries, lambda item=item: archive.open(item, "r"))
     return entries
 
 
 def _tar_entries(path: str) -> list[dict[str, Any]]:
     entries = []
     with tarfile.open(path, "r:*") as archive:
-        for item in archive.getmembers():
+        members = archive.getmembers()
+        _validate_archive_entries(
+            [
+                {"path": _safe_entry_name(item.name), "size": item.size, "is_dir": item.isdir()}
+                for item in members
+            ],
+            os.path.getsize(path),
+        )
+        for item in members:
             if item.issym() or item.islnk() or item.isdev():
                 raise GitHubPlanError("Archive links and device entries are not allowed")
             if not (item.isfile() or item.isdir()):
@@ -105,7 +127,23 @@ def _tar_entries(path: str) -> list[dict[str, Any]]:
                     "sha256": _stream_sha256(extracted) if extracted is not None else None,
                 }
             )
+            _add_manifest(entries, lambda item=item: archive.extractfile(item))
     return entries
+
+
+def _add_manifest(entries: list[dict[str, Any]], open_file: Callable[[], Any]) -> None:
+    entry = entries[-1]
+    if (
+        entry["is_dir"]
+        or entry["size"] > 16_000
+        or not entry["path"].endswith((".deps.json", ".vdf"))
+        or sum("text" in item for item in entries) >= 8
+    ):
+        return
+    handle = open_file()
+    if handle is not None:
+        with handle:
+            entry["text"] = handle.read(16_000).decode("utf-8", errors="replace")
 
 
 def _seven_entries(path: str) -> list[dict[str, Any]]:
@@ -182,99 +220,6 @@ def _validate_release_contents(entries: list[dict[str, Any]]) -> None:
             )
 
 
-def _detect_mapping(
-    entries: list[dict[str, Any]], repo_name: str
-) -> tuple[str | None, list[dict[str, str]], bool]:
-    paths = [item["path"] for item in entries]
-    parts = [path.split("/") for path in paths]
-    prefixes = ["", "game/csgo", "csgo"]
-    first_segments = sorted({item[0] for item in parts if item})
-    for first in first_segments:
-        prefixes.extend([first, f"{first}/game/csgo", f"{first}/csgo"])
-    seen: set[str] = set()
-    for prefix in prefixes:
-        prefix = prefix.strip("/")
-        if prefix in seen:
-            continue
-        seen.add(prefix)
-        base = f"{prefix}/" if prefix else ""
-        roots = [
-            root
-            for root in ("addons", "cfg")
-            if any(path == f"{base}{root}" or path.startswith(f"{base}{root}/") for path in paths)
-        ]
-        if "addons" in roots:
-            return (
-                prefix or None,
-                [{"source": f"{base}{root}", "target": root} for root in roots],
-                False,
-            )
-
-    # Some CounterStrikeSharp releases intentionally omit the outer addons/
-    # directory. Preserve the whole framework subtree because it may include
-    # shared libraries and multiple companion plugin modules.
-    framework_prefixes = ["counterstrikesharp"]
-    framework_prefixes.extend(f"{first}/counterstrikesharp" for first in first_segments)
-    for prefix in framework_prefixes:
-        base = f"{prefix.strip('/')}/"
-        if any(
-            path.casefold().startswith(f"{base.casefold()}plugins/")
-            and path.casefold().endswith(".dll")
-            for path in paths
-        ):
-            return (
-                prefix,
-                [{"source": prefix, "target": "addons/counterstrikesharp"}],
-                False,
-            )
-
-    # A release may contain plugins/<name>/ without the CounterStrikeSharp
-    # wrapper. Map the entire plugins tree so companion modules are retained.
-    plugin_prefixes = ["plugins"]
-    plugin_prefixes.extend(f"{first}/plugins" for first in first_segments)
-    for prefix in plugin_prefixes:
-        base = f"{prefix.strip('/')}/"
-        if any(
-            path.casefold().startswith(base.casefold()) and path.casefold().endswith(".dll")
-            for path in paths
-        ):
-            return (
-                prefix,
-                [{"source": prefix, "target": "addons/counterstrikesharp/plugins"}],
-                False,
-            )
-
-    files = [item for item in entries if not item["is_dir"]]
-    flat_prefixes = [""]
-    flat_prefixes.extend(first_segments)
-    for prefix in flat_prefixes:
-        base = f"{prefix}/" if prefix else ""
-        direct_files = [
-            item["path"]
-            for item in files
-            if item["path"].startswith(base) and "/" not in item["path"][len(base) :]
-        ]
-        if any(path.casefold().endswith(".dll") for path in direct_files) and any(
-            path.casefold().endswith(".deps.json") for path in direct_files
-        ):
-            safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", repo_name).strip(".-")
-            target = f"addons/counterstrikesharp/plugins/{safe_name}"
-            source = prefix or "."
-            return prefix or None, [{"source": source, "target": target}], False
-
-    root_dirs = {
-        item["path"].strip("/").split("/")[0]
-        for item in entries
-        if item["path"].strip("/") and "/" not in item["path"].strip("/") and item["is_dir"]
-    }
-    if "metamod" in root_dirs and any(
-        path.casefold().startswith("metamod/") and path.casefold().endswith(".vdf")
-        for path in paths
-    ):
-        return None, [{"source": ".", "target": "addons"}], False
-    return None, [], True
-
-
 async def inspect_release_asset_layout(
     asset: dict[str, Any],
     repo_name: str,
@@ -301,6 +246,9 @@ async def inspect_release_asset_layout(
     _validate_release_contents(entries)
     source_prefix, mapping, mapping_required = _detect_mapping(entries, repo_name)
     return {
+        "archive_mappings": mapping
+        if len(mapping) > 1 and any(item["target"] not in {"addons", "cfg"} for item in mapping)
+        else [],
         "archive_sha256": archive_sha256,
         "compressed_size": compressed_size,
         "entries": entries,

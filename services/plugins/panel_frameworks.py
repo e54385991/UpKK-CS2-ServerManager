@@ -27,6 +27,7 @@ GITHUB_REPOSITORY_PATTERN = re.compile(
 _PANEL_FRAMEWORK_REPOSITORIES = {
     ("alliedmodders", "metamod-source"): "metamod",
     ("roflmuffin", "counterstrikesharp"): "counterstrikesharp",
+    ("swiftly-solution", "swiftlys2"): "swiftly",
 }
 
 
@@ -82,6 +83,9 @@ async def install_panel_framework(
     if framework_key == "metamod":
         success, message = await manager.install_metamod(server, framework_progress)
         installed_frameworks = ("metamod",)
+    elif framework_key == "swiftly":
+        success, message = await manager.install_swiftly(server, framework_progress)
+        installed_frameworks = ("swiftly",)
     else:
         success, message = await manager.install_counterstrikesharp(server, framework_progress)
         installed_frameworks = ("metamod", "counterstrikesharp")

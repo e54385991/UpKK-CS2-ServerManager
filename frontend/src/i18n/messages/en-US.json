@@ -975,6 +975,7 @@
       "settings": "Open Settings",
       "framework": "Frameworks",
       "allFrameworks": "Both frameworks",
+      "otherFramework": "Metamod / other plugins",
       "updated": "Recently updated",
       "stars": "Minimum stars",
       "forks": "Minimum forks",

@@ -975,6 +975,7 @@
       "settings": "前往设置",
       "framework": "框架范围",
       "allFrameworks": "两种框架",
+      "otherFramework": "Metamod / 其他通用插件",
       "updated": "最近更新",
       "stars": "最低 Star",
       "forks": "最低 Fork",

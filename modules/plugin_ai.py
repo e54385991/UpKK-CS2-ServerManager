@@ -31,8 +31,34 @@ class StrictValue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class InstallationMapping(StrictValue):
+    """Copy a real archive file or directory into a game-relative directory."""
+
+    source: str = Field(min_length=1, max_length=500)
+    target: str = Field(min_length=1, max_length=255)
+
+    @field_validator("source", "target")
+    @classmethod
+    def safe_mapping_path(cls, value: str) -> str:
+        value = value.rstrip("/")
+        if value.startswith("/") or not re.fullmatch(r"[A-Za-z0-9_./ -]+", value):
+            raise ValueError("Mapping paths must be safe relative paths")
+        if any(part in {"", ".."} for part in value.split("/")):
+            raise ValueError("Mapping cannot escape the archive or game directory")
+        return value
+
+    @field_validator("target")
+    @classmethod
+    def allowed_target(cls, value: str) -> str:
+        if value.split("/", 1)[0] not in {"addons", "cfg"}:
+            raise ValueError("Mapping target must be inside addons or cfg")
+        return value
+
+
 class InstallationConfig(StrictValue):
     asset_glob: str = Field(default="*", min_length=1, max_length=200)
+    automatic: bool = False
+    mappings: list[InstallationMapping] = Field(default_factory=list, max_length=20)
     source_prefix: str = Field(default="", max_length=500)
     target_path: str | None = Field(default=None, max_length=255)
 
@@ -112,7 +138,7 @@ class ImportOptions(StrictValue):
     written before the chain existed valid.
     """
 
-    framework: Literal["counterstrikesharp", "swiftly", "all"] = "all"
+    framework: Literal["counterstrikesharp", "swiftly", "other", "all"] = "all"
     keywords: str = Field(default="", max_length=200)
     min_stars: int = Field(default=10, ge=0, le=1_000_000)
     min_forks: int = Field(default=0, ge=0, le=1_000_000)

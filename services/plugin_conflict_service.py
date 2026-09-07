@@ -431,7 +431,10 @@ async def _latest_release_asset(
             or (not layout["mapping_required"] and inferred_custom_target is None)
             else plugin.custom_install_path or inferred_custom_target
         )
+        if layout.get("archive_mappings"):
+            custom_target = None
         return {
+            "archive_mappings": layout.get("archive_mappings", []),
             "download_url": asset["url"],
             "release_id": str(data.get("id") or ""),
             "release_tag": str(data.get("tag_name") or "unknown"),
@@ -538,6 +541,7 @@ async def _install_one(
                 custom_install_path=asset["custom_install_path"],
                 record_installation=False,
                 suppress_notification=False,
+                archive_mappings=asset.get("archive_mappings", []),
                 source_prefix=asset["source_prefix"],
                 allowed_roots=asset["allowed_roots"],
                 expected_archive_sha256=asset["archive_sha256"],

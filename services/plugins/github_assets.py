@@ -85,7 +85,7 @@ async def download_release_asset(url: str) -> tuple[str, str, int]:
                             await handle.write(chunk)
                     return path, digest.hexdigest(), total
             raise GitHubPlanError("GitHub release exceeded the redirect limit")
-    except Exception:
+    except BaseException:
         try:
             os.unlink(path)
         except OSError:

@@ -105,10 +105,14 @@ def test_archive_mapping_inference_and_projection_branches():
     assert (prefix, required) == ("root", False) and len(mapping) == 2
     prefix, mapping, _ = plans._detect_mapping([_entry("counterstrikesharp/plugins/p.dll")], "demo")
     assert prefix == "counterstrikesharp" and mapping[0]["target"].startswith("addons/")
-    prefix, mapping, _ = plans._detect_mapping([_entry("plugins/p.dll")], "demo")
+    prefix, mapping, _ = plans._detect_mapping(
+        [_entry("plugins/p.dll")], "demo", "counterstrikesharp"
+    )
     assert mapping[0]["target"].endswith("plugins")
-    prefix, mapping, _ = plans._detect_mapping([_entry("p.dll"), _entry("p.deps.json")], "my demo")
-    assert mapping[0]["target"].endswith("my-demo")
+    prefix, mapping, _ = plans._detect_mapping(
+        [_entry("p.dll"), _entry("p.deps.json")], "my demo", "counterstrikesharp"
+    )
+    assert mapping[0]["target"].endswith("/p")
     prefix, mapping, _ = plans._detect_mapping(
         [_entry("metamod", is_dir=True), _entry("metamod/plugin.vdf")], "demo"
     )

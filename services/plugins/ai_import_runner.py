@@ -5,18 +5,19 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from fnmatch import fnmatchcase
 from typing import Any
 
 from modules.plugin_ai import ImportItem, PluginAIInfo, RepositoryAnalysis, repository_url
 from services.ai_provider import AIProviderError, create_chat_completion
 from services.ai_security import AIProviderConfig
 from services.http_retry import MAX_BACKGROUND_ATTEMPTS, BackgroundRetry, RetryExhaustedError
+from services.plugins import ai_archive_analysis as archive_analysis
 from services.plugins import ai_discovery as discovery
 from services.plugins import ai_import_store as store
 from services.plugins.ai_analysis import AnalysisFormatError, parse_analysis
 from services.plugins.ai_discovery import DependencyResolutionError
 from services.plugins.ai_requirements import split_requirements
+from services.plugins.archive_mapping import runtime_from_entries
 from services.plugins.github_ai_client import (
     GitHubAIClient,
     GitHubAuthenticationError,
@@ -74,20 +75,25 @@ class ImportRunner:
             'Return only a JSON array of strings, for example ["topic:cs2", "cs2 plugin"].'
         )
         try:
-            message = await create_chat_completion(
-                self.config,
-                [
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": f"keywords: {self.job.options.keywords or 'none'}"},
-                ],
-                stream=True,
-                retry=BackgroundRetry(self.check, self.ai_retry_progress),
-            )
+            async with asyncio.timeout(20):
+                message = await create_chat_completion(
+                    self.config,
+                    [
+                        {"role": "system", "content": prompt},
+                        {
+                            "role": "user",
+                            "content": f"keywords: {self.job.options.keywords or 'none'}",
+                        },
+                    ],
+                    stream=True,
+                    retry=BackgroundRetry(self.check, self.ai_retry_progress),
+                )
             payload = json.loads(
                 re.sub(r"^```[a-z]*|```$", "", str(message.get("content") or "").strip()).strip()
             )
-        except AIProviderError, RetryExhaustedError:
-            raise
+        except AIProviderError, RetryExhaustedError, TimeoutError:
+            await self.progress("searching", "Query expansion unavailable; using built-in searches")
+            return []
         except ValueError, TypeError, KeyError:
             await self.progress(
                 "searching", "Model did not return usable queries; using the built-in sweep"
@@ -101,19 +107,23 @@ class ImportRunner:
             list(discovery.FRAMEWORK_TERMS) if options.framework == "all" else [options.framework]
         )
         rows: dict[str, dict[str, Any]] = {}
-        for framework in frameworks:
-            proposed = await self.propose_terms(framework) if options.expand_search else []
-            terms = discovery.search_terms(framework, options.keywords, proposed)
+        searches = [discovery.search_terms(framework, options.keywords) for framework in frameworks]
+        try:
+            async with asyncio.timeout(max(5, min(90, options.minutes * 20))):
+                for index in range(max(map(len, searches), default=0)):
+                    for terms in searches:
+                        if index < len(terms):
+                            await self.search_into(terms[index], rows)
+                if options.expand_search:
+                    for framework, built_in in zip(frameworks, searches, strict=True):
+                        proposed = await self.propose_terms(framework)
+                        for term in discovery.search_terms(framework, options.keywords, proposed):
+                            if term not in built_in:
+                                await self.search_into(term, rows)
+        except TimeoutError:
             await self.progress(
-                "searching", f"Searching {framework} with {len(terms)} GitHub queries"
+                "searching", "Search budget reached; analyzing collected candidates"
             )
-            for term in terms:
-                for page in range(1, discovery.SEARCH_PAGES + 1):
-                    batch = await self.client.search(options, term, page)
-                    for raw in batch:
-                        rows[repository_url(str(raw["html_url"]))] = raw
-                    if len(batch) < 50:
-                        break
         ordered = sorted(
             rows,
             key=lambda url: discovery.sort_ranking(rows[url], options.sort_priority),
@@ -121,8 +131,30 @@ class ImportRunner:
         )
         return list(dict.fromkeys([*options.repositories, *ordered]))
 
+    async def search_into(self, term: str, rows: dict[str, dict[str, Any]]) -> None:
+        await self.progress("searching", f"Searching GitHub: {term}")
+        for page in range(1, discovery.SEARCH_PAGES + 1):
+            try:
+                batch = await self.client.search(self.job.options, term, page)
+            except GitHubImportError as exc:
+                if exc.status != 422:
+                    raise
+                await self.progress("searching", "GitHub rejected one query; continuing discovery")
+                return
+            for raw in batch:
+                try:
+                    rows[repository_url(str(raw["html_url"]))] = raw
+                except ValueError, KeyError:
+                    continue
+            if len(batch) < 50:
+                return
+
     async def analyze(
-        self, repo: dict[str, Any], docs: list[dict[str, str]], release: dict[str, Any] | None
+        self,
+        repo: dict[str, Any],
+        docs: list[dict[str, str]],
+        release: dict[str, Any] | None,
+        archives: list[dict[str, Any]] | None = None,
     ) -> RepositoryAnalysis:
         await self.check()
         schema = RepositoryAnalysis.model_json_schema()
@@ -138,9 +170,19 @@ class ImportRunner:
             "no safe supported install configuration can be inferred. target_path=null uses existing "
             "archive auto-detection; otherwise use a relative addons/ or cfg/ path. source_prefix is "
             "the directory to strip, normally empty. asset_glob selects Linux release archives only. "
+            "Use the ACTUAL archive entries and manifests supplied below, never invent source paths. "
+            "For nonstandard packages provide installation.mappings, each with source (archive file or "
+            "directory) and target (destination DIRECTORY relative to game/csgo). Keep configs, gamedata, "
+            "translations and shared dependencies. CSS uses addons/counterstrikesharp; SwiftlyS2 uses "
+            "addons/swiftlys2 (do not mistake C# or .dll for CSS). Native Metamod plugins are other: "
+            "map their .vdf loader to addons/metamod and their binaries to the path referenced by that VDF. "
+            "Metamod mentions alone do not make a CSS/SwiftlyS2 plugin other. Exclude Source1-only plugins. "
+            "Do not map Windows/ARM artifacts, samples or build sources. If multiple layouts exist, "
+            "select the Linux asset explicitly. automatic will be set by the panel after validation. "
             "Do not output or execute shell commands. Schema: " + json.dumps(schema)
         )
         evidence = {
+            "archives": archive_analysis.evidence(archives or []),
             "repository": repo["html_url"],
             "description": repo.get("description"),
             "topics": repo.get("topics"),
@@ -168,7 +210,17 @@ class ImportRunner:
                 retry=BackgroundRetry(self.check, self.ai_retry_progress),
             )
             try:
-                return parse_analysis(str(message.get("content") or ""))
+                parsed = parse_analysis(str(message.get("content") or ""))
+                if (
+                    not attempt
+                    and archives
+                    and parsed.is_plugin
+                    and archive_analysis.configure(parsed, archives, []) is None
+                ):
+                    raise AnalysisFormatError(
+                        "Installation mapping does not match the archive: include all runtime/config files, use existing sources and disjoint game-relative target directories"
+                    )
+                return parsed
             except AnalysisFormatError as exc:
                 if attempt:
                     raise
@@ -361,7 +413,13 @@ class ImportRunner:
         await self.progress(
             "analyzing", "AI is analyzing classification, installation and dependencies", url
         )
-        analysis = await self.analyze(repo, docs, release)
+        archives, archive_notes = await archive_analysis.inspect_archives(release, url)
+        analysis = await self.analyze(repo, docs, release, archives)
+        runtimes = {runtime_from_entries(archive["entries"]) for archive in archives} - {None}
+        if len(runtimes) == 1:
+            detected_runtime = next(iter(runtimes))
+            if detected_runtime is not None:
+                analysis.framework = detected_runtime
         in_scope = (
             depth > 0
             or self.job.options.framework == "all"
@@ -384,19 +442,8 @@ class ImportRunner:
         dependencies = await self.resolve_dependencies(
             url, depth, analysis, requirements, docs, notes
         )
-        installation = analysis.installation
-        if not release or not release.get("assets"):
-            installation = None
-            notes.append("No stable release archive; manual installation review required")
-        elif installation and not any(
-            fnmatchcase(str(asset.get("name", "")), installation.asset_glob)
-            for asset in release["assets"]
-        ):
-            installation = None
-            notes.append("No release asset matches the proposed install rule")
-        if not sources:
-            installation = None
-            notes.append("No installation documentation could be verified")
+        notes.extend(archive_notes)
+        installation = archive_analysis.configure(analysis, archives, notes)
         metadata = PluginAIInfo(
             model=self.config.model,
             installation=installation,
