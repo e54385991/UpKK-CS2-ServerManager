@@ -618,3 +618,32 @@ async def test_auto_upgrade_consumes_current_market_rules_and_checked_archive(mo
     assert request.source_prefix == "release"
     assert request.expected_archive_sha256 == "c" * 64
     assert request.exclude_files == ["custom.cfg", "*.cfg", "*.json"]
+
+
+@pytest.mark.asyncio
+async def test_invalid_analysis_gets_one_streamed_correction_before_insert(runner_env):
+    runner.create_chat_completion.side_effect = [
+        {"content": "not JSON"},
+        {"content": analysis().model_dump_json()},
+    ]
+    instance = runner.ImportRunner(job(), "token", config())
+    try:
+        assert await instance.visit(URL) is not None
+        assert runner.create_chat_completion.await_count == 2
+        assert all(call.kwargs["stream"] for call in runner.create_chat_completion.call_args_list)
+        assert "failed validation" in runner.create_chat_completion.call_args.args[1][-1]["content"]
+        store.insert_plugin.assert_awaited_once()
+    finally:
+        await instance.client.close()
+
+
+@pytest.mark.asyncio
+async def test_non_plugin_minimal_response_is_skipped_without_insert(runner_env):
+    runner.create_chat_completion.return_value = {"content": '{"is_plugin":false}'}
+    instance = runner.ImportRunner(job(), "token", config())
+    try:
+        assert await instance.visit(URL) is None
+        assert store.update_job.call_args.kwargs["phase"] == "skipped"
+        store.insert_plugin.assert_not_awaited()
+    finally:
+        await instance.client.close()

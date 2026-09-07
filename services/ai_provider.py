@@ -7,12 +7,13 @@ import logging
 import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from functools import partial
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 
-from services.ai.errors import AIPayloadTooLargeError, AIProviderError
+from services.ai.errors import AIPayloadTooLargeError, AIProviderError, transient_provider_error
 from services.ai.streaming import (
     consume_chat_completion_stream,
     consume_responses_stream,
@@ -27,6 +28,7 @@ from services.ai_security import (
     redact_sensitive_text,
     validate_provider_endpoint,
 )
+from services.http_retry import BackgroundRetry, retry_after_seconds
 
 TextDeltaCallback = Callable[[str], Awaitable[None]]
 DEFAULT_CONTEXT_WINDOW_TOKENS = 262_144
@@ -452,7 +454,11 @@ def _status_error(response: httpx.Response, content: bytes) -> AIProviderError |
                 "Conversation history was compacted; reduce tool output or start a new conversation."
                 + suffix
             )
-        return AIProviderError(f"AI provider returned HTTP {response.status_code}: {detail}")
+        return AIProviderError(
+            f"AI provider returned HTTP {response.status_code}: {detail}",
+            retryable=response.status_code in {408, 429} or response.status_code >= 500,
+            retry_after=retry_after_seconds(response.headers.get("retry-after")),
+        )
     return None
 
 
@@ -515,6 +521,9 @@ def _decode_provider_message(config: AIProviderConfig, content: bytes) -> dict[s
         raise AIProviderError("AI provider returned invalid JSON") from exc
     if not isinstance(data, dict):
         raise AIProviderError("AI provider response is invalid")
+    error = data.get("error")
+    if transient_provider_error(error):
+        raise AIProviderError("AI provider rate limit exceeded", retryable=True)
     if config.api_protocol == "responses":
         return _normalize_responses_message(data)
     try:
@@ -528,6 +537,41 @@ def _decode_provider_message(config: AIProviderConfig, content: bytes) -> dict[s
     return message
 
 
+def _retry_hint(error: Exception) -> float | None:
+    if isinstance(error, httpx.HTTPError):
+        return 0.0
+    if isinstance(error, AIProviderError) and error.retryable:
+        return error.retry_after
+    return None
+
+
+async def _request_message(
+    config: AIProviderConfig,
+    endpoint: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    stream: bool,
+    on_text_delta: TextDeltaCallback | None,
+) -> dict[str, Any]:
+    async with ai_provider_transport.stream(
+        "POST",
+        endpoint,
+        headers=headers,
+        json=payload,
+        timeout=httpx.Timeout(config.timeout_seconds),
+    ) as response:
+        message, content = await _provider_message(
+            config,
+            response,
+            stream=stream,
+            on_text_delta=on_text_delta,
+        )
+    if message is None:
+        assert content is not None
+        message = _decode_provider_message(config, content)
+    return _validate_message_payload(message)
+
+
 async def create_chat_completion(
     config: AIProviderConfig,
     messages: list[dict[str, Any]],
@@ -536,6 +580,7 @@ async def create_chat_completion(
     tool_choice: str | dict[str, Any] | None = None,
     stream: bool = False,
     on_text_delta: TextDeltaCallback | None = None,
+    retry: BackgroundRetry | None = None,
 ) -> dict[str, Any]:
     base_url = await validate_provider_endpoint(config.base_url, config.allowlist)
 
@@ -637,23 +682,20 @@ async def create_chat_completion(
                 variant_config.max_completion_tokens,
             )
             try:
-                async with ai_provider_transport.stream(
-                    "POST",
+                request = partial(
+                    _request_message,
+                    variant_config,
                     endpoint,
-                    headers=headers,
-                    json=payload,
-                    timeout=httpx.Timeout(variant_config.timeout_seconds),
-                ) as response:
-                    message, response_content = await _provider_message(
-                        variant_config,
-                        response,
-                        stream=stream,
-                        on_text_delta=on_text_delta,
-                    )
-                if message is None:
-                    assert response_content is not None
-                    message = _decode_provider_message(variant_config, response_content)
-                return _validate_message_payload(message)
+                    headers,
+                    payload,
+                    stream,
+                    on_text_delta,
+                )
+
+                # Buffered streams can restart safely; never replay externally delivered deltas.
+                if retry is not None and (not stream or on_text_delta is None):
+                    return await retry.run(request, _retry_hint)
+                return await request()
             except httpx.HTTPError as exc:
                 raise AIProviderError(f"AI provider request failed: {type(exc).__name__}") from exc
             except AIProviderError as exc:

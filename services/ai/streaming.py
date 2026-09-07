@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from services.ai.errors import AIProviderError
+from services.ai.errors import AIProviderError, transient_provider_error
 from services.ai_security import MAX_PROVIDER_RESPONSE_BYTES, redact_sensitive_text
 
 TextDeltaCallback = Callable[[str], Awaitable[None]]
@@ -42,7 +42,9 @@ def parse_sse_json(payload: str, *, protocol: str) -> dict[str, Any]:
     try:
         value = json.loads(payload)
     except (TypeError, json.JSONDecodeError) as exc:
-        raise AIProviderError("AI provider returned invalid JSON in its SSE stream") from exc
+        raise AIProviderError(
+            "AI provider returned invalid JSON in its SSE stream", retryable=True
+        ) from exc
     if not isinstance(value, dict):
         raise AIProviderError(f"AI provider returned an invalid {protocol} SSE event")
     return value
@@ -147,14 +149,27 @@ async def consume_chat_completion_stream(
     if "text/event-stream" not in response.headers.get("content-type", "").lower():
         raise AIProviderError("AI provider did not return a standard SSE stream")
     accumulator = ChatStreamAccumulator()
+    completed = False
     async for payload in iter_sse_data(response):
         if payload.strip() == "[DONE]":
+            completed = True
             break
         chunk = parse_sse_json(payload, protocol="Chat Completions")
         if chunk.get("error"):
             detail = redact_sensitive_text(str(chunk["error"]), limit=500)
-            raise AIProviderError(f"AI provider SSE stream failed: {detail}")
+            raise AIProviderError(
+                f"AI provider SSE stream failed: {detail}",
+                retryable=transient_provider_error(chunk["error"]),
+            )
+        choices = chunk.get("choices")
+        if isinstance(choices, list):
+            completed = completed or any(
+                isinstance(choice, dict) and choice.get("finish_reason") is not None
+                for choice in choices
+            )
         await accumulator.add(chunk, on_text_delta)
+    if not completed:
+        raise AIProviderError("AI provider SSE stream ended before completion", retryable=True)
     return accumulator.message()
 
 
@@ -247,7 +262,13 @@ class ResponsesStreamAccumulator:
             return
         if event_type in {"error", "response.failed", "response.incomplete"} or event.get("error"):
             raise AIProviderError(
-                f"AI provider Responses stream failed: {responses_failure_detail(event)}"
+                f"AI provider Responses stream failed: {responses_failure_detail(event)}",
+                retryable=transient_provider_error(event.get("error"))
+                or transient_provider_error(
+                    event.get("response", {}).get("error")
+                    if isinstance(event.get("response"), dict)
+                    else None
+                ),
             )
 
     async def _add_delta(
@@ -270,7 +291,9 @@ class ResponsesStreamAccumulator:
         if not self.saw_event:
             raise AIProviderError("AI provider returned an empty SSE stream")
         if self.completed_response is None:
-            raise AIProviderError("AI provider Responses stream ended before completion")
+            raise AIProviderError(
+                "AI provider Responses stream ended before completion", retryable=True
+            )
         message = normalize_responses_message(self.completed_response)
         streamed_content = "".join(self.content_parts)
         if streamed_content:

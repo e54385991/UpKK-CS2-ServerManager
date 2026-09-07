@@ -11,7 +11,9 @@ from typing import Any
 from modules.plugin_ai import ImportItem, PluginAIInfo, RepositoryAnalysis, repository_url
 from services.ai_provider import AIProviderError, create_chat_completion
 from services.ai_security import AIProviderConfig
+from services.http_retry import MAX_BACKGROUND_ATTEMPTS, BackgroundRetry, RetryExhaustedError
 from services.plugins import ai_import_store as store
+from services.plugins.ai_analysis import AnalysisFormatError, parse_analysis
 from services.plugins.github_ai_client import (
     GitHubAIClient,
     GitHubAuthenticationError,
@@ -24,7 +26,11 @@ class ImportRunner:
     def __init__(self, job: store.JobSnapshot, token: str, config: AIProviderConfig) -> None:
         self.job, self.config = job, config
         self.token_fingerprint = store.fingerprint(token)
-        self.client = GitHubAIClient(token, before_request=self.check)
+        self.client = GitHubAIClient(
+            token,
+            before_request=self.check,
+            retry=BackgroundRetry(self.check, self.github_retry_progress),
+        )
         self.analyzed = 0
         self.visiting: set[str] = set()
         self.visited: dict[str, int | None] = {}
@@ -37,6 +43,18 @@ class ImportRunner:
     ) -> None:
         await store.update_job(
             self.job.operation_id, phase=phase, message=message, repository=url, item=item
+        )
+
+    async def github_retry_progress(self, attempt: int, delay: float) -> None:
+        await self.progress(
+            "reading",
+            f"GitHub request temporarily failed; attempt {attempt}/{MAX_BACKGROUND_ATTEMPTS} in {delay:.1f}s",
+        )
+
+    async def ai_retry_progress(self, attempt: int, delay: float) -> None:
+        await self.progress(
+            "analyzing",
+            f"AI request temporarily failed; attempt {attempt}/{MAX_BACKGROUND_ATTEMPTS} in {delay:.1f}s",
         )
 
     async def candidates(self) -> list[str]:
@@ -94,17 +112,33 @@ class ImportRunner:
             if release
             else None,
         }
-        message = await create_chat_completion(
-            self.config,
-            [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": json.dumps(evidence, ensure_ascii=False)},
-            ],
-        )
-        content = str(message.get("content") or "").strip()
-        if content.startswith("```"):
-            content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        return RepositoryAnalysis.model_validate_json(content)
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": json.dumps(evidence, ensure_ascii=False)},
+        ]
+        for attempt in range(2):
+            await self.check()
+            message = await create_chat_completion(
+                self.config,
+                messages,
+                stream=True,
+                retry=BackgroundRetry(self.check, self.ai_retry_progress),
+            )
+            try:
+                return parse_analysis(str(message.get("content") or ""))
+            except AnalysisFormatError as exc:
+                if attempt:
+                    raise
+                await self.progress(
+                    "analyzing", f"{exc}; requesting corrected JSON once", repo["html_url"]
+                )
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"The previous response failed validation: {exc}. Return a corrected JSON object matching the system schema, using the repository evidence above.",
+                    }
+                )
+        raise AssertionError("analysis attempts exhausted")
 
     async def visit(self, url: str, depth: int = 0) -> int | None:
         url = repository_url(url)
@@ -131,9 +165,15 @@ class ImportRunner:
             result = await self.import_repository(url, depth)
             self.visited[url] = result
             return result
-        except GitHubRateLimitError, GitHubAuthenticationError, AIProviderError, PermissionError:
+        except (
+            GitHubRateLimitError,
+            GitHubAuthenticationError,
+            AIProviderError,
+            PermissionError,
+            RetryExhaustedError,
+        ):
             raise
-        except GitHubImportError as exc:
+        except (GitHubImportError, AnalysisFormatError) as exc:
             await self.progress(
                 "failed_item",
                 str(exc),
@@ -308,6 +348,14 @@ async def run_job(job: store.JobSnapshot) -> None:
             message="Credentials or administrator access changed; check Settings",
             status="failed",
             reason="configuration",
+        )
+    except RetryExhaustedError:
+        await store.update_job(
+            job.operation_id,
+            phase="failed",
+            message=f"Network or upstream service failed after {MAX_BACKGROUND_ATTEMPTS} attempts; completed imports retained. Try again later",
+            status="failed",
+            reason="retry_exhausted",
         )
     except AIProviderError:
         await store.update_job(

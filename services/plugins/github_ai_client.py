@@ -13,6 +13,7 @@ from urllib.parse import quote, urlsplit
 import httpx
 
 from modules.plugin_ai import DocumentationSource, GitHubVerification, ImportOptions, repository_url
+from services.http_retry import BackgroundRetry, retry_after_seconds
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 NETWORK_RETRIES = 3
@@ -20,9 +21,10 @@ NETWORK_RETRY_DELAYS = (0.5, 1.0)
 
 
 class GitHubImportError(RuntimeError):
-    def __init__(self, message: str, *, status: int = 0) -> None:
+    def __init__(self, message: str, *, status: int = 0, retry_after: float = 0.0) -> None:
         super().__init__(message)
         self.status = status
+        self.retry_after = retry_after
 
 
 class GitHubRateLimitError(GitHubImportError):
@@ -55,9 +57,9 @@ def response_error(response: httpx.Response) -> GitHubImportError | None:
     )
     if limited:
         reset = _integer(response.headers.get("x-ratelimit-reset"))
-        retry = _integer(response.headers.get("retry-after"))
-        if retry is not None:
-            reset = max(reset or 0, int(time.time()) + max(0, retry))
+        retry = retry_after_seconds(response.headers.get("retry-after"))
+        if retry:
+            reset = max(reset or 0, int(time.time() + retry + 1))
         return GitHubRateLimitError("GitHub rate limit reached; import stopped", reset_at=reset)
     if code == 401:
         return GitHubAuthenticationError("Global GitHub token is invalid or expired", status=code)
@@ -66,7 +68,21 @@ def response_error(response: httpx.Response) -> GitHubImportError | None:
             "GitHub denied access (HTTP 403); check token permissions", status=code
         )
     if code >= 300:
-        return GitHubImportError(f"GitHub API returned HTTP {code}", status=code)
+        return GitHubImportError(
+            f"GitHub API returned HTTP {code}",
+            status=code,
+            retry_after=retry_after_seconds(response.headers.get("retry-after")),
+        )
+    return None
+
+
+def _retry_hint(error: Exception) -> float | None:
+    if isinstance(error, httpx.HTTPError):
+        return 0.0
+    if isinstance(error, GitHubRateLimitError):
+        return max(0.0, error.reset_at - time.time()) if error.reset_at else 60.0
+    if isinstance(error, GitHubImportError) and (error.status == 408 or error.status >= 500):
+        return error.retry_after
     return None
 
 
@@ -78,9 +94,11 @@ class GitHubAIClient:
         before_request: Callable[[], Awaitable[None]] | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         interval: float = 2.0,
+        retry: BackgroundRetry | None = None,
     ) -> None:
         if not token.strip():
             raise GitHubAuthenticationError("Configure the global GitHub token in Settings")
+        self._retry = retry
         self._check = before_request
         self._interval = interval
         self._last_request = 0.0
@@ -139,6 +157,10 @@ class GitHubAIClient:
         self, path: str, params: dict[str, str | int] | None
     ) -> httpx.Response:
         """Retry transient transport failures while keeping API errors final."""
+        if self._retry is not None:
+            return await self._retry.run(
+                lambda: self._background_response(path, params), _retry_hint
+            )
         for attempt in range(NETWORK_RETRIES):
             try:
                 return await self._read_response(path, params)
@@ -168,6 +190,15 @@ class GitHubAIClient:
             if attempt < len(NETWORK_RETRY_DELAYS):
                 await asyncio.sleep(NETWORK_RETRY_DELAYS[attempt])
         raise AssertionError("network retry loop exhausted")
+
+    async def _background_response(
+        self, path: str, params: dict[str, str | int] | None
+    ) -> httpx.Response:
+        response = await self._read_response(path, params)
+        error = response_error(response)
+        if error:
+            raise error
+        return response
 
     async def _read_response(
         self, path: str, params: dict[str, str | int] | None
