@@ -10,7 +10,8 @@
     "buildTime": "构建",
     "environmentProduction": "生产",
     "environmentDevelopment": "开发",
-    "runtimeUnavailable": "—"
+    "runtimeUnavailable": "—",
+    "githubProject": "打开 GitHub 项目地址"
   },
   "feedback": {
     "title": "请确认",

@@ -10,7 +10,8 @@
     "buildTime": "built",
     "environmentProduction": "Production",
     "environmentDevelopment": "Development",
-    "runtimeUnavailable": "—"
+    "runtimeUnavailable": "—",
+    "githubProject": "Open the GitHub project"
   },
   "feedback": {
     "title": "Please confirm",

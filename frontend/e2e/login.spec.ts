@@ -10,6 +10,10 @@ test("login page renders captcha and sign-in controls", async ({ page }) => {
   await expect(page.getByAltText(/验证码|Captcha/i)).toBeVisible();
   await expect(page.getByRole("link", { name: /忘记密码|Forgot password/i })).toBeVisible();
   await expect(page.getByRole("link", { name: /去注册|Create one/i })).toBeVisible();
+  await expect(page.getByTestId("github-project-link")).toHaveAttribute(
+    "href",
+    "https://github.com/e54385991/upkK-CS2-ServerManager/",
+  );
   await expect(page.locator("[data-google-oauth]")).toHaveAttribute(
     "data-google-oauth",
     /off|on/,
