@@ -42,7 +42,9 @@ def portable_enum(enum_type: type[enum.Enum], *, name: str, length: int | None =
     return SQLEnum(
         enum_type,
         name=name,
-        length=length,
+        # Omitting length preserves SQLAlchemy's longest-enum-value inference.
+        # Explicit None instead means unbounded VARCHAR, which MySQL rejects.
+        **({"length": length} if length is not None else {}),
         native_enum=False,
         create_constraint=False,
         validate_strings=True,

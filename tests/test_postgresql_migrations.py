@@ -92,6 +92,19 @@ def test_models_use_jsonb_nonnative_enums_and_expected_query_indexes():
     } <= index_names
 
 
+@pytest.mark.parametrize(
+    ("table", "column", "length"),
+    [("market_plugins", "category", 13), ("servers", "auth_type", 8), ("servers", "status", 9)],
+)
+def test_default_enum_lengths_match_migrated_varchar_storage(table, column, length):
+    model_column = SQLModel.metadata.tables[table].c[column]
+    migrated_column = Column(column, String(length), nullable=False)
+    context = MigrationContext.configure(dialect_name="postgresql")
+
+    assert model_column.type.length == length
+    assert context.impl.compare_type(migrated_column, model_column) is False
+
+
 def test_market_plugin_framework_matches_migrated_varchar_storage():
     migrated_column = Column("framework", String(32), nullable=False)
     model_column = SQLModel.metadata.tables["market_plugins"].c.framework

@@ -32,9 +32,11 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SQLAlchemyEnum,
 )
+from sqlalchemy.dialects import mysql
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.schema import CreateTable
 from sqlmodel import SQLModel
 
 import modules.models  # noqa: F401
@@ -44,11 +46,6 @@ from scripts.migrate_mysql_to_postgresql import (
     LegacyMigrationError,
     TableReport,
     migrate,
-)
-
-pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_LEGACY_MYSQL_INTEGRATION") != "1",
-    reason="requires disposable MySQL 8 and PostgreSQL 18+ integration servers",
 )
 
 
@@ -90,6 +87,12 @@ def _legacy_test_metadata() -> MetaData:
         Column("updated_at", DateTime(), nullable=True),
     )
     return metadata
+
+
+def test_legacy_schema_compiles_for_mysql_without_database():
+    metadata = _legacy_test_metadata()
+    for table in metadata.sorted_tables:
+        assert str(CreateTable(table).compile(dialect=mysql.dialect()))
 
 
 def _placeholder(column, variant: int):
@@ -227,6 +230,10 @@ async def _drop_database(admin_engine, database_name: str) -> None:
         await connection.execute(text(f'DROP DATABASE IF EXISTS "{database_name}"'))
 
 
+@pytest.mark.skipif(
+    os.getenv("RUN_LEGACY_MYSQL_INTEGRATION") != "1",
+    reason="requires disposable MySQL 8 and PostgreSQL 18+ integration servers",
+)
 @pytest.mark.asyncio
 async def test_all_tables_copy_verify_sequences_and_roll_back_on_failures(monkeypatch):
     legacy_url = os.environ["LEGACY_MYSQL_DATABASE_URL"]
