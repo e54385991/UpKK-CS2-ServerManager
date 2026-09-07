@@ -207,7 +207,14 @@ async def enqueue(actor_id: int, options: ImportOptions, request_id: UUID) -> Jo
             )
             if int(pending or 0) >= 10:
                 raise ValueError("Import queue is full (10 pending jobs)")
-            command = f"AI import: {options.framework}; sort={options.sort}; stars>={options.min_stars}; forks>={options.min_forks}; active={options.updated_within_days}d; {options.minutes}min; max={options.max_plugins}; {options.keywords}"
+            command = (
+                f"AI import: {options.framework}; sort={'>'.join(options.sort_priority)}; "
+                f"stars>={options.min_stars}; forks>={options.min_forks}; "
+                f"active={options.updated_within_days}d; "
+                f"expand={'on' if options.expand_search else 'off'}; "
+                f"deps={'required' if options.require_dependencies else 'advisory'}; "
+                f"{options.minutes}min; max={options.max_plugins}; {options.keywords}"
+            )
             job = PluginImportJob(
                 actor_user_id=actor_id,
                 request_key=key,

@@ -19,6 +19,7 @@ from modules.plugin_ai import (
 )
 from services.ai_provider import AIProviderError
 from services.ai_security import AIProviderConfig
+from services.plugins import ai_discovery as discovery
 from services.plugins import ai_import_runner as runner
 from services.plugins import ai_import_store as store
 from services.plugins import ai_install_policy as policy
@@ -318,7 +319,7 @@ async def test_dependency_cycles_and_undocumented_urls_become_manual_requirement
         },
         {"content": analysis(dependencies=[URL]).model_dump_json()},
     ]
-    instance = runner.ImportRunner(job(), "token", config())
+    instance = runner.ImportRunner(job(require_dependencies=False), "token", config())
     try:
         assert await instance.visit(URL) == 11
         child, parent = [call.args for call in store.insert_plugin.call_args_list]
@@ -333,6 +334,76 @@ async def test_dependency_cycles_and_undocumented_urls_become_manual_requirement
         assert await instance.visit("https://github.com/example/deep", depth=6) is None
     finally:
         await instance.client.close()
+
+
+@pytest.mark.asyncio
+async def test_unresolvable_dependency_drops_the_plugin_by_default(runner_env):
+    """The importer must not list an entry whose prerequisites it could not add."""
+    runner.create_chat_completion.return_value = {
+        "content": analysis(
+            dependencies=["https://github.com/hallucinated/plugin"]
+        ).model_dump_json()
+    }
+    instance = runner.ImportRunner(job(), "token", config())
+    try:
+        assert await instance.visit(URL) is None
+        item = store.update_job.call_args.kwargs["item"]
+        assert item.status == "failed"
+        assert "Required dependencies could not be imported" in item.message
+        store.insert_plugin.assert_not_called()
+    finally:
+        await instance.client.close()
+
+
+@pytest.mark.asyncio
+async def test_recognized_runtime_requirement_imports_its_canonical_repository(runner_env):
+    """ "Requires CounterStrikeSharp" resolves to a real dependency row, not prose."""
+    runtime = discovery.runtime_repository("Requires CounterStrikeSharp")
+    runner.create_chat_completion.side_effect = [
+        {"content": analysis(requirements=["Requires CounterStrikeSharp"]).model_dump_json()},
+        {"content": analysis().model_dump_json()},
+    ]
+    instance = runner.ImportRunner(job(), "token", config())
+    try:
+        assert await instance.visit(URL) == 11
+        child, parent = [call.args for call in store.insert_plugin.call_args_list]
+        # The runtime URL is panel-owned, so it needs no mention in the README.
+        assert child[1] == runtime
+        assert parent[5] == [10]
+        assert parent[4].requirements == ["Requires CounterStrikeSharp"]
+    finally:
+        await instance.client.close()
+
+
+@pytest.mark.asyncio
+async def test_abandoned_repository_is_skipped_but_a_listed_one_is_noted(runner_env):
+    """The maintenance window also applies after the GitHub query, not only in it."""
+    stale = {
+        "html_url": URL,
+        "owner": {"login": "example"},
+        "default_branch": "main",
+        "pushed_at": "2019-01-02T03:04:05Z",
+    }
+    GitHubAIClient.repository.side_effect = lambda url: stale | {"html_url": url}
+    instance = runner.ImportRunner(job(updated_within_days=90), "token", config())
+    try:
+        assert await instance.visit(URL) is None
+        item = store.update_job.call_args.kwargs["item"]
+        assert item.status == "skipped" and "outside the requested 90-day window" in item.message
+        store.insert_plugin.assert_not_called()
+    finally:
+        await instance.client.close()
+
+    # A repository the administrator listed by hand is a direct instruction, so
+    # it still imports — with its age recorded for the reviewer.
+    listed = runner.ImportRunner(job(repositories=[URL]), "token", config())
+    try:
+        assert await listed.visit(URL) == 10
+        assert any(
+            "outside the requested" in note for note in store.insert_plugin.call_args.args[4].notes
+        )
+    finally:
+        await listed.client.close()
 
 
 @pytest.mark.asyncio
@@ -489,14 +560,17 @@ async def test_search_paginates_both_frameworks_sorts_and_deduplicates(runner_en
 
     search = AsyncMock(side_effect=result)
     monkeypatch.setattr(GitHubAIClient, "search", search)
-    instance = runner.ImportRunner(job(repositories=[URL]), "token", config())
+    instance = runner.ImportRunner(job(repositories=[URL], expand_search=False), "token", config())
     try:
         candidates = await instance.candidates()
         assert candidates[:2] == [URL, "https://github.com/example/last"]
-        assert len(candidates) == 52 and search.await_count == 4
+        # Each framework sweeps its full deterministic term list, two pages deep.
+        terms_per_framework = len(discovery.FRAMEWORK_TERMS["counterstrikesharp"])
+        assert len(candidates) == 52
+        assert search.await_count == 2 * terms_per_framework * discovery.SEARCH_PAGES
         assert {call.args[1] for call in search.call_args_list} == {
-            "CounterStrikeSharp",
-            "SwiftlyS2",
+            *discovery.FRAMEWORK_TERMS["counterstrikesharp"],
+            *discovery.FRAMEWORK_TERMS["swiftly"],
         }
     finally:
         await instance.client.close()

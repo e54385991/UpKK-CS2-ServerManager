@@ -975,7 +975,6 @@
       "settings": "Open Settings",
       "framework": "Frameworks",
       "allFrameworks": "Both frameworks",
-      "sort": "Sort by",
       "updated": "Recently updated",
       "stars": "Minimum stars",
       "forks": "Minimum forks",
@@ -1033,7 +1032,11 @@
         "rate_limited": "GitHub rate limited",
         "failed": "Failed",
         "cancelled": "Cancelled"
-      }
+      },
+      "sortRank": "Sort priority {rank}",
+      "sortHelp": "Candidates are ranked by the first key, and ties are broken by the second and third.",
+      "expandSearch": "Let the AI propose extra GitHub queries beyond the built-in sweep",
+      "requireDependencies": "Skip a plugin whose prerequisites cannot be imported automatically"
     }
   },
   "assistant": {
@@ -1254,6 +1257,25 @@
       "sending": "Sending…",
       "required": "Enter a recipient address first.",
       "failed": "The test email could not be sent."
+    },
+    "downloadCache": {
+      "title": "Plugin download cache",
+      "description": "Reuse plugin and framework archives the panel already downloaded instead of fetching them again for every server.",
+      "enabled": "Reuse downloaded archives",
+      "enabledHelp": "Applies to panel-proxy downloads of marketplace plugins and the Metamod, CounterStrikeSharp, SwiftlyS2 and CS2Fixes runtimes.",
+      "path": "Cache directory",
+      "pathHelp": "Empty uses data/cache_serverplugins under the program directory. Each file is named after the plugin and a URL digest, so it can be inspected and deleted by hand.",
+      "maxAgeDays": "Delete entries unused for (days)",
+      "maxMegabytes": "Keep the directory under (MB)",
+      "zeroDisables": "0 switches this limit off.",
+      "usage": "{files} cached files, {size}",
+      "save": "Save cache settings",
+      "saving": "Saving…",
+      "saved": "Cache settings saved.",
+      "saveFailed": "Request failed. Check the configuration or try again later.",
+      "prune": "Apply cleanup policy now",
+      "clear": "Clear cache",
+      "clearConfirm": "Delete every cached archive? The next install downloads them again."
     }
   },
   "serverWorkspace": {

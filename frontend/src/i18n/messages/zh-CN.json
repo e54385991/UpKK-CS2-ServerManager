@@ -975,7 +975,6 @@
       "settings": "前往设置",
       "framework": "框架范围",
       "allFrameworks": "两种框架",
-      "sort": "优先排序",
       "updated": "最近更新",
       "stars": "最低 Star",
       "forks": "最低 Fork",
@@ -1033,7 +1032,11 @@
         "rate_limited": "GitHub 限流",
         "failed": "失败",
         "cancelled": "已取消"
-      }
+      },
+      "sortRank": "排序优先级 {rank}",
+      "sortHelp": "候选先按第一项排序，相同再依次按第二、第三项比较。",
+      "expandSearch": "允许 AI 在内置检索之外自主补充 GitHub 搜索式",
+      "requireDependencies": "依赖无法自动导入时放弃该插件"
     }
   },
   "assistant": {
@@ -1254,6 +1257,25 @@
       "sending": "发送中…",
       "required": "请输入测试收件地址。",
       "failed": "测试邮件发送失败。"
+    },
+    "downloadCache": {
+      "title": "插件下载缓存",
+      "description": "复用面板已下载的插件和框架压缩包，避免为每台服务器重复下载。",
+      "enabled": "复用已下载的压缩包",
+      "enabledHelp": "作用于面板代理下载的插件市场条目，以及 Metamod、CounterStrikeSharp、SwiftlyS2 和 CS2Fixes 运行时。",
+      "path": "缓存目录",
+      "pathHelp": "留空使用程序目录下的 data/cache_serverplugins。文件名包含插件标识和 URL 摘要，可人工查看和删除。",
+      "maxAgeDays": "多少天未使用即清理（天）",
+      "maxMegabytes": "目录体积上限（MB）",
+      "zeroDisables": "填 0 表示关闭该限制。",
+      "usage": "已缓存 {files} 个文件，共 {size}",
+      "save": "保存缓存设置",
+      "saving": "保存中…",
+      "saved": "缓存设置已保存。",
+      "saveFailed": "请求失败，请检查配置或稍后重试。",
+      "prune": "立即执行清理策略",
+      "clear": "清空缓存",
+      "clearConfirm": "确定删除所有缓存压缩包？下次安装将重新下载。"
     }
   },
   "serverWorkspace": {

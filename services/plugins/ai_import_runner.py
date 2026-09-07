@@ -12,8 +12,10 @@ from modules.plugin_ai import ImportItem, PluginAIInfo, RepositoryAnalysis, repo
 from services.ai_provider import AIProviderError, create_chat_completion
 from services.ai_security import AIProviderConfig
 from services.http_retry import MAX_BACKGROUND_ATTEMPTS, BackgroundRetry, RetryExhaustedError
+from services.plugins import ai_discovery as discovery
 from services.plugins import ai_import_store as store
 from services.plugins.ai_analysis import AnalysisFormatError, parse_analysis
+from services.plugins.ai_discovery import DependencyResolutionError
 from services.plugins.ai_requirements import split_requirements
 from services.plugins.github_ai_client import (
     GitHubAIClient,
@@ -35,6 +37,10 @@ class ImportRunner:
         self.analyzed = 0
         self.visiting: set[str] = set()
         self.visited: dict[str, int | None] = {}
+        # URLs the importer decided against (not a plugin, out of scope, budget
+        # exhausted). Retrying one would repeat the same GitHub and AI calls for
+        # the same answer, so dependency retries skip them.
+        self.rejected: set[str] = set()
 
     async def check(self) -> None:
         await store.check_job(self.job.operation_id, self.token_fingerprint)
@@ -58,25 +64,59 @@ class ImportRunner:
             f"AI request temporarily failed; attempt {attempt}/{MAX_BACKGROUND_ATTEMPTS} in {delay:.1f}s",
         )
 
+    async def propose_terms(self, framework: str) -> list[str]:
+        """Ask the model for extra GitHub queries. Never fails the job."""
+        prompt = (
+            "You plan GitHub repository searches for a Counter-Strike 2 server panel. "
+            f"List up to 6 short GitHub search queries that find community plugins for the "
+            f"{framework} runtime. Use product names, namespaces, topic: qualifiers and common "
+            "plugin vocabulary. Do not use stars:, forks:, pushed:, is: or fork: qualifiers. "
+            'Return only a JSON array of strings, for example ["topic:cs2", "cs2 plugin"].'
+        )
+        try:
+            message = await create_chat_completion(
+                self.config,
+                [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"keywords: {self.job.options.keywords or 'none'}"},
+                ],
+                stream=True,
+                retry=BackgroundRetry(self.check, self.ai_retry_progress),
+            )
+            payload = json.loads(
+                re.sub(r"^```[a-z]*|```$", "", str(message.get("content") or "").strip()).strip()
+            )
+        except AIProviderError, RetryExhaustedError:
+            raise
+        except ValueError, TypeError, KeyError:
+            await self.progress(
+                "searching", "Model did not return usable queries; using the built-in sweep"
+            )
+            return []
+        return [str(item) for item in payload][:6] if isinstance(payload, list) else []
+
     async def candidates(self) -> list[str]:
         options = self.job.options
-        terms = {"counterstrikesharp": "CounterStrikeSharp", "swiftly": "SwiftlyS2"}
-        frameworks = list(terms) if options.framework == "all" else [options.framework]
+        frameworks = (
+            list(discovery.FRAMEWORK_TERMS) if options.framework == "all" else [options.framework]
+        )
         rows: dict[str, dict[str, Any]] = {}
         for framework in frameworks:
-            term = f"{terms[framework]} {options.keywords}".strip()
-            for page in range(1, 5):
-                batch = await self.client.search(options, term, page)
-                for raw in batch:
-                    rows[repository_url(str(raw["html_url"]))] = raw
-                if len(batch) < 50:
-                    break
-        field = {"stars": "stargazers_count", "forks": "forks_count", "updated": "pushed_at"}[
-            options.sort
-        ]
+            proposed = await self.propose_terms(framework) if options.expand_search else []
+            terms = discovery.search_terms(framework, options.keywords, proposed)
+            await self.progress(
+                "searching", f"Searching {framework} with {len(terms)} GitHub queries"
+            )
+            for term in terms:
+                for page in range(1, discovery.SEARCH_PAGES + 1):
+                    batch = await self.client.search(options, term, page)
+                    for raw in batch:
+                        rows[repository_url(str(raw["html_url"]))] = raw
+                    if len(batch) < 50:
+                        break
         ordered = sorted(
             rows,
-            key=lambda url: rows[url].get(field) or ("" if field == "pushed_at" else 0),
+            key=lambda url: discovery.sort_ranking(rows[url], options.sort_priority),
             reverse=True,
         )
         return list(dict.fromkeys([*options.repositories, *ordered]))
@@ -160,6 +200,9 @@ class ImportRunner:
             )
             return existing
         if depth > 5 or self.analyzed >= 200:
+            # A budget stop is a decision, not a transient failure: retrying it
+            # would only burn the remaining budget faster.
+            self.rejected.add(url)
             return None
         self.analyzed += 1
         self.visited[url] = None
@@ -176,6 +219,17 @@ class ImportRunner:
             RetryExhaustedError,
         ):
             raise
+        except DependencyResolutionError as exc:
+            # The administrator asked for entries that install unattended, so a
+            # plugin whose prerequisites could not be imported is not listed.
+            self.rejected.add(url)
+            await self.progress(
+                "failed_item",
+                str(exc),
+                url,
+                ImportItem(repository=url, status="failed", message=str(exc)),
+            )
+            return None
         except (GitHubImportError, AnalysisFormatError) as exc:
             await self.progress(
                 "failed_item",
@@ -199,10 +253,108 @@ class ImportRunner:
         finally:
             self.visiting.discard(url)
 
+    def documented_repositories(self, docs: list[dict[str, str]]) -> set[str]:
+        """GitHub repositories the retrieved documents actually mention."""
+        found: set[str] = set()
+        for doc in docs:
+            for match in re.findall(
+                r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*",
+                doc["text"],
+            ):
+                try:
+                    found.add(repository_url(match))
+                except ValueError:
+                    continue
+        return found
+
+    async def resolve_dependencies(
+        self,
+        url: str,
+        depth: int,
+        analysis: RepositoryAnalysis,
+        requirements: list[str],
+        docs: list[dict[str, str]],
+        notes: list[str],
+    ) -> list[int]:
+        """Import every prerequisite, appending advisory notes for the rest.
+
+        Dependency URLs the model produced are only followed when the retrieved
+        documents actually contain them, so an invented URL cannot pull an
+        arbitrary repository in. A ``Requires <runtime>`` line additionally
+        resolves to that runtime's canonical repository from
+        ``ai_discovery.RUNTIME_REPOSITORIES`` — that URL comes from the panel,
+        not from the model, so it needs no such corroboration.
+        """
+        documented = self.documented_repositories(docs)
+        targets = list(analysis.dependencies)
+        for requirement in requirements:
+            canonical = discovery.runtime_repository(requirement)
+            if canonical and canonical not in targets:
+                targets.append(canonical)
+
+        resolved_ids: list[int] = []
+        unresolved: list[str] = []
+        for dependency in targets:
+            if dependency not in documented and dependency not in discovery.TRUSTED_DEPENDENCIES:
+                notes.append(
+                    f"Dependency URL is not supported by retrieved documents: {dependency}"
+                )
+                unresolved.append(dependency)
+                continue
+            resolved = await self.resolve_dependency(dependency, depth)
+            if resolved is None:
+                notes.append(f"Unresolved dependency: {dependency}")
+                unresolved.append(dependency)
+            else:
+                resolved_ids.append(resolved)
+        if unresolved and self.job.options.require_dependencies:
+            raise DependencyResolutionError(
+                "Required dependencies could not be imported automatically: "
+                + ", ".join(unresolved[:5])
+            )
+        return resolved_ids
+
+    async def resolve_dependency(self, url: str, depth: int) -> int | None:
+        """Import one prerequisite, retrying transient failures a few times."""
+        for attempt in range(1, discovery.DEPENDENCY_ATTEMPTS + 1):
+            resolved = await self.visit(url, depth + 1)
+            if resolved is not None:
+                return resolved
+            if url in self.rejected or attempt == discovery.DEPENDENCY_ATTEMPTS:
+                return None
+            # visit() memoizes a failed import; clear it so the retry runs.
+            self.visited.pop(url, None)
+            await self.progress(
+                "reading",
+                f"Dependency import failed; attempt {attempt + 1}/{discovery.DEPENDENCY_ATTEMPTS}",
+                url,
+            )
+        return None
+
     async def import_repository(self, url: str, depth: int) -> int | None:
         await self.progress("reading", "Reading repository installation documentation", url)
         repo = await self.client.repository(url)
         if repo.get("private"):
+            self.rejected.add(url)
+            return None
+        # The GitHub query already carries ``pushed:>=``, but explicitly listed
+        # repositories and dependencies never go through search, which is how
+        # long-abandoned repositories still reached the marketplace. Discovered
+        # candidates are now dropped outright; a hand-listed repository or a
+        # prerequisite is still imported — breaking a dependency chain is worse
+        # than an old runtime — and records its age as a note.
+        age = discovery.repository_age_days(repo)
+        stale = (
+            f"Repository last updated {age} days ago, "
+            f"outside the requested {self.job.options.updated_within_days}-day window"
+            if age is not None and age > self.job.options.updated_within_days
+            else None
+        )
+        if stale and depth == 0 and url not in self.job.options.repositories:
+            self.rejected.add(url)
+            await self.progress(
+                "skipped", stale, url, ImportItem(repository=url, status="skipped", message=stale)
+            )
             return None
         docs, sources = await self.client.documents(repo)
         release = await self.client.release(url)
@@ -216,6 +368,7 @@ class ImportRunner:
             or analysis.framework in {self.job.options.framework, "other"}
         )
         if not analysis.is_plugin or not in_scope:
+            self.rejected.add(url)
             await self.progress(
                 "skipped",
                 "Not identified as a CS2 plugin",
@@ -223,29 +376,14 @@ class ImportRunner:
                 ImportItem(repository=url, status="skipped", message="Not a CS2 plugin"),
             )
             return None
-        dependencies = []
         # Only prerequisites naming a runtime the panel knows become
         # requirements; the rest are advisory notes that never block an install.
         requirements, notes = split_requirements(analysis.requirements)
-        documented = {
-            repository_url(match)
-            for doc in docs
-            for match in re.findall(
-                r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*",
-                doc["text"],
-            )
-        }
-        for dependency in analysis.dependencies:
-            if dependency not in documented:
-                notes.append(
-                    f"Dependency URL is not supported by retrieved documents: {dependency}"
-                )
-                continue
-            resolved = await self.visit(dependency, depth + 1)
-            if resolved is None:
-                notes.append(f"Unresolved dependency: {dependency}")
-            else:
-                dependencies.append(resolved)
+        if stale:
+            notes.append(stale)
+        dependencies = await self.resolve_dependencies(
+            url, depth, analysis, requirements, docs, notes
+        )
         installation = analysis.installation
         if not release or not release.get("assets"):
             installation = None

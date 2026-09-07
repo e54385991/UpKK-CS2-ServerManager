@@ -91,6 +91,14 @@ class SystemSettings(SQLModel, table=True):
         default=True, sa_column_kwargs={"server_default": text("true")}
     )
     plugin_download_cache_path: Optional[str] = Field(default=None, max_length=1000)
+    # Automatic retention for the reusable archive cache. 0 disables that limit;
+    # an administrator can always clear the directory from Settings.
+    plugin_download_cache_max_age_days: int = Field(
+        default=30, sa_column_kwargs={"server_default": text("30")}
+    )
+    plugin_download_cache_max_megabytes: int = Field(
+        default=4096, sa_column_kwargs={"server_default": text("4096")}
+    )
 
     # Public and sensitive form protection. Keep enabled by default.
     captcha_enabled: bool = Field(

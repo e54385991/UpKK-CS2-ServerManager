@@ -44,6 +44,8 @@ export type SystemSettings = {
   readonly pluginDownloadCachePath: string | null;
   readonly pluginDownloadCacheFiles: number;
   readonly pluginDownloadCacheBytes: number;
+  readonly pluginDownloadCacheMaxAgeDays: number;
+  readonly pluginDownloadCacheMaxMegabytes: number;
   readonly captchaEnabled: boolean;
   readonly clientIpHeader: string | null;
   readonly logLevel: LogLevel | null;
@@ -71,6 +73,8 @@ export type SettingsPatch = {
   readonly githubProxyUrl?: string | null;
   readonly pluginDownloadCacheEnabled?: boolean;
   readonly pluginDownloadCachePath?: string | null;
+  readonly pluginDownloadCacheMaxAgeDays?: number;
+  readonly pluginDownloadCacheMaxMegabytes?: number;
   readonly captchaEnabled?: boolean;
   readonly clientIpHeader?: string | null;
   readonly logLevel?: LogLevel | null;

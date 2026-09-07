@@ -30,6 +30,8 @@ function toSettings(raw: SystemSettingsViewDto): SystemSettings {
     pluginDownloadCachePath: raw.plugin_download_cache_path ?? null,
     pluginDownloadCacheFiles: raw.plugin_download_cache_files ?? 0,
     pluginDownloadCacheBytes: raw.plugin_download_cache_bytes ?? 0,
+    pluginDownloadCacheMaxAgeDays: raw.plugin_download_cache_max_age_days ?? 30,
+    pluginDownloadCacheMaxMegabytes: raw.plugin_download_cache_max_megabytes ?? 4096,
     captchaEnabled: raw.captcha_enabled ?? true,
     clientIpHeader: raw.client_ip_header ?? null,
     logLevel: toLogLevel(raw.log_level),
@@ -75,6 +77,8 @@ export function toWirePatch(patch: SettingsPatch): Record<string, unknown> {
       : {}),
     ...(patch.pluginDownloadCacheEnabled !== undefined ? { plugin_download_cache_enabled: patch.pluginDownloadCacheEnabled } : {}),
     ...(patch.pluginDownloadCachePath !== undefined ? { plugin_download_cache_path: patch.pluginDownloadCachePath } : {}),
+    ...(patch.pluginDownloadCacheMaxAgeDays !== undefined ? { plugin_download_cache_max_age_days: patch.pluginDownloadCacheMaxAgeDays } : {}),
+    ...(patch.pluginDownloadCacheMaxMegabytes !== undefined ? { plugin_download_cache_max_megabytes: patch.pluginDownloadCacheMaxMegabytes } : {}),
     ...(patch.captchaEnabled !== undefined
       ? { captcha_enabled: patch.captchaEnabled }
       : {}),
@@ -132,6 +136,15 @@ export async function putSettings(
   });
   if (!result.ok) return result;
   return { ok: true, data: toSettings(result.data) };
+}
+
+export async function postPluginDownloadCache(
+  action: "clear" | "prune",
+): Promise<ApiResult<ActionResultDto>> {
+  return apiFetch<ActionResultDto>(
+    `/api/v1/settings/plugin-download-cache/${action}`,
+    { method: "POST" },
+  );
 }
 
 export async function postTestEmail(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -21,7 +22,13 @@ from services.client_ip import set_client_ip_header
 from services.email_service import email_service
 from services.log_output import apply_console_log_level, effective_console_log_level
 from services.plugin_download_cache import (
+    CachePolicy,
+)
+from services.plugin_download_cache import (
     clear as clear_download_cache,
+)
+from services.plugin_download_cache import (
+    prune as prune_download_cache,
 )
 from services.plugin_download_cache import (
     stats as download_cache_stats,
@@ -101,6 +108,7 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
     has_gmail_credentials = bool((settings.gmail_credentials_json or "").strip())
     has_gmail_token = bool((settings.gmail_token_json or "").strip())
     provider: Literal["gmail", "smtp"] = "gmail" if settings.email_provider == "gmail" else "smtp"
+    download_cache = download_cache_stats(settings.plugin_download_cache_path)
     if settings.default_proxy_mode == "direct":
         proxy_mode: Literal["direct", "panel", "github_url"] = "direct"
     elif settings.default_proxy_mode == "github_url":
@@ -112,12 +120,10 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
         github_proxy_url=settings.github_proxy_url,
         plugin_download_cache_enabled=settings.plugin_download_cache_enabled,
         plugin_download_cache_path=settings.plugin_download_cache_path,
-        plugin_download_cache_files=download_cache_stats(settings.plugin_download_cache_path)[
-            "files"
-        ],
-        plugin_download_cache_bytes=download_cache_stats(settings.plugin_download_cache_path)[
-            "bytes"
-        ],
+        plugin_download_cache_files=download_cache["files"],
+        plugin_download_cache_bytes=download_cache["bytes"],
+        plugin_download_cache_max_age_days=settings.plugin_download_cache_max_age_days,
+        plugin_download_cache_max_megabytes=settings.plugin_download_cache_max_megabytes,
         captcha_enabled=bool(settings.captcha_enabled),
         client_ip_header=settings.client_ip_header,
         log_level=_log_level(settings.log_level),
@@ -182,6 +188,14 @@ async def update_system_settings(
     # Attribution and console verbosity must follow the policy saved just now.
     set_client_ip_header(settings.client_ip_header)
     apply_console_log_level(settings.log_level)
+    # A tightened retention limit should take effect now, not at the next download.
+    if {
+        "plugin_download_cache_path",
+        "plugin_download_cache_max_age_days",
+        "plugin_download_cache_max_megabytes",
+    } & set(update_data):
+        with suppress(OSError):
+            prune_download_cache(CachePolicy.from_settings(settings))
     await record_audit_event(
         category="settings",
         action="system.update",
@@ -366,3 +380,14 @@ async def clear_plugin_download_cache(db: DatabaseSession, current_user: AdminUs
     settings = await SystemSettings.get_or_create_settings(db)
     count = clear_download_cache(settings.plugin_download_cache_path)
     return ActionResult(success=True, message=f"Cleared {count} cached files")
+
+
+@router.post("/plugin-download-cache/prune", response_model=ActionResult)
+async def prune_plugin_download_cache(db: DatabaseSession, current_user: AdminUser) -> ActionResult:
+    """Apply the saved retention policy now instead of waiting for a download."""
+    settings = await SystemSettings.get_or_create_settings(db)
+    removed, freed = prune_download_cache(CachePolicy.from_settings(settings))
+    return ActionResult(
+        success=True,
+        message=f"Removed {removed} expired cached files ({freed / (1024 * 1024):.1f} MB)",
+    )

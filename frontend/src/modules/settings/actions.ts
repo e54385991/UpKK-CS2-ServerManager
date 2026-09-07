@@ -8,6 +8,7 @@ import {
   getAiSettings,
   getGmailAuthorize,
   getSettings,
+  postPluginDownloadCache,
   postTestEmail,
   putAiSettings,
   putGmailCredentials,
@@ -34,6 +35,14 @@ export async function refreshSettingsAction(): Promise<
   ApiResult<SystemSettings>
 > {
   return getSettings();
+}
+
+export async function pluginDownloadCacheAction(
+  action: "clear" | "prune",
+): Promise<ApiResult<ActionResultDto>> {
+  const result = await postPluginDownloadCache(action);
+  if (result.ok) revalidatePath("/settings");
+  return result;
 }
 
 export async function sendTestEmailAction(

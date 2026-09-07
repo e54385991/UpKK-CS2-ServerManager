@@ -100,8 +100,8 @@ class SwiftlyMixin(SSHMixinBase):
 
                     panel_archive_path = os.path.join(download_dir, "swiftly.zip")
 
-                    # Download to panel server
-                    from modules.http_helper import http_helper
+                    # Download to panel server, reusing the local archive cache
+                    from services.plugins.download_reuse import cached_download
 
                     last_progress = 0
 
@@ -117,9 +117,10 @@ class SwiftlyMixin(SSHMixinBase):
                                     f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
                                 )
 
-                    success_download, error = await http_helper.download_file(
+                    success_download, error = await cached_download(
                         swiftly_url,
                         panel_archive_path,
+                        scope="framework-swiftly",
                         timeout=300,
                         progress_callback=download_progress_callback,
                     )

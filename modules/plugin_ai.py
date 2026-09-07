@@ -8,7 +8,7 @@ import re
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def repository_url(value: str) -> str:
@@ -99,16 +99,53 @@ class PluginAIInfo(StrictValue):
         return hashlib.sha256(encoded.encode()).hexdigest()
 
 
+SortKey = Literal["stars", "forks", "updated"]
+DEFAULT_SORT_PRIORITY: tuple[SortKey, ...] = ("stars", "updated", "forks")
+
+
 class ImportOptions(StrictValue):
+    """One submitted AI marketplace sweep.
+
+    ``sort_priority`` is the ordered tie-breaker chain applied to the merged
+    candidate list; ``sort`` mirrors its first key because that is the single
+    value GitHub's search API accepts, and it keeps jobs and clients that were
+    written before the chain existed valid.
+    """
+
     framework: Literal["counterstrikesharp", "swiftly", "all"] = "all"
     keywords: str = Field(default="", max_length=200)
     min_stars: int = Field(default=10, ge=0, le=1_000_000)
     min_forks: int = Field(default=0, ge=0, le=1_000_000)
-    sort: Literal["stars", "forks", "updated"] = "stars"
+    sort: SortKey = "stars"
+    sort_priority: list[SortKey] = Field(
+        default_factory=lambda: list(DEFAULT_SORT_PRIORITY), min_length=1, max_length=3
+    )
     updated_within_days: int = Field(default=90, ge=1, le=3650)
+    # Let the model propose extra GitHub queries beyond the built-in sweep.
+    expand_search: bool = True
+    # Drop a plugin whose prerequisites could not be imported automatically.
+    require_dependencies: bool = True
     repositories: list[str] = Field(default_factory=list, max_length=10)
     minutes: int = Field(default=15, ge=1, le=120)
     max_plugins: int = Field(default=20, ge=1, le=100)
+
+    @model_validator(mode="before")
+    @classmethod
+    def carry_legacy_sort(cls, data: object) -> object:
+        """A payload with only ``sort`` keeps that key as the primary ordering."""
+        if isinstance(data, dict) and "sort" in data and "sort_priority" not in data:
+            primary = data["sort"]
+            if primary in DEFAULT_SORT_PRIORITY:
+                rest = [key for key in DEFAULT_SORT_PRIORITY if key != primary]
+                return {**data, "sort_priority": [primary, *rest]}
+        return data
+
+    @model_validator(mode="after")
+    def align_sort(self) -> ImportOptions:
+        priority = list(dict.fromkeys(self.sort_priority)) or list(DEFAULT_SORT_PRIORITY)
+        self.sort_priority = priority
+        self.sort = priority[0]
+        return self
 
     @field_validator("repositories")
     @classmethod

@@ -198,8 +198,8 @@ class CounterStrikeSharpMixin(SSHMixinBase):
 
                     panel_archive_path = os.path.join(download_dir, "counterstrikesharp.zip")
 
-                    # Download to panel server
-                    from modules.http_helper import http_helper
+                    # Download to panel server, reusing the local archive cache
+                    from services.plugins.download_reuse import cached_download
 
                     async def download_event_callback(progress: dict[str, Any]):
                         percent = progress.get("percent")
@@ -223,9 +223,10 @@ class CounterStrikeSharpMixin(SSHMixinBase):
 
                     download_progress_callback.progress_event_callback = download_event_callback
 
-                    success_download, error = await http_helper.download_file(
+                    success_download, error = await cached_download(
                         css_url,
                         panel_archive_path,
+                        scope="framework-counterstrikesharp",
                         timeout=300,
                         progress_callback=download_progress_callback,
                     )

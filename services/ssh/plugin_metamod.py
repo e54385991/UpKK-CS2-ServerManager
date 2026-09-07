@@ -84,8 +84,8 @@ class MetamodMixin(SSHMixinBase):
 
                     panel_archive_path = os.path.join(download_dir, "metamod.tar.gz")
 
-                    # Download to panel server
-                    from modules.http_helper import http_helper
+                    # Download to panel server, reusing the local archive cache
+                    from services.plugins.download_reuse import cached_download
 
                     async def download_event_callback(progress: dict[str, Any]):
                         percent = progress.get("percent")
@@ -114,9 +114,13 @@ class MetamodMixin(SSHMixinBase):
                     if actual_download_url != metamod_url:
                         await send_progress("Using GitHub proxy for download")
 
-                    success_download, error = await http_helper.download_file(
+                    success_download, error = await cached_download(
                         actual_download_url,
                         panel_archive_path,
+                        # Key on the canonical URL so switching GitHub proxies
+                        # does not invalidate an archive already on disk.
+                        cache_url=metamod_url,
+                        scope="framework-metamod",
                         timeout=180,
                         progress_callback=download_progress_callback,
                     )

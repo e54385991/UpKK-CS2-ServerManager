@@ -56,6 +56,18 @@ _NON_RETRYABLE_INSTALL_ERRORS = (
 )
 
 
+def _archive_cache_scope(request: GitHubPluginInstallRequest) -> str:
+    """Readable cache prefix so an operator can identify a file before deleting it.
+
+    Uniqueness comes from the digest the cache appends, not from this label; the
+    label only has to say which plugin an archive belongs to.
+    """
+    repository = (request.repo_url or "").strip().rstrip("/")
+    if repository:
+        return f"plugin-{'-'.join(repository.split('/')[-2:])}"
+    return f"plugin-{(request.display_name or 'archive').strip()}"
+
+
 async def get_server_for_user(
     db: AsyncSession,
     server_id: int,
@@ -213,13 +225,14 @@ async def install_github_plugin(  # noqa: C901
         # release cannot redirect the managed host to an arbitrary destination.
         secure_plan_download = bool(request.expected_archive_sha256)
         if secure_plan_download:
-            from services.plugins.github_assets import (
-                download_release_asset as _download_release_asset,
-            )
+            from services.plugins.download_reuse import cached_release_asset
 
             await progress("Downloading approved release through the secure GitHub gateway...")
-            local_archive_path, local_digest, _local_size = await _download_release_asset(
-                request.download_url
+            local_archive_path, local_digest, _local_size = await cached_release_asset(
+                request.download_url,
+                scope=_archive_cache_scope(request),
+                version=request.release_tag,
+                expected_sha256=request.expected_archive_sha256,
             )
             try:
                 if (
@@ -275,7 +288,7 @@ async def install_github_plugin(  # noqa: C901
                     f"Panel proxy: Downloading from {request.download_url} to {panel_archive_path}"
                 )
 
-                from modules.http_helper import http_helper
+                from services.plugins.download_reuse import cached_download
 
                 # Progress tracking for download
                 last_progress_percent = 0
@@ -296,9 +309,11 @@ async def install_github_plugin(  # noqa: C901
                                 f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
                             )
 
-                success, error = await http_helper.download_file(
+                success, error = await cached_download(
                     request.download_url,
                     panel_archive_path,
+                    scope=_archive_cache_scope(request),
+                    version=request.release_tag,
                     timeout=600,
                     progress_callback=download_progress,
                 )

@@ -11103,7 +11103,13 @@
       },
       "ImportOptions": {
         "additionalProperties": false,
+        "description": "One submitted AI marketplace sweep.\n\n``sort_priority`` is the ordered tie-breaker chain applied to the merged\ncandidate list; ``sort`` mirrors its first key because that is the single\nvalue GitHub's search API accepts, and it keeps jobs and clients that were\nwritten before the chain existed valid.",
         "properties": {
+          "expand_search": {
+            "default": true,
+            "title": "Expand Search",
+            "type": "boolean"
+          },
           "framework": {
             "default": "all",
             "enum": [
@@ -11156,6 +11162,11 @@
             "title": "Repositories",
             "type": "array"
           },
+          "require_dependencies": {
+            "default": true,
+            "title": "Require Dependencies",
+            "type": "boolean"
+          },
           "sort": {
             "default": "stars",
             "enum": [
@@ -11165,6 +11176,20 @@
             ],
             "title": "Sort",
             "type": "string"
+          },
+          "sort_priority": {
+            "items": {
+              "enum": [
+                "stars",
+                "forks",
+                "updated"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Sort Priority",
+            "type": "array"
           },
           "updated_within_days": {
             "default": 90,
@@ -24735,6 +24760,32 @@
             ],
             "title": "Plugin Download Cache Enabled"
           },
+          "plugin_download_cache_max_age_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Download Cache Max Age Days"
+          },
+          "plugin_download_cache_max_megabytes": {
+            "anyOf": [
+              {
+                "maximum": 1048576.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Download Cache Max Megabytes"
+          },
           "plugin_download_cache_path": {
             "anyOf": [
               {
@@ -25333,6 +25384,16 @@
           "plugin_download_cache_files": {
             "default": 0,
             "title": "Plugin Download Cache Files",
+            "type": "integer"
+          },
+          "plugin_download_cache_max_age_days": {
+            "default": 30,
+            "title": "Plugin Download Cache Max Age Days",
+            "type": "integer"
+          },
+          "plugin_download_cache_max_megabytes": {
+            "default": 4096,
+            "title": "Plugin Download Cache Max Megabytes",
             "type": "integer"
           },
           "plugin_download_cache_path": {
@@ -42510,6 +42571,33 @@
           }
         ],
         "summary": "Clear Plugin Download Cache",
+        "tags": [
+          "v1-settings"
+        ]
+      }
+    },
+    "/api/v1/settings/plugin-download-cache/prune": {
+      "post": {
+        "description": "Apply the saved retention policy now instead of waiting for a download.",
+        "operationId": "prune_plugin_download_cache_api_v1_settings_plugin_download_cache_prune_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Prune Plugin Download Cache",
         "tags": [
           "v1-settings"
         ]

@@ -22,9 +22,17 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await expect(dialog.locator("#ai-framework")).toHaveValue("all");
       await expect(dialog.locator("#ai-min_stars")).toHaveValue("10");
       await expect(dialog.locator("#ai-updated_within_days")).toHaveValue("90");
+      // Default ordering is stars, then most recently updated, then forks.
+      await expect(dialog.locator("#ai-sort-0")).toHaveValue("stars");
+      await expect(dialog.locator("#ai-sort-1")).toHaveValue("updated");
+      await expect(dialog.locator("#ai-sort-2")).toHaveValue("forks");
+      // Promoting "updated" to first pushes stars down rather than duplicating.
+      await dialog.locator("#ai-sort-0").selectOption("updated");
+      await expect(dialog.locator("#ai-sort-1")).toHaveValue("stars");
+      await dialog.locator("#ai-sort-0").selectOption("stars");
       const submit = dialog.locator('button[type="submit"]');
       await expect(submit).toBeDisabled();
-      await dialog.getByRole("checkbox").check();
+      await dialog.locator("#ai-acknowledge").check();
       await expect(submit).toBeEnabled();
       await page.screenshot({ path: `/tmp/plugin-ai-modal-${locale}-${width}.png`, fullPage: true });
       expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBeTruthy();

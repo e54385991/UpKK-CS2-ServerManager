@@ -161,6 +161,17 @@ HTTP request.
   （`services/plugins/description_sync.py`），剩余数量通过响应的 `remaining`
   返回，由管理员再次触发。外部请求前必须先提交读事务，不得在 GitHub I/O 期间
   持有请求数据库 session。
+- **下载缓存**：面板代理下载的不可变压缩包（市场插件发行包，以及 Metamod:Source、
+  CounterStrikeSharp、SwiftlyS2、CS2Fixes 运行时）先查本地缓存
+  （`services/plugin_download_cache.py` + `services/plugins/download_reuse.py`）。
+  默认目录是程序目录下的 `data/cache_serverplugins`，文件名是
+  `<可读标识>-<URL 摘要>-<原文件名>`：唯一性由摘要保证（两个都叫 `plugin.zip` 的插件不会
+  互相覆盖），可读前缀（`plugin-<owner>-<repo>`、`framework-metamod`）只是方便管理员人工
+  辨认和删除。缓存键用**规范上游 URL**，带 GitHub 代理前缀的调用要传 `cache_url=`，否则换代理
+  等于整个缓存失效。命中会刷新 mtime，因此保留策略是 LRU：`plugin_download_cache_max_age_days`
+  天未使用即删除，再按最久未用删到 `plugin_download_cache_max_megabytes` 以内，两项填 0 关闭；
+  设置页可立即执行清理策略或清空。缓存是**咨询性**的——读写失败一律退回正常下载，不能让安装失败。
+  SteamCMD 引导包故意不缓存：它的 URL 永远指向 latest。
 - **AI 采集的依赖要求不阻止安装**。`PluginAIInfo.requirements` 只写入能精确识别
   的运行依赖（`services/plugins/ai_requirements.py` 的固定词表：Metamod:Source、
   CounterStrikeSharp、SwiftlyS2、CS2Fixes、MultiAddonManager），写成规范的
@@ -172,6 +183,24 @@ HTTP request.
   （`PluginInstallPlanView.ai_notices`），控制台在安装前作为提示展示；缺少安装
   规则时按普通条目的压缩包自动识别流程安装。未核对仍需要
   `acknowledge_ai_unreviewed`。
+- **AI 采集的检索、排序、时效与依赖策略**都在 `services/plugins/ai_discovery.py`：
+  - 检索不再是每个框架一条固定查询。`FRAMEWORK_TERMS` 给出确定性查询（产品名、
+    `topic:`、常见插件措辞），`expand_search=true`（默认）时再让模型补充，合计不超过
+    `MAX_SEARCH_TERMS`，每条查询翻 `SEARCH_PAGES` 页。模型给的查询必须过
+    `sanitize_term`：`RESERVED_QUALIFIERS`（`stars:`/`forks:`/`pushed:`/`is:`/`fork:`/
+    `archived:` 等）**整个 token 丢弃**，不能先剥符号再判断——那会把 `stars:>500` 变成散落的
+    `500`。模型不可用或没返回可用 JSON 时静默退回内置查询，不让任务失败。
+  - `sort_priority` 是有序的多级排序链，默认 `stars > updated > forks`；`sort` 只是它的第一项
+    （GitHub 搜索 API 只接受单个键），并由 model validator 保持同步。只带 `sort` 的旧任务和旧
+    前端仍然合法，会被提升成该键优先的链。
+  - `updated_within_days` 在搜索查询之外**再核对一次** `pushed_at`：搜索命中的候选超期直接
+    跳过（这正是过去三年没动的仓库还能进市场的原因，`pushed:>=` 只管搜索结果，管不到手填
+    仓库和依赖）；管理员手动列出的仓库和依赖仍然导入，但把仓库年龄写进 `notes`。
+  - `Requires <runtime>` 会解析到 `RUNTIME_REPOSITORIES` 里面板自己声明的规范仓库并递归导入，
+    因此这些 URL 不受「必须出现在抓取到的文档里」这条限制——那条限制是防模型编造 URL 的。
+    依赖导入失败会重试到 `DEPENDENCY_ATTEMPTS` 次（已判定跳过的不重试）。
+    `require_dependencies=true`（默认）时，依赖仍解析不了就抛 `DependencyResolutionError`，
+    该插件记为 failed 而不是带着「未解析依赖」备注入库；关掉它才回到只记备注的旧行为。
 
 # 维护与质量基线
 

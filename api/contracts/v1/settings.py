@@ -37,6 +37,9 @@ class SystemSettingsView(V1Model):
     plugin_download_cache_path: str | None = None
     plugin_download_cache_files: int = 0
     plugin_download_cache_bytes: int = 0
+    # 0 means the matching automatic-cleanup limit is switched off.
+    plugin_download_cache_max_age_days: int = 30
+    plugin_download_cache_max_megabytes: int = 4096
     captcha_enabled: bool = True
     client_ip_header: str | None = None
     # None means the console follows the LOG_LEVEL environment variable.
@@ -66,6 +69,8 @@ class SystemSettingsPatch(ApiRequest):
     default_proxy_mode: ProxyMode | None = None
     plugin_download_cache_enabled: bool | None = None
     plugin_download_cache_path: str | None = Field(default=None, max_length=1000)
+    plugin_download_cache_max_age_days: int | None = Field(default=None, ge=0, le=3650)
+    plugin_download_cache_max_megabytes: int | None = Field(default=None, ge=0, le=1_048_576)
     github_proxy_url: str | None = None
     captcha_enabled: bool | None = None
     client_ip_header: str | None = Field(default=None, max_length=64)

@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
 import { getAiSettings, getSettings } from "@/modules/settings/api";
 import { AiSettingsForm } from "@/modules/settings/ai-settings-form";
+import { DownloadCacheCard } from "@/modules/settings/download-cache-card";
 import { SettingsForm } from "@/modules/settings/settings-form";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -27,6 +28,7 @@ export async function SettingsPanel() {
   return (
     <div className="space-y-6">
       <SettingsForm initial={result.data} />
+      <DownloadCacheCard initial={result.data} />
       <AiSettingsForm initial={ai.ok ? ai.data : null} />
     </div>
   );

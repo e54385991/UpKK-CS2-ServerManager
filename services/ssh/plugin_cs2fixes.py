@@ -97,7 +97,7 @@ class CS2FixesMixin(SSHMixinBase):
                     panel_archive_path = os.path.join(download_dir, "cs2fixes.tar.gz")
 
                     # Download to panel server
-                    from modules.http_helper import http_helper
+                    from services.plugins.download_reuse import cached_download
 
                     last_progress = 0
 
@@ -120,9 +120,13 @@ class CS2FixesMixin(SSHMixinBase):
                         actual_download_url = f"{proxy_base}/{cs2fixes_url}"
                         await send_progress("Using GitHub proxy for download")
 
-                    success_download, error = await http_helper.download_file(
+                    success_download, error = await cached_download(
                         actual_download_url,
                         panel_archive_path,
+                        # Key on the canonical URL so switching GitHub proxies
+                        # does not invalidate an archive already on disk.
+                        cache_url=cs2fixes_url,
+                        scope="framework-cs2fixes",
                         timeout=300,
                         progress_callback=download_progress_callback,
                     )

@@ -16,7 +16,16 @@ import { Textarea } from "@/shared/ui/textarea";
 
 type Options = components["schemas"]["ImportOptions"];
 type Readiness = components["schemas"]["PluginAIReadinessView"];
-const defaults: Options = { framework: "all", keywords: "", min_stars: 10, min_forks: 0, sort: "stars", updated_within_days: 90, minutes: 15, max_plugins: 20, repositories: [] };
+type SortKey = "stars" | "updated" | "forks";
+const SORT_KEYS: readonly SortKey[] = ["stars", "updated", "forks"];
+const defaults: Options = { framework: "all", keywords: "", min_stars: 10, min_forks: 0, sort: "stars", sort_priority: [...SORT_KEYS], updated_within_days: 90, expand_search: true, require_dependencies: true, minutes: 15, max_plugins: 20, repositories: [] };
+
+/** Move `key` to `rank`, pushing whatever sat there aside, so the three keys
+ *  always stay a complete ordering rather than collapsing to duplicates. */
+function reorder(priority: readonly SortKey[], rank: number, key: SortKey): SortKey[] {
+  const rest = priority.filter(entry => entry !== key);
+  return [...rest.slice(0, rank), key, ...rest.slice(rank)];
+}
 
 export function AIImportButton() {
   const t = useTranslations("plugins.aiImport");
@@ -66,13 +75,18 @@ export function AIImportButton() {
           <div><Label htmlFor="ai-framework">{t("framework")}</Label><Select id="ai-framework" value={options.framework} onChange={e => setOptions({ ...options, framework: e.target.value as Options["framework"] })}>
             <option value="all">{t("allFrameworks")}</option><option value="counterstrikesharp">CounterStrikeSharp</option><option value="swiftly">SwiftlyS2</option>
           </Select></div>
-          <div><Label htmlFor="ai-sort">{t("sort")}</Label><Select id="ai-sort" value={options.sort} onChange={e => setOptions({ ...options, sort: e.target.value as Options["sort"] })}><option value="stars">Star</option><option value="forks">Fork</option><option value="updated">{t("updated")}</option></Select></div>
+          {[0, 1, 2].map(rank => <div key={rank}><Label htmlFor={`ai-sort-${rank}`}>{t("sortRank", { rank: rank + 1 })}</Label><Select id={`ai-sort-${rank}`} value={(options.sort_priority ?? defaults.sort_priority)?.[rank] ?? SORT_KEYS[rank]} onChange={e => setOptions({ ...options, sort_priority: reorder((options.sort_priority ?? SORT_KEYS) as SortKey[], rank, e.target.value as SortKey) })}>
+            <option value="stars">Star</option><option value="forks">Fork</option><option value="updated">{t("updated")}</option>
+          </Select></div>)}
           {([['min_stars', 'stars', 0, 1000000], ['min_forks', 'forks', 0, 1000000], ['updated_within_days', 'days', 1, 3650], ['minutes', 'minutes', 1, 120], ['max_plugins', 'count', 1, 100]] as const).map(([key,label,min,max]) => <div key={key}><Label htmlFor={`ai-${key}`}>{t(label)}</Label><Input id={`ai-${key}`} required type="number" min={min} max={max} value={options[key]} onChange={e => setOptions({ ...options, [key]: Number(e.target.value) })} /></div>)}
           <div><Label htmlFor="ai-keywords">{t("keywords")}</Label><Input id="ai-keywords" maxLength={200} value={options.keywords} onChange={e => setOptions({ ...options, keywords: e.target.value })} /></div>
         </div>
+        <p className="text-xs text-fg-subtle">{t("sortHelp")}</p>
+        <label className="flex gap-2 text-sm"><input id="ai-expand_search" type="checkbox" checked={options.expand_search ?? true} onChange={e => setOptions({ ...options, expand_search: e.target.checked })} />{t("expandSearch")}</label>
+        <label className="flex gap-2 text-sm"><input id="ai-require_dependencies" type="checkbox" checked={options.require_dependencies ?? true} onChange={e => setOptions({ ...options, require_dependencies: e.target.checked })} />{t("requireDependencies")}</label>
         <div><Label htmlFor="ai-repositories">{t("repositories")}</Label><Textarea id="ai-repositories" value={repositories} onChange={e => setRepositories(e.target.value)} placeholder="https://github.com/samyycX/CS2-PlayerModelChanger&#10;https://github.com/K4ryuu/K4-Missions-SwiftlyS2" /></div>
         <p className="rounded-md border border-warn/30 bg-warn-muted p-3 text-sm text-warn">{t("warning")}</p>
-        <label className="flex gap-2 text-sm"><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} />{t("acknowledge")}</label>
+        <label className="flex gap-2 text-sm"><input id="ai-acknowledge" type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} />{t("acknowledge")}</label>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <Button type="submit" disabled={busy || !ack || !ready?.token_valid || !ready.ai_configured}>{busy ? t("submitting") : t("submit")}</Button>
       </form>

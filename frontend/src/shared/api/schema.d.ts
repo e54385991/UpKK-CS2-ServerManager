@@ -5123,6 +5123,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/plugin-download-cache/prune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prune Plugin Download Cache
+         * @description Apply the saved retention policy now instead of waiting for a download.
+         */
+        post: operations["prune_plugin_download_cache_api_v1_settings_plugin_download_cache_prune_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/test-email": {
         parameters: {
             query?: never;
@@ -11155,8 +11175,21 @@ export interface components {
              */
             status: "imported" | "skipped" | "failed";
         };
-        /** ImportOptions */
+        /**
+         * ImportOptions
+         * @description One submitted AI marketplace sweep.
+         *
+         *     ``sort_priority`` is the ordered tie-breaker chain applied to the merged
+         *     candidate list; ``sort`` mirrors its first key because that is the single
+         *     value GitHub's search API accepts, and it keeps jobs and clients that were
+         *     written before the chain existed valid.
+         */
         ImportOptions: {
+            /**
+             * Expand Search
+             * @default true
+             */
+            expand_search: boolean;
             /**
              * Framework
              * @default all
@@ -11191,11 +11224,18 @@ export interface components {
             /** Repositories */
             repositories?: string[];
             /**
+             * Require Dependencies
+             * @default true
+             */
+            require_dependencies: boolean;
+            /**
              * Sort
              * @default stars
              * @enum {string}
              */
             sort: "stars" | "forks" | "updated";
+            /** Sort Priority */
+            sort_priority?: ("stars" | "forks" | "updated")[];
             /**
              * Updated Within Days
              * @default 90
@@ -16325,6 +16365,10 @@ export interface components {
             log_level?: string | null;
             /** Plugin Download Cache Enabled */
             plugin_download_cache_enabled?: boolean | null;
+            /** Plugin Download Cache Max Age Days */
+            plugin_download_cache_max_age_days?: number | null;
+            /** Plugin Download Cache Max Megabytes */
+            plugin_download_cache_max_megabytes?: number | null;
             /** Plugin Download Cache Path */
             plugin_download_cache_path?: string | null;
             /** Smtp Host */
@@ -16491,6 +16535,16 @@ export interface components {
              * @default 0
              */
             plugin_download_cache_files: number;
+            /**
+             * Plugin Download Cache Max Age Days
+             * @default 30
+             */
+            plugin_download_cache_max_age_days: number;
+            /**
+             * Plugin Download Cache Max Megabytes
+             * @default 4096
+             */
+            plugin_download_cache_max_megabytes: number;
             /** Plugin Download Cache Path */
             plugin_download_cache_path?: string | null;
             /** Smtp Host */
@@ -26800,6 +26854,26 @@ export interface operations {
         };
     };
     clear_plugin_download_cache_api_v1_settings_plugin_download_cache_clear_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+        };
+    };
+    prune_plugin_download_cache_api_v1_settings_plugin_download_cache_prune_post: {
         parameters: {
             query?: never;
             header?: never;
