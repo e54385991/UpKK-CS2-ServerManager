@@ -8,8 +8,9 @@ import uuid
 from pathlib import Path
 
 import pytest
+from alembic.migration import MigrationContext
+from sqlalchemy import Column, String, func, select, text
 from sqlalchemy import Enum as SQLAlchemyEnum
-from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -89,6 +90,16 @@ def test_models_use_jsonb_nonnative_enums_and_expected_query_indexes():
         "uq_users_username_ci",
         "uq_users_email_ci",
     } <= index_names
+
+
+def test_market_plugin_framework_matches_migrated_varchar_storage():
+    migrated_column = Column("framework", String(32), nullable=False)
+    model_column = SQLModel.metadata.tables["market_plugins"].c.framework
+    context = MigrationContext.configure(dialect_name="postgresql")
+
+    assert isinstance(model_column.type, SQLAlchemyEnum)
+    assert model_column.type.native_enum is False
+    assert context.impl.compare_type(migrated_column, model_column) is False
 
 
 def test_database_url_handles_password_characters_without_string_concatenation():

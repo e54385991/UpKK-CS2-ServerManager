@@ -115,7 +115,8 @@ class MarketPlugin(SQLModel, table=True):
     framework: PluginFramework = Field(
         default=DEFAULT_PLUGIN_FRAMEWORK,
         sa_column=Column(
-            portable_enum(PluginFramework, name="plugin_framework"),
+            # Match the VARCHAR(32) storage established by revision 0020.
+            portable_enum(PluginFramework, name="plugin_framework", length=32),
             nullable=False,
             server_default=text(f"'{DEFAULT_PLUGIN_FRAMEWORK.name}'"),
         ),

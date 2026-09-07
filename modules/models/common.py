@@ -37,11 +37,12 @@ SQLModel.metadata.naming_convention = {
 }
 
 
-def portable_enum(enum_type: type[enum.Enum], *, name: str) -> SQLEnum:
+def portable_enum(enum_type: type[enum.Enum], *, name: str, length: int | None = None) -> SQLEnum:
     """Store enums as constrained strings instead of PostgreSQL enum types."""
     return SQLEnum(
         enum_type,
         name=name,
+        length=length,
         native_enum=False,
         create_constraint=False,
         validate_strings=True,
