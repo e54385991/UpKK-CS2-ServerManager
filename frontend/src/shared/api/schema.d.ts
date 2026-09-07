@@ -2336,6 +2336,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/registration-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Registration Config
+         * @description Return the public account-creation policy without requiring a session.
+         */
+        get: operations["registration_config_api_v1_auth_registration_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/reset-password": {
         parameters: {
             query?: never;
@@ -14040,6 +14060,17 @@ export interface components {
             username: string;
         };
         /**
+         * RegistrationConfigView
+         * @description Public registration policy used to hide unavailable account entry points.
+         */
+        RegistrationConfigView: {
+            /**
+             * Registration Enabled
+             * @default true
+             */
+            registration_enabled: boolean;
+        };
+        /**
          * RenameRequest
          * @description Rename file/directory request
          */
@@ -16640,6 +16671,8 @@ export interface components {
             plugin_download_cache_max_megabytes?: number | null;
             /** Plugin Download Cache Path */
             plugin_download_cache_path?: string | null;
+            /** Registration Enabled */
+            registration_enabled?: boolean | null;
             /** Smtp Host */
             smtp_host?: string | null;
             /** Smtp Password */
@@ -16766,6 +16799,11 @@ export interface components {
             plugin_download_cache_max_megabytes: number;
             /** Plugin Download Cache Path */
             plugin_download_cache_path?: string | null;
+            /**
+             * Registration Enabled
+             * @default true
+             */
+            registration_enabled: boolean;
             /** Smtp Host */
             smtp_host?: string | null;
             /**
@@ -16901,6 +16939,11 @@ export interface components {
             plugin_download_cache_max_megabytes: number;
             /** Plugin Download Cache Path */
             plugin_download_cache_path?: string | null;
+            /**
+             * Registration Enabled
+             * @default true
+             */
+            registration_enabled: boolean;
             /** Smtp Host */
             smtp_host?: string | null;
             /** Smtp Port */
@@ -21298,6 +21341,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registration_config_api_v1_auth_registration_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationConfigView"];
                 };
             };
         };

@@ -12,7 +12,13 @@ import { Input, Label } from "@/shared/ui/input";
 type GoogleConfig = { clientId: string; enabled: boolean };
 const TOKEN_MESSAGE = "google-oauth-token";
 
-export function GoogleLoginButton({ nextPath }: { nextPath: Route }) {
+export function GoogleLoginButton({
+  nextPath,
+  registrationEnabled,
+}: {
+  nextPath: Route;
+  registrationEnabled: boolean;
+}) {
   const t = useTranslations("login");
   const router = useRouter();
   const [config, setConfig] = useState<GoogleConfig | null>(null);
@@ -75,6 +81,10 @@ export function GoogleLoginButton({ nextPath }: { nextPath: Route }) {
           response.status === 400 &&
           detail.includes("Username and password required")
         ) {
+          if (!registrationEnabled) {
+            setError(t("registrationDisabled"));
+            return;
+          }
           setIdToken(token);
           return;
         }
@@ -85,7 +95,7 @@ export function GoogleLoginButton({ nextPath }: { nextPath: Route }) {
         setPending(false);
       }
     },
-    [nextPath, router, t],
+    [nextPath, registrationEnabled, router, t],
   );
 
   useEffect(() => {

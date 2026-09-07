@@ -18508,6 +18508,19 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "RegistrationConfigView": {
+        "additionalProperties": false,
+        "description": "Public registration policy used to hide unavailable account entry points.",
+        "properties": {
+          "registration_enabled": {
+            "default": true,
+            "title": "Registration Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "RegistrationConfigView",
+        "type": "object"
+      },
       "RenameRequest": {
         "description": "Rename file/directory request",
         "properties": {
@@ -25264,6 +25277,17 @@
             ],
             "title": "Plugin Download Cache Path"
           },
+          "registration_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Enabled"
+          },
           "smtp_host": {
             "anyOf": [
               {
@@ -25700,6 +25724,11 @@
             ],
             "title": "Plugin Download Cache Path"
           },
+          "registration_enabled": {
+            "default": true,
+            "title": "Registration Enabled",
+            "type": "boolean"
+          },
           "smtp_host": {
             "anyOf": [
               {
@@ -26117,6 +26146,11 @@
               }
             ],
             "title": "Plugin Download Cache Path"
+          },
+          "registration_enabled": {
+            "default": true,
+            "title": "Registration Enabled",
+            "type": "boolean"
           },
           "smtp_host": {
             "anyOf": [
@@ -33659,6 +33693,28 @@
           }
         },
         "summary": "Register",
+        "tags": [
+          "v1-auth"
+        ]
+      }
+    },
+    "/api/v1/auth/registration-config": {
+      "get": {
+        "description": "Return the public account-creation policy without requiring a session.",
+        "operationId": "registration_config_api_v1_auth_registration_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationConfigView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Registration Config",
         "tags": [
           "v1-auth"
         ]

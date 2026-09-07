@@ -52,6 +52,7 @@ export type RegisterRequestDto = Schemas["RegisterRequest"];
 export type PasswordResetEmailRequestDto = Schemas["PasswordResetEmailRequest"];
 export type PasswordResetCompleteRequestDto = Schemas["PasswordResetCompleteRequest"];
 export type GoogleConfigViewDto = Schemas["GoogleConfigView"];
+export type RegistrationConfigViewDto = Schemas["RegistrationConfigView"];
 export type GoogleSignInRequestDto = Schemas["GoogleSignInRequest"];
 export type AuthTokenViewDto = Schemas["AuthTokenView"];
 export type ServerOperationViewDto = Schemas["ServerOperationView"];

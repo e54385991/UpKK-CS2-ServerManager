@@ -289,6 +289,7 @@ async def test_google_oauth_configuration_invalid_existing_and_registration(monk
     request = _request()
     response = Response()
     monkeypatch.setattr(auth, "enforce_rate_limit", AsyncMock())
+    monkeypatch.setattr(auth, "ensure_registration_enabled", AsyncMock())
     monkeypatch.setattr(auth, "record_audit_event", AsyncMock())
     monkeypatch.setattr(auth, "set_web_session_cookie", lambda *_args: None)
     settings = SimpleNamespace(GOOGLE_CLIENT_ID="client", JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30)
@@ -312,6 +313,17 @@ async def test_google_oauth_configuration_invalid_existing_and_registration(monk
         await auth.google_oauth_login(oauth, request, response, _DB())
 
     monkeypatch.setattr(auth.User, "get_by_google_id", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        auth,
+        "ensure_registration_enabled",
+        AsyncMock(
+            side_effect=HTTPException(status_code=403, detail="Public registration is disabled")
+        ),
+    )
+    with pytest.raises(HTTPException) as exc:
+        await auth.google_oauth_login(oauth, request, response, _DB())
+    assert exc.value.status_code == 403
+    monkeypatch.setattr(auth, "ensure_registration_enabled", AsyncMock())
     with pytest.raises(HTTPException):
         await auth.google_oauth_login(GoogleOAuthRequest(id_token="id"), request, response, _DB())
     user.is_active = True

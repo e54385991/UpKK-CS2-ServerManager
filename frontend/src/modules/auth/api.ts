@@ -1,6 +1,16 @@
 import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
-import type { ActionResultDto, SessionUserDto } from "@/shared/api/types";
+import type {
+  ActionResultDto,
+  RegistrationConfigViewDto,
+  SessionUserDto,
+} from "@/shared/api/types";
+
+export function getRegistrationConfig(): Promise<
+  ApiResult<RegistrationConfigViewDto>
+> {
+  return apiFetch<RegistrationConfigViewDto>("/api/v1/auth/registration-config");
+}
 
 export function registerAccount(input: {
   readonly username: string;

@@ -36,6 +36,7 @@ function toSettings(raw: SystemSettingsViewDto): SystemSettings {
     pluginDownloadCacheMaxAgeDays: raw.plugin_download_cache_max_age_days ?? 30,
     pluginDownloadCacheMaxMegabytes: raw.plugin_download_cache_max_megabytes ?? 4096,
     captchaEnabled: raw.captcha_enabled ?? true,
+    registrationEnabled: raw.registration_enabled ?? true,
     clientIpHeader: raw.client_ip_header ?? null,
     logLevel: toLogLevel(raw.log_level),
     effectiveLogLevel: toLogLevel(raw.effective_log_level) ?? "INFO",
@@ -84,6 +85,9 @@ export function toWirePatch(patch: SettingsPatch): Record<string, unknown> {
     ...(patch.pluginDownloadCacheMaxMegabytes !== undefined ? { plugin_download_cache_max_megabytes: patch.pluginDownloadCacheMaxMegabytes } : {}),
     ...(patch.captchaEnabled !== undefined
       ? { captcha_enabled: patch.captchaEnabled }
+      : {}),
+    ...(patch.registrationEnabled !== undefined
+      ? { registration_enabled: patch.registrationEnabled }
       : {}),
     ...(patch.clientIpHeader !== undefined
       ? { client_ip_header: patch.clientIpHeader ?? "" }

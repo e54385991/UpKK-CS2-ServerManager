@@ -11,6 +11,7 @@ import {
   Send,
   ShieldCheck,
   TriangleAlert,
+  UserPlus,
   Upload,
 } from "lucide-react";
 import {
@@ -63,6 +64,9 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
     initial.githubProxyUrl ?? "",
   );
   const [captchaEnabled, setCaptchaEnabled] = useState(initial.captchaEnabled);
+  const [registrationEnabled, setRegistrationEnabled] = useState(
+    initial.registrationEnabled,
+  );
   const [clientIpChoice, setClientIpChoice] = useState(
     clientIpChoiceOf(initial.clientIpHeader),
   );
@@ -108,6 +112,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
       defaultProxyMode: proxyMode,
       githubProxyUrl: githubProxyUrl.trim() || null,
       captchaEnabled,
+      registrationEnabled,
       clientIpHeader,
       logLevel: logLevelOf(logLevel),
       ...(clearGithubToken
@@ -132,6 +137,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
     }
     setSettings(result.data);
     setCaptchaEnabled(result.data.captchaEnabled);
+    setRegistrationEnabled(result.data.registrationEnabled);
     setClientIpChoice(clientIpChoiceOf(result.data.clientIpHeader));
     setClientIpCustom(customClientIpOf(result.data.clientIpHeader));
     setLogLevel(result.data.logLevel ?? ENVIRONMENT_LOG_LEVEL);
@@ -623,6 +629,35 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
           <CardContent>
             <p className="text-sm text-fg-muted">
               {captchaEnabled ? t("captcha.enabledHelp") : t("captcha.disabledHelp")}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">
+                  <UserPlus className="size-4" />
+                </span>
+                <div>
+                  <CardTitle>{t("registration.title")}</CardTitle>
+                  <CardDescription>{t("registration.description")}</CardDescription>
+                </div>
+              </div>
+              <Switch
+                id="registration-enabled"
+                label={t("registration.enabled")}
+                checked={registrationEnabled}
+                onCheckedChange={setRegistrationEnabled}
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-fg-muted">
+              {registrationEnabled
+                ? t("registration.enabledHelp")
+                : t("registration.disabledHelp")}
             </p>
           </CardContent>
         </Card>

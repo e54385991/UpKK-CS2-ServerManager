@@ -18,6 +18,9 @@ def _database_session(*, user=None):
         commit=AsyncMock(),
         refresh=AsyncMock(),
         get=AsyncMock(return_value=user),
+        execute=AsyncMock(
+            return_value=SimpleNamespace(scalar_one_or_none=lambda: None),
+        ),
     )
 
 
@@ -198,6 +201,28 @@ def test_v1_register_rejects_invalid_captcha(monkeypatch):
     assert response.json()["detail"] == "Invalid or expired CAPTCHA code"
 
 
+def test_v1_registration_config_is_public(monkeypatch):
+    monkeypatch.setattr(
+        "api.routes.v1.auth.SystemSettings.get_or_create_settings",
+        AsyncMock(return_value=SimpleNamespace(registration_enabled=False)),
+    )
+    client = _public_client(monkeypatch)
+    response = client.get("/api/v1/auth/registration-config")
+    assert response.status_code == 200
+    assert response.json() == {"registration_enabled": False}
+
+
+def test_v1_register_rejects_when_registration_is_disabled(monkeypatch):
+    client = _public_client(monkeypatch)
+    monkeypatch.setattr(
+        "api.registration.SystemSettings.get_or_create_settings",
+        AsyncMock(return_value=SimpleNamespace(registration_enabled=False)),
+    )
+    response = client.post("/api/v1/auth/register", json=_register_payload())
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Public registration is disabled"
+
+
 def test_v1_register_rejects_duplicate_username(monkeypatch):
     client = _public_client(monkeypatch)
     monkeypatch.setattr("api.registration.enforce_rate_limit", AsyncMock())
@@ -240,7 +265,15 @@ def test_v1_register_creates_member(monkeypatch):
     async def refresh(user):
         user.id = 12
 
-    db = SimpleNamespace(add=add, commit=AsyncMock(), refresh=refresh, get=AsyncMock())
+    db = SimpleNamespace(
+        add=add,
+        commit=AsyncMock(),
+        refresh=refresh,
+        get=AsyncMock(),
+        execute=AsyncMock(
+            return_value=SimpleNamespace(scalar_one_or_none=lambda: None),
+        ),
+    )
     app = create_app(lifespan=None)
 
     async def override_db():

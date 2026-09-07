@@ -77,6 +77,12 @@ class GoogleConfigView(V1Model):
     enabled: bool = False
 
 
+class RegistrationConfigView(V1Model):
+    """Public registration policy used to hide unavailable account entry points."""
+
+    registration_enabled: bool = True
+
+
 class GoogleSignInRequest(ApiRequest):
     """Google identity-token sign-in. New accounts also send a username and password."""
 
@@ -308,6 +314,7 @@ __all__ = [
     "PasswordResetEmailRequest",
     "PasswordResetCompleteRequest",
     "GoogleConfigView",
+    "RegistrationConfigView",
     "GoogleSignInRequest",
     "AuthTokenView",
     "ProfileView",

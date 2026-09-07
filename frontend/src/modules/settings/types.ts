@@ -52,6 +52,7 @@ export type SystemSettings = {
   readonly pluginDownloadCacheMaxAgeDays: number;
   readonly pluginDownloadCacheMaxMegabytes: number;
   readonly captchaEnabled: boolean;
+  readonly registrationEnabled: boolean;
   readonly clientIpHeader: string | null;
   readonly logLevel: LogLevel | null;
   readonly effectiveLogLevel: LogLevel;
@@ -81,6 +82,7 @@ export type SettingsPatch = {
   readonly pluginDownloadCacheMaxAgeDays?: number;
   readonly pluginDownloadCacheMaxMegabytes?: number;
   readonly captchaEnabled?: boolean;
+  readonly registrationEnabled?: boolean;
   readonly clientIpHeader?: string | null;
   readonly logLevel?: LogLevel | null;
   readonly globalGithubToken?: string;

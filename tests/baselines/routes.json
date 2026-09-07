@@ -1706,6 +1706,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "GET"
+    ],
+    "name": "registration_config",
+    "path": "/api/v1/auth/registration-config"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "register",

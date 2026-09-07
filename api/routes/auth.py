@@ -12,7 +12,7 @@ from google.oauth2 import id_token
 from sqlmodel import select
 
 from api.dependencies import ActiveUser, DatabaseSession
-from api.registration import register_user
+from api.registration import ensure_registration_enabled, register_user
 from modules import (
     ApiKeyGenerate,
     ApiKeyResponse,
@@ -632,6 +632,8 @@ async def google_oauth_login(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Username and password required for new Google account registration",
                 )
+
+            await ensure_registration_enabled(db)
 
             # Check if username already exists
             existing_user = await User.get_by_username(db, oauth_data.username)

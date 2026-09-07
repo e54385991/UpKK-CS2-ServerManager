@@ -589,6 +589,9 @@ test("settings and profile render parity fields", async ({ page }) => {
   await expect(page.getByTestId("settings-section-downloads")).toBeVisible();
   await expect(page.getByTestId("settings-section-notifications")).toBeVisible();
   await expect(page.getByTestId("settings-section-security")).toBeVisible();
+  await expect(
+    page.getByRole("switch", { name: /允许公开注册|Allow public registration/ }),
+  ).toBeVisible();
   await expect(page.getByTestId("settings-section-logging")).toBeVisible();
   await expect(page.getByTestId("settings-section-download-cache")).toBeVisible();
   await expect(page.getByTestId("settings-section-ai")).toBeVisible();

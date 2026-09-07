@@ -6,7 +6,7 @@ from api.dependencies import ActiveUser, DatabaseSession, SettingsDependency
 from api.password_reset import complete_password_reset, request_password_reset
 from api.registration import register_user
 from api.routes.auth import google_oauth_login
-from modules import GoogleOAuthRequest
+from modules import GoogleOAuthRequest, SystemSettings
 
 from .schemas import (
     ActionResult,
@@ -16,10 +16,18 @@ from .schemas import (
     PasswordResetCompleteRequest,
     PasswordResetEmailRequest,
     RegisterRequest,
+    RegistrationConfigView,
     SessionUser,
 )
 
 router = APIRouter(prefix="/api/v1/auth", tags=["v1-auth"])
+
+
+@router.get("/registration-config", response_model=RegistrationConfigView)
+async def registration_config(db: DatabaseSession) -> RegistrationConfigView:
+    """Return the public account-creation policy without requiring a session."""
+    settings = await SystemSettings.get_or_create_settings(db)
+    return RegistrationConfigView(registration_enabled=bool(settings.registration_enabled))
 
 
 @router.post("/register", response_model=SessionUser, status_code=status.HTTP_201_CREATED)

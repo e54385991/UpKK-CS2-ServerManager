@@ -53,6 +53,7 @@ class SystemSettingsView(V1Model):
     plugin_download_cache_max_age_days: int = 30
     plugin_download_cache_max_megabytes: int = 4096
     captcha_enabled: bool = True
+    registration_enabled: bool = True
     client_ip_header: str | None = None
     # None means the console follows the LOG_LEVEL environment variable.
     log_level: LogLevel | None = None
@@ -85,6 +86,7 @@ class SystemSettingsPatch(ApiRequest):
     plugin_download_cache_max_megabytes: int | None = Field(default=None, ge=0, le=1_048_576)
     github_proxy_url: str | None = None
     captcha_enabled: bool | None = None
+    registration_enabled: bool | None = None
     client_ip_header: str | None = Field(default=None, max_length=64)
     log_level: str | None = Field(default=None, max_length=16)
     global_github_token: str | None = Field(default=None, max_length=255)
@@ -142,6 +144,7 @@ class SystemSettingsTransfer(V1Model):
     plugin_download_cache_max_age_days: int = Field(default=30, ge=0, le=3650)
     plugin_download_cache_max_megabytes: int = Field(default=4096, ge=0, le=1_048_576)
     captcha_enabled: bool = True
+    registration_enabled: bool = True
     client_ip_header: str | None = Field(default=None, max_length=64)
     log_level: LogLevel | None = None
     email_enabled: bool = False

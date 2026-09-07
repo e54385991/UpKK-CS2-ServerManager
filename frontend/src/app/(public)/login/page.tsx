@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getSession } from "@/modules/auth/session";
+import { getRegistrationConfig } from "@/modules/auth/api";
 import { LoginForm } from "@/modules/auth/login-form";
 import { PublicAuthFrame } from "@/modules/auth/public-frame";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -13,12 +14,18 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function LoginPage() {
-  if (await getSession()) redirect("/overview");
+  const [session, registration] = await Promise.all([
+    getSession(),
+    getRegistrationConfig(),
+  ]);
+  if (session) redirect("/overview");
 
   return (
     <PublicAuthFrame>
       <Suspense fallback={<LoginFormSkeleton />}>
-        <LoginForm />
+        <LoginForm
+          registrationEnabled={registration.ok ? registration.data.registration_enabled : true}
+        />
       </Suspense>
     </PublicAuthFrame>
   );

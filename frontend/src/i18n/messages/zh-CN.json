@@ -101,6 +101,7 @@
     "googleDivider": "或",
     "googlePopupBlocked": "无法打开 Google 登录窗口，请允许弹出窗口后重试。",
     "googleFailed": "Google 登录失败（{status}）。",
+    "registrationDisabled": "管理员已关闭公开注册，Google 仅可用于已有账户登录。",
     "googleRegisterTitle": "完成注册",
     "googleRegisterHelp": "欢迎！请设置用户名和密码以完成 Google 账户注册。",
     "googleRegisterSubmit": "完成注册",
@@ -131,7 +132,9 @@
     "haveAccount": "已有账户？",
     "loginHere": "去登录",
     "successMessage": "注册成功。现在可以使用新账户登录。",
-    "errorMessage": "无法创建账户。请检查验证码后重试。"
+    "errorMessage": "无法创建账户。请检查验证码后重试。",
+    "disabledTitle": "注册已关闭",
+    "disabledMessage": "管理员已关闭公开注册，请联系管理员获取账户。"
   },
   "forgotPassword": {
     "title": "忘记密码",
@@ -1214,6 +1217,13 @@
       "enabled": "启用验证码",
       "enabledHelp": "已启用。登录、注册、主机初始化及敏感凭据操作会要求验证码。",
       "disabledHelp": "已关闭。上述操作将不再要求验证码，但原有限流和登录权限仍然有效。"
+    },
+    "registration": {
+      "title": "公开注册",
+      "description": "控制访客是否可以创建普通成员账户。",
+      "enabled": "允许公开注册",
+      "enabledHelp": "已启用。访客可以通过注册页面或 Google OAuth 创建普通账户。",
+      "disabledHelp": "已关闭。注册页面和公开注册接口会拒绝创建新账户，已有账户不受影响。"
     },
     "clientIp": {
       "title": "来源 IP",

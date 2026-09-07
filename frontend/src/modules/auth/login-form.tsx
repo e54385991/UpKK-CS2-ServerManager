@@ -18,7 +18,7 @@ type Captcha = { token: string; imageUrl: string; enabled: boolean };
  * Next API proxy (first-party cookies, no CORS). On success the backend sets
  * the HttpOnly session cookie and we navigate into the console.
  */
-export function LoginForm() {
+export function LoginForm({ registrationEnabled }: { registrationEnabled: boolean }) {
   const t = useTranslations("login");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -189,14 +189,19 @@ export function LoginForm() {
         {pending ? t("submitting") : t("submit")}
       </Button>
 
-      <GoogleLoginButton nextPath={nextPath} />
+      <GoogleLoginButton
+        nextPath={nextPath}
+        registrationEnabled={registrationEnabled}
+      />
 
-      <p className="text-center text-sm text-fg-muted">
-        {t("noAccount")}{" "}
-        <Link href={"/register" as Route} className="text-primary hover:underline">
-          {t("registerHere")}
-        </Link>
-      </p>
+      {registrationEnabled ? (
+        <p className="text-center text-sm text-fg-muted">
+          {t("noAccount")}{" "}
+          <Link href={"/register" as Route} className="text-primary hover:underline">
+            {t("registerHere")}
+          </Link>
+        </p>
+      ) : null}
     </form>
   );
 }

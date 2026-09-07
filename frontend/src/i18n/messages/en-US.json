@@ -101,6 +101,7 @@
     "googleDivider": "or",
     "googlePopupBlocked": "Could not open the Google sign-in window. Allow pop-ups and try again.",
     "googleFailed": "Google sign-in failed ({status}).",
+    "registrationDisabled": "Public registration is disabled. Google sign-in is available for existing accounts only.",
     "googleRegisterTitle": "Complete registration",
     "googleRegisterHelp": "Welcome. Choose a username and password to finish Google registration.",
     "googleRegisterSubmit": "Complete registration",
@@ -131,7 +132,9 @@
     "haveAccount": "Already have an account?",
     "loginHere": "Sign in",
     "successMessage": "Registration successful. You can now sign in.",
-    "errorMessage": "Could not create the account. Check the captcha and try again."
+    "errorMessage": "Could not create the account. Check the captcha and try again.",
+    "disabledTitle": "Registration is closed",
+    "disabledMessage": "The administrator has disabled public registration. Contact an administrator to get an account."
   },
   "forgotPassword": {
     "title": "Forgot password",
@@ -1214,6 +1217,13 @@
       "enabled": "Enable CAPTCHA",
       "enabledHelp": "Enabled. Sign-in, registration, host setup, and sensitive credential actions require CAPTCHA.",
       "disabledHelp": "Disabled. Those actions no longer require CAPTCHA, while rate limits and access controls remain active."
+    },
+    "registration": {
+      "title": "Public registration",
+      "description": "Control whether visitors can create regular member accounts.",
+      "enabled": "Allow public registration",
+      "enabledHelp": "Enabled. Visitors can create regular accounts from the registration page or Google OAuth.",
+      "disabledHelp": "Disabled. The registration page and public registration APIs reject new accounts; existing accounts are unaffected."
     },
     "clientIp": {
       "title": "Source IP",

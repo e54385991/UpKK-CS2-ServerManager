@@ -112,6 +112,7 @@ def test_v1_settings_get_exposes_presence_flags_not_secrets(monkeypatch):
     assert body["gmail_ready"] is True
     assert body["default_proxy_mode"] == "panel"
     assert body["captcha_enabled"] is True
+    assert body["registration_enabled"] is True
     dumped = response.text
     assert "github_pat_secret123456" not in dumped
     assert "smtp-secret" not in dumped
@@ -188,6 +189,7 @@ def test_v1_settings_import_updates_system_and_ai_but_preserves_redacted_secrets
             "system": {
                 "default_proxy_mode": "direct",
                 "captcha_enabled": False,
+                "registration_enabled": False,
                 "email_enabled": False,
             },
             "ai": {
@@ -201,6 +203,7 @@ def test_v1_settings_import_updates_system_and_ai_but_preserves_redacted_secrets
     assert response.status_code == 200
     assert settings.default_proxy_mode == "direct"
     assert settings.captcha_enabled is False
+    assert settings.registration_enabled is False
     assert settings.global_github_token == "github_pat_secret123456"
     assert settings.smtp_password == "smtp-secret"
     assert ai_settings.model == "migrated-model"
@@ -333,6 +336,14 @@ def test_v1_settings_put_updates_captcha_policy(monkeypatch):
     assert response.status_code == 200
     assert settings.captcha_enabled is False
     assert response.json()["captcha_enabled"] is False
+
+
+def test_v1_settings_put_updates_registration_policy(monkeypatch):
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    response = client.put("/api/v1/settings", json={"registration_enabled": False})
+    assert response.status_code == 200
+    assert settings.registration_enabled is False
+    assert response.json()["registration_enabled"] is False
 
 
 def test_v1_settings_put_updates_client_ip_header(monkeypatch):
