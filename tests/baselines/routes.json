@@ -2356,6 +2356,14 @@
     "methods": [
       "DELETE"
     ],
+    "name": "clear_completed_imports",
+    "path": "/api/v1/plugins/market/ai-imports/completed"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
     "name": "delete_import",
     "path": "/api/v1/plugins/market/ai-imports/{operation_id}"
   },
@@ -2502,6 +2510,14 @@
     ],
     "name": "uninstall_market_plugin",
     "path": "/api/v1/servers/{server_id}/plugins/market/{plugin_id}/uninstall"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "bulk_delete_market_plugins",
+    "path": "/api/v1/plugins/market/bulk-delete"
   },
   {
     "kind": "APIRoute",

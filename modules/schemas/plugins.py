@@ -2,7 +2,7 @@
 
 # ruff: noqa: F403,F405
 
-from modules.plugin_ai import InstallationMapping, PluginAIInfo
+from modules.plugin_ai import InstallationConfig, InstallationMapping, PluginAIInfo
 
 from .common import *
 
@@ -207,6 +207,7 @@ class MarketPluginUpdate(SQLModel):
     icon_url: Optional[str] = Field(None, max_length=500)
     dependencies: Optional[str] = None
     custom_install_path: Optional[str] = Field(None, max_length=255)
+    installation: Optional[InstallationConfig] = None
 
 
 class DependencyInfo(SQLModel):

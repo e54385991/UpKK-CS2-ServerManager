@@ -13274,6 +13274,27 @@
         "title": "MapsWorkspaceView",
         "type": "object"
       },
+      "MarketPluginBulkDeleteRequest": {
+        "additionalProperties": false,
+        "description": "Delete selected marketplace listings or empty the entire catalogue.",
+        "properties": {
+          "clear_all": {
+            "default": false,
+            "title": "Clear All",
+            "type": "boolean"
+          },
+          "plugin_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 200,
+            "title": "Plugin Ids",
+            "type": "array"
+          }
+        },
+        "title": "MarketPluginBulkDeleteRequest",
+        "type": "object"
+      },
       "MarketPluginCreate": {
         "description": "Schema for creating a market plugin (admin only)",
         "properties": {
@@ -13968,6 +13989,16 @@
             ],
             "title": "Icon Url"
           },
+          "installation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "is_recommended": {
             "anyOf": [
               {
@@ -14117,6 +14148,17 @@
               }
             ],
             "title": "Icon Url"
+          },
+          "installation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Administrator-approved archive installation rule. When supplied, it replaces the existing source/target mapping rule."
           },
           "is_recommended": {
             "anyOf": [
@@ -34223,6 +34265,33 @@
         ]
       }
     },
+    "/api/v1/plugins/market/ai-imports/completed": {
+      "delete": {
+        "description": "Remove retained successful/cancelled AI import history.",
+        "operationId": "clear_completed_imports_api_v1_plugins_market_ai_imports_completed_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Clear Completed Imports",
+        "tags": [
+          "v1-plugin-ai-imports"
+        ]
+      }
+    },
     "/api/v1/plugins/market/ai-imports/plugins/{plugin_id}/review": {
       "patch": {
         "operationId": "review_plugin_api_v1_plugins_market_ai_imports_plugins__plugin_id__review_patch",
@@ -34491,6 +34560,53 @@
         "summary": "Events",
         "tags": [
           "v1-plugin-ai-imports"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/bulk-delete": {
+      "post": {
+        "description": "Delete selected listings or clear the whole marketplace catalogue.",
+        "operationId": "bulk_delete_market_plugins_api_v1_plugins_market_bulk_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketPluginBulkDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Bulk Delete Market Plugins",
+        "tags": [
+          "v1-plugins"
         ]
       }
     },

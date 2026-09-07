@@ -25,6 +25,7 @@ import {
   fetchMarketRepoInfo,
   listPluginDependencyOptions,
   syncMarketPluginDescriptions,
+  deleteMarketPlugins,
   updateMarketPlugin,
 } from "@/modules/plugins/market-admin-api";
 import type {
@@ -128,6 +129,19 @@ export async function updateMarketPluginAction(
     revalidatePath("/plugins");
     revalidatePath(`/plugins/${pluginId}`);
   }
+  return result;
+}
+
+export async function deleteMarketPluginsAction(input: {
+  readonly pluginIds?: readonly number[];
+  readonly clearAll?: boolean;
+}): Promise<ApiResult<ActionResultDto>> {
+  const session = await getSession();
+  if (!session?.isAdmin) {
+    return { ok: false, status: 403, error: "Not enough permissions" };
+  }
+  const result = await deleteMarketPlugins(input);
+  if (result.ok) revalidatePath("/plugins");
   return result;
 }
 

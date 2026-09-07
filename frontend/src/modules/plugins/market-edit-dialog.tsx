@@ -3,7 +3,7 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { LoaderCircle, WandSparkles } from "lucide-react";
+import { LoaderCircle, Plus, Trash2, WandSparkles } from "lucide-react";
 import {
   fetchMarketRepoInfoAction,
   listPluginDependencyOptionsAction,
@@ -28,6 +28,14 @@ import { Select } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
 
 type PendingAction = "repo-info" | "dependencies" | "save" | null;
+type MappingRow = { source: string; target: string };
+type InstallationForm = {
+  assetGlob: string;
+  automatic: boolean;
+  sourcePrefix: string;
+  targetPath: string;
+  mappings: MappingRow[];
+};
 
 type FormState = {
   title: string;
@@ -41,6 +49,7 @@ type FormState = {
   customInstallPath: string;
   isRecommended: boolean;
   dependencyIds: readonly number[];
+  installation: InstallationForm;
 };
 
 function initialState(plugin: MarketPlugin): FormState {
@@ -56,6 +65,16 @@ function initialState(plugin: MarketPlugin): FormState {
     customInstallPath: plugin.customInstallPath ?? "",
     isRecommended: plugin.isRecommended,
     dependencyIds: plugin.dependencies.map((dep) => dep.id),
+    installation: {
+      assetGlob: plugin.aiMetadata?.installation?.asset_glob ?? "*",
+      automatic: plugin.aiMetadata?.installation?.automatic ?? false,
+      sourcePrefix: plugin.aiMetadata?.installation?.source_prefix ?? "",
+      targetPath: plugin.aiMetadata?.installation?.target_path ?? "",
+      mappings: (plugin.aiMetadata?.installation?.mappings ?? []).map((item) => ({
+        source: item.source,
+        target: item.target,
+      })),
+    },
   };
 }
 
@@ -86,6 +105,25 @@ function changedFields(
   const before = [...base.dependencyIds].sort().join(",");
   const after = [...form.dependencyIds].sort().join(",");
   if (before !== after) input.dependencyIds = form.dependencyIds;
+  const beforeInstallation = base.installation;
+  const installationChanged =
+    form.installation.assetGlob.trim() !== beforeInstallation.assetGlob ||
+    form.installation.automatic !== beforeInstallation.automatic ||
+    form.installation.sourcePrefix.trim() !== beforeInstallation.sourcePrefix ||
+    form.installation.targetPath.trim() !== beforeInstallation.targetPath ||
+    JSON.stringify(form.installation.mappings) !==
+      JSON.stringify(beforeInstallation.mappings);
+  if (installationChanged) {
+    input.installation = {
+      asset_glob: form.installation.assetGlob.trim() || "*",
+      automatic: form.installation.automatic,
+      source_prefix: form.installation.sourcePrefix.trim(),
+      target_path: form.installation.targetPath.trim() || null,
+      mappings: form.installation.mappings
+        .map((item) => ({ source: item.source.trim(), target: item.target.trim() }))
+        .filter((item) => item.source && item.target),
+    };
+  }
   return input as MarketPluginUpdateInput;
 }
 
@@ -136,6 +174,38 @@ export function MarketPluginEditDialog({
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateMapping(index: number, key: keyof MappingRow, value: string) {
+    setForm((current) => ({
+      ...current,
+      installation: {
+        ...current.installation,
+        mappings: current.installation.mappings.map((item, itemIndex) =>
+          itemIndex === index ? { ...item, [key]: value } : item,
+        ),
+      },
+    }));
+  }
+
+  function addMapping() {
+    setForm((current) => ({
+      ...current,
+      installation: {
+        ...current.installation,
+        mappings: [...current.installation.mappings, { source: "", target: "addons/" }],
+      },
+    }));
+  }
+
+  function removeMapping(index: number) {
+    setForm((current) => ({
+      ...current,
+      installation: {
+        ...current.installation,
+        mappings: current.installation.mappings.filter((_, itemIndex) => itemIndex !== index),
+      },
+    }));
   }
 
   function handleClose() {
@@ -355,6 +425,113 @@ export function MarketPluginEditDialog({
               onChange={(event) => update("customInstallPath", event.target.value)}
             />
             <p className="text-xs text-fg-subtle">{t("edit.installPathHint")}</p>
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-line bg-surface-overlay p-3">
+          <div>
+            <p className="font-medium text-fg">{t("edit.installationTitle")}</p>
+            <p className="text-xs text-fg-subtle">{t("edit.installationHint")}</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="market-edit-asset-glob">{t("aiImport.assetGlob")}</Label>
+              <Input
+                id="market-edit-asset-glob"
+                value={form.installation.assetGlob}
+                maxLength={200}
+                onChange={(event) =>
+                  update("installation", {
+                    ...form.installation,
+                    assetGlob: event.target.value,
+                  })
+                }
+              />
+            </div>
+            <label className="flex items-center gap-2 self-end pb-2 text-sm text-fg-muted">
+              <input
+                type="checkbox"
+                checked={form.installation.automatic}
+                className="size-4 rounded border-line accent-primary"
+                onChange={(event) =>
+                  update("installation", {
+                    ...form.installation,
+                    automatic: event.target.checked,
+                  })
+                }
+              />
+              {t("edit.automaticMapping")}
+            </label>
+            <div className="space-y-1.5">
+              <Label htmlFor="market-edit-source-prefix">{t("aiImport.source")}</Label>
+              <Input
+                id="market-edit-source-prefix"
+                value={form.installation.sourcePrefix}
+                maxLength={500}
+                placeholder="例如 build/publish/MyPlugin"
+                onChange={(event) =>
+                  update("installation", {
+                    ...form.installation,
+                    sourcePrefix: event.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="market-edit-target-path">{t("aiImport.target")}</Label>
+              <Input
+                id="market-edit-target-path"
+                value={form.installation.targetPath}
+                maxLength={255}
+                placeholder="例如 addons/counterstrikesharp/plugins/MyPlugin"
+                onChange={(event) =>
+                  update("installation", {
+                    ...form.installation,
+                    targetPath: event.target.value,
+                  })
+                }
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label>{t("edit.mappingRules")}</Label>
+              <Button type="button" variant="secondary" size="sm" onClick={addMapping}>
+                <Plus className="size-3.5" />
+                {t("edit.addMapping")}
+              </Button>
+            </div>
+            {form.installation.mappings.length === 0 ? (
+              <p className="text-xs text-fg-subtle">{t("edit.noMappingRules")}</p>
+            ) : (
+              <div className="space-y-2">
+                {form.installation.mappings.map((mapping, index) => (
+                  <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                    <Input
+                      aria-label={t("edit.mappingSource", { index: index + 1 })}
+                      value={mapping.source}
+                      placeholder="压缩包内源目录或文件"
+                      onChange={(event) => updateMapping(index, "source", event.target.value)}
+                    />
+                    <Input
+                      aria-label={t("edit.mappingTarget", { index: index + 1 })}
+                      value={mapping.target}
+                      placeholder="addons/ 或 cfg/ 下的目标目录"
+                      onChange={(event) => updateMapping(index, "target", event.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t("edit.removeMapping", { index: index + 1 })}
+                      onClick={() => removeMapping(index)}
+                    >
+                      <Trash2 className="size-4 text-danger" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

@@ -7,11 +7,17 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from api.contracts.base import ApiRequest, ApiResponse
 from api.contracts.v1.identity import V1Model
-from modules.plugin_ai import ImportEvent, ImportItem, ImportOptions, PluginAIInfo
+from modules.plugin_ai import (
+    ImportEvent,
+    ImportItem,
+    ImportOptions,
+    InstallationConfig,
+    PluginAIInfo,
+)
 
 
 class PluginRef(V1Model):
@@ -157,6 +163,13 @@ class MarketPluginUpdateRequest(ApiRequest):
     icon_url: str | None = Field(default=None, max_length=500)
     dependencies: str | None = Field(default=None, max_length=1000)
     custom_install_path: str | None = Field(default=None, max_length=255)
+    installation: InstallationConfig | None = Field(
+        default=None,
+        description=(
+            "Administrator-approved archive installation rule. When supplied, it replaces "
+            "the existing source/target mapping rule."
+        ),
+    )
 
     @field_validator("title")
     @classmethod
@@ -176,6 +189,28 @@ class MarketPluginUpdateRequest(ApiRequest):
         # An empty list stays an empty string so the edit actually clears the
         # stored dependencies instead of being treated as "leave unchanged".
         return _dependency_id_list(value) or ""
+
+
+class MarketPluginBulkDeleteRequest(ApiRequest):
+    """Delete selected marketplace listings or empty the entire catalogue."""
+
+    plugin_ids: list[int] = Field(default_factory=list, max_length=200)
+    clear_all: bool = False
+
+    @field_validator("plugin_ids")
+    @classmethod
+    def validate_plugin_ids(cls, values: list[int]) -> list[int]:
+        if any(value <= 0 for value in values):
+            raise ValueError("plugin_ids must contain positive IDs")
+        return list(dict.fromkeys(values))
+
+    @model_validator(mode="after")
+    def require_target(self) -> MarketPluginBulkDeleteRequest:
+        if not self.clear_all and not self.plugin_ids:
+            raise ValueError("Select at least one plugin or set clear_all=true")
+        if self.clear_all and self.plugin_ids:
+            raise ValueError("clear_all cannot be combined with plugin_ids")
+        return self
 
 
 class MarketPluginDescriptionSyncRequest(ApiRequest):
@@ -691,6 +726,7 @@ __all__ = [
     "DEFAULT_PLUGIN_FRAMEWORK",
     "MarketPluginCreateRequest",
     "MarketPluginUpdateRequest",
+    "MarketPluginBulkDeleteRequest",
     "MarketPluginDescriptionSyncRequest",
     "MarketPluginDescriptionSyncItemView",
     "MarketPluginDescriptionSyncView",

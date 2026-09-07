@@ -3,12 +3,22 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { components } from "@/shared/api/schema";
-import { cancelAIImport, deleteAIImport, getAIImport, listAIImports } from "@/modules/plugins/ai-import-actions";
+import {
+  cancelAIImport,
+  clearCompletedAIImports,
+  deleteAIImport,
+  getAIImport,
+  listAIImports,
+} from "@/modules/plugins/ai-import-actions";
 import { latestSubmittedAIImport } from "@/modules/plugins/ai-import-activity";
 import { Button } from "@/shared/ui/button";
+import { confirm, notify } from "@/shared/feedback";
+import { Eraser, LoaderCircle } from "lucide-react";
 
 type Task = components["schemas"]["PluginAIImportView"];
 const active = (task: Task) => task.status === "queued" || task.status === "running";
+const completed = (task: Task) => task.status === "completed" || task.status === "cancelled";
+const queueVisible = (task: Task) => active(task) || task.status === "failed";
 
 export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] }) {
   const t = useTranslations("plugins.aiImport");
@@ -22,6 +32,9 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
   };
   const [tasks, setTasks] = useState<Task[]>([...initialTasks]);
   const [selected, setSelected] = useState<Task | null>(() => latestSubmittedAIImport() ?? initialTasks[0] ?? null);
+  const [tab, setTab] = useState<"queue" | "completed">(
+    initialTasks.some(queueVisible) ? "queue" : "completed",
+  );
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -58,10 +71,45 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
     stream.addEventListener("snapshot", receive);
     return () => stream.close();
   }, [selectedId, selectedActive, t]);
+  const activeTasks = tasks.filter(queueVisible);
+  const completedTasks = tasks.filter(completed);
+  const visibleTasks = tab === "queue" ? activeTasks : completedTasks;
   if (!tasks.length) return null;
+  async function clearCompleted() {
+    if (!completedTasks.length) return;
+    if (!(await confirm({
+      title: t("clearCompletedTitle"),
+      description: t("clearCompletedConfirm", { count: completedTasks.length }),
+      confirmLabel: t("clearCompleted"),
+      tone: "danger",
+    }))) return;
+    setDeleting(true);
+    const result = await clearCompletedAIImports();
+    setDeleting(false);
+    if (!result.ok) {
+      notify.error(result.error || t("requestFailed"));
+      return;
+    }
+    setTasks(current => current.filter(task => !completed(task)));
+    setSelected(current => current && completed(current) ? null : current);
+    notify.success(result.data.message || t("clearCompletedSuccess"));
+    window.dispatchEvent(new Event("plugin-ai-import-refresh"));
+  }
   return <section className="max-h-80 overflow-y-auto border-b border-line p-4 text-sm">
-    <h3 className="mb-2 font-semibold">{t("tasks")}</h3>
-    <div className="space-y-2">{tasks.slice(0, 20).map(task => <button key={task.operation_id} className="block w-full rounded border border-line p-2 text-left hover:bg-surface-raised" onClick={() => { setSelected(task); void getAIImport(task.operation_id).then(r => { if (r.ok) setSelected(r.data); }); }}>
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <h3 className="font-semibold">{t("tasks")}</h3>
+      {tab === "completed" && completedTasks.length > 0 ? <Button type="button" variant="ghost" size="sm" disabled={deleting} onClick={() => void clearCompleted()}><Eraser className="size-3.5" />{t("clearCompleted")}</Button> : null}
+    </div>
+    <div className="mb-2 flex rounded-md border border-line bg-surface-raised p-0.5">
+      {(["queue", "completed"] as const).map((value) => {
+        const count = value === "queue" ? activeTasks.length : completedTasks.length;
+        return <button key={value} type="button" className={`flex-1 rounded px-2 py-1 text-xs ${tab === value ? "bg-surface text-fg shadow-sm" : "text-fg-muted"}`} onClick={() => { setTab(value); setSelected(current => (current && (value === "queue" ? queueVisible(current) : completed(current)) ? current : (value === "queue" ? activeTasks[0] : completedTasks[0]) ?? null)); }}>
+          {value === "queue" ? t("queueTab") : t("completedTab")} {count > 0 ? `(${count})` : ""}
+        </button>;
+      })}
+    </div>
+    {visibleTasks.length === 0 ? <p className="py-3 text-xs text-fg-muted">{tab === "queue" ? t("queueEmpty") : t("completedEmpty")}</p> : null}
+    <div className="space-y-2">{visibleTasks.slice(0, 20).map(task => <button key={task.operation_id} className="block w-full rounded border border-line p-2 text-left hover:bg-surface-raised" onClick={() => { setSelected(task); void getAIImport(task.operation_id).then(r => { if (r.ok) setSelected(r.data); }); }}>
       <span className="font-medium">{task.options.framework === "all" ? t("allFrameworks") : task.options.framework}</span><span className="ml-2 text-fg-muted">{statusLabel(task.status)}</span>
       <p className="truncate text-xs text-fg-muted">{task.message}</p>
     </button>)}</div>
@@ -84,7 +132,7 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
             window.dispatchEvent(new Event("plugin-ai-import-refresh"));
           } else setError(t("requestFailed"));
         } finally { setDeleting(false); }
-      }}>{t("deleteTask")}</Button>}
+      }}>{deleting ? <LoaderCircle className="animate-spin" /> : null}{t("deleteTask")}</Button>}
       <ul className="max-h-36 overflow-auto text-xs">{selected.items.map((item,index) => <li key={index} className="mb-2 break-all">{item.repository} · {t(`status.${item.status}`)}<p>{item.message}</p></li>)}</ul>
       <pre className="max-h-28 overflow-auto whitespace-pre-wrap text-xs text-fg-muted">{selected.events.map(event => event.message).join("\n")}</pre>
     </div>}

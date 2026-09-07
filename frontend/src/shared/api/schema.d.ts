@@ -2748,6 +2748,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugins/market/ai-imports/completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear Completed Imports
+         * @description Remove retained successful/cancelled AI import history.
+         */
+        delete: operations["clear_completed_imports_api_v1_plugins_market_ai_imports_completed_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plugins/market/ai-imports/plugins/{plugin_id}/review": {
         parameters: {
             query?: never;
@@ -2828,6 +2848,26 @@ export interface paths {
         get: operations["events_api_v1_plugins_market_ai_imports__operation_id__events_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/bulk-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Delete Market Plugins
+         * @description Delete selected listings or clear the whole marketplace catalogue.
+         */
+        post: operations["bulk_delete_market_plugins_api_v1_plugins_market_bulk_delete_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11971,6 +12011,19 @@ export interface components {
             ssh_ok: boolean;
         };
         /**
+         * MarketPluginBulkDeleteRequest
+         * @description Delete selected marketplace listings or empty the entire catalogue.
+         */
+        MarketPluginBulkDeleteRequest: {
+            /**
+             * Clear All
+             * @default false
+             */
+            clear_all: boolean;
+            /** Plugin Ids */
+            plugin_ids?: number[];
+        };
+        /**
          * MarketPluginCreate
          * @description Schema for creating a market plugin (admin only)
          */
@@ -12229,6 +12282,7 @@ export interface components {
             framework?: string | null;
             /** Icon Url */
             icon_url?: string | null;
+            installation?: components["schemas"]["InstallationConfig"] | null;
             /** Is Recommended */
             is_recommended?: boolean | null;
             /** Tags */
@@ -12262,6 +12316,8 @@ export interface components {
             framework?: ("counterstrikesharp" | "swiftly" | "other") | null;
             /** Icon Url */
             icon_url?: string | null;
+            /** @description Administrator-approved archive installation rule. When supplied, it replaces the existing source/target mapping rule. */
+            installation?: components["schemas"]["InstallationConfig"] | null;
             /** Is Recommended */
             is_recommended?: boolean | null;
             /** Tags */
@@ -21730,6 +21786,26 @@ export interface operations {
             };
         };
     };
+    clear_completed_imports_api_v1_plugins_market_ai_imports_completed_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+        };
+    };
     review_plugin_api_v1_plugins_market_ai_imports_plugins__plugin_id__review_patch: {
         parameters: {
             query?: never;
@@ -21896,6 +21972,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_delete_market_plugins_api_v1_plugins_market_bulk_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketPluginBulkDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
                 };
             };
             /** @description Validation Error */

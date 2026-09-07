@@ -7,6 +7,7 @@ validation and response mapping only.
 from __future__ import annotations
 
 from modules.models.plugins import MarketPlugin, PluginCategory
+from modules.plugin_ai import PluginAIInfo
 from modules.schemas.plugins import MarketPluginUpdate
 from services.plugins.common import parse_framework
 
@@ -50,3 +51,15 @@ def apply_market_plugin_update(plugin: MarketPlugin, request: MarketPluginUpdate
         value = getattr(request, name)
         if value is not None:
             setattr(plugin, name, value)
+    if request.installation is not None:
+        try:
+            info = (
+                PluginAIInfo.model_validate(plugin.ai_metadata)
+                if plugin.ai_metadata
+                else PluginAIInfo(model="administrator")
+            )
+        except ValueError as exc:
+            raise ValueError("Existing AI installation metadata is invalid") from exc
+        info.installation = request.installation
+        info.reviewed = True
+        plugin.ai_metadata = info.model_dump(mode="json")

@@ -24,6 +24,7 @@ from services.plugin_catalog import (
     collect_export_bundle,
     conflict_to_catalog_item,
     delete_market_plugin,
+    delete_market_plugins,
     ensure_default_plugin_catalog,
     import_plugin_catalog,
     load_default_plugin_catalog,
@@ -511,3 +512,42 @@ async def test_delete_market_plugin_strips_dependency_ids(monkeypatch):
     assert dependent.dependencies == "1"
     assert last_dep.dependencies is None
     assert session.committed is True
+
+
+@pytest.mark.asyncio
+async def test_delete_market_plugins_clears_selected_dependencies_and_all(monkeypatch):
+    keep = MarketPlugin(
+        id=1,
+        github_url="https://github.com/example/keep",
+        title="Keep",
+        category=PluginCategory.UTILITY,
+        dependencies="2,3",
+    )
+    selected = MarketPlugin(
+        id=2,
+        github_url="https://github.com/example/selected",
+        title="Selected",
+        category=PluginCategory.UTILITY,
+    )
+    other = MarketPlugin(
+        id=3,
+        github_url="https://github.com/example/other",
+        title="Other",
+        category=PluginCategory.UTILITY,
+    )
+    session = _FakeSession(plugins=[keep, selected, other])
+    _catalog_session(session, monkeypatch)
+
+    deleted = await delete_market_plugins(session, [2])
+
+    assert deleted == [selected]
+    assert keep.dependencies == "3"
+    assert session.plugins == [keep, other]
+
+    monkeypatch.setattr(
+        "services.plugin_catalog._load_market_plugins",
+        AsyncMock(side_effect=lambda _db: list(session.plugins)),
+    )
+    deleted = await delete_market_plugins(session)
+    assert {item.title for item in deleted} == {"Keep", "Other"}
+    assert session.plugins == []

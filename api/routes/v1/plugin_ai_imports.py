@@ -84,6 +84,13 @@ async def get_import(operation_id: UUID, current_user: AdminUser) -> PluginAIImp
     return to_view(job)
 
 
+@router.delete("/completed", response_model=ActionResult)
+async def clear_completed_imports(current_user: AdminUser) -> ActionResult:
+    """Remove retained successful/cancelled AI import history."""
+    cleared = await store.clear_completed_jobs(current_user.id)
+    return ActionResult(success=True, message=f"Cleared {cleared} completed import task(s)")
+
+
 @router.delete("/{operation_id}", response_model=ActionResult)
 async def delete_import(operation_id: UUID, current_user: AdminUser) -> ActionResult:
     try:

@@ -3,7 +3,7 @@ import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
 import { Package, TriangleAlert } from "lucide-react";
 import { listMarketPlugins } from "@/modules/plugins/api";
-import { MarketPluginCard } from "@/modules/plugins/market-plugin-card";
+import { MarketCatalogItems } from "@/modules/plugins/market-catalog-items";
 import type { MarketInstallServer, MarketQuery } from "@/modules/plugins/types";
 import { markdownToPlainText } from "@/shared/lib/markdown";
 import { Card } from "@/shared/ui/card";
@@ -62,20 +62,14 @@ export async function MarketCatalog({
 
   return (
     <div className="space-y-4">
-      <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {items.map((plugin) => (
-          <li key={plugin.id}>
-            <MarketPluginCard
-              plugin={plugin}
-              excerpt={markdownToPlainText(plugin.description)}
-              servers={servers}
-              defaultServerId={serverId}
-              canDelete={canDelete}
-              canEdit={canDelete}
-            />
-          </li>
-        ))}
-      </ul>
+      <MarketCatalogItems
+        items={items}
+        total={total}
+        excerpts={items.map((plugin) => markdownToPlainText(plugin.description))}
+        servers={servers}
+        defaultServerId={serverId}
+        canDelete={canDelete}
+      />
 
       <div className="flex items-center justify-between text-sm text-fg-muted">
         <p>{t("pageRange", { from: offset + 1, to: Math.min(offset + limit, total), total })}</p>

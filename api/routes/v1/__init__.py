@@ -30,6 +30,7 @@ from . import (
     plugin_catalog,
     plugin_configs,
     plugin_diagnostics,
+    plugin_market_admin,
     plugin_updates,
     plugins,
     profile,
@@ -58,6 +59,7 @@ router.include_router(operations.router)
 router.include_router(plugin_ai_imports.router)
 router.include_router(plugins.market_router)
 router.include_router(plugins.server_router)
+router.include_router(plugin_market_admin.router)
 router.include_router(plugin_catalog.router)
 router.include_router(plugin_configs.router)
 router.include_router(overview.router)

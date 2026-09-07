@@ -124,6 +124,9 @@ export async function updateMarketPlugin(
   if (input.dependencyIds !== undefined) {
     body.dependencies = input.dependencyIds.join(",");
   }
+  if (input.installation !== undefined) {
+    body.installation = input.installation;
+  }
   const result = await apiFetch<MarketPluginViewDto>(
     `/api/v1/plugins/market/${pluginId}`,
     {
@@ -178,5 +181,19 @@ export async function deleteMarketPlugin(
 ): Promise<ApiResult<ActionResultDto>> {
   return apiFetch<ActionResultDto>(`/api/v1/plugins/market/${pluginId}`, {
     method: "DELETE",
+  });
+}
+
+export async function deleteMarketPlugins(input: {
+  readonly pluginIds?: readonly number[];
+  readonly clearAll?: boolean;
+}): Promise<ApiResult<ActionResultDto>> {
+  return apiFetch<ActionResultDto>("/api/v1/plugins/market/bulk-delete", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      plugin_ids: input.pluginIds ? [...input.pluginIds] : [],
+      clear_all: input.clearAll ?? false,
+    }),
   });
 }

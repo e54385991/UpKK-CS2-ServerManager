@@ -50,6 +50,7 @@ def client(monkeypatch):
         ),
         ("check_administrator", None),
         ("delete_job", None),
+        ("clear_completed_jobs", 2),
     ]:
         monkeypatch.setattr(store, method, AsyncMock(return_value=value))
     return TestClient(app), user, job
@@ -154,3 +155,12 @@ def test_delete_terminal_import_api(client):
     store.delete_job.reset_mock()
     assert api.delete(url).status_code == 403
     store.delete_job.assert_not_awaited()
+
+
+def test_clear_completed_imports_api(client):
+    api, user, _job = client
+    response = api.delete(BASE + "/completed")
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    store.clear_completed_jobs.assert_awaited_once_with(user.id)

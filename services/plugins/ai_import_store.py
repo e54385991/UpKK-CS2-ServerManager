@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, func
+from sqlalchemy import and_, delete, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -36,6 +36,9 @@ from services.plugins.github_ai_client import GitHubAIClient, GitHubImportError
 from services.redis_manager import redis_manager
 
 ACTIVE = ("queued", "running")
+TERMINAL_VISIBLE = ("completed", "cancelled")
+FAILED_RETENTION = timedelta(days=7)
+COMPLETED_RETENTION = timedelta(hours=24)
 WORKER_LOCK = "plugin_import:worker"
 worker_lease: ContextVar[str | None] = ContextVar("plugin_import_worker_lease", default=None)
 
@@ -240,15 +243,51 @@ async def get_job(job_id: str) -> JobSnapshot | None:
 
 async def list_jobs(*, active_only: bool = False) -> list[JobSnapshot]:
     async with async_session_maker() as db:
-        query = select(PluginImportJob).where(
-            PluginImportJob.created_at >= now() - timedelta(days=7)
+        current = now()
+        terminal_time = func.coalesce(PluginImportJob.completed_at, PluginImportJob.created_at)
+        retention = or_(
+            col(PluginImportJob.status).in_(ACTIVE),
+            and_(
+                col(PluginImportJob.status) == "failed",
+                terminal_time >= current - FAILED_RETENTION,
+            ),
+            and_(
+                col(PluginImportJob.status).in_(TERMINAL_VISIBLE),
+                terminal_time >= current - COMPLETED_RETENTION,
+            ),
         )
+        query = select(PluginImportJob).where(retention)
+        # ``active_only`` is retained for the operation-inbox caller. Recent
+        # terminal rows are intentionally included so the UI can render its
+        # separate completed tab without keeping them in the active queue.
         if active_only:
-            query = query.where(col(PluginImportJob.status).in_((*ACTIVE, "failed")))
+            query = query.where(
+                or_(
+                    col(PluginImportJob.status).in_((*ACTIVE, "failed")),
+                    col(PluginImportJob.status).in_(TERMINAL_VISIBLE),
+                )
+            )
         jobs = (
             await db.execute(query.order_by(col(PluginImportJob.created_at).desc()).limit(100))
         ).scalars()
         return [snapshot(job) for job in jobs]
+
+
+async def clear_completed_jobs(actor_id: int) -> int:
+    """Delete successful/cancelled AI import history, leaving failures intact."""
+    async with async_session_maker() as db:
+        await authorize(db, actor_id)
+        jobs = (
+            await db.execute(
+                select(PluginImportJob).where(col(PluginImportJob.status).in_(TERMINAL_VISIBLE))
+            )
+        ).scalars()
+        cleared = 0
+        for job in jobs:
+            await db.delete(job)
+            cleared += 1
+        await db.commit()
+        return cleared
 
 
 async def clear_failed_jobs(actor_id: int) -> int:

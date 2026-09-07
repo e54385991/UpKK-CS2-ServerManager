@@ -32,6 +32,9 @@ export function MarketPluginCard({
   defaultServerId,
   canDelete = false,
   canEdit = false,
+  selectable = false,
+  selected = false,
+  onSelect,
 }: {
   plugin: MarketPlugin;
   /**
@@ -44,6 +47,9 @@ export function MarketPluginCard({
   defaultServerId?: number;
   canDelete?: boolean;
   canEdit?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (selected: boolean) => void;
 }) {
   const t = useTranslations("plugins");
   const format = useFormatter();
@@ -62,6 +68,18 @@ export function MarketPluginCard({
     <Card className="flex h-full flex-col p-5 transition-colors hover:border-line-strong hover:bg-surface-raised">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
+          {selectable ? (
+            <label className="mb-1 inline-flex items-center gap-2 text-xs text-fg-muted">
+              <input
+                type="checkbox"
+                checked={selected}
+                aria-label={t("bulkSelectOne", { name: plugin.title })}
+                className="size-4 rounded border-line accent-primary"
+                onChange={(event) => onSelect?.(event.target.checked)}
+              />
+              {t("bulkSelect")}
+            </label>
+          ) : null}
           <Link
             href={hrefFor(plugin.id, defaultServerId)}
             className="block truncate text-sm font-semibold text-fg hover:text-primary hover:underline"

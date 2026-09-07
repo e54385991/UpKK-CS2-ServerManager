@@ -138,6 +138,8 @@ export type MarketPluginUpdateInput = {
   readonly iconUrl?: string;
   readonly dependencyIds?: readonly number[];
   readonly customInstallPath?: string;
+  /** Administrator-approved archive layout used by the market installer. */
+  readonly installation?: components["schemas"]["InstallationConfig"];
 };
 
 export const DESCRIPTION_SYNC_ACTIONS = [

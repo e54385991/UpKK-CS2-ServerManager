@@ -533,3 +533,39 @@ async def delete_market_plugin(db: AsyncSession, plugin_id: int) -> MarketPlugin
     await db.delete(target)
     await db.commit()
     return target
+
+
+async def delete_market_plugins(
+    db: AsyncSession,
+    plugin_ids: list[int] | None = None,
+) -> list[MarketPlugin]:
+    """Delete several listings while keeping remaining dependency IDs valid.
+
+    ``plugin_ids=None`` means the whole marketplace. Files already installed on
+    game servers are deliberately untouched; the FK only drops their tracking
+    reference.
+    """
+    plugins = await _load_market_plugins(db)
+    selected_ids = (
+        {int(plugin.id) for plugin in plugins if plugin.id is not None}
+        if plugin_ids is None
+        else set(plugin_ids)
+    )
+    targets = [plugin for plugin in plugins if plugin.id in selected_ids]
+    if not targets:
+        return []
+    for other in plugins:
+        if other.id in selected_ids or not other.dependencies:
+            continue
+        try:
+            dep_ids = parse_dependency_ids(other.dependencies)
+        except PluginPlanError:
+            continue
+        remaining = [dep_id for dep_id in dep_ids if dep_id not in selected_ids]
+        if remaining != dep_ids:
+            other.dependencies = ",".join(str(dep_id) for dep_id in remaining) or None
+            db.add(other)
+    for target in targets:
+        await db.delete(target)
+    await db.commit()
+    return targets

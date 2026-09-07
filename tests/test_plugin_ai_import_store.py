@@ -209,6 +209,22 @@ async def test_clear_failed_jobs_needs_admin_and_reports_what_it_removed(env):
 
 
 @pytest.mark.asyncio
+async def test_clear_completed_jobs_only_removes_successful_history(env):
+    db, _ = env
+    db.job.status = "completed"
+    db.rows = [db.job]
+
+    assert await store.clear_completed_jobs(1) == 1
+    assert db.deleted == [db.job]
+    assert db.commit.await_count
+
+    db.deleted.clear()
+    db.rows = []
+    assert await store.clear_completed_jobs(1) == 0
+    assert db.deleted == []
+
+
+@pytest.mark.asyncio
 async def test_events_replay_monotonic_and_terminal_writes_noop(env):
     db, _ = env
     db.rows = [db.job]

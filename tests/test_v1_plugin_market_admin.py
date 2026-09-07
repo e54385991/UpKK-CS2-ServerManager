@@ -335,9 +335,58 @@ def test_market_update_changes_both_classifications(monkeypatch):
     assert body.framework == "other"
 
 
+def test_market_update_accepts_archive_installation_mapping(monkeypatch):
+    client, _user = _client()
+    updated = _sample_market(
+        ai_metadata={
+            "model": "administrator",
+            "reviewed": True,
+            "installation": {
+                "asset_glob": "linux.zip",
+                "automatic": False,
+                "mappings": [{"source": "bundle", "target": "addons/custom"}],
+                "source_prefix": "",
+                "target_path": None,
+            },
+            "requirements": [],
+            "notes": [],
+            "sources": [],
+        }
+    )
+    update = AsyncMock(return_value=updated)
+    monkeypatch.setattr("api.routes.v1.plugins.legacy.update_plugin", update)
+    monkeypatch.setattr("api.routes.v1.plugins._dependency_refs", AsyncMock(return_value=[[]]))
+    monkeypatch.setattr("api.routes.v1.plugins.record_audit_event", AsyncMock())
+
+    response = client.patch(
+        "/api/v1/plugins/market/11",
+        json={
+            "installation": {
+                "asset_glob": "linux.zip",
+                "automatic": False,
+                "mappings": [{"source": "bundle", "target": "addons/custom"}],
+                "source_prefix": "",
+                "target_path": None,
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    assert update.await_args.args[1].installation.mappings[0].target == "addons/custom"
+
+
+def test_market_bulk_delete_requires_explicit_target():
+    client, _user = _client()
+
+    response = client.post("/api/v1/plugins/market/bulk-delete", json={})
+
+    assert response.status_code == 422
+
+
 def test_market_update_applies_classifications_to_the_row():
     """`apply_market_plugin_update` is what the legacy handler runs for a PATCH."""
     from modules.models.plugins import MarketPlugin
+    from modules.plugin_ai import InstallationConfig, InstallationMapping, PluginAIInfo
     from modules.schemas.plugins import MarketPluginUpdate
     from services.plugins.catalog_fields import apply_market_plugin_update
 
@@ -355,6 +404,19 @@ def test_market_update_applies_classifications_to_the_row():
     assert plugin.framework is PluginFramework.SWIFTLY
     # Untouched fields keep their stored value.
     assert plugin.title == "Plugin"
+
+    apply_market_plugin_update(
+        plugin,
+        MarketPluginUpdate(
+            installation=InstallationConfig(
+                mappings=[InstallationMapping(source="bundle", target="addons/custom")]
+            )
+        ),
+    )
+    stored = PluginAIInfo.model_validate(plugin.ai_metadata)
+    assert stored.reviewed is True
+    assert stored.installation is not None
+    assert stored.installation.mappings[0].target == "addons/custom"
 
 
 def test_market_update_rejects_an_unknown_classification():
