@@ -200,7 +200,7 @@ def test_csgo_wrappers_flat_css_and_config_mapping_are_deterministic():
         {"path": "Example.dll", "size": 4, "is_dir": False},
         {"path": "Example.deps.json", "size": 4, "is_dir": False},
     ]
-    prefix, mapping, required = _detect_mapping(flat, "Example")
+    prefix, mapping, required = _detect_mapping(flat, "Example", "counterstrikesharp")
     assert prefix is None
     assert required is False
     assert mapping[0]["target"] == "addons/counterstrikesharp/plugins/Example"
@@ -274,7 +274,7 @@ def test_plugins_root_dir_maps_to_counterstrikesharp_plugins():
         {"path": "plugins/Killfeed_Icons/", "size": 0, "is_dir": True},
         {"path": "plugins/Killfeed_Icons/Killfeed_Icons.dll", "size": 12288, "is_dir": False},
     ]
-    prefix, mapping, required = _detect_mapping(entries, "killfeed-icons")
+    prefix, mapping, required = _detect_mapping(entries, "killfeed-icons", "counterstrikesharp")
     assert required is False
     assert prefix == "plugins"
     assert mapping == [{"source": "plugins", "target": "addons/counterstrikesharp/plugins"}]
@@ -323,7 +323,7 @@ def test_single_compiled_plugin_wrapper_maps_to_repository_plugin_directory():
         {"path": "SimpleAdmin/SimpleAdmin.deps.json", "size": 50, "is_dir": False},
     ]
 
-    prefix, mapping, required = _detect_mapping(entries, "SimpleAdmin")
+    prefix, mapping, required = _detect_mapping(entries, "SimpleAdmin", "counterstrikesharp")
 
     assert required is False
     assert prefix == "SimpleAdmin"

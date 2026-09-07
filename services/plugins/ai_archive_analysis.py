@@ -9,6 +9,7 @@ from modules.plugin_ai import InstallationConfig, InstallationMapping, Repositor
 from services.plugins.archive_mapping import detect_mapping, validate_mapping
 from services.plugins.github_assets import GitHubPlanError, validate_download_url
 from services.plugins.release_archive import inspect_release_asset_layout
+from services.plugins.tracking import derive_asset_glob
 
 MAX_INSPECTED_ASSETS = 3
 MAX_EVIDENCE_ENTRIES = 1500
@@ -52,7 +53,9 @@ async def inspect_archives(
         except GitHubPlanError:
             notes.append(f"Release archive could not be safely inspected: {asset['name']}")
             continue
-        archives.append({"asset": asset["name"], **layout})
+        archives.append(
+            {"asset": asset["name"], "release_tag": (release or {}).get("tag_name"), **layout}
+        )
     return archives, notes
 
 
@@ -102,7 +105,9 @@ def configure(
         # A generated rule is only offered for the archive that was examined.
         # Automatic rules re-detect later layouts before falling back to these
         # validated paths, so a stale source prefix cannot override standard trees.
-        pattern = proposed.asset_glob if proposed else "*"
+        pattern = (
+            derive_asset_glob(archive["asset"], archive.get("release_tag")) or archive["asset"]
+        )
         notes.append(f"Installation mapping verified against release archive: {archive['asset']}")
         return InstallationConfig(
             asset_glob=pattern,

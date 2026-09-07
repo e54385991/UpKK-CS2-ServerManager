@@ -567,6 +567,9 @@ async def test_search_paginates_both_frameworks_sorts_and_deduplicates(runner_en
         # Each framework sweeps its full deterministic term list, two pages deep.
         terms_per_framework = len(discovery.FRAMEWORK_TERMS["counterstrikesharp"])
         assert len(candidates) == 52
+        assert [call.args[1] for call in search.call_args_list[::2]][:3] == [
+            discovery.FRAMEWORK_TERMS[key][0] for key in ("counterstrikesharp", "swiftly", "other")
+        ]
         assert (
             search.await_count
             == len(discovery.FRAMEWORK_TERMS) * terms_per_framework * discovery.SEARCH_PAGES

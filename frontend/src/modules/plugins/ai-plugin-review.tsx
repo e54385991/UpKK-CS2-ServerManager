@@ -38,7 +38,7 @@ export function AIPluginReview({ pluginId, initial, canEdit }: { pluginId: numbe
       <Button type="button" disabled={busy} onClick={async () => {
         setBusy(true); setError("");
         try {
-          const response = await reviewAIPlugin(pluginId, { ...info, reviewed: true, installation: { ...info.installation, asset_glob: asset, source_prefix: source, target_path: target || null, ...(source !== (info.installation?.source_prefix ?? "") || target !== (info.installation?.target_path ?? "") ? { automatic: false, mappings: [] } : {}) }, requirements: requirements.split("\n").map(v => v.trim()).filter(Boolean) });
+          const response = await reviewAIPlugin(pluginId, { ...info, reviewed: true, installation: { ...info.installation, automatic: info.installation?.automatic ?? false, asset_glob: asset, source_prefix: source, target_path: target || null, ...(source !== (info.installation?.source_prefix ?? "") || target !== (info.installation?.target_path ?? "") ? { automatic: false, mappings: [] } : {}) }, requirements: requirements.split("\n").map(v => v.trim()).filter(Boolean) });
           if (response.ok) { setInfo(response.data.metadata); router.refresh(); } else setError(t("requestFailed"));
         } finally { setBusy(false); }
       }}>{t("saveReview")}</Button>

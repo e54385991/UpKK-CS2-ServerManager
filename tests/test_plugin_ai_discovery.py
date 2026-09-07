@@ -83,6 +83,12 @@ def test_search_terms_append_keywords_dedupe_and_stay_bounded():
 
 
 def test_recognized_runtimes_map_to_panel_owned_repositories():
+    assert ImportOptions(framework="other").framework == "other"
+    assert discovery.search_terms("other", "retakes")
+    assert (
+        discovery.runtime_repository("Requires SwiftlyS2")
+        == "https://github.com/swiftly-solution/swiftlys2"
+    )
     assert (
         discovery.runtime_repository("Requires CounterStrikeSharp")
         == "https://github.com/roflmuffin/counterstrikesharp"
@@ -94,3 +100,11 @@ def test_recognized_runtimes_map_to_panel_owned_repositories():
         discovery.runtime_repository(f"Requires {label}")
         for label in discovery.RUNTIME_REPOSITORIES
     )
+
+
+def test_keyword_filters_cannot_override_search_scope():
+    terms = discovery.search_terms("swiftly", "vip -stars:>1 OR is:private")
+    assert all(
+        "OR" not in term and "stars:" not in term and "is:private" not in term for term in terms
+    )
+    assert any("in:name,description,readme" in term for term in terms)

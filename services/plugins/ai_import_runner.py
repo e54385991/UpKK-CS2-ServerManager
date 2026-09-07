@@ -418,7 +418,7 @@ class ImportRunner:
         runtimes = {runtime_from_entries(archive["entries"]) for archive in archives} - {None}
         if len(runtimes) == 1:
             detected_runtime = next(iter(runtimes))
-            if detected_runtime is not None:
+            if detected_runtime in ("counterstrikesharp", "swiftly"):
                 analysis.framework = detected_runtime
         in_scope = (
             depth > 0

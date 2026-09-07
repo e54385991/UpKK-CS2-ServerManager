@@ -157,7 +157,18 @@ def test_ai_proposal_is_validated_and_can_map_nonstandard_native_config():
         result("other", proposed), [{"asset": "linux.zip", "entries": entries}], notes
     )
     assert configured and configured.automatic and len(configured.mappings) == 3
+    assert configured.asset_glob == "linux.zip"
     assert "verified" in notes[0]
+    plugin = MarketPlugin(
+        title="P",
+        github_url="https://github.com/a/p",
+        framework="other",
+        ai_metadata=PluginAIInfo(model="test", installation=configured).model_dump(),
+    )
+    applied = policy.apply_layout(
+        plugin, {"entries": entries, "mapping": [], "mapping_required": True, "source_prefix": None}
+    )
+    assert applied["archive_mappings"] == [rule.model_dump() for rule in configured.mappings]
     bad = proposed.model_copy(
         update={"mappings": [InstallationMapping(source="missing", target="addons")]}
     )

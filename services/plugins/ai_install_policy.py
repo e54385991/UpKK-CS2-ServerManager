@@ -78,15 +78,21 @@ def apply_layout(plugin: MarketPlugin, layout: dict) -> dict:
             "source_prefix": source,
             "mapping": mapping,
             "mapping_required": required,
+            "archive_mappings": mapping
+            if len(mapping) > 1 and any(item["target"] not in {"addons", "cfg"} for item in mapping)
+            else [],
         }
     if not rule:
         return layout
     if rule.automatic or rule.mappings:
-        mapping = (
-            layout["mapping"]
-            if rule.automatic and not layout["mapping_required"]
-            else [item.model_dump() for item in rule.mappings]
-        )
+        mapping = [item.model_dump() for item in rule.mappings]
+        if rule.automatic and not layout["mapping_required"]:
+            try:
+                mapping = validate_mapping(layout["entries"], layout["mapping"])
+            except ValueError:
+                # A partial native auto-layout may omit config files covered
+                # by the previously verified AI rule.
+                pass
         mapping = validate_mapping(layout["entries"], mapping)
         return {
             **layout,
