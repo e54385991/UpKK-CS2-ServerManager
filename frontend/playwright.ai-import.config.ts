@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "ai-import.spec.ts",
+  testMatch: ["ai-import.spec.ts", "github-credentials.spec.ts"],
   workers: 1,
   timeout: 45_000,
   use: { ...devices["Desktop Chrome"], channel: "chrome", baseURL: "http://localhost:31801" },

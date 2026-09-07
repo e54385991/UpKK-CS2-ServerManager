@@ -806,6 +806,8 @@
     "browseMarket": "Browse market",
     "viewInMarket": "Market",
     "github": {
+      "credentialsInvalid": "GitHub authentication failed. Your token may be invalid, expired or revoked. Update your GitHub token in your profile, or remove your personal token to use the global token.",
+      "configureCredentials": "Open profile settings",
       "open": "Install from GitHub",
       "close": "Close",
       "title": "Install plugin from GitHub",

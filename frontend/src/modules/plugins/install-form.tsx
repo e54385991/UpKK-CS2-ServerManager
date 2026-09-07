@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { GitHubRequestError } from "@/modules/plugins/github-request-error";
 import { useTranslations } from "next-intl";
 import { Download, Trash2, TriangleAlert } from "lucide-react";
 import {
@@ -455,7 +456,7 @@ export function InstallForm({
           ))}
         </Select>
         {versionsError ? (
-          <p className="mt-1 text-xs text-danger">{versionsError}</p>
+          <GitHubRequestError error={versionsError} />
         ) : null}
       </div>
 

@@ -24,7 +24,13 @@ createServer(async (req, res) => {
     return;
   }
   if (path === "/api/v1/auth/me") return json({ id: 1, username: "test-admin", is_admin: true, is_active: true, email: null });
-  if (path === "/api/v1/servers") return json([]);
+  if (path === "/api/v1/servers") return json([{ id: 1, name: "fixture-server", host: "fixture.invalid", game_port: 27015, status: "running", max_players: 32 }]);
+  if (path === "/api/v1/profile") return json({ id: 1, username: "test-admin", is_admin: true, is_active: true, has_github_token: true, github_token_prefix: "ghp_…", steamcmd_max_retries: 3, steamcmd_max_retries_default: 3, steamcmd_max_retries_limit: 10 });
+  if (path === "/api/v1/servers/1/plugins") return json([]);
+  if (path === "/api/v1/plugins/github/releases") {
+    const missing = new URL(req.url, "http://localhost").searchParams.get("repo_url")?.includes("missing");
+    return json({ detail: missing ? "Failed to fetch releases: HTTP 404: Not Found" : 'Failed to fetch releases: HTTP 401: { "message": "Bad credentials", "status": "401" }' }, 400);
+  }
   if (path === "/api/v1/operations/inbox") return json(inbox());
   if (path === "/api/v1/settings") return json({ default_proxy_mode: "direct", effective_log_level: "INFO", has_global_github_token: true, global_github_token_prefix: "ghp_…", github_token_verification: verification, email_enabled: false, email_provider: "smtp", smtp_use_tls: true, has_smtp_password: false, has_gmail_credentials: false, has_gmail_token: false, gmail_ready: false });
   if (path === "/api/v1/settings/test-github-token") return json(verification);

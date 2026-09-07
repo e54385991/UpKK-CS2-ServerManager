@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { GitHubRequestError } from "@/modules/plugins/github-request-error";
 import { useTranslations } from "next-intl";
-import { Download, Search, Trash2, TriangleAlert } from "lucide-react";
+import { Download, Search, Trash2 } from "lucide-react";
 import {
   analyzeGitHubArchiveAction,
   installGitHubPluginAction,
@@ -310,12 +311,7 @@ export function GitHubInstallForm({
 
   const body = (
     <div className="space-y-4">
-        {error ? (
-          <div className="flex items-start gap-2 rounded-md border border-danger/30 bg-danger-muted/50 px-3 py-2 text-sm text-danger">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        ) : null}
+        {error ? <GitHubRequestError error={error} /> : null}
 
         {servers.length > 1 || defaultServerId == null ? (
           <div>

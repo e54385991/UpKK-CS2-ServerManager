@@ -806,6 +806,8 @@
     "browseMarket": "浏览市场",
     "viewInMarket": "市场",
     "github": {
+      "credentialsInvalid": "GitHub 身份验证失败，当前 Token 可能已失效、过期或被撤销。请前往个人中心更新 GitHub Token；若要使用全局 Token，请先移除个人 Token。",
+      "configureCredentials": "前往个人中心设置",
       "open": "从 GitHub 安装",
       "close": "关闭",
       "title": "从 GitHub 安装插件",
