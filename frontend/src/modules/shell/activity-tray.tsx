@@ -227,7 +227,8 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
   const marketTasks = inbox?.marketImportItems ?? [];
   const hasVisibleMarketTasks =
     marketTasks.some((item) => item.status === "queued" || item.status === "running") ||
-    marketTasks.some((item) => item.status === "completed" || item.status === "cancelled");
+    marketTasks.some((item) => item.status === "completed" || item.status === "cancelled") ||
+    marketTasks.some((item) => item.status === "failed");
   const remaining = queue.length + marketTasks.filter(item => item.status === "queued" || item.status === "running").length;
   const failedCount = failed.length;
   const allFailedCount = failedCount + marketTasks.filter(item => item.status === "failed").length;
