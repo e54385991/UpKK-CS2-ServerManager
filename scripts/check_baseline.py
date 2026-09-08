@@ -102,6 +102,7 @@ def main() -> None:
                 "tests/test_ai_streaming.py",
                 "tests/test_ai_assistant_security.py",
                 "tests/test_ai_domain_units.py",
+                "tests/test_ai_import_usage.py",
                 "tests/test_discord_bot_agent_policy.py",
                 "tests/test_batch_performance_contracts.py",
                 "tests/test_telemetry_batches.py",
