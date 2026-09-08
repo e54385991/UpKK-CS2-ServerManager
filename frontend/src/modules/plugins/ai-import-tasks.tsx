@@ -74,7 +74,6 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
   const activeTasks = tasks.filter(queueVisible);
   const completedTasks = tasks.filter(completed);
   const visibleTasks = tab === "queue" ? activeTasks : completedTasks;
-  if (!tasks.length) return null;
   async function clearCompleted() {
     if (!completedTasks.length) return;
     if (!(await confirm({
