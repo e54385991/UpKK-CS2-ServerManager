@@ -12,3 +12,16 @@ test('completed tab survives when the task list is empty', () => {
   assert.match(source, /queueEmpty/);
   assert.match(source, /completedEmpty/);
 });
+
+test('activity tray hides completed-only section when no visible import tasks exist', () => {
+  const tray = readFileSync(
+    new URL('../../frontend/src/modules/shell/activity-tray.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(tray, /hasVisibleMarketTasks/);
+  assert.match(
+    tray,
+    /isAdmin && hasVisibleMarketTasks && <AIImportTasks initialTasks=\{marketTasks\} \/>/,
+  );
+});

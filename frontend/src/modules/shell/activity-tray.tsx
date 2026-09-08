@@ -225,6 +225,9 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
       );
   }, [dismissed, inbox?.failedItems, overlay]);
   const marketTasks = inbox?.marketImportItems ?? [];
+  const hasVisibleMarketTasks =
+    marketTasks.some((item) => item.status === "queued" || item.status === "running") ||
+    marketTasks.some((item) => item.status === "completed" || item.status === "cancelled");
   const remaining = queue.length + marketTasks.filter(item => item.status === "queued" || item.status === "running").length;
   const failedCount = failed.length;
   const allFailedCount = failedCount + marketTasks.filter(item => item.status === "failed").length;
@@ -417,7 +420,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
           data-testid="activity-tray-panel"
           className="absolute right-0 z-40 mt-2 flex w-[min(28rem,calc(100vw-2rem))] max-h-[min(36rem,70dvh)] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel"
         >
-          {isAdmin && <AIImportTasks initialTasks={marketTasks} />}
+          {isAdmin && hasVisibleMarketTasks && <AIImportTasks initialTasks={marketTasks} />}
           <header className="space-y-3 border-b border-line px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <div>
