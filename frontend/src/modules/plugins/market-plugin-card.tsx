@@ -82,7 +82,7 @@ export function MarketPluginCard({
           ) : null}
           <Link
             href={hrefFor(plugin.id, defaultServerId)}
-            className="block truncate text-sm font-semibold text-fg hover:text-primary hover:underline"
+            className="block break-words text-sm font-semibold text-fg hover:text-primary hover:underline"
           >
             {plugin.title}
           </Link>

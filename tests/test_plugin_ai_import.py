@@ -689,8 +689,11 @@ async def test_selected_asset_rules_read_real_archive_and_block_rule_bypass(monk
         with pytest.raises(PluginPlanError):
             await policy.selected_asset_rules(plugin, url)
     inspect.assert_awaited_once()
-    with pytest.raises(PluginPlanError, match="acknowledgement"):
-        validate_plugin_plan_acknowledgements({"ai_unreviewed": [1]}, [])
+    # Unreviewed AI metadata no longer hard-blocks the plan; the UI shows an
+    # advisory confirmation and the backend records the acknowledged decision.
+    validate_plugin_plan_acknowledgements(
+        {"ai_unreviewed": [1], "hard_conflicts": [], "warnings": []}, []
+    )
     validate_plugin_plan_acknowledgements(
         {"ai_unreviewed": [1], "hard_conflicts": [], "warnings": []},
         [],

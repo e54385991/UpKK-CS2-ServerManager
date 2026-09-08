@@ -1058,7 +1058,7 @@
       "verified": "验证成功",
       "invalid": "验证失败",
       "reviewed": "AI 采集 · 已核对",
-      "needsReview": "AI 采集 - 注意核对依赖要求关系",
+      "needsReview": "AI 采集 · 待核对",
       "assetGlob": "发布包文件名匹配规则",
       "source": "压缩包源目录（留空自动识别）",
       "target": "安装目标路径（留空自动识别）",

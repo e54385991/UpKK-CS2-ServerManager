@@ -65,7 +65,7 @@ export async function PluginDetail({
       <Card>
         <CardHeader>
           <div>
-            <CardTitle>{plugin.title}</CardTitle>
+            <CardTitle className="break-words">{plugin.title}</CardTitle>
             <CardDescription>
               {plugin.author || t("unknownAuthor")}
               {plugin.version ? ` · ${plugin.version}` : ""}

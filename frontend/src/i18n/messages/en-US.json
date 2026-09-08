@@ -1058,7 +1058,7 @@
       "verified": "Verified",
       "invalid": "Verification failed",
       "reviewed": "AI collected · Reviewed",
-      "needsReview": "AI collected - verify the dependency requirements",
+      "needsReview": "AI collected · needs review",
       "assetGlob": "Release asset filename pattern",
       "source": "Archive source directory (empty for detection)",
       "target": "Installation target (empty for detection)",

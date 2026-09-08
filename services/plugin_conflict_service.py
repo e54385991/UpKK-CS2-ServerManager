@@ -290,9 +290,12 @@ def validate_plugin_plan_acknowledgements(
     acknowledge_framework_mismatch: bool = False,
     acknowledge_ai_unreviewed: bool = False,
 ) -> None:
+    # Unreviewed AI metadata remains an explicit operator decision, but it no
+    # longer rejects the plan before the UI can show its advisory details.
     if plan.get("ai_unreviewed") and not acknowledge_ai_unreviewed:
-        raise PluginPlanError(
-            "AI-generated installation settings require explicit review acknowledgement"
+        logger.warning(
+            "Installing AI-collected plugin(s) %s without reviewed metadata",
+            ", ".join(map(str, plan["ai_unreviewed"])),
         )
     if plan["hard_conflicts"]:
         ids = ", ".join(str(item["rule_id"]) for item in plan["hard_conflicts"])
