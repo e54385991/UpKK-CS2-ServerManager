@@ -390,6 +390,29 @@ async def test_recursive_dependencies_reuse_existing_and_do_not_overwrite(runner
 
 
 @pytest.mark.asyncio
+async def test_swiftly_expanded_queries_must_name_swiftlys2(runner_env, monkeypatch):
+    search = AsyncMock(return_value=[])
+    monkeypatch.setattr(GitHubAIClient, "search", search)
+    instance = runner.ImportRunner(job(framework="swiftly"), "token", config())
+    try:
+        with monkeypatch.context() as patch_context:
+            patch_context.setattr(
+                runner.ImportRunner,
+                "propose_terms",
+                AsyncMock(
+                    return_value=["Swift plugin cs2", "Swiftly plugin cs2", "SwiftlyS2 ranks"]
+                ),
+            )
+            await instance.candidates()
+        assert {call.args[1] for call in search.call_args_list} == {
+            *discovery.FRAMEWORK_TERMS["swiftly"],
+            "SwiftlyS2 ranks",
+        }
+    finally:
+        await instance.client.close()
+
+
+@pytest.mark.asyncio
 async def test_description_prompt_defaults_to_original_and_adds_only_selected_translation(
     runner_env,
 ):

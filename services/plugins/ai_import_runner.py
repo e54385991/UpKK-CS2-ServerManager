@@ -67,11 +67,23 @@ class ImportRunner:
 
     async def propose_terms(self, framework: str) -> list[str]:
         """Ask the model for extra GitHub queries. Never fails the job."""
+        framework_names = {
+            "counterstrikesharp": "CounterStrikeSharp",
+            "swiftly": "SwiftlyS2",
+        }
+        required_name = framework_names.get(framework)
         prompt = (
             "You plan GitHub repository searches for a Counter-Strike 2 server panel. "
             f"List up to 6 short GitHub search queries that find community plugins for the "
             f"{framework} runtime. Use product names, namespaces, topic: qualifiers and common "
-            "plugin vocabulary. Do not use stars:, forks:, pushed:, is: or fork: qualifiers. "
+            "plugin vocabulary. "
+            + (
+                f"Every query must include the exact product name {required_name}; do not "
+                "substitute broad words such as Swift or Swiftly. "
+                if required_name
+                else ""
+            )
+            + "Do not use stars:, forks:, pushed:, is: or fork: qualifiers. "
             'Return only a JSON array of strings, for example ["topic:cs2", "cs2 plugin"].'
         )
         try:
@@ -117,6 +129,13 @@ class ImportRunner:
                 if options.expand_search:
                     for framework, built_in in zip(frameworks, searches, strict=True):
                         proposed = await self.propose_terms(framework)
+                        if framework == "swiftly":
+                            proposed = [
+                                term
+                                for term in proposed
+                                if (cleaned := discovery.sanitize_term(term)) is not None
+                                and "swiftlys2" in cleaned.casefold()
+                            ]
                         for term in discovery.search_terms(framework, options.keywords, proposed):
                             if term not in built_in:
                                 await self.search_into(term, rows)
