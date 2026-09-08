@@ -18,6 +18,17 @@ from services.http_retry import BackgroundRetry, retry_after_seconds
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 NETWORK_RETRIES = 3
 NETWORK_RETRY_DELAYS = (0.5, 1.0)
+DOCUMENT_DIRECTORIES = (
+    "doc",
+    "docs",
+    "documentation",
+    "install",
+    "installation",
+    "setup",
+    "dependencies",
+)
+MAX_DOCUMENT_FILES = 3
+MAX_DOCUMENT_FILE_BYTES = 100_000
 
 
 class GitHubImportError(RuntimeError):
@@ -274,18 +285,33 @@ class GitHubAIClient:
         sha = str(commit["sha"])
         readme = await self.optional(f"{prefix}/readme", params={"ref": sha})
         files = [readme] if readme else []
-        tree = await self.optional(f"{prefix}/git/trees/{sha}", params={"recursive": 1})
-        paths = [
-            str(item.get("path") or "")
-            for item in (tree or {}).get("tree", [])
-            if item.get("type") == "blob" and int(item.get("size") or 0) <= 100_000
-        ]
+        root_tree = await self.optional(f"{prefix}/git/trees/{sha}")
+        paths: list[str] = []
+        if isinstance(root_tree, dict):
+            paths.extend(
+                str(item.get("path") or "")
+                for item in root_tree.get("tree", [])
+                if item.get("type") == "blob"
+                and int(item.get("size") or 0) <= MAX_DOCUMENT_FILE_BYTES
+            )
+        for directory in DOCUMENT_DIRECTORIES:
+            entries = await self.optional(
+                f"{prefix}/contents/{quote(directory, safe='')}", params={"ref": sha}
+            )
+            if not isinstance(entries, list) or not entries:
+                continue
+            paths.extend(
+                str(entry.get("path") or "")
+                for entry in entries
+                if entry.get("type") == "file"
+                and int(entry.get("size") or 0) <= MAX_DOCUMENT_FILE_BYTES
+            )
         selected = sorted(
             path
-            for path in paths
+            for path in dict.fromkeys(path for path in paths if path)
             if path.lower().endswith(".md")
             and any(word in path.lower() for word in ("install", "setup", "dependenc"))
-        )[:3]
+        )[:MAX_DOCUMENT_FILES]
         for path in selected:
             file = await self.optional(
                 f"{prefix}/contents/{quote(path, safe='/')}", params={"ref": sha}

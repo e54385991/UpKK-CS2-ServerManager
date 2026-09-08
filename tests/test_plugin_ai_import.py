@@ -184,7 +184,20 @@ async def test_token_verification_and_pinned_document_sources():
             return httpx.Response(200, json={"sha": SHA})
         if "/git/trees/" in path:
             return httpx.Response(
-                200, json={"tree": [{"path": "docs/install.md", "type": "blob", "size": 100}]}
+                200,
+                json={
+                    "tree": [
+                        {"path": "docs", "type": "tree"},
+                        {"path": "README.md", "type": "blob", "size": 100},
+                    ]
+                },
+            )
+        if path.endswith("/contents/docs"):
+            return httpx.Response(
+                200,
+                json=[
+                    {"path": "docs/install.md", "type": "file", "size": 100},
+                ],
             )
         if path.endswith("/releases/latest"):
             return httpx.Response(404)
@@ -196,7 +209,9 @@ async def test_token_verification_and_pinned_document_sources():
         return httpx.Response(
             200,
             json={
-                "path": "docs/install.md" if "/contents/" in path else "README.md",
+                "path": "docs/install.md"
+                if path.endswith("/contents/docs/install.md")
+                else "README.md",
                 "encoding": "base64",
                 "content": base64.b64encode(b"Install plugin archive").decode(),
             },
@@ -209,6 +224,69 @@ async def test_token_verification_and_pinned_document_sources():
     assert len(docs) == 2 and {source.commit for source in sources} == {SHA}
     assert await client.release(URL) is None
     assert await client.search(ImportOptions(), "CounterStrikeSharp") == [{"html_url": URL}]
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_documents_are_discovered_in_bounded_directory_segments():
+    paths: list[str] = []
+
+    def document(path: str, text: bytes) -> dict[str, object]:
+        return {
+            "path": path,
+            "encoding": "base64",
+            "content": base64.b64encode(text).decode(),
+        }
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        paths.append(path)
+        if "/commits/" in path:
+            return httpx.Response(200, json={"sha": SHA})
+        if "/git/trees/" in path:
+            return httpx.Response(
+                200,
+                json={
+                    "tree": [
+                        {
+                            "path": "INSTALL.md",
+                            "type": "blob",
+                            "size": github.MAX_DOCUMENT_FILE_BYTES + 1,
+                        },
+                        {"path": "install.md", "type": "blob", "size": 10},
+                        {"path": "docs", "type": "tree"},
+                    ]
+                },
+            )
+        if path.endswith("/contents/docs"):
+            return httpx.Response(
+                200,
+                json=[
+                    {"path": "docs/install.md", "type": "file", "size": 10},
+                    {"path": "docs/setup.md", "type": "file", "size": 10},
+                    {"path": "docs/dependencies.md", "type": "file", "size": 10},
+                    {"path": "docs/empty.md", "type": "file", "size": 0},
+                ],
+            )
+        if "/contents/" in path:
+            document_path = request.url.path.removeprefix("/repos/example/plugin/contents/")
+            return httpx.Response(200, json=document(document_path, b"Document text"))
+        if path.endswith("/readme"):
+            return httpx.Response(200, json=document("README.md", b"Readme text"))
+        return httpx.Response(404)
+
+    from services.plugins import github_ai_client as github
+
+    client = GitHubAIClient("token", interval=0, transport=httpx.MockTransport(handle))
+    docs, sources = await client.documents({"html_url": URL, "default_branch": "main"})
+    selected = [doc["path"] for doc in docs]
+    assert selected[0] == "README.md"
+    assert selected[1:] == ["docs/dependencies.md", "docs/install.md", "docs/setup.md"]
+    assert {source.path for source in sources} == set(selected)
+    assert all(source.commit == SHA for source in sources)
+    assert "/contents/INSTALL.md" not in paths
+
+    assert not any("recursive=1" in request for request in paths)
     await client.close()
 
 
