@@ -1094,7 +1094,7 @@
       },
       "sortRank": "Sort priority {rank}",
       "sortHelp": "Candidates are ranked by the first key, and ties are broken by the second and third.",
-      "expandSearch": "Let the AI propose extra GitHub queries beyond the built-in sweep",
+      "expandSearch": "Let AI plan precise keyword groups and synonyms first, with built-in search fallbacks",
       "requireDependencies": "Skip a plugin whose prerequisites cannot be imported automatically"
     }
   },

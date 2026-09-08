@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import json
 from dataclasses import replace
 from unittest.mock import AsyncMock
 
@@ -390,24 +391,28 @@ async def test_recursive_dependencies_reuse_existing_and_do_not_overwrite(runner
 
 
 @pytest.mark.asyncio
-async def test_swiftly_expanded_queries_must_name_swiftlys2(runner_env, monkeypatch):
+async def test_ai_plans_before_search_and_scopes_swiftlys2(runner_env, monkeypatch):
     search = AsyncMock(return_value=[])
     monkeypatch.setattr(GitHubAIClient, "search", search)
-    instance = runner.ImportRunner(job(framework="swiftly"), "token", config())
+    runner.create_chat_completion.return_value = {
+        "content": json.dumps(
+            {
+                "swiftly": [{"terms": ["retakes"]}, {"terms": ["practice", "retake"]}],
+            }
+        )
+    }
+    instance = runner.ImportRunner(job(framework="swiftly", keywords="回防练习"), "token", config())
     try:
-        with monkeypatch.context() as patch_context:
-            patch_context.setattr(
-                runner.ImportRunner,
-                "propose_terms",
-                AsyncMock(
-                    return_value=["Swift plugin cs2", "Swiftly plugin cs2", "SwiftlyS2 ranks"]
-                ),
-            )
-            await instance.candidates()
-        assert {call.args[1] for call in search.call_args_list} == {
-            *discovery.FRAMEWORK_TERMS["swiftly"],
-            "SwiftlyS2 ranks",
-        }
+        await instance.candidates()
+        runner.create_chat_completion.assert_awaited_once()
+        terms = [call.args[1] for call in search.call_args_list]
+        assert terms[:2] == [
+            "SwiftlyS2 retakes in:name,description,readme",
+            "SwiftlyS2 practice retake in:name,description,readme",
+        ]
+        assert all("SwiftlyS2" in term or "topic:swiftlys2" in term for term in terms)
+        assert all("回防练习" not in term for term in terms[:2])
+        assert "回防练习" in runner.create_chat_completion.call_args.args[1][1]["content"]
     finally:
         await instance.client.close()
 
@@ -721,6 +726,7 @@ async def test_search_paginates_both_frameworks_sorts_and_deduplicates(runner_en
     instance = runner.ImportRunner(job(repositories=[URL], expand_search=False), "token", config())
     try:
         candidates = await instance.candidates()
+        runner.create_chat_completion.assert_not_awaited()
         assert candidates[:2] == [URL, "https://github.com/example/last"]
         # Each framework sweeps its full deterministic term list, two pages deep.
         terms_per_framework = len(discovery.FRAMEWORK_TERMS["counterstrikesharp"])
@@ -977,3 +983,66 @@ def test_framework_subtree_keeps_detected_source(source, target):
     )
     assert policy.apply_layout(plugin, layout) == layout
     assert mapping == [{"source": source, "target": target}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure", [AIProviderError("unavailable"), TimeoutError(), ValueError("bad JSON")]
+)
+async def test_ai_planning_failure_falls_back_for_all_frameworks(runner_env, monkeypatch, failure):
+    search = AsyncMock(return_value=[])
+    monkeypatch.setattr(GitHubAIClient, "search", search)
+    runner.create_chat_completion.side_effect = failure
+    instance = runner.ImportRunner(job(), "token", config())
+    try:
+        assert await instance.candidates() == []
+        runner.create_chat_completion.assert_awaited_once()
+        terms = [call.args[1] for call in search.call_args_list]
+        assert terms[:3] == [discovery.FRAMEWORK_TERMS[key][0] for key in discovery.FRAMEWORK_TERMS]
+        assert search.await_count == 12
+    finally:
+        await instance.client.close()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_planning_never_starts_github_search(runner_env, monkeypatch):
+    search = AsyncMock(return_value=[])
+    monkeypatch.setattr(GitHubAIClient, "search", search)
+    runner.create_chat_completion.side_effect = asyncio.CancelledError()
+    instance = runner.ImportRunner(job(), "token", config())
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await instance.candidates()
+        search.assert_not_awaited()
+    finally:
+        await instance.client.close()
+
+
+@pytest.mark.asyncio
+async def test_slow_planning_has_own_deadline_and_leaves_search_budget(runner_env, monkeypatch):
+    finished = asyncio.Event()
+    real_timeout = asyncio.timeout
+    budgets = []
+
+    def timeout(seconds):
+        budgets.append(seconds)
+        return real_timeout(0.005 if len(budgets) == 1 else seconds)
+
+    async def slow(*args, **kwargs):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(runner.asyncio, "timeout", timeout)
+    runner.create_chat_completion.side_effect = slow
+    search = AsyncMock(return_value=[])
+    monkeypatch.setattr(GitHubAIClient, "search", search)
+    instance = runner.ImportRunner(job(framework="swiftly"), "token", config())
+    try:
+        await instance.candidates()
+        assert finished.is_set()
+        assert budgets == [45, 90]
+        assert search.await_count == 4
+    finally:
+        await instance.client.close()

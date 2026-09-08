@@ -1094,7 +1094,7 @@
       },
       "sortRank": "排序优先级 {rank}",
       "sortHelp": "候选先按第一项排序，相同再依次按第二、第三项比较。",
-      "expandSearch": "允许 AI 在内置检索之外自主补充 GitHub 搜索式",
+      "expandSearch": "由 AI 优先规划精准多词查询与同义表达，保留内置检索兜底",
       "requireDependencies": "依赖无法自动导入时放弃该插件"
     }
   },

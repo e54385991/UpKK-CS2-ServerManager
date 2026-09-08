@@ -168,7 +168,7 @@ class ImportOptions(StrictValue):
         default_factory=lambda: list(DEFAULT_SORT_PRIORITY), min_length=1, max_length=3
     )
     updated_within_days: int = Field(default=90, ge=1, le=3650)
-    # Let the model propose extra GitHub queries beyond the built-in sweep.
+    # Plan semantic keyword groups first, with deterministic search fallbacks.
     expand_search: bool = True
     # Drop a plugin whose prerequisites could not be imported automatically.
     require_dependencies: bool = True

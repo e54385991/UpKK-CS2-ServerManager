@@ -4,10 +4,9 @@ Three things live here rather than in ``ai_import_runner`` so the runner stays a
 readable pipeline:
 
 * **Search planning** — one hand-written query per framework was a narrow view of
-  GitHub. The importer now sweeps several deterministic queries (product name,
-  topic, install path) and may add model-proposed ones, with every qualifier the
-  panel controls stripped back out so a proposed query cannot widen the star,
-  fork or freshness filters the administrator set.
+  GitHub. ``ai_search_plan`` now compiles model-planned keyword groups before
+  searching; the deterministic queries here provide bounded recall fallbacks.
+  Panel-owned qualifiers remain outside model control.
 * **Freshness** — the GitHub search filter is only a first pass. Explicitly
   listed repositories and dependencies never went through it at all, which is
   how repositories untouched for years still reached the marketplace. The runner
@@ -26,11 +25,10 @@ from datetime import datetime, timezone
 from modules.plugin_ai import repository_url
 from services.plugins.ai_requirements import requirement_label
 
-# The deterministic terms always run; the remainder is what a model may add.
+# The complete sweep stays bounded, including AI groups and deterministic fallbacks.
 # Every term costs one throttled GitHub search per page, so the sweep for both
 # frameworks stays a few minutes even at the ceiling.
 MAX_SEARCH_TERMS = 8
-MAX_PROPOSED_TERMS = 4
 SEARCH_PAGES = 2
 DEPENDENCY_ATTEMPTS = 3
 
@@ -57,8 +55,8 @@ FRAMEWORK_TERMS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Qualifiers the panel sets itself from the submitted options. A model-proposed
-# query may add `topic:` or `language:`, but never these.
+# Qualifiers the panel sets itself from submitted options. User search keywords
+# may add `topic:` or `language:`, but never these.
 RESERVED_QUALIFIERS = frozenset(
     {
         "archived",
@@ -103,7 +101,7 @@ def runtime_repository(requirement: str) -> str | None:
 
 
 def sanitize_term(value: object) -> str | None:
-    """Reduce a proposed query to plain terms plus qualifiers the panel allows.
+    """Reduce fallback keywords to plain terms plus qualifiers the panel allows.
 
     Reserved qualifiers are dropped whole. Stripping their punctuation first
     would leave the bare value behind — ``stars:>500`` becoming a stray ``500``
@@ -122,18 +120,11 @@ def sanitize_term(value: object) -> str | None:
     return " ".join(kept)[:120].strip() or None
 
 
-def search_terms(framework: str, keywords: str, proposed: list[str] | None = None) -> list[str]:
-    """Build the bounded, deduplicated query sweep for one framework."""
+def search_terms(framework: str, keywords: str) -> list[str]:
+    """Build deterministic recall fallbacks without accepting raw model queries."""
     suffix = sanitize_term(keywords) or ""
     terms = [f"{base} {suffix}".strip() for base in FRAMEWORK_TERMS.get(framework, ())]
-    extra: list[str] = []
-    for candidate in proposed or []:
-        cleaned = sanitize_term(candidate)
-        if cleaned:
-            extra.append(f"{cleaned} {suffix}".strip())
-    room = max(0, MAX_SEARCH_TERMS - len(terms))
-    combined = [*terms, *extra[: min(room, MAX_PROPOSED_TERMS)]]
-    return list(dict.fromkeys(combined))[:MAX_SEARCH_TERMS]
+    return list(dict.fromkeys(terms))[:MAX_SEARCH_TERMS]
 
 
 def repository_age_days(repo: dict[str, object]) -> int | None:

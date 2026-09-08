@@ -74,11 +74,9 @@ def test_proposed_queries_cannot_widen_panel_controlled_filters(proposed, expect
 
 
 def test_search_terms_append_keywords_dedupe_and_stay_bounded():
-    terms = discovery.search_terms(
-        "counterstrikesharp", "vip", ["CounterStrikeSharp", "stars:>1", "topic:cs2"]
-    )
+    terms = discovery.search_terms("counterstrikesharp", "vip")
     assert terms[0] == "CounterStrikeSharp vip"
-    assert "topic:cs2 vip" in terms
+    assert "topic:counterstrikesharp vip" in terms
     assert len(terms) == len(set(terms)) <= discovery.MAX_SEARCH_TERMS
 
 

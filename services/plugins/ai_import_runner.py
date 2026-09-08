@@ -22,6 +22,7 @@ from services.http_retry import MAX_BACKGROUND_ATTEMPTS, BackgroundRetry, RetryE
 from services.plugins import ai_archive_analysis as archive_analysis
 from services.plugins import ai_discovery as discovery
 from services.plugins import ai_import_store as store
+from services.plugins import ai_search_plan as search_plan
 from services.plugins.ai_analysis import AnalysisFormatError, parse_analysis
 from services.plugins.ai_discovery import DependencyResolutionError
 from services.plugins.ai_requirements import split_requirements
@@ -86,36 +87,26 @@ class ImportRunner:
             "analyzing", "AI provider is still responding; waiting within the task time budget"
         )
 
-    async def propose_terms(self, framework: str) -> list[str]:
-        """Ask the model for extra GitHub queries. Never fails the job."""
-        framework_names = {
-            "counterstrikesharp": "CounterStrikeSharp",
-            "swiftly": "SwiftlyS2",
-        }
-        required_name = framework_names.get(framework)
-        prompt = (
-            "You plan GitHub repository searches for a Counter-Strike 2 server panel. "
-            f"List up to 6 short GitHub search queries that find community plugins for the "
-            f"{framework} runtime. Use product names, namespaces, topic: qualifiers and common "
-            "plugin vocabulary. "
-            + (
-                f"Every query must include the exact product name {required_name}; do not "
-                "substitute broad words such as Swift or Swiftly. "
-                if required_name
-                else ""
-            )
-            + "Do not use stars:, forks:, pushed:, is: or fork: qualifiers. "
-            'Return only a JSON array of strings, for example ["topic:cs2", "cs2 plugin"].'
+    async def plan_searches(self, frameworks: list[str]) -> dict[str, list[str]]:
+        """Plan all selected frameworks in one bounded call before searching."""
+        await self.progress(
+            "analyzing", "AI is planning precise keyword groups for plugin discovery"
         )
         try:
-            async with asyncio.timeout(20):
+            async with asyncio.timeout(min(45, self.job.options.minutes * 15)):
                 message = await create_chat_completion(
                     self.config,
                     [
-                        {"role": "system", "content": prompt},
+                        {"role": "system", "content": search_plan.planning_prompt()},
                         {
                             "role": "user",
-                            "content": f"keywords: {self.job.options.keywords or 'none'}",
+                            "content": json.dumps(
+                                {
+                                    "frameworks": frameworks,
+                                    "keywords": self.job.options.keywords,
+                                },
+                                ensure_ascii=False,
+                            ),
                         },
                     ],
                     stream=True,
@@ -124,18 +115,19 @@ class ImportRunner:
                         self.check, self.ai_retry_progress, self.ai_waiting_progress
                     ),
                 )
-            payload = json.loads(
-                re.sub(r"^```[a-z]*|```$", "", str(message.get("content") or "").strip()).strip()
-            )
-        except AIProviderError, RetryExhaustedError, TimeoutError:
-            await self.progress("searching", "Query expansion unavailable; using built-in searches")
-            return []
-        except ValueError, TypeError, KeyError:
+            plans = search_plan.parse_plan(str(message.get("content") or ""), frameworks)
+        except AIProviderError, RetryExhaustedError, TimeoutError, ValueError, TypeError:
+            plans = {}
+        if not plans:
             await self.progress(
-                "searching", "Model did not return usable queries; using the built-in sweep"
+                "searching", "AI query planning unavailable; using built-in searches"
             )
-            return []
-        return [str(item) for item in payload][:6] if isinstance(payload, list) else []
+        else:
+            await self.progress(
+                "searching",
+                f"AI planned {sum(map(len, plans.values()))} precise keyword groups; starting search",
+            )
+        return plans
 
     async def candidates(self) -> list[str]:
         options = self.job.options
@@ -143,26 +135,17 @@ class ImportRunner:
             list(discovery.FRAMEWORK_TERMS) if options.framework == "all" else [options.framework]
         )
         rows: dict[str, dict[str, Any]] = {}
-        searches = [discovery.search_terms(framework, options.keywords) for framework in frameworks]
+        plans = await self.plan_searches(frameworks) if options.expand_search else {}
+        searches = [
+            search_plan.planned_searches(framework, options.keywords, plans.get(framework, []))
+            for framework in frameworks
+        ]
         try:
             async with asyncio.timeout(max(5, min(90, options.minutes * 20))):
                 for index in range(max(map(len, searches), default=0)):
                     for terms in searches:
                         if index < len(terms):
                             await self.search_into(terms[index], rows)
-                if options.expand_search:
-                    for framework, built_in in zip(frameworks, searches, strict=True):
-                        proposed = await self.propose_terms(framework)
-                        if framework == "swiftly":
-                            proposed = [
-                                term
-                                for term in proposed
-                                if (cleaned := discovery.sanitize_term(term)) is not None
-                                and "swiftlys2" in cleaned.casefold()
-                            ]
-                        for term in discovery.search_terms(framework, options.keywords, proposed):
-                            if term not in built_in:
-                                await self.search_into(term, rows)
         except TimeoutError:
             await self.progress(
                 "searching", "Search budget reached; analyzing collected candidates"
