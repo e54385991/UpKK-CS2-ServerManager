@@ -11341,6 +11341,7 @@ export interface components {
             repository?: string | null;
             /** Sequence */
             sequence: number;
+            token_usage?: components["schemas"]["ImportTokenUsage"] | null;
         };
         /** ImportItem */
         ImportItem: {
@@ -11431,6 +11432,22 @@ export interface components {
              * @default 90
              */
             updated_within_days: number;
+        };
+        /** ImportTokenUsage */
+        ImportTokenUsage: {
+            /** Estimated */
+            estimated: boolean;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Reasoning Tokens */
+            reasoning_tokens: number;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "waiting" | "thinking" | "generating" | "completed";
         };
         /**
          * InitializedHostBatchDeleteRequest

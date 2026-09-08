@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from services.ai.errors import AIPayloadTooLargeError, AIProviderError, transient_provider_error
+from services.ai.progress import ProgressCallback, StreamProgress
 from services.ai.streaming import (
     consume_chat_completion_stream,
     consume_responses_stream,
@@ -501,24 +502,26 @@ async def _provider_message(
     *,
     stream: bool,
     on_text_delta: TextDeltaCallback | None,
+    progress: StreamProgress | None = None,
 ) -> tuple[dict[str, Any] | None, bytes | None]:
     if response.status_code < 200 or response.status_code >= 300:
         content = await _read_limited_response(response)
         error = _status_error(response, content)
         if error is not None:
             raise error
-    if not stream:
+    if not stream or "text/event-stream" not in response.headers.get("content-type", "").lower():
+        # Gateways may return JSON errors (or a buffered completion) despite stream=True.
         return None, await _read_limited_response(response)
     if config.api_protocol == "responses":
-        return await _consume_responses_stream(response, on_text_delta), None
-    return await _consume_chat_completion_stream(response, on_text_delta), None
+        return await _consume_responses_stream(response, on_text_delta, progress), None
+    return await _consume_chat_completion_stream(response, on_text_delta, progress), None
 
 
 def _decode_provider_message(config: AIProviderConfig, content: bytes) -> dict[str, Any]:
     try:
         data = json.loads(content)
     except (ValueError, KeyError, IndexError, TypeError) as exc:
-        raise AIProviderError("AI provider returned invalid JSON") from exc
+        raise AIProviderError("AI provider returned invalid JSON", retryable=True) from exc
     if not isinstance(data, dict):
         raise AIProviderError("AI provider response is invalid")
     error = data.get("error")
@@ -540,7 +543,11 @@ def _decode_provider_message(config: AIProviderConfig, content: bytes) -> dict[s
 def _retry_hint(error: Exception) -> float | None:
     if isinstance(error, httpx.HTTPError):
         return 0.0
-    if isinstance(error, AIProviderError) and error.retryable:
+    if (
+        isinstance(error, AIProviderError)
+        and error.retryable
+        and not isinstance(error, AIPayloadTooLargeError)
+    ):
         return error.retry_after
     return None
 
@@ -552,7 +559,11 @@ async def _request_message(
     payload: dict[str, Any],
     stream: bool,
     on_text_delta: TextDeltaCallback | None,
+    on_progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
+    progress = StreamProgress(on_progress, payload) if on_progress is not None else None
+    if progress is not None:
+        await progress.emit(force=True)
     await ai_provider_transport.acquire_rpm(
         config.requests_per_minute, config.base_url, config.api_key
     )
@@ -568,11 +579,15 @@ async def _request_message(
             response,
             stream=stream,
             on_text_delta=on_text_delta,
+            progress=progress,
         )
     if message is None:
         assert content is not None
         message = _decode_provider_message(config, content)
-    return _validate_message_payload(message)
+    message = _validate_message_payload(message)
+    if progress is not None:
+        await progress.finish(message)
+    return message
 
 
 async def create_chat_completion(
@@ -584,6 +599,7 @@ async def create_chat_completion(
     stream: bool = False,
     on_text_delta: TextDeltaCallback | None = None,
     retry: BackgroundRetry | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     base_url = await validate_provider_endpoint(config.base_url, config.allowlist)
 
@@ -693,6 +709,7 @@ async def create_chat_completion(
                     payload,
                     stream,
                     on_text_delta,
+                    on_progress,
                 )
 
                 # Buffered streams can restart safely; never replay externally delivered deltas.

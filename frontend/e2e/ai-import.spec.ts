@@ -49,6 +49,17 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await submit.click();
       await expect(dialog).toBeHidden();
       await expect(page.getByText("Searching maintained CS2 plugins").first()).toBeVisible();
+      const usage = page.getByTestId("ai-import-usage");
+      await expect(usage).toBeVisible();
+      await expect(usage).toContainText(locale === "zh-CN" ? "AI 思考中" : "AI is thinking");
+      await expect(page.getByTestId("ai-tokens-input")).toHaveText("1,200");
+      const firstCount = await page.getByTestId("ai-tokens-output").textContent();
+      await expect(page.getByTestId("ai-tokens-output")).not.toHaveText(firstCount ?? "");
+      expect(await usage.evaluate(el => {
+        const box = el.getBoundingClientRect();
+        return el.scrollWidth <= el.clientWidth + 1 && box.left >= 0 && box.right <= innerWidth;
+      })).toBeTruthy();
+      await page.screenshot({ path: `/tmp/plugin-ai-usage-${locale}-${width}.png`, fullPage: true });
       await page.getByRole("button", { name: locale === "zh-CN" ? "取消任务" : "Cancel job", exact: true }).click();
       await expect(page.getByRole("button", { name: locale === "zh-CN" ? "取消任务" : "Cancel job", exact: true })).toBeHidden();
       const deleteTask = page.getByRole("button", { name: locale === "zh-CN" ? "删除任务记录" : "Delete task history", exact: true });

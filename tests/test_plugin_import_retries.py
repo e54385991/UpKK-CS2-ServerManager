@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from services import ai_provider, http_retry
-from services.ai.errors import AIProviderError
+from services.ai.errors import AIPayloadTooLargeError, AIProviderError
 from services.ai_security import AIProviderConfig
 from services.http_retry import BackgroundRetry, RetryExhaustedError, retry_after_seconds
 from services.plugins import ai_import_runner as runner
@@ -133,6 +133,23 @@ async def test_ai_permanent_errors_and_adaptive_413_are_not_replayed(provider, r
     retry.notify.assert_not_awaited()
     if status == 413:
         assert requests[0].content != requests[1].content
+    await ai_provider.ai_provider_transport.close()
+
+
+@pytest.mark.asyncio
+async def test_ai_413_is_not_replayed_after_adaptive_payload(provider, retry):
+    requests = []
+
+    def handle(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(413)
+
+    with pytest.raises(AIPayloadTooLargeError):
+        await ai_provider.create_chat_completion(
+            provider(handle), [{"role": "user", "content": "test"}], retry=retry
+        )
+    assert len(requests) == 2
+    retry.notify.assert_not_awaited()
     await ai_provider.ai_provider_transport.close()
 
 

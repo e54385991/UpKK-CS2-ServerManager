@@ -419,7 +419,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
           role="dialog"
           aria-label={t("activityTitle")}
           data-testid="activity-tray-panel"
-          className="absolute right-0 z-40 mt-2 flex w-[min(28rem,calc(100vw-2rem))] max-h-[min(36rem,70dvh)] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel"
+          className="fixed right-4 sm:absolute sm:right-0 z-40 mt-2 flex w-[min(28rem,calc(100vw-2rem))] max-h-[min(36rem,70dvh)] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel"
         >
           {isAdmin && hasVisibleMarketTasks && <AIImportTasks initialTasks={marketTasks} />}
           <header className="space-y-3 border-b border-line px-4 py-3">

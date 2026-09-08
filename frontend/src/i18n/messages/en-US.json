@@ -998,6 +998,19 @@
     "forgetPending": "Clearing…",
     "forgetFailed": "Could not clear the record",
     "aiImport": {
+      "usage": {
+        "waiting": "Waiting for AI",
+        "thinking": "AI is thinking",
+        "generating": "AI is generating",
+        "completed": "Request completed",
+        "lastRequest": "Latest AI request",
+        "estimated": "Estimated tokens",
+        "reported": "Provider usage",
+        "input": "Input",
+        "output": "Output",
+        "reasoning": "Of which reasoning",
+        "hint": "Current request usage; output includes reasoning. Counts update from received data and stay unchanged while the provider is silent."
+      },
       "open": "AI discovery",
       "description": "Discover maintained CS2 plugins and analyze installation docs, categories and dependencies in the background. Jobs continue after you leave.",
       "model": "AI model",

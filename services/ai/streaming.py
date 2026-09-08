@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from services.ai.errors import AIProviderError, transient_provider_error
+from services.ai.progress import StreamProgress
 from services.ai_security import MAX_PROVIDER_RESPONSE_BYTES, redact_sensitive_text
 
 TextDeltaCallback = Callable[[str], Awaitable[None]]
@@ -145,6 +146,7 @@ class ChatStreamAccumulator:
 async def consume_chat_completion_stream(
     response: httpx.Response,
     on_text_delta: TextDeltaCallback | None,
+    progress: StreamProgress | None = None,
 ) -> dict[str, Any]:
     if "text/event-stream" not in response.headers.get("content-type", "").lower():
         raise AIProviderError("AI provider did not return a standard SSE stream")
@@ -168,6 +170,8 @@ async def consume_chat_completion_stream(
                 for choice in choices
             )
         await accumulator.add(chunk, on_text_delta)
+        if progress is not None:
+            await progress.chat(chunk)
     if not completed:
         raise AIProviderError("AI provider SSE stream ended before completion", retryable=True)
     return accumulator.message()
@@ -304,6 +308,7 @@ class ResponsesStreamAccumulator:
 async def consume_responses_stream(
     response: httpx.Response,
     on_text_delta: TextDeltaCallback | None,
+    progress: StreamProgress | None = None,
 ) -> dict[str, Any]:
     if "text/event-stream" not in response.headers.get("content-type", "").lower():
         raise AIProviderError("AI provider did not return a standard SSE stream")
@@ -313,4 +318,6 @@ async def consume_responses_stream(
             break
         event = parse_sse_json(payload, protocol="Responses")
         await accumulator.add(event, on_text_delta)
+        if progress is not None:
+            await progress.responses(event)
     return accumulator.message()

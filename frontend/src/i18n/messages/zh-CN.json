@@ -998,6 +998,19 @@
     "forgetPending": "清除中…",
     "forgetFailed": "清除记录失败",
     "aiImport": {
+      "usage": {
+        "waiting": "等待 AI 响应",
+        "thinking": "AI 思考中",
+        "generating": "AI 生成中",
+        "completed": "本次请求已完成",
+        "lastRequest": "最近一次 AI 请求",
+        "estimated": "估算 token",
+        "reported": "供应商计量",
+        "input": "输入",
+        "output": "输出",
+        "reasoning": "其中思考",
+        "hint": "当前请求用量；输出包含思考。根据已收到的数据更新，供应商未返回数据时数字保持不变。"
+      },
       "open": "AI 智能导入",
       "description": "后台搜索仍在维护的热门 CS2 插件，自动分析安装文档、分类与依赖。关闭页面后任务继续运行。",
       "model": "AI 模型",

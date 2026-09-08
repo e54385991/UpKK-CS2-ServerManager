@@ -551,6 +551,35 @@ async def test_invalid_ai_output_continues_but_provider_unavailability_stops(run
 
 
 @pytest.mark.asyncio
+async def test_oversized_ai_request_fails_item_but_job_continues(runner_env):
+    from services.ai.errors import AIPayloadTooLargeError
+
+    instance = runner.ImportRunner(job(), "token", config())
+    try:
+        GitHubAIClient.repository.side_effect = lambda url: {
+            "html_url": url,
+            "owner": {"login": "example"},
+            "default_branch": "main",
+        }
+        GitHubAIClient.documents.return_value = (
+            [{"path": "README.md", "text": "plugin"}],
+            [DocumentationSource(path="README.md", commit=SHA)],
+        )
+        GitHubAIClient.release.return_value = {"assets": [{"name": "plugin.zip"}]}
+        runner.create_chat_completion.side_effect = [
+            AIPayloadTooLargeError("AI provider returned HTTP 413", retryable=True),
+            {"content": analysis().model_dump_json()},
+        ]
+        assert await instance.visit(URL) is None
+        assert store.update_job.call_args.kwargs["item"].status == "failed"
+        assert "too large" in store.update_job.call_args.kwargs["message"]
+        assert await instance.visit("https://github.com/example/next") == 10
+        store.insert_plugin.assert_awaited_once()
+    finally:
+        await instance.client.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("failure_at", ["repository", "documents", "release"])
 async def test_any_github_rate_limit_aborts_before_ai_or_insert(runner_env, failure_at):
     getattr(GitHubAIClient, failure_at).side_effect = GitHubRateLimitError(

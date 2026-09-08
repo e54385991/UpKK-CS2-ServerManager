@@ -27,6 +27,7 @@ from modules.plugin_ai import (
     ImportEvent,
     ImportItem,
     ImportOptions,
+    ImportTokenUsage,
     PluginAIInfo,
     PluginDescriptionI18n,
     RepositoryAnalysis,
@@ -182,13 +183,27 @@ def snapshot(job: PluginImportJob) -> JobSnapshot:
 
 
 def append_event(
-    job: PluginImportJob, phase: str, message: str, repository: str | None = None
+    job: PluginImportJob,
+    phase: str,
+    message: str,
+    repository: str | None = None,
+    token_usage: ImportTokenUsage | None = None,
 ) -> None:
     sequence = int(str(job.events[-1]["sequence"])) + 1 if job.events else 1
     event = ImportEvent(
-        sequence=sequence, phase=phase, message=message[:2000], repository=repository
+        sequence=sequence,
+        phase=phase,
+        message=message[:2000],
+        repository=repository,
+        token_usage=token_usage,
     )
-    job.events = [*job.events, event.model_dump(mode="json")][-300:]
+    # Keep the latest counter snapshot without evicting repository/retry history.
+    previous = job.events
+    if token_usage is not None and previous and previous[-1].get("token_usage") is not None:
+        previous = previous[:-1]
+    job.events = [*previous, event.model_dump(mode="json")][-300:]
+    if token_usage is not None:
+        return
     job.phase, job.message, job.current_repository = phase, message[:2000], repository
 
 
@@ -377,6 +392,7 @@ async def update_job(
     retry_at: int | None = None,
     item: ImportItem | None = None,
     model: str | None = None,
+    token_usage: ImportTokenUsage | None = None,
 ) -> None:
     async with async_session_maker() as db:
         job = (
@@ -390,7 +406,7 @@ async def update_job(
         )
         if job is None or job.status not in ACTIVE:
             return
-        append_event(job, phase, message, repository)
+        append_event(job, phase, message, repository, token_usage)
         job.heartbeat_at = now()
         if item:
             job.items = [*job.items, item.model_dump(mode="json")]

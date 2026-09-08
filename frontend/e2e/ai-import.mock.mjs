@@ -17,6 +17,14 @@ createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "text/event-stream" });
     const send = () => {
       const value = path.includes("operations/inbox") ? inbox() : tasks.find(task => path.includes(task.operation_id));
+      if (value?.status === "running" && !path.includes("operations/inbox")) {
+        value.phase = "analyzing";
+        const previous = value.events.at(-1)?.token_usage?.output_tokens ?? 0;
+        value.events = [{ sequence: previous + 1, phase: "token_usage", message: "usage", token_usage: {
+          input_tokens: 1200, output_tokens: previous + 16, reasoning_tokens: previous + 16,
+          estimated: true, stage: "thinking",
+        } }];
+      }
       res.write(`event: ${path.includes("operations/inbox") ? "inbox" : "snapshot"}\ndata: ${JSON.stringify(value)}\n\n`);
     };
     send();

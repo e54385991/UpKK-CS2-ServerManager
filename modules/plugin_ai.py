@@ -226,7 +226,16 @@ class ImportItem(StrictValue):
     plugin_id: int | None = None
 
 
+class ImportTokenUsage(StrictValue):
+    input_tokens: int = Field(ge=0, le=10_000_000)
+    output_tokens: int = Field(ge=0, le=10_000_000)
+    reasoning_tokens: int = Field(ge=0, le=10_000_000)
+    estimated: bool
+    stage: Literal["waiting", "thinking", "generating", "completed"]
+
+
 class ImportEvent(StrictValue):
+    token_usage: ImportTokenUsage | None = None
     sequence: int
     phase: str
     message: str

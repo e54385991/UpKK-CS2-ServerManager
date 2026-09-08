@@ -10,6 +10,7 @@ import {
   getAIImport,
   listAIImports,
 } from "@/modules/plugins/ai-import-actions";
+import { AIImportUsage } from "@/modules/plugins/ai-import-usage";
 import { latestSubmittedAIImport } from "@/modules/plugins/ai-import-activity";
 import { Button } from "@/shared/ui/button";
 import { confirm, notify } from "@/shared/feedback";
@@ -113,7 +114,8 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
       <p className="truncate text-xs text-fg-muted">{task.message}</p>
     </button>)}</div>
     {selected && <div className="mt-3 space-y-2 rounded border border-line p-3">
-      <p>{phaseLabel(selected.phase)} · {statusLabel(selected.status)}</p>
+      <p className="flex items-center gap-2" role="status">{active(selected) && <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin text-primary motion-reduce:animate-none" />}{phaseLabel(selected.phase)} · {statusLabel(selected.status)}</p>
+      <AIImportUsage task={selected} />
       <p>{t("elapsed", { seconds: selected.started_at ? Math.max(0, Math.floor(((selected.completed_at ? Date.parse(selected.completed_at) : clock) - Date.parse(selected.started_at)) / 1000)) : 0 })}</p>
       <p className="break-all text-xs">{selected.current_repository}</p>
       <p className="text-xs">{t("results", { imported: selected.items.filter(i => i.status === "imported").length, skipped: selected.items.filter(i => i.status === "skipped").length, failed: selected.items.filter(i => i.status === "failed").length })}</p>
@@ -133,7 +135,7 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
         } finally { setDeleting(false); }
       }}>{deleting ? <LoaderCircle className="animate-spin" /> : null}{t("deleteTask")}</Button>}
       <ul className="max-h-36 overflow-auto text-xs">{selected.items.map((item,index) => <li key={index} className="mb-2 break-all">{item.repository} · {t(`status.${item.status}`)}<p>{item.message}</p></li>)}</ul>
-      <pre className="max-h-28 overflow-auto whitespace-pre-wrap text-xs text-fg-muted">{selected.events.map(event => event.message).join("\n")}</pre>
+      <pre className="max-h-28 overflow-auto whitespace-pre-wrap text-xs text-fg-muted">{selected.events.filter(event => !event.token_usage).map(event => event.message).join("\n")}</pre>
     </div>}
     {error && <p role="alert" className="text-danger">{error}</p>}
   </section>;

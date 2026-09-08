@@ -7,7 +7,15 @@ import json
 import re
 from typing import Any
 
-from modules.plugin_ai import ImportItem, PluginAIInfo, RepositoryAnalysis, repository_url
+from modules.plugin_ai import (
+    ImportItem,
+    ImportTokenUsage,
+    PluginAIInfo,
+    RepositoryAnalysis,
+    repository_url,
+)
+from services.ai.errors import AIPayloadTooLargeError
+from services.ai.progress import ProviderProgress
 from services.ai_provider import AIProviderError, create_chat_completion
 from services.ai_security import AIProviderConfig
 from services.http_retry import MAX_BACKGROUND_ATTEMPTS, BackgroundRetry, RetryExhaustedError
@@ -65,6 +73,19 @@ class ImportRunner:
             f"AI request temporarily failed; attempt {attempt}/{MAX_BACKGROUND_ATTEMPTS} in {delay:.1f}s",
         )
 
+    async def ai_token_progress(self, value: ProviderProgress) -> None:
+        await store.update_job(
+            self.job.operation_id,
+            phase="token_usage",
+            message="AI token usage updated",
+            token_usage=ImportTokenUsage(**value),
+        )
+
+    async def ai_waiting_progress(self) -> None:
+        await self.progress(
+            "analyzing", "AI provider is still responding; waiting within the task time budget"
+        )
+
     async def propose_terms(self, framework: str) -> list[str]:
         """Ask the model for extra GitHub queries. Never fails the job."""
         framework_names = {
@@ -98,7 +119,10 @@ class ImportRunner:
                         },
                     ],
                     stream=True,
-                    retry=BackgroundRetry(self.check, self.ai_retry_progress),
+                    on_progress=self.ai_token_progress,
+                    retry=BackgroundRetry(
+                        self.check, self.ai_retry_progress, self.ai_waiting_progress
+                    ),
                 )
             payload = json.loads(
                 re.sub(r"^```[a-z]*|```$", "", str(message.get("content") or "").strip()).strip()
@@ -247,7 +271,8 @@ class ImportRunner:
                 self.config,
                 messages,
                 stream=True,
-                retry=BackgroundRetry(self.check, self.ai_retry_progress),
+                on_progress=self.ai_token_progress,
+                retry=BackgroundRetry(self.check, self.ai_retry_progress, self.ai_waiting_progress),
             )
             try:
                 parsed = parse_analysis(str(message.get("content") or ""))
@@ -303,6 +328,12 @@ class ImportRunner:
             result = await self.import_repository(url, depth)
             self.visited[url] = result
             return result
+        except AIPayloadTooLargeError as exc:
+            await self._fail_item(
+                url,
+                f"AI payload is too large for the configured provider; {exc}",
+            )
+            return None
         except (
             GitHubRateLimitError,
             GitHubAuthenticationError,
@@ -500,6 +531,16 @@ class ImportRunner:
             metadata,
             dependencies,
             self.token_fingerprint,
+        )
+
+    async def _fail_item(self, url: str, message: str) -> None:
+        """Record one candidate as failed without terminating the whole job."""
+        self.rejected.add(url)
+        await self.progress(
+            "failed_item",
+            message,
+            url,
+            ImportItem(repository=url, status="failed", message=message),
         )
 
     async def run(self) -> None:

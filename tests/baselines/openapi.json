@@ -11277,6 +11277,16 @@
           "sequence": {
             "title": "Sequence",
             "type": "integer"
+          },
+          "token_usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportTokenUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -11438,6 +11448,52 @@
           }
         },
         "title": "ImportOptions",
+        "type": "object"
+      },
+      "ImportTokenUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "estimated": {
+            "title": "Estimated",
+            "type": "boolean"
+          },
+          "input_tokens": {
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "reasoning_tokens": {
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Reasoning Tokens",
+            "type": "integer"
+          },
+          "stage": {
+            "enum": [
+              "waiting",
+              "thinking",
+              "generating",
+              "completed"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "reasoning_tokens",
+          "estimated",
+          "stage"
+        ],
+        "title": "ImportTokenUsage",
         "type": "object"
       },
       "InitializedHostBatchDeleteRequest": {

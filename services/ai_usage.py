@@ -26,7 +26,23 @@ def token_count(value: Any) -> int:
             text = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
         except TypeError, ValueError:
             text = str(value)
-    return max(0, (len(text) + 3) // 4)
+    return stream_token_count(len(text))
+
+
+def stream_token_count(characters: int) -> int:
+    """Estimate streamed tokens from lengths without retaining private text."""
+    return min(MAX_REPORTED_TOKENS, max(0, (characters + 3) // 4))
+
+
+def provider_reasoning_tokens(response: dict[str, Any], output_tokens: int) -> int | None:
+    usage = response.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    details = usage.get("output_tokens_details", usage.get("completion_tokens_details"))
+    value = details.get("reasoning_tokens") if isinstance(details, dict) else None
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return min(value, output_tokens)
+    return None
 
 
 def estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
@@ -54,7 +70,7 @@ def cached_input_tokens(usage: dict[str, Any]) -> int:
             continue
         try:
             parsed = int(value)
-        except TypeError, ValueError:
+        except TypeError, ValueError, OverflowError:
             continue
         if parsed > 0:
             return min(parsed, MAX_REPORTED_TOKENS)
@@ -76,7 +92,7 @@ def provider_token_usage(response: dict[str, Any]) -> tuple[int, int, int] | Non
                 continue
             try:
                 parsed = int(value)
-            except TypeError, ValueError:
+            except TypeError, ValueError, OverflowError:
                 continue
             if parsed >= 0:
                 return min(parsed, MAX_REPORTED_TOKENS)

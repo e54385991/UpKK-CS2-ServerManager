@@ -34,6 +34,23 @@ class RetryExhaustedError(RuntimeError):
 class BackgroundRetry:
     check: Callable[[], Awaitable[None]]
     notify: Callable[[int, float], Awaitable[None]]
+    waiting: Callable[[], Awaitable[None]] | None = None
+
+    async def _request[T](self, request: Callable[[], Awaitable[T]]) -> T:
+        if self.waiting is None:
+            return await request()
+        task = asyncio.ensure_future(request())
+        try:
+            while True:
+                done, _pending = await asyncio.wait({task}, timeout=15)
+                if done:
+                    return await task
+                await self.check()
+                await self.waiting()
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def run[T](
         self,
@@ -43,7 +60,7 @@ class BackgroundRetry:
         for attempt in range(1, MAX_BACKGROUND_ATTEMPTS + 1):
             await self.check()
             try:
-                return await request()
+                return await self._request(request)
             except Exception as exc:
                 hint = retry_hint(exc)
                 if hint is None:
