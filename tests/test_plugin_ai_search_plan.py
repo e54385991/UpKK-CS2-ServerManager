@@ -25,12 +25,12 @@ def test_plan_separates_synonyms_deduplicates_groups_and_keeps_frameworks():
     )
     assert len(plan["swiftly"]) == 2
     assert plan["counterstrikesharp"] == [
-        "CounterStrikeSharp rank in:name,description,readme topic:cs2-plugin"
+        "CounterStrikeSharp rank in:name,description topic:cs2-plugin"
     ]
-    assert plan["other"] == ["CS2 server utility in:name,description,readme"]
+    assert plan["other"] == ["CS2 server utility in:name,description"]
     queries = planned_searches("swiftly", "回防练习", plan["swiftly"])
     assert queries[:2] == plan["swiftly"]
-    assert queries[2:] == list(FRAMEWORK_TERMS["swiftly"][:2])
+    assert queries[2:] == list(FRAMEWORK_TERMS["swiftly"])
 
 
 @pytest.mark.parametrize(
@@ -58,7 +58,7 @@ def test_qualifiers_are_only_emitted_by_compiler():
             "topics": ["cs2-plugin is:private"],
         },
     )
-    assert query == "SwiftlyS2 rank in:name,description,readme"
+    assert query == "SwiftlyS2 rank in:name,description"
 
 
 def test_missing_framework_and_invalid_payload_use_bounded_fallbacks():

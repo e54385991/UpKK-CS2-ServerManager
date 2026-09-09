@@ -9947,6 +9947,45 @@ export interface components {
             /** Message */
             message?: string | null;
         };
+        /**
+         * DiscoveryProgress
+         * @description Cumulative unique root repositories, not search hits or dependencies.
+         *
+         *     Eligible and analyzed are stage counters; they are not disjoint outcomes.
+         *     Existing includes repositories added to the market while the job is running.
+         */
+        DiscoveryProgress: {
+            /**
+             * Deep Analyzed
+             * @default 0
+             */
+            deep_analyzed: number;
+            /**
+             * Discovered
+             * @default 0
+             */
+            discovered: number;
+            /**
+             * Eligible
+             * @default 0
+             */
+            eligible: number;
+            /**
+             * Existing
+             * @default 0
+             */
+            existing: number;
+            /**
+             * Irrelevant
+             * @default 0
+             */
+            irrelevant: number;
+            /**
+             * Uncertain
+             * @default 0
+             */
+            uncertain: number;
+        };
         /** DiskSpaceListView */
         DiskSpaceListView: {
             /** Servers */
@@ -11333,6 +11372,7 @@ export interface components {
         };
         /** ImportEvent */
         ImportEvent: {
+            discovery?: components["schemas"]["DiscoveryProgress"] | null;
             /** Message */
             message: string;
             /** Phase */
@@ -11404,7 +11444,7 @@ export interface components {
             min_forks: number;
             /**
              * Min Stars
-             * @default 10
+             * @default 0
              */
             min_stars: number;
             /**
@@ -11429,7 +11469,7 @@ export interface components {
             sort_priority?: ("stars" | "forks" | "updated")[];
             /**
              * Updated Within Days
-             * @default 90
+             * @default 365
              */
             updated_within_days: number;
         };

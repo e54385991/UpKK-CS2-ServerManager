@@ -183,14 +183,30 @@ HTTP request.
   （`PluginInstallPlanView.ai_notices`），控制台在安装前作为提示展示；缺少安装
   规则时按普通条目的压缩包自动识别流程安装。未核对仍需要
   `acknowledge_ai_unreviewed`。
-- **AI 采集的检索、排序、时效与依赖策略**都在 `services/plugins/ai_discovery.py`：
+- **AI 采集的检索、筛选与去重**由 `services/plugins/ai_candidate_discovery.py` 和
+  `services/plugins/ai_candidate_screening.py` 编排；排序、时效与依赖策略在
+  `services/plugins/ai_discovery.py`：
+  - 任务开始时批量加载规范化仓库地址索引；搜索结果立即排除已收录和本任务重复项，
+    筛选前后按批刷新索引，依赖复用已有 ID，写入前保留数据库复核。不得为每个候选
+    重复全表读取市场地址。统计按唯一根仓库计数，通过 `ImportEvent.discovery` 回放，
+    旧事件没有该字段仍合法。
+  - 每批最多 20 个新候选先用名称、描述、topics 判断身份；信息不足时补读固定 commit
+    的 README 后再判断一次，仅合格项进入发行包检查和安装规则分析。收录 CS2 服务端
+    插件、运行框架及专用配套库，排除教程、模板、插件列表、通用 SDK、面板和配置合集。
+    两次完全无效的筛选响应记为任务失败；证据不足是可重试的本轮略过，不是永久黑名单。
+    手填仓库及必需依赖保留显式入口，仍须通过最终身份和安装证据校验。
+  - 每轮各框架执行一条查询的一页，处理本轮候选后再补充搜索；本轮候选池按
+    `sort_priority` 排序。README 和仓库元数据在任务内复用，文档目录只访问根目录树
+    中实际存在的路径。搜索耗时累计计入独立预算，不把中间筛选、导入时间算进去。
+    默认最低星数为 0、更新窗口为 365 天；明确提交的门槛和旧任务参数不得自动放宽。
   - `expand_search=true`（默认）时，搜索前由 AI 一次规划全部选中框架的多组关键词，
     `services/plugins/ai_search_plan.py` 把结构化 `terms` / `topics` 编译成查询。
     组内多词同时匹配，组间分别搜索并合并；模型按用户意图组织同义词、翻译和具体功能词，
     不再把原始用户关键词强行追加到每条 AI 查询。后端添加精确的 CounterStrikeSharp /
-    SwiftlyS2 / CS2 锚点以及 `in:name,description,readme`，不接受模型的任意限定符。
-    每框架最多 `MAX_PLANNED_GROUPS` 组，优先执行两组 AI 查询，再穿插两条
-    `FRAMEWORK_TERMS` 兜底，总数不超过 `MAX_SEARCH_TERMS`，每条最多 `SEARCH_PAGES` 页，
+    SwiftlyS2 / CS2 锚点以及 `in:name,description`，不接受模型的任意限定符。
+    每框架最多规划 `MAX_PLANNED_GROUPS` 组，优先执行两组 AI 查询，再穿插两条
+    `FRAMEWORK_TERMS` 精确兜底、另两组 AI 查询及 README 兜底；总数不超过
+    `MAX_SEARCH_TERMS`，每条最多 `SEARCH_PAGES` 页，
     框架之间轮转。规划有独立的有限时间预算，不占用 GitHub 搜索阶段预算，整体仍受任务时限约束。
     模型不可用、JSON 无效或某框架没有有效分组时，该框架退回完整内置查询；关闭开关同样退回。
     内置查询的用户关键词仍经 `sanitize_term` 清理；受控限定符整个 token 丢弃，不能把

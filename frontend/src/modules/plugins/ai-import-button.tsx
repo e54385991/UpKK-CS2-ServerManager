@@ -18,7 +18,7 @@ type Options = components["schemas"]["ImportOptions"];
 type Readiness = components["schemas"]["PluginAIReadinessView"];
 type SortKey = "stars" | "updated" | "forks";
 const SORT_KEYS: readonly SortKey[] = ["stars", "updated", "forks"];
-const defaults: Options = { framework: "all", description_language: "original", keywords: "", min_stars: 10, min_forks: 0, sort: "stars", sort_priority: [...SORT_KEYS], updated_within_days: 90, expand_search: true, require_dependencies: true, minutes: 15, max_plugins: 20, repositories: [] };
+const defaults: Options = { framework: "all", description_language: "original", keywords: "", min_stars: 0, min_forks: 0, sort: "stars", sort_priority: [...SORT_KEYS], updated_within_days: 365, expand_search: true, require_dependencies: true, minutes: 15, max_plugins: 20, repositories: [] };
 
 /** Move `key` to `rank`, pushing whatever sat there aside, so the three keys
  *  always stay a complete ordering rather than collapsing to duplicates. */

@@ -28,7 +28,7 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
     return key ? t(`status.${key}`) : value;
   };
   const phaseLabel = (value: string) => {
-    const key = (["queued", "starting", "searching", "reading", "analyzing", "importing", "skipped", "failed_item", "completed", "stopped", "rate_limited", "failed", "cancelled"] as const).find(key => key === value);
+    const key = (["queued", "starting", "searching", "filtering", "reading", "analyzing", "importing", "skipped", "failed_item", "completed", "stopped", "rate_limited", "failed", "cancelled"] as const).find(key => key === value);
     return key ? t(`phase.${key}`) : value;
   };
   const [tasks, setTasks] = useState<Task[]>([...initialTasks]);
@@ -56,6 +56,7 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
   }, [initialTasks.length]);
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  const discovery = selected ? [...selected.events].reverse().find(event => event.discovery)?.discovery : null;
   const selectedId = selected?.operation_id;
   const selectedActive = selected ? active(selected) : false;
   useEffect(() => {
@@ -115,6 +116,7 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
     </button>)}</div>
     {selected && <div className="mt-3 space-y-2 rounded border border-line p-3">
       <p className="flex items-center gap-2" role="status">{active(selected) && <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin text-primary motion-reduce:animate-none" />}{phaseLabel(selected.phase)} · {statusLabel(selected.status)}</p>
+      {discovery && <p data-testid="ai-discovery-summary" className="text-xs text-fg-muted">{t("discoverySummary", discovery)}</p>}
       <AIImportUsage task={selected} />
       <p>{t("elapsed", { seconds: selected.started_at ? Math.max(0, Math.floor(((selected.completed_at ? Date.parse(selected.completed_at) : clock) - Date.parse(selected.started_at)) / 1000)) : 0 })}</p>
       <p className="break-all text-xs">{selected.current_repository}</p>

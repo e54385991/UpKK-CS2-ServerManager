@@ -23,6 +23,7 @@ from modules.models import (
     User,
 )
 from modules.plugin_ai import (
+    DiscoveryProgress,
     GitHubVerification,
     ImportEvent,
     ImportItem,
@@ -188,6 +189,7 @@ def append_event(
     message: str,
     repository: str | None = None,
     token_usage: ImportTokenUsage | None = None,
+    discovery: DiscoveryProgress | None = None,
 ) -> None:
     sequence = int(str(job.events[-1]["sequence"])) + 1 if job.events else 1
     event = ImportEvent(
@@ -196,6 +198,7 @@ def append_event(
         message=message[:2000],
         repository=repository,
         token_usage=token_usage,
+        discovery=discovery,
     )
     # Keep the latest counter snapshot without evicting repository/retry history.
     previous = job.events
@@ -393,6 +396,7 @@ async def update_job(
     item: ImportItem | None = None,
     model: str | None = None,
     token_usage: ImportTokenUsage | None = None,
+    discovery: DiscoveryProgress | None = None,
 ) -> None:
     async with async_session_maker() as db:
         job = (
@@ -406,7 +410,7 @@ async def update_job(
         )
         if job is None or job.status not in ACTIVE:
             return
-        append_event(job, phase, message, repository, token_usage)
+        append_event(job, phase, message, repository, token_usage, discovery)
         job.heartbeat_at = now()
         if item:
             job.items = [*job.items, item.model_dump(mode="json")]
@@ -434,16 +438,27 @@ async def check_job(job_id: str, token_fingerprint: str) -> None:
             raise PermissionError("Global GitHub token changed; submit a new task")
 
 
-async def existing_plugin(url: str) -> int | None:
+async def existing_repositories() -> dict[str, int]:
+    """Load one normalized marketplace index in a short transaction."""
+    result: dict[str, int] = {}
     async with async_session_maker() as db:
         rows = (await db.execute(select(MarketPlugin.id, MarketPlugin.github_url))).all()
         for row in rows:
             try:
-                if repository_url(str(row[1])) == url.casefold():
-                    return int(row[0])
+                result.setdefault(repository_url(str(row[1])), int(row[0]))
             except ValueError:
                 continue
-    return None
+    return result
+
+
+async def existing_plugin(url: str) -> int | None:
+    return (await existing_repositories()).get(repository_url(url))
+
+
+@dataclass(frozen=True)
+class PluginInsertResult:
+    plugin_id: int
+    created: bool
 
 
 async def insert_plugin(
@@ -454,7 +469,7 @@ async def insert_plugin(
     metadata: PluginAIInfo,
     dependency_ids: list[int],
     token_fingerprint: str,
-) -> int:
+) -> PluginInsertResult:
     await check_lease()
     async with async_session_maker() as db:
         job = (
@@ -482,7 +497,7 @@ async def insert_plugin(
             .first()
         )
         if existing:
-            return int(existing.id)
+            return PluginInsertResult(int(existing.id), created=False)
         plugin = MarketPlugin(
             github_url=url,
             title=analysis.title,
@@ -509,7 +524,7 @@ async def insert_plugin(
         append_event(job, "importing", item.message, url)
         db.add(job)
         await db.commit()
-        return int(plugin.id)
+        return PluginInsertResult(int(plugin.id), created=True)
 
 
 async def claim_next() -> JobSnapshot | None:

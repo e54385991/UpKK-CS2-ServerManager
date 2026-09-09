@@ -329,25 +329,22 @@ async def test_insert_and_dependencies_commit_atomically_existing_entries_preser
         [2, 3],
         store.fingerprint("token"),
     )
-    assert added == 15
+    assert added == store.PluginInsertResult(15, True)
     plugin = next(value for value in db.added if isinstance(value, MarketPlugin))
     assert plugin.dependencies == "2,3" and not plugin.ai_metadata["reviewed"]
     assert plugin.description_i18n == {"original": "Description", "zh_cn": "描述"}
     assert db.job.items[-1]["plugin_id"] == plugin.id
     assert db.commit.await_count == 1
     db.execute.side_effect = [Result([db.job]), Result([db.plugin])]
-    assert (
-        await store.insert_plugin(
-            db.job.id,
-            "https://github.com/a/b",
-            "author",
-            result,
-            info,
-            [],
-            store.fingerprint("token"),
-        )
-        == 12
-    )
+    assert await store.insert_plugin(
+        db.job.id,
+        "https://github.com/a/b",
+        "author",
+        result,
+        info,
+        [],
+        store.fingerprint("token"),
+    ) == store.PluginInsertResult(12, False)
     assert db.plugin.title == "Original" and db.commit.await_count == 1
     db.execute.side_effect = lambda _: Result([(12, "https://github.com/A/B.git/")])
     assert await store.existing_plugin("https://github.com/a/b") == 12

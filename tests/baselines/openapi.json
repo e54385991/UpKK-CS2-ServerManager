@@ -7366,6 +7366,50 @@
         "title": "DiscordTestRequest",
         "type": "object"
       },
+      "DiscoveryProgress": {
+        "additionalProperties": false,
+        "description": "Cumulative unique root repositories, not search hits or dependencies.\n\nEligible and analyzed are stage counters; they are not disjoint outcomes.\nExisting includes repositories added to the market while the job is running.",
+        "properties": {
+          "deep_analyzed": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Deep Analyzed",
+            "type": "integer"
+          },
+          "discovered": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Discovered",
+            "type": "integer"
+          },
+          "eligible": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Eligible",
+            "type": "integer"
+          },
+          "existing": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Existing",
+            "type": "integer"
+          },
+          "irrelevant": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Irrelevant",
+            "type": "integer"
+          },
+          "uncertain": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Uncertain",
+            "type": "integer"
+          }
+        },
+        "title": "DiscoveryProgress",
+        "type": "object"
+      },
       "DiskSpaceListView": {
         "additionalProperties": false,
         "properties": {
@@ -11255,6 +11299,16 @@
       "ImportEvent": {
         "additionalProperties": false,
         "properties": {
+          "discovery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscoveryProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -11389,7 +11443,7 @@
             "type": "integer"
           },
           "min_stars": {
-            "default": 10,
+            "default": 0,
             "maximum": 1000000.0,
             "minimum": 0.0,
             "title": "Min Stars",
@@ -11440,7 +11494,7 @@
             "type": "array"
           },
           "updated_within_days": {
-            "default": 90,
+            "default": 365,
             "maximum": 3650.0,
             "minimum": 1.0,
             "title": "Updated Within Days",

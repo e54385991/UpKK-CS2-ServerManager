@@ -23,8 +23,8 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await dialog.locator("#ai-framework").selectOption("other");
       await expect(dialog.locator("#ai-framework")).toHaveValue("other");
       await dialog.locator("#ai-framework").selectOption("all");
-      await expect(dialog.locator("#ai-min_stars")).toHaveValue("10");
-      await expect(dialog.locator("#ai-updated_within_days")).toHaveValue("90");
+      await expect(dialog.locator("#ai-min_stars")).toHaveValue("0");
+      await expect(dialog.locator("#ai-updated_within_days")).toHaveValue("365");
       // Default ordering is stars, then most recently updated, then forks.
       await expect(dialog.locator("#ai-sort-0")).toHaveValue("stars");
       await expect(dialog.locator("#ai-sort-1")).toHaveValue("updated");
@@ -51,6 +51,12 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       await expect(page.getByText("Searching maintained CS2 plugins").first()).toBeVisible();
       const usage = page.getByTestId("ai-import-usage");
       await expect(usage).toBeVisible();
+      const discovery = page.getByTestId("ai-discovery-summary");
+      await expect(discovery).toBeInViewport();
+      await expect(discovery).toContainText(locale === "zh-CN" ? "已收录 80" : "Already listed 80");
+      await expect(discovery).toContainText(locale === "zh-CN" ? "无关 16" : "Irrelevant 16");
+      await expect(discovery).toContainText(locale === "zh-CN" ? "合格 4" : "Eligible 4");
+      expect(await discovery.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBeTruthy();
       await expect(usage).toContainText(locale === "zh-CN" ? "AI 思考中" : "AI is thinking");
       await expect(page.getByTestId("ai-tokens-input")).toHaveText("1,200");
       const firstCount = await page.getByTestId("ai-tokens-output").textContent();

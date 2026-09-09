@@ -32,23 +32,22 @@ MAX_SEARCH_TERMS = 8
 SEARCH_PAGES = 2
 DEPENDENCY_ATTEMPTS = 3
 
-# Deterministic starting queries. The first entry of each list stays the plain
-# product name so behaviour without model expansion matches the previous sweep.
+# Search declared repository identity first; README mentions are a later fallback.
 FRAMEWORK_TERMS: dict[str, tuple[str, ...]] = {
     "counterstrikesharp": (
-        "CounterStrikeSharp",
+        "CounterStrikeSharp in:name,description",
         "topic:counterstrikesharp",
-        "CounterStrikeSharp plugin cs2",
+        "CounterStrikeSharp plugin in:name,description,readme",
         "CounterStrikeSharp in:name,description,readme",
     ),
     "swiftly": (
-        "SwiftlyS2",
+        "SwiftlyS2 in:name,description",
         "topic:swiftlys2",
-        "SwiftlyS2 plugin cs2",
+        "SwiftlyS2 plugin in:name,description,readme",
         "SwiftlyS2 in:name,description,readme",
     ),
     "other": (
-        "Metamod cs2",
+        "CS2 plugin in:name,description",
         "topic:cs2-plugin metamod",
         "Source2 Metamod in:name,description,readme",
         "CS2 SourceHook in:name,description,readme",

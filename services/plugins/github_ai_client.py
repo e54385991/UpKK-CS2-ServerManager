@@ -29,6 +29,26 @@ DOCUMENT_DIRECTORIES = (
 )
 MAX_DOCUMENT_FILES = 3
 MAX_DOCUMENT_FILE_BYTES = 100_000
+type ReadmeEvidence = tuple[str, list[dict[str, str]], list[DocumentationSource]]
+
+
+def _decode_documents(
+    files: list[dict[str, Any]], sha: str
+) -> tuple[list[dict[str, str]], list[DocumentationSource]]:
+    docs, sources = [], []
+    for file in files:
+        if file.get("encoding") != "base64":
+            continue
+        try:
+            content = base64.b64decode(str(file.get("content") or "")).decode(
+                "utf-8", errors="replace"
+            )
+        except ValueError:
+            continue
+        path = str(file.get("path") or "README.md")
+        docs.append({"path": path, "text": content[:16000]})
+        sources.append(DocumentationSource(path=path, commit=sha))
+    return docs, sources
 
 
 class GitHubImportError(RuntimeError):
@@ -116,6 +136,7 @@ class GitHubAIClient:
         self._last_search = 0.0
         self._lock = asyncio.Lock()
         self._blocked: GitHubRateLimitError | None = None
+        self._readmes: dict[str, ReadmeEvidence] = {}
         self._client = httpx.AsyncClient(
             base_url="https://api.github.com",
             timeout=30,
@@ -274,20 +295,38 @@ class GitHubAIClient:
         owner_repo = repository_url(url).removeprefix("https://github.com/")
         return await self.request(f"/repos/{owner_repo}")
 
+    async def readme(self, repo: dict[str, Any]) -> ReadmeEvidence:
+        """Pin the README once; full documentation reuses this exact commit."""
+        url = repository_url(str(repo["html_url"]))
+        if url in self._readmes:
+            return self._readmes[url]
+        prefix = "/repos/" + url.removeprefix("https://github.com/")
+        commit = await self.request(
+            f"{prefix}/commits/{quote(str(repo['default_branch']), safe='')}"
+        )
+        sha = str(commit["sha"])
+        file = await self.optional(f"{prefix}/readme", params={"ref": sha})
+        docs, sources = _decode_documents([file] if file else [], sha)
+        evidence = (sha, docs, sources)
+        self._readmes[url] = evidence
+        return evidence
+
     async def documents(
         self, repo: dict[str, Any]
     ) -> tuple[list[dict[str, str]], list[DocumentationSource]]:
         owner_repo = repository_url(str(repo["html_url"])).removeprefix("https://github.com/")
         prefix = f"/repos/{owner_repo}"
-        commit = await self.request(
-            f"{prefix}/commits/{quote(str(repo['default_branch']), safe='')}"
-        )
-        sha = str(commit["sha"])
-        readme = await self.optional(f"{prefix}/readme", params={"ref": sha})
-        files = [readme] if readme else []
+        sha, readme_docs, readme_sources = await self.readme(repo)
+        files = []
         root_tree = await self.optional(f"{prefix}/git/trees/{sha}")
         paths: list[str] = []
+        directories: set[str] = set()
         if isinstance(root_tree, dict):
+            directories = {
+                str(item.get("path") or "")
+                for item in root_tree.get("tree", [])
+                if item.get("type") == "tree"
+            }
             paths.extend(
                 str(item.get("path") or "")
                 for item in root_tree.get("tree", [])
@@ -295,6 +334,8 @@ class GitHubAIClient:
                 and int(item.get("size") or 0) <= MAX_DOCUMENT_FILE_BYTES
             )
         for directory in DOCUMENT_DIRECTORIES:
+            if directory not in directories:
+                continue
             entries = await self.optional(
                 f"{prefix}/contents/{quote(directory, safe='')}", params={"ref": sha}
             )
@@ -318,20 +359,8 @@ class GitHubAIClient:
             )
             if file:
                 files.append(file)
-        docs, sources = [], []
-        for file in files:
-            if file.get("encoding") != "base64":
-                continue
-            try:
-                content = base64.b64decode(str(file.get("content") or "")).decode(
-                    "utf-8", errors="replace"
-                )
-            except ValueError:
-                continue
-            path = str(file.get("path") or "README.md")
-            docs.append({"path": path, "text": content[:16000]})
-            sources.append(DocumentationSource(path=path, commit=sha))
-        return docs, sources
+        docs, sources = _decode_documents(files, sha)
+        return [*readme_docs, *docs], [*readme_sources, *sources]
 
     async def release(self, url: str) -> dict[str, Any] | None:
         owner_repo = repository_url(url).removeprefix("https://github.com/")

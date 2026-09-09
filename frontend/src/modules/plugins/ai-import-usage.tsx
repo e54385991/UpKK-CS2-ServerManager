@@ -11,7 +11,7 @@ export function AIImportUsage({ task }: { task: Task }) {
   const usage = [...task.events].reverse().find(event => event.token_usage)?.token_usage;
   const running = task.status === "running";
   if (!usage) return null;
-  const streaming = running && usage.stage !== "completed" && task.phase === "analyzing";
+  const streaming = running && usage.stage !== "completed" && ["analyzing", "filtering"].includes(task.phase);
   return <div className="rounded-md border border-line bg-surface-raised p-3" data-testid="ai-import-usage">
     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
       <span className="flex items-center gap-2" role="status">

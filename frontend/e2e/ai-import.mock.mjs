@@ -18,9 +18,9 @@ createServer(async (req, res) => {
     const send = () => {
       const value = path.includes("operations/inbox") ? inbox() : tasks.find(task => path.includes(task.operation_id));
       if (value?.status === "running" && !path.includes("operations/inbox")) {
-        value.phase = "analyzing";
+        value.phase = "filtering";
         const previous = value.events.at(-1)?.token_usage?.output_tokens ?? 0;
-        value.events = [{ sequence: previous + 1, phase: "token_usage", message: "usage", token_usage: {
+        value.events = [{ sequence: 1, phase: "filtering", message: "Screened candidates", discovery: { discovered: 100, existing: 80, irrelevant: 16, uncertain: 0, eligible: 4, deep_analyzed: 1 } }, { sequence: previous + 2, phase: "token_usage", message: "usage", token_usage: {
           input_tokens: 1200, output_tokens: previous + 16, reasoning_tokens: previous + 16,
           estimated: true, stage: "thinking",
         } }];

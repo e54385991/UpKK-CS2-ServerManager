@@ -37,7 +37,7 @@ SHA = "a" * 40
 
 
 def test_import_maintenance_window_defaults_and_override():
-    assert ImportOptions().updated_within_days == 90
+    assert ImportOptions().updated_within_days == 365
     assert ImportOptions(updated_within_days=365).updated_within_days == 365
     assert ImportOptions().description_language == "original"
     assert ImportOptions(description_language="zh-CN").description_language == "zh-CN"
@@ -57,6 +57,10 @@ def job(**options):
             command="AI import",
         )
     )
+
+
+async def collect_candidates(instance):
+    return [url async for batch in instance.candidates() for url in batch]
 
 
 def config():
@@ -338,7 +342,12 @@ def runner_env(monkeypatch):
     monkeypatch.setattr(store, "check_job", AsyncMock())
     monkeypatch.setattr(store, "update_job", AsyncMock())
     monkeypatch.setattr(store, "existing_plugin", AsyncMock(return_value=None))
-    monkeypatch.setattr(store, "insert_plugin", AsyncMock(side_effect=[10, 11, 12]))
+    monkeypatch.setattr(store, "existing_repositories", AsyncMock(return_value={}))
+    monkeypatch.setattr(
+        store,
+        "insert_plugin",
+        AsyncMock(side_effect=[store.PluginInsertResult(value, True) for value in (10, 11, 12)]),
+    )
     monkeypatch.setattr(
         GitHubAIClient,
         "repository",
@@ -377,7 +386,7 @@ async def test_recursive_dependencies_reuse_existing_and_do_not_overwrite(runner
             dependencies=["https://github.com/example/dependency"]
         ).model_dump_json()
     }
-    store.existing_plugin.side_effect = lambda url: 9 if url.endswith("dependency") else None
+    store.existing_repositories.return_value = {"https://github.com/example/dependency": 9}
     instance = runner.ImportRunner(job(), "token", config())
     try:
         assert await instance.visit(URL) == 10
@@ -403,12 +412,12 @@ async def test_ai_plans_before_search_and_scopes_swiftlys2(runner_env, monkeypat
     }
     instance = runner.ImportRunner(job(framework="swiftly", keywords="回防练习"), "token", config())
     try:
-        await instance.candidates()
+        await collect_candidates(instance)
         runner.create_chat_completion.assert_awaited_once()
         terms = [call.args[1] for call in search.call_args_list]
         assert terms[:2] == [
-            "SwiftlyS2 retakes in:name,description,readme",
-            "SwiftlyS2 practice retake in:name,description,readme",
+            "SwiftlyS2 retakes in:name,description",
+            "SwiftlyS2 practice retake in:name,description",
         ]
         assert all("SwiftlyS2" in term or "topic:swiftlys2" in term for term in terms)
         assert all("回防练习" not in term for term in terms[:2])
@@ -728,13 +737,14 @@ async def test_search_paginates_both_frameworks_sorts_and_deduplicates(runner_en
     monkeypatch.setattr(GitHubAIClient, "search", search)
     instance = runner.ImportRunner(job(repositories=[URL], expand_search=False), "token", config())
     try:
-        candidates = await instance.candidates()
+        candidates = await collect_candidates(instance)
         runner.create_chat_completion.assert_not_awaited()
-        assert candidates[:2] == [URL, "https://github.com/example/last"]
+        assert candidates[:2] == [URL, "https://github.com/example/plugin49"]
+        assert candidates[-1] == "https://github.com/example/last"
         # Each framework sweeps its full deterministic term list, two pages deep.
         terms_per_framework = len(discovery.FRAMEWORK_TERMS["counterstrikesharp"])
         assert len(candidates) == 52
-        assert [call.args[1] for call in search.call_args_list[::2]][:3] == [
+        assert [call.args[1] for call in search.call_args_list][:3] == [
             discovery.FRAMEWORK_TERMS[key][0] for key in ("counterstrikesharp", "swiftly", "other")
         ]
         assert (
@@ -761,11 +771,12 @@ async def test_run_verifies_then_imports_bounded_targets_and_closes_client(runne
             return_value=GitHubVerification(valid=True, core_remaining=100, search_remaining=29)
         ),
     )
-    monkeypatch.setattr(
-        runner.ImportRunner,
-        "candidates",
-        AsyncMock(return_value=[URL, "https://github.com/example/extra"]),
-    )
+
+    async def batches(self):
+        yield [URL, "https://github.com/example/extra"]
+
+    monkeypatch.setattr(runner.ImportRunner, "candidates", batches)
+    monkeypatch.setattr(runner.ImportRunner, "shortlist", AsyncMock(side_effect=lambda urls: urls))
     instance = runner.ImportRunner(job(max_plugins=1), "token", config())
     await instance.run()
     store.insert_plugin.assert_awaited_once()
@@ -998,7 +1009,7 @@ async def test_ai_planning_failure_falls_back_for_all_frameworks(runner_env, mon
     runner.create_chat_completion.side_effect = failure
     instance = runner.ImportRunner(job(), "token", config())
     try:
-        assert await instance.candidates() == []
+        assert await collect_candidates(instance) == []
         runner.create_chat_completion.assert_awaited_once()
         terms = [call.args[1] for call in search.call_args_list]
         assert terms[:3] == [discovery.FRAMEWORK_TERMS[key][0] for key in discovery.FRAMEWORK_TERMS]
@@ -1015,7 +1026,7 @@ async def test_cancelled_planning_never_starts_github_search(runner_env, monkeyp
     instance = runner.ImportRunner(job(), "token", config())
     try:
         with pytest.raises(asyncio.CancelledError):
-            await instance.candidates()
+            await collect_candidates(instance)
         search.assert_not_awaited()
     finally:
         await instance.client.close()
@@ -1043,9 +1054,10 @@ async def test_slow_planning_has_own_deadline_and_leaves_search_budget(runner_en
     monkeypatch.setattr(GitHubAIClient, "search", search)
     instance = runner.ImportRunner(job(framework="swiftly"), "token", config())
     try:
-        await instance.candidates()
+        await collect_candidates(instance)
         assert finished.is_set()
-        assert budgets == [45, 90]
+        assert budgets[0] == 45
+        assert len(budgets) == 5 and all(0 < value <= 90 for value in budgets[1:])
         assert search.await_count == 4
     finally:
         await instance.client.close()

@@ -161,13 +161,13 @@ class ImportOptions(StrictValue):
     framework: Literal["counterstrikesharp", "swiftly", "other", "all"] = "all"
     description_language: Literal["original", "zh-CN", "en-US"] = "original"
     keywords: str = Field(default="", max_length=200)
-    min_stars: int = Field(default=10, ge=0, le=1_000_000)
+    min_stars: int = Field(default=0, ge=0, le=1_000_000)
     min_forks: int = Field(default=0, ge=0, le=1_000_000)
     sort: SortKey = "stars"
     sort_priority: list[SortKey] = Field(
         default_factory=lambda: list(DEFAULT_SORT_PRIORITY), min_length=1, max_length=3
     )
-    updated_within_days: int = Field(default=90, ge=1, le=3650)
+    updated_within_days: int = Field(default=365, ge=1, le=3650)
     # Plan semantic keyword groups first, with deterministic search fallbacks.
     expand_search: bool = True
     # Drop a plugin whose prerequisites could not be imported automatically.
@@ -234,7 +234,23 @@ class ImportTokenUsage(StrictValue):
     stage: Literal["waiting", "thinking", "generating", "completed"]
 
 
+class DiscoveryProgress(StrictValue):
+    """Cumulative unique root repositories, not search hits or dependencies.
+
+    Eligible and analyzed are stage counters; they are not disjoint outcomes.
+    Existing includes repositories added to the market while the job is running.
+    """
+
+    discovered: int = Field(default=0, ge=0)
+    existing: int = Field(default=0, ge=0)
+    irrelevant: int = Field(default=0, ge=0)
+    uncertain: int = Field(default=0, ge=0)
+    eligible: int = Field(default=0, ge=0)
+    deep_analyzed: int = Field(default=0, ge=0)
+
+
 class ImportEvent(StrictValue):
+    discovery: DiscoveryProgress | None = None
     token_usage: ImportTokenUsage | None = None
     sequence: int
     phase: str
