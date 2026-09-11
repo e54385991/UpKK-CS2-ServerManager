@@ -155,16 +155,31 @@ def _alias_variants(value: str | None) -> set[str]:
     return variants
 
 
-def _aliases_match(left: set[str], right: set[str]) -> bool:
+def _aliases_match(left: set[str], right: set[str], *, allow_suffix: bool = True) -> bool:
     if left & right:
         return True
+    if not allow_suffix:
+        return False
     return any(
         len(shorter) >= 6 and longer.endswith(shorter) for longer in left for shorter in right
     ) or any(len(shorter) >= 6 and longer.endswith(shorter) for longer in right for shorter in left)
 
 
-def installation_evidence(item: Any, inventory: dict[str, Any]) -> list[dict[str, str]]:
-    """Return remote evidence matching a managed record or market plugin."""
+def installation_evidence(
+    item: Any,
+    inventory: dict[str, Any],
+    *,
+    strict: bool = False,
+) -> list[dict[str, str]]:
+    """Return remote evidence matching a managed record or market plugin.
+
+    Fuzzy suffix matching is useful for diagnostics because repositories often
+    publish a short assembly name (for example ``MapChooser``) under a longer
+    project name.  It is unsafe for the install planner, though: an unrelated
+    plugin such as ``SimpleAdmin`` would make a requested ``Admin`` listing
+    look installed.  The planner therefore asks for strict, exact evidence
+    before it skips any installation step.
+    """
     frameworks = inventory.get("frameworks") or {}
     framework_key = str(getattr(item, "framework_key", "") or "").casefold()
     identity_aliases: set[str] = set()
@@ -187,7 +202,11 @@ def installation_evidence(item: Any, inventory: dict[str, Any]) -> list[dict[str
     aliases.update(_alias_variants(getattr(item, "custom_install_path", None)))
     matches: list[dict[str, str]] = []
     for plugin in inventory.get("plugins") or []:
-        if _aliases_match(aliases, _alias_variants(str(plugin.get("name") or ""))):
+        if _aliases_match(
+            aliases,
+            _alias_variants(str(plugin.get("name") or "")),
+            allow_suffix=not strict,
+        ):
             matches.append(
                 {
                     "kind": str(plugin.get("kind") or "unknown"),
@@ -208,10 +227,10 @@ def verified_market_plugin_ids(
     installed: set[int] = set()
     for item in managed:
         market_plugin_id = getattr(item, "market_plugin_id", None)
-        if market_plugin_id is not None and installation_evidence(item, inventory):
+        if market_plugin_id is not None and installation_evidence(item, inventory, strict=True):
             installed.add(int(market_plugin_id))
     for plugin in planned_plugins:
         plugin_id = getattr(plugin, "id", None)
-        if plugin_id is not None and installation_evidence(plugin, inventory):
+        if plugin_id is not None and installation_evidence(plugin, inventory, strict=True):
             installed.add(int(plugin_id))
     return installed

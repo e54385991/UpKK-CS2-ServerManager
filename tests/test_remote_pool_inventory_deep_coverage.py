@@ -199,6 +199,24 @@ def test_inventory_decoding_aliases_and_evidence():
     planned = [SimpleNamespace(id=2, title="My Plugin")]
     assert inventory.verified_market_plugin_ids(managed, planned, remote) == {1, 2}
 
+    # Suffix matching is intentionally available to diagnostics, but the
+    # install planner must not skip "Plugin" merely because "SimplePlugin" is
+    # already present on the host.
+    unrelated = {
+        "plugins": [
+            {
+                "kind": "counterstrikesharp",
+                "name": "SimplePlugin.dll",
+                "relative_path": "x",
+                "key": "counterstrikesharp:simpleplugin.dll",
+            }
+        ]
+    }
+    requested = SimpleNamespace(id=3, title="Plugin")
+    assert inventory.installation_evidence(requested, unrelated)
+    assert inventory.installation_evidence(requested, unrelated, strict=True) == []
+    assert inventory.verified_market_plugin_ids([], [requested], unrelated) == set()
+
 
 @pytest.mark.asyncio
 async def test_inventory_remote_inspection_paths(monkeypatch):
