@@ -4,7 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
-import { getSession } from "@/modules/auth/session";
+import { getSession } from "@/modules/auth/render-session";
 import { ServerList, ServerListSkeleton } from "@/modules/servers/server-list";
 import { ServerTransferHeader } from "@/modules/servers/transfer-header";
 import { SERVER_STATUS_GROUPS } from "@/modules/servers/workspace";

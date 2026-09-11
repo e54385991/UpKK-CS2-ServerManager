@@ -96,7 +96,7 @@ def test_datetime_and_record_helpers():
     assert module._trim_events([{"n": i} for i in range(4)])[-1]["n"] == 3
     assert len(module._trim_events([{"n": 1}])) == 1
     assert module._record_ttl({"status": "failed"}) == module.FAILED_RETENTION_SECONDS
-    assert module._record_ttl({"status": "completed"}) == module.OPERATION_TTL_SECONDS
+    assert module._record_ttl({"status": "completed"}) == module.COMPLETED_RETENTION_SECONDS
     conflict = module.ServerOperationConflict("busy", "op")
     assert conflict.operation_id == "op"
 

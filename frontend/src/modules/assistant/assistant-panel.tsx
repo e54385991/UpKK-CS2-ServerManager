@@ -3,7 +3,7 @@ import { TriangleAlert } from "lucide-react";
 import { getAssistantConversation, getAssistantWorkspace } from "@/modules/assistant/api";
 import { AssistantChat } from "@/modules/assistant/assistant-chat";
 import type { AssistantServerOption } from "@/modules/assistant/types";
-import { getSession } from "@/modules/auth/session";
+import { getSession } from "@/modules/auth/render-session";
 import { listServers } from "@/modules/servers/api";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -15,10 +15,16 @@ export async function AssistantPanel({
   conversationId?: string;
   initialDraft?: string;
 }) {
-  const t = await getTranslations("assistant");
-  const [workspace, session] = await Promise.all([
+  const sessionPromise = getSession();
+  const serversPromise = sessionPromise.then((session) =>
+    listServers(session?.isAdmin ? "all" : "mine"),
+  );
+  const detailPromise = conversationId
+    ? getAssistantConversation(conversationId)
+    : Promise.resolve(null);
+  const [t, workspace] = await Promise.all([
+    getTranslations("assistant"),
     getAssistantWorkspace(),
-    getSession(),
   ]);
   if (!workspace.ok) {
     return (
@@ -28,10 +34,7 @@ export async function AssistantPanel({
       </Card>
     );
   }
-  const [detail, servers] = await Promise.all([
-    conversationId ? getAssistantConversation(conversationId) : Promise.resolve(null),
-    listServers(session?.isAdmin ? "all" : "mine"),
-  ]);
+  const [detail, servers] = await Promise.all([detailPromise, serversPromise]);
   const serverOptions: AssistantServerOption[] = servers.ok
     ? servers.data.map((item) => ({
         id: item.id,

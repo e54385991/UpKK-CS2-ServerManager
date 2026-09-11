@@ -227,3 +227,6 @@ jobs:
 
       - name: Verify isolated overview streaming and failure recovery
         run: npx playwright test --config=playwright.overview.config.ts
+
+      - name: Verify isolated render deduplication, streaming and lazy dialogs
+        run: npx playwright test --config=playwright.performance.config.ts

@@ -1,4 +1,4 @@
-"""Cross-server inbox of queued, running, and retained failed operations."""
+"""Cross-server inbox of queued, running, and retained operations."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from modules.database import async_session_maker
 from services.plugins.ai_import_store import check_administrator, clear_failed_jobs, list_jobs
 from services.server_operation_hub import (
     ACTIVE_STATUSES,
+    COMPLETED_RETENTION_SECONDS,
     FAILED_RETENTION_SECONDS,
     server_operation_hub,
 )
@@ -63,6 +64,7 @@ async def _build_inbox(
 ) -> OperationInboxView:
     names = {server_id: name for server_id, name in servers}
     items: list[OperationInboxItem] = []
+    completed_items: list[OperationInboxItem] = []
     failed_items: list[OperationInboxItem] = []
     for server_id, server_name in servers:
         label = server_name or names.get(server_id) or f"#{server_id}"
@@ -79,12 +81,17 @@ async def _build_inbox(
             )
         for record in await server_operation_hub.list_failed_for_server(server_id):
             failed_items.append(await _to_inbox_item(record, server_name=label, queue_position=0))
+        for record in await server_operation_hub.list_completed_for_server(server_id):
+            completed_items.append(
+                await _to_inbox_item(record, server_name=label, queue_position=0)
+            )
     items.sort(
         key=lambda item: (
             0 if item.status == "running" else 1,
             item.started_at,
         )
     )
+    completed_items.sort(key=lambda item: item.completed_at or item.started_at, reverse=True)
     failed_items.sort(key=lambda item: item.completed_at or item.started_at, reverse=True)
     running = [item for item in items if item.status == "running"]
     return OperationInboxView(
@@ -92,10 +99,13 @@ async def _build_inbox(
         if include_imports
         else [],
         items=items,
+        completed_items=completed_items,
         failed_items=failed_items,
         active_count=len(items),
         running_count=len(running),
+        completed_count=len(completed_items),
         failed_count=len(failed_items),
+        completed_retention_days=COMPLETED_RETENTION_SECONDS // 86400,
         failed_retention_days=FAILED_RETENTION_SECONDS // 86400,
     )
 
@@ -105,7 +115,7 @@ async def list_operation_inbox(
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> OperationInboxView:
-    """Active jobs plus failed jobs retained for seven days."""
+    """Active jobs plus completed and failed history retained for seven days."""
     return await _build_inbox(await _accessible_servers(db, current_user), current_user.is_admin)
 
 
@@ -204,3 +214,44 @@ async def dismiss_failed_operation(
             status_code=status.HTTP_404_NOT_FOUND, detail="Failed operation not found"
         )
     return ActionResult(success=True, message="Failed operation cleared")
+
+
+@router.delete("/inbox/completed", response_model=ActionResult)
+async def clear_completed_operations(
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ActionResult:
+    """Remove every retained successful job the caller can see."""
+    servers = await _accessible_servers(db, current_user)
+    cleared = await server_operation_hub.clear_completed(
+        [server_id for server_id, _name in servers]
+    )
+    return ActionResult(
+        success=True,
+        message=f"Cleared {cleared} completed operation(s)",
+    )
+
+
+@router.delete("/inbox/completed/{operation_id}", response_model=ActionResult)
+async def dismiss_completed_operation(
+    operation_id: UUID,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ActionResult:
+    """Remove one completed job from the retained history."""
+    allowed = {server_id for server_id, _name in await _accessible_servers(db, current_user)}
+    record = await server_operation_hub.get(str(operation_id))
+    if record is None or record.get("status") != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Completed operation not found"
+        )
+    if int(record["server_id"]) not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Completed operation not found"
+        )
+    dismissed = await server_operation_hub.dismiss_completed(str(operation_id))
+    if dismissed is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Completed operation not found"
+        )
+    return ActionResult(success=True, message="Completed operation cleared")

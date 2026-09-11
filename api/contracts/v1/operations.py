@@ -227,10 +227,13 @@ class OperationInboxItem(ServerOperationView):
 class OperationInboxView(V1Model):
     market_import_items: list[PluginAIImportView] = Field(default_factory=list)
     items: list[OperationInboxItem] = Field(default_factory=list)
+    completed_items: list[OperationInboxItem] = Field(default_factory=list)
     failed_items: list[OperationInboxItem] = Field(default_factory=list)
     active_count: int = 0
     running_count: int = 0
+    completed_count: int = 0
     failed_count: int = 0
+    completed_retention_days: int = 7
     failed_retention_days: int = 7
 
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { getSession } from "@/modules/auth/session";
+import { getSession } from "@/modules/auth/render-session";
 import { ForgotPasswordForm } from "@/modules/auth/forgot-form";
 import { PublicAuthFrame } from "@/modules/auth/public-frame";
 

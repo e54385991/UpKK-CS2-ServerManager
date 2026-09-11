@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { getSession } from "@/modules/auth/session";
+import { getSession } from "@/modules/auth/render-session";
 import { TutorialGuide } from "@/modules/tutorial/tutorial-guide";
 
 export async function generateMetadata(): Promise<Metadata> {

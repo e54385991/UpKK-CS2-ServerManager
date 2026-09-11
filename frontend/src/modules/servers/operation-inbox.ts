@@ -39,10 +39,13 @@ type InboxItemDto = {
 export type InboxSnapshotDto = {
   market_import_items?: OperationInbox["marketImportItems"];
   items: InboxItemDto[];
+  completed_items?: InboxItemDto[];
   failed_items?: InboxItemDto[];
   active_count: number;
   running_count: number;
+  completed_count?: number;
   failed_count?: number;
+  completed_retention_days?: number;
   failed_retention_days?: number;
 };
 
@@ -100,14 +103,18 @@ function toInboxItem(item: InboxItemDto): OperationInboxItem {
 }
 
 export function mapOperationInbox(raw: InboxSnapshotDto): OperationInbox {
+  const completedItems = (raw.completed_items ?? []).map(toInboxItem);
   const failedItems = (raw.failed_items ?? []).map(toInboxItem);
   return {
     items: raw.items.map(toInboxItem),
+    completedItems,
     marketImportItems: raw.market_import_items ?? [],
     failedItems,
     activeCount: raw.active_count,
     runningCount: raw.running_count,
+    completedCount: raw.completed_count ?? completedItems.length,
     failedCount: raw.failed_count ?? failedItems.length,
+    completedRetentionDays: raw.completed_retention_days ?? 7,
     failedRetentionDays: raw.failed_retention_days ?? 7,
   };
 }
@@ -120,11 +127,14 @@ export function parseOperationInboxPayload(raw: string): OperationInbox | null {
     }
     return mapOperationInbox({
       items: data.items,
+      completed_items: data.completed_items,
       market_import_items: data.market_import_items,
       failed_items: data.failed_items,
       active_count: data.active_count,
       running_count: data.running_count ?? 0,
+      completed_count: data.completed_count,
       failed_count: data.failed_count,
+      completed_retention_days: data.completed_retention_days,
       failed_retention_days: data.failed_retention_days,
     });
   } catch {

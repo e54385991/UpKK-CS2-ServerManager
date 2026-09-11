@@ -7,11 +7,7 @@ import {
   parseLiveConsoleView,
   resolveLiveConsoleView,
 } from "@/modules/console/live-console";
-import {
-  getCurrentServerOperation,
-  getDeploymentLock,
-  getServer,
-} from "@/modules/servers/api";
+import { getCurrentServerOperation, getDeploymentLock, getServer } from "@/modules/servers/render-queries";
 import {
   LiveDeployPanel,
   LiveDeployPanelSkeleton,

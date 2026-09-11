@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { requireSession } from "@/modules/auth/session";
+import { requireSession } from "@/modules/auth/render-session";
 import { SettingsPanel, SettingsPanelSkeleton } from "@/modules/settings/settings-panel";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Badge } from "@/shared/ui/badge";

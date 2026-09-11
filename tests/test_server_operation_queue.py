@@ -127,6 +127,29 @@ async def test_failed_job_is_retained_and_can_be_cleared(hub: ServerOperationHub
 
 
 @pytest.mark.asyncio
+async def test_completed_job_is_retained_with_replayable_history_and_can_be_cleared(
+    hub: ServerOperationHub,
+):
+    record = await hub.create(server_id=1, action="install_plugin", actor_user_id=1)
+    operation_id = record["operation_id"]
+    await hub.emit(operation_id, "progress", kind="output", message="installed files")
+    await hub.finish(operation_id, success=True, message="Plugin installed")
+
+    completed = await hub.list_completed_for_server(1)
+    assert [item["operation_id"] for item in completed] == [operation_id]
+    assert completed[0]["status"] == "completed"
+    assert [event["message"] for event in await hub.replay(operation_id)] == [
+        "Operation accepted: install_plugin (queued)",
+        "installed files",
+        "Plugin installed",
+    ]
+
+    dismissed = await hub.dismiss_completed(operation_id)
+    assert dismissed is not None
+    assert await hub.list_completed_for_server(1) == []
+
+
+@pytest.mark.asyncio
 async def test_emit_keeps_only_the_latest_event_limit(hub, monkeypatch):
     monkeypatch.setattr("services.server_operation_hub.EVENT_LIMIT", 3)
     record = await hub.create(server_id=1, action="deploy", actor_user_id=1)

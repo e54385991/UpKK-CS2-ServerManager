@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { Route } from "next";
 import { getRegistrationConfig } from "@/modules/auth/api";
-import { getSession } from "@/modules/auth/session";
+import { getSession } from "@/modules/auth/render-session";
 import { PublicAuthFrame } from "@/modules/auth/public-frame";
 import { RegisterForm } from "@/modules/auth/register-form";
 

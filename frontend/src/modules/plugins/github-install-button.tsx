@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Download } from "lucide-react";
-import { GitHubInstallForm } from "@/modules/plugins/github-install-form";
+import dynamic from "next/dynamic";
+import { DialogContentLoading } from "@/shared/ui/dialog-loading";
+
 import { Button } from "@/shared/ui/button";
 import { Dialog } from "@/shared/ui/dialog";
 
@@ -13,6 +15,8 @@ type ServerOption = {
   readonly usePanelProxy?: boolean;
   readonly githubProxy?: string | null;
 };
+
+const GitHubInstallForm = dynamic(() => import("@/modules/plugins/github-install-form").then(mod => mod.GitHubInstallForm), { loading: DialogContentLoading });
 
 export function GitHubInstallButton({
   servers,

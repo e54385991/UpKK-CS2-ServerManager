@@ -105,11 +105,26 @@ export async function clearFailedOperationsFromBrowser(): Promise<
   return requestJson("/server-ops/inbox", { method: "DELETE" });
 }
 
+export async function clearCompletedOperationsFromBrowser(): Promise<
+  ClientResult<ActionResultDto>
+> {
+  return requestJson("/server-ops/inbox?history=completed", { method: "DELETE" });
+}
+
 export async function dismissFailedOperationFromBrowser(
   operationId: string,
 ): Promise<ClientResult<ActionResultDto>> {
   return requestJson(
     `/server-ops/inbox?operationId=${encodeURIComponent(operationId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function dismissCompletedOperationFromBrowser(
+  operationId: string,
+): Promise<ClientResult<ActionResultDto>> {
+  return requestJson(
+    `/server-ops/inbox?history=completed&operationId=${encodeURIComponent(operationId)}`,
     { method: "DELETE" },
   );
 }

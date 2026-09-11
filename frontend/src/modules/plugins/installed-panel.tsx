@@ -4,7 +4,7 @@ import { Puzzle, TriangleAlert } from "lucide-react";
 import { GitHubInstallForm } from "@/modules/plugins/github-install-form";
 import { InstalledPluginsList } from "@/modules/plugins/installed-list";
 import { listServerPlugins } from "@/modules/plugins/api";
-import { getServer } from "@/modules/servers/api";
+import { getServer } from "@/modules/servers/render-queries";
 import {
   Card,
   CardContent,

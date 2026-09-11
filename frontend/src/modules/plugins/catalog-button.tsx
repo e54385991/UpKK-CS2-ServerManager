@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ArrowDownUp } from "lucide-react";
-import { PluginCatalogDialog } from "@/modules/plugins/catalog-dialog";
+import dynamic from "next/dynamic";
+import { DialogLoading } from "@/shared/ui/dialog-loading";
+
 import { Button } from "@/shared/ui/button";
+
+const PluginCatalogDialog = dynamic(() => import("@/modules/plugins/catalog-dialog").then(mod => mod.PluginCatalogDialog));
 
 export function PluginCatalogButton({
   canImport,
@@ -13,18 +17,23 @@ export function PluginCatalogButton({
 }) {
   const t = useTranslations("plugins");
   const [open, setOpen] = useState(false);
+  const [opened, setOpened] = useState(false);
 
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" onClick={() => { setOpened(true); setOpen(true); }}>
         <ArrowDownUp />
         {t("catalog.open")}
       </Button>
-      <PluginCatalogDialog
-        open={open}
-        canImport={canImport}
-        onClose={() => setOpen(false)}
-      />
+      {opened ? (
+        <Suspense fallback={<DialogLoading title={t("catalog.open")} open={open} onClose={() => setOpen(false)} />}>
+          <PluginCatalogDialog
+            open={open}
+            canImport={canImport}
+            onClose={() => setOpen(false)}
+          />
+        </Suspense>
+      ) : null}
     </>
   );
 }

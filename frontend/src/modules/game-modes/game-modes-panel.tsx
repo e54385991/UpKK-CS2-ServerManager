@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
 import { getGameModeCatalog } from "@/modules/game-modes/api";
 import { GameModesWizard } from "@/modules/game-modes/game-modes-wizard";
-import { getServer } from "@/modules/servers/api";
+import { getServer } from "@/modules/servers/render-queries";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 

@@ -1,11 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
-import {
-  getCurrentServerOperation,
-  getDeploymentLock,
-  listOperationLogs,
-  listS3Backups,
-} from "@/modules/servers/api";
+import { listOperationLogs, listS3Backups } from "@/modules/servers/api";
+import { getCurrentServerOperation, getDeploymentLock } from "@/modules/servers/render-queries";
 import { S3BackupsConsole } from "@/modules/servers/s3-backups-console";
 import type { ServerStatus } from "@/modules/servers/types";
 import { Card } from "@/shared/ui/card";

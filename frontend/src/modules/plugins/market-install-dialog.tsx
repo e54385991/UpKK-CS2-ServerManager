@@ -1,9 +1,13 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { InstallForm } from "@/modules/plugins/install-form";
+import dynamic from "next/dynamic";
+import { DialogContentLoading } from "@/shared/ui/dialog-loading";
+
 import type { MarketInstallServer } from "@/modules/plugins/types";
 import { Dialog } from "@/shared/ui/dialog";
+
+const InstallForm = dynamic(() => import("@/modules/plugins/install-form").then(mod => mod.InstallForm), { loading: DialogContentLoading });
 
 export function MarketInstallDialog({
   open,

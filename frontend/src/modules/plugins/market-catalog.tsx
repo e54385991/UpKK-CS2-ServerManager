@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { Package, TriangleAlert } from "lucide-react";
-import { listMarketPlugins } from "@/modules/plugins/api";
+import type { listMarketPlugins } from "@/modules/plugins/api";
 import { MarketCatalogItems } from "@/modules/plugins/market-catalog-items";
 import {
   localizedPluginDescription,
@@ -28,11 +28,13 @@ function pageHref(query: MarketQuery, offset: number, serverId?: number): Route 
 
 export async function MarketCatalog({
   query,
+  resultPromise,
   serverId,
   servers,
   canDelete = false,
 }: {
   query: MarketQuery;
+  resultPromise: ReturnType<typeof listMarketPlugins>;
   serverId?: number;
   servers: readonly MarketInstallServer[];
   canDelete?: boolean;
@@ -40,7 +42,7 @@ export async function MarketCatalog({
   const t = await getTranslations("plugins");
   const requestLocale = await getLocale();
   const locale = isLocale(requestLocale) ? requestLocale : DEFAULT_LOCALE;
-  const result = await listMarketPlugins(query);
+  const result = await resultPromise;
 
   if (!result.ok) {
     return (

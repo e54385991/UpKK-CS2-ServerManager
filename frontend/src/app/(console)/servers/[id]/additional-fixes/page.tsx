@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { AdditionalFixesConsole } from "@/modules/servers/additional-fixes-console";
-import { getServer } from "@/modules/servers/api";
+import { getServer } from "@/modules/servers/render-queries";
 import { parseServerId } from "@/modules/servers/workspace";
 import { Card } from "@/shared/ui/card";
 

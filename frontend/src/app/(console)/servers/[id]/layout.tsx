@@ -1,14 +1,9 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import {
-  getCurrentServerOperation,
-  getDeploymentLock,
-  getServer,
-} from "@/modules/servers/api";
-import { isDeployProgressVisible } from "@/modules/console/live-console";
+import { getCurrentServerOperation, getDeploymentLock, getServer } from "@/modules/servers/render-queries";
 import { DeleteServerButton } from "@/modules/servers/delete-server-button";
-import { SshReconnectCard } from "@/modules/servers/ssh-reconnect-card";
+import { WorkspaceStatus, WorkspaceStatusSkeleton } from "@/modules/servers/workspace-status";
 import { parseServerId } from "@/modules/servers/workspace";
 import { ServerWorkspaceNav } from "@/modules/servers/workspace-nav";
 import { SERVER_STATUS_TONE } from "@/modules/servers/types";
@@ -27,33 +22,17 @@ export default async function ServerWorkspaceLayout({
   const serverId = parseServerId(id);
   if (serverId == null) notFound();
 
-  const [t, tServers] = await Promise.all([
+  const operationPromise = getCurrentServerOperation(serverId);
+  const lockPromise = getDeploymentLock(serverId);
+  const [t, tServers, result] = await Promise.all([
     getTranslations("serverDetail"),
     getTranslations("servers"),
-  ]);
-  const [result, currentOperation, lock] = await Promise.all([
     getServer(serverId),
-    getCurrentServerOperation(serverId),
-    getDeploymentLock(serverId),
   ]);
   if (!result.ok && result.status === 404) notFound();
 
   const server = result.ok ? result.data : null;
   const tone = server ? SERVER_STATUS_TONE[server.status] : null;
-  const operationActive =
-    currentOperation.ok &&
-    currentOperation.data != null &&
-    (currentOperation.data.status === "queued" ||
-      currentOperation.data.status === "running");
-  const canForceStop =
-    operationActive ||
-    (lock.ok && lock.data.lockActive) ||
-    server?.status === "deploying";
-  const showDeploy = isDeployProgressVisible({
-    serverStatus: server?.status ?? null,
-    lockActive: lock.ok && lock.data.lockActive,
-    operation: currentOperation.ok ? currentOperation.data : null,
-  });
 
   return (
     <>
@@ -86,26 +65,9 @@ export default async function ServerWorkspaceLayout({
         }
       />
       {server ? (
-        <SshReconnectCard
-          serverId={server.id}
-          serverName={server.name}
-          isSshDown={server.isSshDown}
-          sshPooled={server.sshPooled}
-          sshInUse={server.sshInUse}
-          sshActiveLeases={server.sshActiveLeases}
-          sshIdleSeconds={server.sshIdleSeconds}
-          canForceStop={canForceStop}
-          showDeploy={showDeploy}
-          health={{
-            id: server.id,
-            isSshDown: server.isSshDown,
-            sshHealthStatus: server.sshHealthStatus,
-            consecutiveSshFailures: server.consecutiveSshFailures,
-            sshHealthFailureThreshold: server.sshHealthFailureThreshold,
-            sshHealthCheckIntervalHours: server.sshHealthCheckIntervalHours,
-            lastSshHealthCheck: server.lastSshHealthCheck,
-          }}
-        />
+        <Suspense fallback={<WorkspaceStatusSkeleton />}>
+          <WorkspaceStatus server={server} operationPromise={operationPromise} lockPromise={lockPromise} />
+        </Suspense>
       ) : null}
       <ServerWorkspaceNav serverId={serverId} />
       {children}

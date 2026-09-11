@@ -35,7 +35,7 @@ import {
   startUrlDownloadAction,
 } from "@/modules/files/actions";
 import { useFileClipboard, writeFileClipboard } from "@/modules/files/clipboard";
-import { ExtractDialog } from "@/modules/files/extract-dialog";
+import { ExtractDialog } from "@/modules/files/lazy-dialogs";
 import {
   extractRevealOpenPath,
   guessExtractedFolderName,
@@ -43,11 +43,11 @@ import {
   revealDelayMs,
   type ExtractRevealHint,
 } from "@/modules/files/extract-reveal";
-import { FileEditorDialog, type EditorFile } from "@/modules/files/file-editor-dialog";
+import { FileEditorDialog, type EditorFile } from "@/modules/files/lazy-dialogs";
 import { FilesPathBar } from "@/modules/files/path-bar";
 import { FilesShortcuts } from "@/modules/files/files-shortcuts";
 import { FilesUploadDock } from "@/modules/files/files-upload-dock";
-import { RenameDialog } from "@/modules/files/rename-dialog";
+import { RenameDialog } from "@/modules/files/lazy-dialogs";
 import {
   filesHref,
   isAtRoot,

@@ -1,8 +1,9 @@
+import { listMarketPlugins } from "@/modules/plugins/api";
 import { AIImportButton } from "@/modules/plugins/ai-import-button";
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { requireSession } from "@/modules/auth/session";
+import { requireSession } from "@/modules/auth/render-session";
 import { PluginCatalogButton } from "@/modules/plugins/catalog-button";
 import { GitHubInstallButton } from "@/modules/plugins/github-install-button";
 import { FrameworkTabs } from "@/modules/plugins/framework-tabs";
@@ -38,11 +39,11 @@ export default async function PluginsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const [t, sp, session, serversResult] = await Promise.all([
+  const serversPromise = listServers();
+  const [t, sp, session] = await Promise.all([
     getTranslations("plugins"),
     searchParams,
     requireSession(),
-    listServers(),
   ]);
   const offset = Math.max(0, Number(sp.offset ?? 0)) || 0;
   const serverId = Number(sp.serverId);
@@ -59,6 +60,8 @@ export default async function PluginsPage({
     limit: PAGE_SIZE,
     offset,
   };
+  const resultPromise = listMarketPlugins(query);
+  const serversResult = await serversPromise;
   const key = JSON.stringify({ ...query, serverId: sp.serverId ?? null });
 
   return (
@@ -98,6 +101,7 @@ export default async function PluginsPage({
       />
       <Suspense key={key} fallback={<MarketCatalogSkeleton />}>
         <MarketCatalog
+          resultPromise={resultPromise}
           query={query}
           serverId={Number.isInteger(serverId) ? serverId : undefined}
           canDelete={session.isAdmin}

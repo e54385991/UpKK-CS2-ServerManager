@@ -2,7 +2,7 @@ import { AIPluginReview } from "@/modules/plugins/ai-plugin-review";
 import { getLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ExternalLink, TriangleAlert } from "lucide-react";
-import { getMarketPlugin } from "@/modules/plugins/api";
+import type { getMarketPlugin } from "@/modules/plugins/api";
 import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin-button";
 import { InstallForm } from "@/modules/plugins/install-form";
 import { MarketPluginEditButton } from "@/modules/plugins/market-edit-button";
@@ -26,11 +26,13 @@ import { DEFAULT_LOCALE, isLocale } from "@/i18n/config";
 
 export async function PluginDetail({
   pluginId,
+  resultPromise,
   serverId,
   servers,
   canDelete = false,
 }: {
   pluginId: number;
+  resultPromise: ReturnType<typeof getMarketPlugin>;
   serverId: number | null;
   servers: readonly MarketInstallServer[];
   canDelete?: boolean;
@@ -38,7 +40,7 @@ export async function PluginDetail({
   const t = await getTranslations("plugins");
   const requestLocale = await getLocale();
   const locale = isLocale(requestLocale) ? requestLocale : DEFAULT_LOCALE;
-  const pluginResult = await getMarketPlugin(pluginId);
+  const pluginResult = await resultPromise;
 
   if (!pluginResult.ok && pluginResult.status === 404) notFound();
 

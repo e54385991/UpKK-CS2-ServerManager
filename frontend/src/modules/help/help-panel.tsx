@@ -1,5 +1,5 @@
 import { getTranslations } from "next-intl/server";
-import { getServer } from "@/modules/servers/api";
+import { getServer } from "@/modules/servers/render-queries";
 import { HelpConsole } from "@/modules/help/help-console";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";

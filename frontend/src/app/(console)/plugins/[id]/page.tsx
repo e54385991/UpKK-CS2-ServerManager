@@ -1,8 +1,9 @@
+import { getMarketPlugin } from "@/modules/plugins/api";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { Route } from "next";
-import { requireSession } from "@/modules/auth/session";
+import { requireSession } from "@/modules/auth/render-session";
 import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
 import { PluginDetail } from "@/modules/plugins/plugin-detail";
@@ -33,6 +34,7 @@ export default async function PluginDetailPage({
   const pluginId = Number(id);
   if (!Number.isInteger(pluginId)) notFound();
   const serverId = Number(sp.serverId);
+  const resultPromise = getMarketPlugin(pluginId);
   const serversResult = await listServers();
   const servers = serversResult.ok
     ? serversResult.data.map((server) => ({
@@ -55,6 +57,7 @@ export default async function PluginDetailPage({
         }
       />
       <PluginDetail
+        resultPromise={resultPromise}
         pluginId={pluginId}
         serverId={Number.isInteger(serverId) ? serverId : null}
         servers={servers}

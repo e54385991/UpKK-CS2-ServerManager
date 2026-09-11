@@ -1,5 +1,9 @@
 import { NextRequest } from "next/server";
 import {
+  clearCompletedOperations,
+  dismissCompletedOperation,
+} from "@/modules/servers/completed-operation-api";
+import {
   clearFailedOperations,
   dismissFailedOperation,
   listOperationInbox,
@@ -22,7 +26,14 @@ export async function GET() {
 }
 
 export async function DELETE(request: NextRequest) {
+  const history = request.nextUrl.searchParams.get("history");
   const operationId = request.nextUrl.searchParams.get("operationId");
+  if (history === "completed") {
+    if (operationId) {
+      return resultResponse(await dismissCompletedOperation(operationId));
+    }
+    return resultResponse(await clearCompletedOperations());
+  }
   if (operationId) {
     return resultResponse(await dismissFailedOperation(operationId));
   }

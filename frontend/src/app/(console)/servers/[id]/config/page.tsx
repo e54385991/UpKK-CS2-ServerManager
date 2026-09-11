@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { getServer } from "@/modules/servers/api";
+import { getServer } from "@/modules/servers/render-queries";
 import { ServerConfigWorkspace } from "@/modules/servers/config-form";
 import { parseServerId } from "@/modules/servers/workspace";
 import { Card } from "@/shared/ui/card";

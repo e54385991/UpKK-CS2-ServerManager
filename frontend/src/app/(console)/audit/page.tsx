@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { requireSession } from "@/modules/auth/session";
+import { requireSession } from "@/modules/auth/render-session";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Card } from "@/shared/ui/card";
 import { AuditFilters } from "@/modules/audit/audit-filters";

@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Pencil } from "lucide-react";
-import { MarketPluginEditDialog } from "@/modules/plugins/market-edit-dialog";
+import dynamic from "next/dynamic";
+import { DialogLoading } from "@/shared/ui/dialog-loading";
+
 import type { MarketPlugin } from "@/modules/plugins/types";
 import { Button } from "@/shared/ui/button";
+
+const MarketPluginEditDialog = dynamic(() => import("@/modules/plugins/market-edit-dialog").then(mod => mod.MarketPluginEditDialog));
 
 export function MarketPluginEditButton({
   plugin,
@@ -31,11 +35,13 @@ export function MarketPluginEditButton({
         {t("edit.open")}
       </Button>
       {open ? (
-        <MarketPluginEditDialog
-          plugin={plugin}
-          open
-          onClose={() => setOpen(false)}
-        />
+        <Suspense fallback={<DialogLoading title={t("edit.open")} open={open} onClose={() => setOpen(false)} />}>
+            <MarketPluginEditDialog
+              plugin={plugin}
+              open
+              onClose={() => setOpen(false)}
+            />
+        </Suspense>
       ) : null}
     </>
   );

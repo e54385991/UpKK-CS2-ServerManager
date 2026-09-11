@@ -2507,12 +2507,52 @@ export interface paths {
         };
         /**
          * List Operation Inbox
-         * @description Active jobs plus failed jobs retained for seven days.
+         * @description Active jobs plus completed and failed history retained for seven days.
          */
         get: operations["list_operation_inbox_api_v1_operations_inbox_get"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/inbox/completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear Completed Operations
+         * @description Remove every retained successful job the caller can see.
+         */
+        delete: operations["clear_completed_operations_api_v1_operations_inbox_completed_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/inbox/completed/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Dismiss Completed Operation
+         * @description Remove one completed job from the retained history.
+         */
+        delete: operations["dismiss_completed_operation_api_v1_operations_inbox_completed__operation_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -12645,6 +12685,18 @@ export interface components {
              */
             active_count: number;
             /**
+             * Completed Count
+             * @default 0
+             */
+            completed_count: number;
+            /** Completed Items */
+            completed_items?: components["schemas"]["OperationInboxItem"][];
+            /**
+             * Completed Retention Days
+             * @default 7
+             */
+            completed_retention_days: number;
+            /**
              * Failed Count
              * @default 0
              */
@@ -21770,6 +21822,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationInboxView"];
+                };
+            };
+        };
+    };
+    clear_completed_operations_api_v1_operations_inbox_completed_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+        };
+    };
+    dismiss_completed_operation_api_v1_operations_inbox_completed__operation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -1,10 +1,7 @@
 import { getFormatter, getTranslations } from "next-intl/server";
 import type { Route } from "next";
-import {
-  getServer,
-  getServerDiskSpace,
-  getStartupCommand,
-} from "@/modules/servers/api";
+import { getServerDiskSpace, getStartupCommand } from "@/modules/servers/api";
+import { getServer } from "@/modules/servers/render-queries";
 import { DiskSpaceCard } from "@/modules/servers/disk-space-card";
 import { StartupCommandCard } from "@/modules/servers/startup-command-card";
 import { workspaceHref } from "@/modules/servers/workspace";

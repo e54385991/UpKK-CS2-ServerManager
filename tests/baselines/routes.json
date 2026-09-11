@@ -2258,6 +2258,22 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "DELETE"
+    ],
+    "name": "clear_completed_operations",
+    "path": "/api/v1/operations/inbox/completed"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "dismiss_completed_operation",
+    "path": "/api/v1/operations/inbox/completed/{operation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "start_server_operation",

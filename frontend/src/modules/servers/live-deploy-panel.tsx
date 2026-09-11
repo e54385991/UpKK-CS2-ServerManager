@@ -1,11 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
 import { getConsolePane } from "@/modules/console/api";
-import {
-  getCurrentServerOperation,
-  getDeploymentLock,
-  listOperationLogs,
-} from "@/modules/servers/api";
+import { listOperationLogs } from "@/modules/servers/api";
+import { getCurrentServerOperation, getDeploymentLock } from "@/modules/servers/render-queries";
 import { LiveDeployWorkspace } from "@/modules/servers/live-deploy-workspace";
 import type { ServerStatus } from "@/modules/servers/types";
 import { Card } from "@/shared/ui/card";

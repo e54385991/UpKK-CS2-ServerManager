@@ -288,10 +288,13 @@ export type OperationInboxItem = ServerOperation & {
 export type OperationInbox = {
   readonly marketImportItems?: readonly components["schemas"]["PluginAIImportView"][];
   readonly items: readonly OperationInboxItem[];
+  readonly completedItems: readonly OperationInboxItem[];
   readonly failedItems: readonly OperationInboxItem[];
   readonly activeCount: number;
   readonly runningCount: number;
+  readonly completedCount: number;
   readonly failedCount: number;
+  readonly completedRetentionDays: number;
   readonly failedRetentionDays: number;
 };
 

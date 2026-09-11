@@ -1,4 +1,4 @@
-import { getSession } from "@/modules/auth/session";
+import { getSession } from "@/modules/auth/render-session";
 import { ConsoleShell } from "@/modules/shell/console-shell";
 
 /**

@@ -14940,6 +14940,23 @@
             "title": "Active Count",
             "type": "integer"
           },
+          "completed_count": {
+            "default": 0,
+            "title": "Completed Count",
+            "type": "integer"
+          },
+          "completed_items": {
+            "items": {
+              "$ref": "#/components/schemas/OperationInboxItem"
+            },
+            "title": "Completed Items",
+            "type": "array"
+          },
+          "completed_retention_days": {
+            "default": 7,
+            "title": "Completed Retention Days",
+            "type": "integer"
+          },
           "failed_count": {
             "default": 0,
             "title": "Failed Count",
@@ -34350,7 +34367,7 @@
     },
     "/api/v1/operations/inbox": {
       "get": {
-        "description": "Active jobs plus failed jobs retained for seven days.",
+        "description": "Active jobs plus completed and failed history retained for seven days.",
         "operationId": "list_operation_inbox_api_v1_operations_inbox_get",
         "responses": {
           "200": {
@@ -34370,6 +34387,82 @@
           }
         ],
         "summary": "List Operation Inbox",
+        "tags": [
+          "v1-operations"
+        ]
+      }
+    },
+    "/api/v1/operations/inbox/completed": {
+      "delete": {
+        "description": "Remove every retained successful job the caller can see.",
+        "operationId": "clear_completed_operations_api_v1_operations_inbox_completed_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Clear Completed Operations",
+        "tags": [
+          "v1-operations"
+        ]
+      }
+    },
+    "/api/v1/operations/inbox/completed/{operation_id}": {
+      "delete": {
+        "description": "Remove one completed job from the retained history.",
+        "operationId": "dismiss_completed_operation_api_v1_operations_inbox_completed__operation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Dismiss Completed Operation",
         "tags": [
           "v1-operations"
         ]

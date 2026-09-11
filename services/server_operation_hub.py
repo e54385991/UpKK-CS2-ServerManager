@@ -8,38 +8,28 @@ import logging
 import time
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from modules.utils import get_current_time
 from services.ai_security import redact_sensitive_text
 from services.redis_manager import redis_manager
+from services.server_operation_history import (
+    COMPLETED_RETENTION_SECONDS,
+    FAILED_RETENTION_SECONDS,
+    ServerOperationHistoryMixin,
+    _as_datetime as _history_as_datetime,
+)
+
+_as_datetime = _history_as_datetime
 
 logger = logging.getLogger(__name__)
 
 OPERATION_TTL_SECONDS = 24 * 60 * 60
-FAILED_RETENTION_SECONDS = 7 * 24 * 60 * 60
 EVENT_LIMIT = 300
 SUBSCRIBER_QUEUE_LIMIT = 256
 ACTIVE_STATUSES = frozenset({"queued", "running"})
 TERMINAL_EVENT_TYPES = frozenset({"operation_completed", "operation_failed"})
 MAX_PENDING_PER_SERVER = 10
-MAX_FAILED_PER_SERVER = 100
-
-
-def _as_datetime(value: object) -> datetime | None:
-    if isinstance(value, datetime):
-        stamp = value
-    elif isinstance(value, str) and value:
-        try:
-            stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-    else:
-        return None
-    if stamp.tzinfo is None:
-        stamp = stamp.replace(tzinfo=timezone.utc)
-    return stamp
 
 
 def _trim_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -51,6 +41,8 @@ def _trim_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _record_ttl(record: dict[str, Any]) -> int:
     if record.get("status") == "failed":
         return FAILED_RETENTION_SECONDS
+    if record.get("status") == "completed":
+        return COMPLETED_RETENTION_SECONDS
     return OPERATION_TTL_SECONDS
 
 
@@ -62,17 +54,22 @@ class ServerOperationConflict(Exception):
         self.operation_id = operation_id
 
 
-class ServerOperationHub:
+class ServerOperationHub(ServerOperationHistoryMixin):
     def __init__(self) -> None:
         self._records: dict[str, dict[str, Any]] = {}
         self._current: dict[int, str] = {}
         self._pending: dict[int, list[str]] = {}
         self._failed: dict[int, list[str]] = {}
+        self._completed: dict[int, list[str]] = {}
         self._runners: dict[str, Any] = {}
         self._events: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._queues: dict[str, set[asyncio.Queue]] = defaultdict(set)
         self._tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
+
+    @property
+    def _history_redis(self) -> Any:
+        return redis_manager
 
     def _record_key(self, operation_id: str) -> str:
         return f"server_op:{operation_id}"
@@ -85,9 +82,6 @@ class ServerOperationHub:
 
     def _pending_key(self, server_id: int) -> str:
         return f"server_op_pending:{server_id}"
-
-    def _failed_key(self, server_id: int) -> str:
-        return f"server_op_failed:{server_id}"
 
     async def create(
         self,
@@ -252,67 +246,6 @@ class ServerOperationHub:
             seen.add(operation_id)
         return items
 
-    async def list_failed_for_server(self, server_id: int) -> list[dict[str, Any]]:
-        """Failed jobs still inside the 7-day retention window."""
-        async with self._lock:
-            failed_ids = await self._failed_ids_unlocked(server_id)
-        now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(seconds=FAILED_RETENTION_SECONDS)
-        kept: list[str] = []
-        items: list[dict[str, Any]] = []
-        for operation_id in failed_ids:
-            record = await self.get(operation_id)
-            if record is None or record.get("status") != "failed":
-                continue
-            completed = _as_datetime(record.get("completed_at"))
-            if completed is not None and completed < cutoff:
-                continue
-            kept.append(operation_id)
-            items.append(record)
-        if kept != failed_ids:
-            async with self._lock:
-                self._failed[server_id] = list(kept)
-            await self._persist_failed(server_id)
-        items.sort(
-            key=lambda item: str(item.get("completed_at") or item.get("started_at") or ""),
-            reverse=True,
-        )
-        return items
-
-    async def dismiss_failed(self, operation_id: str) -> dict[str, Any] | None:
-        """Drop one failed job from the inbox so it no longer appears."""
-        record = await self.get(operation_id)
-        if record is None or record.get("status") != "failed":
-            return None
-        server_id = int(record["server_id"])
-        was_current = False
-        async with self._lock:
-            failed_ids = await self._failed_ids_unlocked(server_id)
-            if operation_id in failed_ids:
-                failed_ids = [item for item in failed_ids if item != operation_id]
-                self._failed[server_id] = failed_ids
-            if self._current.get(server_id) == operation_id:
-                self._current.pop(server_id, None)
-                was_current = True
-        await self._persist_failed(server_id)
-        if was_current:
-            try:
-                await redis_manager.delete(self._current_key(server_id))
-            except Exception as exc:
-                logger.warning("Unable to clear current pointer for server %s: %s", server_id, exc)
-        await self._forget_operation(operation_id)
-        return record
-
-    async def clear_failed(self, server_ids: list[int]) -> int:
-        """Dismiss every retained failure for the given servers."""
-        cleared = 0
-        for server_id in server_ids:
-            records = await self.list_failed_for_server(server_id)
-            for record in records:
-                if await self.dismiss_failed(str(record["operation_id"])):
-                    cleared += 1
-        return cleared
-
     async def latest_message(self, operation_id: str) -> str | None:
         events = list(self._events.get(operation_id) or [])
         if not events:
@@ -403,8 +336,10 @@ class ServerOperationHub:
         )
         if record is not None:
             await self._promote_next(int(record["server_id"]), operation_id)
-            if not success:
-                await self._remember_failed(record)
+            if success:
+                await self.remember_completed(record)
+            else:
+                await self.remember_failed(record)
         return record
 
     async def _promote_next(self, server_id: int, finished_id: str) -> None:
@@ -567,46 +502,6 @@ class ServerOperationHub:
                 ids = [str(item) for item in parsed if item]
         self._pending[server_id] = ids
         return list(ids)
-
-    async def _failed_ids_unlocked(self, server_id: int) -> list[str]:
-        cached = self._failed.get(server_id)
-        if cached is not None:
-            return list(cached)
-        stored = await redis_manager.get(self._failed_key(server_id))
-        ids: list[str] = []
-        if isinstance(stored, list):
-            ids = [str(item) for item in stored if item]
-        elif isinstance(stored, str) and stored:
-            try:
-                parsed = json.loads(stored)
-            except json.JSONDecodeError:
-                parsed = []
-            if isinstance(parsed, list):
-                ids = [str(item) for item in parsed if item]
-        self._failed[server_id] = ids
-        return list(ids)
-
-    async def _persist_failed(self, server_id: int) -> None:
-        try:
-            await redis_manager.set(
-                self._failed_key(server_id),
-                list(self._failed.get(server_id) or []),
-                expire=FAILED_RETENTION_SECONDS,
-            )
-        except Exception as exc:
-            logger.warning("Unable to persist failed operations for server %s: %s", server_id, exc)
-
-    async def _remember_failed(self, record: dict[str, Any]) -> None:
-        server_id = int(record["server_id"])
-        operation_id = str(record["operation_id"])
-        async with self._lock:
-            failed_ids = await self._failed_ids_unlocked(server_id)
-            if operation_id not in failed_ids:
-                failed_ids.append(operation_id)
-            self._failed[server_id] = failed_ids[-MAX_FAILED_PER_SERVER:]
-        await self._persist_failed(server_id)
-        await self._persist_record(record)
-        await self._expire_events(operation_id, FAILED_RETENTION_SECONDS)
 
     async def _forget_operation(self, operation_id: str) -> None:
         self._records.pop(operation_id, None)

@@ -1,11 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
 import { listServerPlugins } from "@/modules/plugins/api";
-import {
-  getCurrentServerOperation,
-  getDeploymentLock,
-  listOperationLogs,
-} from "@/modules/servers/api";
+import { listOperationLogs } from "@/modules/servers/api";
+import { getCurrentServerOperation, getDeploymentLock } from "@/modules/servers/render-queries";
 import { FrameworksConsole } from "@/modules/servers/frameworks-console";
 import { detectInstalledFrameworkKeys } from "@/modules/servers/frameworks";
 import type { ServerStatus } from "@/modules/servers/types";

@@ -1,6 +1,7 @@
 "use client";
 
-import { AIImportTasks } from "@/modules/plugins/ai-import-tasks";
+import dynamic from "next/dynamic";
+import { DialogContentLoading } from "@/shared/ui/dialog-loading";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -18,8 +19,10 @@ import {
 } from "@/modules/servers/activity-store";
 import {
   clearFailedOperationsFromBrowser,
+  clearCompletedOperationsFromBrowser,
   cancelOperationFromBrowser,
   dismissFailedOperationFromBrowser,
+  dismissCompletedOperationFromBrowser,
   loadOperationInboxFromBrowser,
   loadOperationJournalFromBrowser,
 } from "@/modules/servers/operation-client";
@@ -51,9 +54,14 @@ import { Badge, StatusDot } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 
+const AIImportTasks = dynamic(
+  () => import("@/modules/plugins/ai-import-tasks").then((mod) => mod.AIImportTasks),
+  { loading: DialogContentLoading },
+);
+
 const GAME_ACTIONS = new Set(["start", "restart"]);
 
-type TrayTab = "queue" | "failed";
+type TrayTab = "queue" | "completed" | "failed";
 
 function mergeById(
   groups: readonly (readonly OperationInboxItem[])[],
@@ -215,6 +223,15 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
         return right.startedAt.localeCompare(left.startedAt);
       });
   }, [dismissed, inbox?.items, overlay]);
+  const completed = useMemo(() => {
+    return mergeById([inbox?.completedItems ?? []])
+      .filter((item) => !dismissed.has(item.operationId) && item.status === "completed")
+      .sort((left, right) =>
+        (right.completedAt ?? right.startedAt).localeCompare(
+          left.completedAt ?? left.startedAt,
+        ),
+      );
+  }, [dismissed, inbox?.completedItems]);
   const failed = useMemo(() => {
     return mergeById([overlay, inbox?.failedItems ?? []])
       .filter((item) => !dismissed.has(item.operationId) && item.status === "failed")
@@ -230,14 +247,17 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
     marketTasks.some((item) => item.status === "completed" || item.status === "cancelled") ||
     marketTasks.some((item) => item.status === "failed");
   const remaining = queue.length + marketTasks.filter(item => item.status === "queued" || item.status === "running").length;
+  const completedCount = completed.length;
   const failedCount = failed.length;
   const allFailedCount = failedCount + marketTasks.filter(item => item.status === "failed").length;
   const running = queue.some((item) => item.status === "running") || marketTasks.some(item => item.status === "running");
   const selectedIsFailed = Boolean(
     selectedId && failed.some((item) => item.operationId === selectedId),
   );
-  const activeTab: TrayTab = tab === "queue" && selectedIsFailed ? "failed" : tab;
-  const visible = activeTab === "queue" ? queue : failed;
+  const activeTab: TrayTab =
+    tab === "queue" && selectedIsFailed ? "failed" : tab;
+  const visible =
+    activeTab === "queue" ? queue : activeTab === "completed" ? completed : failed;
   const selected =
     visible.find((item) => item.operationId === selectedId) ?? visible[0] ?? null;
 
@@ -314,8 +334,32 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
     if (inboxResult.ok) setInbox(inboxResult.data);
   }
 
-  async function dismissOne(operationId: string) {
-    const result = await dismissFailedOperationFromBrowser(operationId);
+  async function clearCompleted() {
+    if (completedCount === 0) return;
+    if (
+      !(await confirm({
+        title: t("activityClearCompleted"),
+        description: t("activityClearCompletedConfirm", { count: completedCount }),
+        tone: "danger",
+      }))
+    ) {
+      return;
+    }
+    const result = await clearCompletedOperationsFromBrowser();
+    if (!result.ok) {
+      notify.error(result.error || t("activityClearCompletedError"));
+      return;
+    }
+    dismissActivityOperations(completed.map((item) => item.operationId));
+    const inboxResult = await loadOperationInboxFromBrowser();
+    if (inboxResult.ok) setInbox(inboxResult.data);
+  }
+
+  async function dismissTerminalOne(operationId: string, terminalTab: "completed" | "failed") {
+    const result =
+      terminalTab === "completed"
+        ? await dismissCompletedOperationFromBrowser(operationId)
+        : await dismissFailedOperationFromBrowser(operationId);
     if (!result.ok) return;
     dismissActivityOperations([operationId]);
     const inboxResult = await loadOperationInboxFromBrowser();
@@ -370,7 +414,13 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
             closeActivityTray();
             return;
           }
-          setTab(remaining === 0 && failedCount > 0 ? "failed" : "queue");
+          setTab(
+            remaining > 0
+              ? "queue"
+              : failedCount > 0
+                ? "failed"
+                : "completed",
+          );
           openActivityTray(selected?.operationId);
         }}
       >
@@ -431,12 +481,29 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
                     ? remaining > 0
                       ? t("activityRemaining", { count: remaining })
                       : t("activityEmpty")
-                    : failedCount > 0
-                      ? t("activityFailedCount", { count: failedCount })
-                      : t("activityFailedEmpty")}
+                    : activeTab === "completed"
+                      ? completedCount > 0
+                        ? t("activityCompletedCount", { count: completedCount })
+                        : t("activityCompletedEmpty")
+                      : failedCount > 0
+                        ? t("activityFailedCount", { count: failedCount })
+                        : t("activityFailedEmpty")}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {activeTab === "completed" && completedCount > 0 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-danger hover:bg-danger/10"
+                    data-testid="activity-tray-clear-completed"
+                    onClick={() => void clearCompleted()}
+                  >
+                    <Trash2 className="size-4" />
+                    {t("activityClearCompletedAll", { count: completedCount })}
+                  </Button>
+                ) : null}
                 {allFailedCount > 0 ? (
                   <Button
                     type="button"
@@ -469,6 +536,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
               {(
                 [
                   ["queue", t("activityTabQueue"), remaining],
+                  ["completed", t("activityTabCompleted"), completedCount],
                   ["failed", t("activityTabFailed"), failedCount],
                 ] as const
               ).map(([id, label, count]) => (
@@ -487,6 +555,12 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
                   onClick={() => {
                     if (id === "queue") {
                       selectActivityOperation(queue[0]?.operationId ?? null);
+                    }
+                    if (id === "completed") {
+                      selectActivityOperation(completed[0]?.operationId ?? null);
+                    }
+                    if (id === "failed") {
+                      selectActivityOperation(failed[0]?.operationId ?? null);
                     }
                     setTab(id);
                   }}
@@ -511,7 +585,11 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
           <div className="min-h-0 flex-1 overflow-y-auto">
             {visible.length === 0 ? (
               <p className="px-4 py-6 text-sm text-fg-muted">
-                {activeTab === "queue" ? t("activityEmptyHelp") : t("activityFailedHelp")}
+                {activeTab === "queue"
+                  ? t("activityEmptyHelp")
+                  : activeTab === "completed"
+                    ? t("activityCompletedHelp")
+                    : t("activityFailedHelp")}
               </p>
             ) : (
               <ul className="divide-y divide-line">
@@ -568,8 +646,14 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
                         variant="ghost"
                         size="icon"
                         className="m-1 shrink-0"
-                        aria-label={t("activityDismissFailed")}
-                        onClick={() => void dismissOne(item.operationId)}
+                        aria-label={
+                          activeTab === "completed"
+                            ? t("activityDismissCompleted")
+                            : t("activityDismissFailed")
+                        }
+                        onClick={() =>
+                          void dismissTerminalOne(item.operationId, activeTab)
+                        }
                       >
                         <X />
                       </Button>
