@@ -56,6 +56,8 @@ export function SettingsWorkspace({
         : "hidden",
     [active],
   );
+  const markDirty = (section: SectionKey) => setDirty((current) => new Set(current).add(section));
+  const clearDirty = (section: SectionKey) => setDirty((current) => { const next = new Set(current); next.delete(section); return next; });
 
   function select(section: (typeof SECTIONS)[number]) {
     const next = section.key === "downloadCache" ? "download-cache" : (section.key as SectionKey);
@@ -100,21 +102,17 @@ export function SettingsWorkspace({
           activeSection={mainSection}
           onDirty={() => {
             if (mainSection === "hidden") return;
-            setDirty((current) => new Set(current).add(mainSection));
+            markDirty(mainSection);
           }}
           onSaved={() => {
-            setDirty((current) => {
-              const next = new Set(current);
-              next.delete(mainSection);
-              return next;
-            });
+            clearDirty(mainSection);
           }}
         />
         <div data-testid="settings-section-download-cache" className={cn(active === "download-cache" ? "" : "hidden")}>
-          <DownloadCacheCard initial={settings} />
+          <DownloadCacheCard initial={settings} onDirty={() => markDirty("download-cache")} onSaved={() => clearDirty("download-cache")} />
         </div>
         <div data-testid="settings-section-ai" className={cn(active === "ai" ? "" : "hidden")}>
-          <AiSettingsForm initial={ai} />
+          <AiSettingsForm initial={ai} onDirty={() => markDirty("ai")} onSaved={() => clearDirty("ai")} />
         </div>
         <div data-testid="settings-section-transfer" className={cn(active === "transfer" ? "" : "hidden")}>
           <SettingsTransferCard />

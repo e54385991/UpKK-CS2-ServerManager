@@ -44,8 +44,12 @@ function optionalNumber(value: string): number | null {
 
 export function AiSettingsForm({
   initial,
+  onDirty,
+  onSaved,
 }: {
   initial: AiSystemSettings | null;
+  onDirty?: () => void;
+  onSaved?: () => void;
 }) {
   const t = useTranslations("aiSettings");
   const seed = initial ?? EMPTY_AI_SYSTEM_SETTINGS;
@@ -179,6 +183,7 @@ export function AiSettingsForm({
         return;
       }
       applySaved(result.data);
+      onSaved?.();
       showBanner({ tone: "ok", text: t("saved") });
     } catch (error) {
       showBanner({
@@ -219,7 +224,7 @@ export function AiSettingsForm({
   }
 
   return (
-    <Card className="max-w-2xl" data-testid="ai-settings-card">
+    <Card className="max-w-2xl" data-testid="ai-settings-card" onChange={onDirty}>
       <CardHeader>
         <CardTitle>{t("title")}</CardTitle>
         <CardDescription>{t("help")}</CardDescription>

@@ -31,7 +31,7 @@ function megabytes(bytes: number): string {
  * clear and prune buttons act on the directory immediately, and pairing them
  * with an unsaved path in the form would apply them to the wrong directory.
  */
-export function DownloadCacheCard({ initial }: { initial: SystemSettings }) {
+export function DownloadCacheCard({ initial, onDirty, onSaved }: { initial: SystemSettings; onDirty?: () => void; onSaved?: () => void }) {
   const t = useTranslations("settings.downloadCache");
   const [settings, setSettings] = useState(initial);
   const [enabled, setEnabled] = useState(initial.pluginDownloadCacheEnabled);
@@ -68,6 +68,7 @@ export function DownloadCacheCard({ initial }: { initial: SystemSettings }) {
     setSettings(result.data);
     setMaxAgeDays(String(result.data.pluginDownloadCacheMaxAgeDays));
     setMaxMegabytes(String(result.data.pluginDownloadCacheMaxMegabytes));
+    onSaved?.();
     setMessage(t("saved"));
   }
 
@@ -83,7 +84,7 @@ export function DownloadCacheCard({ initial }: { initial: SystemSettings }) {
   }
 
   return (
-    <Card>
+    <Card onChange={onDirty}>
       <CardHeader>
         <div className="flex items-center gap-3">
           <span className="flex size-9 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">
