@@ -250,6 +250,8 @@ export const SERVER_OPERATION_ACTIONS = [
   "plugin_diagnostic_resume",
   "send_game_command",
   "test_initialized_ssh",
+  "batch_delete",
+  "move_paths",
 ] as const;
 
 export type ServerOperationAction = (typeof SERVER_OPERATION_ACTIONS)[number];

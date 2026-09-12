@@ -519,7 +519,9 @@
       "plugin_diagnostic_restore": "Restore diagnostic snapshot",
       "plugin_diagnostic_resume": "Resume plugin diagnostic",
       "send_game_command": "Send game command",
-      "test_initialized_ssh": "Test initialized host SSH"
+      "test_initialized_ssh": "Test initialized host SSH",
+      "batch_delete": "Delete selected files",
+      "move_paths": "Move files"
     },
     "confirm": {
       "deploy": "Deploy CS2 to this host? SteamCMD can take a long time and will lock other actions.",

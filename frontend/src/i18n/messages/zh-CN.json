@@ -519,7 +519,9 @@
       "plugin_diagnostic_restore": "恢复诊断快照",
       "plugin_diagnostic_resume": "继续插件诊断",
       "send_game_command": "发送游戏命令",
-      "test_initialized_ssh": "测试已初始化主机 SSH"
+      "test_initialized_ssh": "测试已初始化主机 SSH",
+      "batch_delete": "删除选中文件",
+      "move_paths": "移动文件"
     },
     "confirm": {
       "deploy": "要向这台主机部署 CS2 吗？SteamCMD 可能耗时很长，期间会锁定其他操作。",
