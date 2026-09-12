@@ -148,6 +148,56 @@ export async function deleteFilePath(
   return { ok: true, data: toMutation(result.data) };
 }
 
+export async function deleteFilePaths(
+  serverId: number,
+  paths: readonly string[],
+): Promise<ApiResult<ServerOperation>> {
+  const result = await apiFetch<ServerOperationViewDto>(
+    `/api/v1/servers/${serverId}/files/batch-delete`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ paths: [...paths] }),
+    },
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: mapServerOperation(result.data) };
+}
+
+export async function moveFilePaths(
+  serverId: number,
+  sources: readonly string[],
+  destination: string,
+  conflict: "skip" | "overwrite" = "skip",
+): Promise<ApiResult<ServerOperation>> {
+  const result = await apiFetch<ServerOperationViewDto>(
+    `/api/v1/servers/${serverId}/files/move`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sources: [...sources], destination, conflict }),
+    },
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: mapServerOperation(result.data) };
+}
+
+export async function previewMovePaths(
+  serverId: number,
+  sources: readonly string[],
+  destination: string,
+): Promise<ApiResult<{ destination: string; conflicts: string[]; missing: string[] }>> {
+  const result = await apiFetch<{ destination: string; conflicts: string[]; missing: string[] }>(
+    `/api/v1/servers/${serverId}/files/move/preview`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sources: [...sources], destination }),
+    },
+  );
+  return result;
+}
+
 export async function copyFilePaths(
   serverId: number,
   sources: readonly string[],

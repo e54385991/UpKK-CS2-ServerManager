@@ -9,6 +9,7 @@ function emitClipboard() {
 
 export type FileClipboard = {
   readonly paths: readonly string[];
+  readonly mode: "copy" | "move";
 };
 
 export function clipboardStorageKey(serverId: number): string {
@@ -25,6 +26,15 @@ export function parseFileClipboard(raw: unknown): string[] {
     .slice(0, 50);
 }
 
+export function parseFileClipboardPayload(raw: unknown): FileClipboard {
+  if (!raw || typeof raw !== "object") return { paths: [], mode: "copy" };
+  const record = raw as { paths?: unknown; mode?: unknown };
+  return {
+    paths: parseFileClipboard(raw),
+    mode: record.mode === "move" ? "move" : "copy",
+  };
+}
+
 export function readFileClipboard(serverId: number): string[] {
   if (typeof window === "undefined") return [];
   try {
@@ -35,10 +45,14 @@ export function readFileClipboard(serverId: number): string[] {
   }
 }
 
-export function writeFileClipboard(serverId: number, paths: readonly string[]): void {
+export function writeFileClipboard(
+  serverId: number,
+  paths: readonly string[],
+  mode: "copy" | "move" = "copy",
+): void {
   window.sessionStorage.setItem(
     clipboardStorageKey(serverId),
-    JSON.stringify({ paths: paths.slice(0, 50) }),
+    JSON.stringify({ paths: paths.slice(0, 50), mode }),
   );
   emitClipboard();
 }
@@ -55,18 +69,18 @@ export function getFileClipboardSnapshot(serverId: number): string {
   return window.sessionStorage.getItem(clipboardStorageKey(serverId)) ?? "";
 }
 
-export function useFileClipboard(serverId: number): string[] {
+export function useFileClipboard(serverId: number): FileClipboard {
   const raw = useSyncExternalStore(
     subscribeFileClipboard,
     () => getFileClipboardSnapshot(serverId),
     () => "",
   );
   return useMemo(() => {
-    if (!raw) return [];
+    if (!raw) return { paths: [], mode: "copy" };
     try {
-      return parseFileClipboard(JSON.parse(raw) as unknown);
+      return parseFileClipboardPayload(JSON.parse(raw) as unknown);
     } catch {
-      return [];
+      return { paths: [], mode: "copy" };
     }
   }, [raw]);
 }

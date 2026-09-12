@@ -10,6 +10,7 @@ from services.operation_enqueue import bind_hub_enqueuers
 from .cleanup import *  # noqa: F401,F403
 from .diagnostics import *  # noqa: F401,F403
 from .downloads import *  # noqa: F401,F403
+from .file_mutations import *  # noqa: F401,F403
 from .game_mode import *  # noqa: F401,F403
 from .host import *  # noqa: F401,F403
 from .initialized_hosts import *  # noqa: F401,F403

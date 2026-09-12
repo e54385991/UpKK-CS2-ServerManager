@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import posixpath
 
+from asyncssh.constants import FILEXFER_TYPE_DIRECTORY
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, status
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
@@ -27,7 +28,12 @@ from api.routes.file_manager.common import (
     resolve_extract_paths,
 )
 from api.routes.v1.operation_locks import reject_stuck_lock_unless_active
-from api.routes.v1.operation_runner import enqueue_extract_archive, enqueue_url_download
+from api.routes.v1.operation_runner import (
+    enqueue_batch_delete,
+    enqueue_extract_archive,
+    enqueue_move_paths,
+    enqueue_url_download,
+)
 from api.routes.v1.operations import to_view
 from services.audit_log_service import record_audit_event
 from services.server_operation_hub import ServerOperationConflict, server_operation_hub
@@ -35,6 +41,7 @@ from services.server_operation_hub import ServerOperationConflict, server_operat
 from .schemas import (
     FileArchiveInspectRequest,
     FileArchiveInspectView,
+    FileBatchDeleteRequest,
     FileContentUpdateRequest,
     FileContentView,
     FileCopyRequest,
@@ -42,6 +49,8 @@ from .schemas import (
     FileEntryView,
     FileExtractRequest,
     FileMkdirRequest,
+    FileMovePreviewView,
+    FileMoveRequest,
     FileMutationResult,
     FileRenameRequest,
     FilesWorkspaceView,
@@ -333,6 +342,162 @@ async def delete_path(
         message=str(payload.get("message") or "Deleted successfully"),
         path=path,
     )
+
+
+@router.post(
+    "/batch-delete", response_model=ServerOperationView, status_code=status.HTTP_202_ACCEPTED
+)
+async def batch_delete_paths(
+    server_id: int,
+    body: FileBatchDeleteRequest,
+    request: Request,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ServerOperationView:
+    server = await require_server_access(db, server_id, current_user)
+    paths = [posixpath.normpath(path) for path in body.paths]
+    root = posixpath.normpath(server.game_directory)
+    if any(not is_path_safe(server.game_directory, path) or path == root for path in paths):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid delete path")
+    await reject_stuck_lock_unless_active(server_id)
+    try:
+        record = await enqueue_batch_delete(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            paths=paths,
+        )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await record_audit_event(
+        category="files",
+        action="files.batch_delete",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"path_count": len(paths), "operation_id": record["operation_id"]},
+    )
+    return to_view(record)
+
+
+@router.post("/move/preview", response_model=FileMovePreviewView)
+async def preview_move_paths(
+    server_id: int,
+    body: FileMoveRequest,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> FileMovePreviewView:
+    server = await require_server_access(db, server_id, current_user)
+    await db.commit()
+    destination = posixpath.normpath(body.destination)
+    sources: list[str] = []
+    for raw_path in body.sources:
+        path = posixpath.normpath(raw_path)
+        if any(path == parent or path.startswith(parent.rstrip("/") + "/") for parent in sources):
+            continue
+        sources = [parent for parent in sources if not parent.startswith(path.rstrip("/") + "/")]
+        sources.append(path)
+    if not is_path_safe(server.game_directory, destination) or any(
+        not is_path_safe(server.game_directory, path) for path in sources
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid move path")
+    manager = SSHManager()
+    conflicts: list[str] = []
+    missing: list[str] = []
+    try:
+        connected, message = await manager.connect(server)
+        if not connected:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message)
+        connection = manager.conn
+        if connection is None:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail="SSH connection unavailable"
+            )
+        async with connection.start_sftp_client() as sftp:
+            try:
+                destination_attrs = await sftp.lstat(destination)
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Destination directory does not exist",
+                ) from None
+            if destination_attrs.type != FILEXFER_TYPE_DIRECTORY:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Destination is not a directory",
+                )
+            for source in sources:
+                target = remote_join(destination, posixpath.basename(source))
+                try:
+                    await sftp.lstat(source)
+                except Exception:
+                    missing.append(source)
+                try:
+                    await sftp.lstat(target)
+                    conflicts.append(target)
+                except Exception:
+                    pass
+    finally:
+        await manager.disconnect()
+    return FileMovePreviewView(destination=destination, conflicts=conflicts, missing=missing)
+
+
+@router.post("/move", response_model=ServerOperationView, status_code=status.HTTP_202_ACCEPTED)
+async def move_paths(
+    server_id: int,
+    body: FileMoveRequest,
+    request: Request,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ServerOperationView:
+    server = await require_server_access(db, server_id, current_user)
+    destination = posixpath.normpath(body.destination)
+    sources: list[str] = []
+    for raw_path in body.sources:
+        path = posixpath.normpath(raw_path)
+        if any(path == parent or path.startswith(parent.rstrip("/") + "/") for parent in sources):
+            continue
+        sources = [parent for parent in sources if not parent.startswith(path.rstrip("/") + "/")]
+        sources.append(path)
+    if not is_path_safe(server.game_directory, destination) or any(
+        not is_path_safe(server.game_directory, path)
+        or posixpath.normpath(path) == posixpath.normpath(server.game_directory)
+        for path in sources
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid move path")
+    if destination in sources or any(
+        destination.startswith(path.rstrip("/") + "/") for path in sources
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Cannot move a folder into itself",
+        )
+    await reject_stuck_lock_unless_active(server_id)
+    try:
+        record = await enqueue_move_paths(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            sources=sources,
+            destination=destination,
+            conflict=body.conflict,
+        )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await record_audit_event(
+        category="files",
+        action="files.move",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "source_count": len(sources),
+            "destination": destination,
+            "conflict": body.conflict,
+            "operation_id": record["operation_id"],
+        },
+    )
+    return to_view(record)
 
 
 @router.post("/rename", response_model=FileMutationResult)

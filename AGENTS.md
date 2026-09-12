@@ -6,16 +6,21 @@ This repository hosts two applications:
   (`main.py`, `api/`, `modules/`, `services/`, `alembic/`).
 - **Frontend** (`frontend/`): a dedicated **Next.js 16.3.4** console that
   replaces the legacy Jinja/Bootstrap UI and talks to the backend through a
-  same-origin proxy. See `frontend/AGENTS.md` for its rules — read it before
-  working under `frontend/`. Before changing Next.js behavior, read the
-  relevant version-matched sections of `frontend/node_modules/next/dist/docs/`
-  (Next 16 has breaking changes); do not read the entire manual for every edit.
+  same-origin proxy. Use `frontend/AGENTS.md` for frontend-specific constraints.
+  When changing Next.js behavior, consult only the relevant version-matched
+  sections of `frontend/node_modules/next/dist/docs/` (Next 16 has breaking
+  changes); do not read the entire manual for unrelated edits.
 
 # Task Completion Checks
 
-This section is the single source of truth for completion checks. For any
-code, dependency, build, CI, or runtime configuration change, run the full
-repository quality baseline at least once before reporting completion:
+This section is the single source of truth for completion checks. Match the
+checks to the risk and scope of the change:
+
+- For an isolated code change, run the affected tests and static checks before
+  reporting completion.
+- For dependency, build/CI, runtime-configuration, shared-contract, or
+  cross-domain changes, run the full repository quality baseline before
+  reporting completion:
 
 ```bash
 uv run python scripts/check_baseline.py
@@ -25,7 +30,8 @@ The baseline already runs the frontend unit tests, lint, typecheck, production
 build, and bundle budget. A successful baseline satisfies those gates; do not
 run them again solely because `frontend/AGENTS.md` lists them. Reuse results
 only while the checked content, dependencies, and relevant environment remain
-unchanged. After further edits, rerun the affected checks.
+unchanged. After further edits, rerun only the affected checks unless the
+change still falls into one of the full-baseline categories above.
 
 For documentation or instruction-only changes (including `AGENTS.md` and
 `SKILL.md`), run `git diff --check` and validate affected references, examples,
@@ -34,11 +40,11 @@ additional checks if executable examples or changed instructions alter an
 actual build/runtime contract. Read-only reviews do not require a build or
 test run. These exceptions do not waive checks for accompanying code changes.
 
-Fix failures caused by this task and continue other independent work while
-investigating blockers. If a required check cannot run or remains failing,
-report the exact command, observed failure, and remaining risk; distinguish
-implementation progress from verified completion. Do not claim completion,
-weaken a gate, or make unrelated repairs merely to turn the baseline green.
+Fix failures caused by this task and keep the work within the requested scope.
+If a relevant check cannot run or remains failing, report the exact command,
+observed failure, and remaining risk; distinguish implementation progress from
+verified completion. Do not claim completion, weaken a gate, or make unrelated
+repairs merely to turn the baseline green.
 
 # Git 提交约定
 
@@ -286,6 +292,6 @@ HTTP request.
 基线包含 uv lock、pre-commit、Ruff、basedpyright（零错误/警告）、import-linter、循环依赖、
 复杂度 ≤15、文件规模、API response_model/敏感字段、OpenAPI/路由/公开导出快照、全量 pytest、
 覆盖率、依赖审计，以及 Next.js lint/typecheck/build/bundle budget。数据库集成、Compose 健康检查和
-稳定的 Next.js Playwright 公共页面 smoke 按 CI job 执行。新增或重构的领域必须覆盖单元、集成、
-契约、安全和性能回归风险；先复用已有测试，仅为尚未覆盖的行为补充测试。某类测试不适用时，
-说明依据，不为每次局部修改机械新增五套测试；已有质量门禁和覆盖率要求保持不变。
+稳定的 Next.js Playwright 公共页面 smoke 按 CI job 执行。新增或重构的领域按实际回归风险覆盖适用的
+单元、集成、契约、安全和性能检查；先复用已有测试，仅为尚未覆盖且与本次改动相关的行为补充测试。
+某类测试不适用时说明依据，不为每次局部修改机械新增五套测试；已有质量门禁和覆盖率要求保持不变。

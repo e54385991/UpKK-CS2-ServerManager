@@ -4,8 +4,9 @@
 
 This project uses **Next.js 16.3.4**, which has breaking changes versus older
 Next.js — APIs, conventions, and file structure may differ from your training
-data. **Before changing Next.js behavior, read the relevant version-matched
-sections under `node_modules/next/dist/docs/`** (e.g. `dist/docs/01-app/...`).
+data. **When changing Next.js behavior** (for example routing, rendering,
+caching, or build/runtime configuration), read the relevant version-matched
+sections under `node_modules/next/dist/docs/` (e.g. `dist/docs/01-app/...`).
 Reuse sections already read in this task unless the version or topic changes;
 text, styling, and instruction-only edits do not require a full manual read.
 If bundled docs are missing, check the installed/locked version and its official
@@ -25,7 +26,7 @@ Jinja/Bootstrap UI and talks to the FastAPI backend through a same-origin proxy.
 
 | Area | Choice | Notes |
 | --- | --- | --- |
-| Framework | `next@16.3.4` (App Router, Turbopack) | Read `node_modules/next/dist/docs/` first. |
+| Framework | `next@16.3.4` (App Router, Turbopack) | Consult the matching bundled docs when changing Next.js behavior. |
 | UI runtime | `react`/`react-dom@19.2.8` | React Compiler-era; the `react-hooks` lint rules are strict. |
 | Language | `typescript@5.9.3` | Deliberate compatibility pin: the current `eslint-config-next@16.3.4` toolchain does not support TypeScript 7 yet. |
 | Styling | `tailwindcss@4.3.3` + `@tailwindcss/postcss` | v4 engine; design tokens live in `src/app/globals.css` under `@theme`. |
@@ -53,7 +54,7 @@ Strict one-way dependency direction, enforced by ESLint `no-restricted-imports`:
 When adding a feature, create/extend a module under `src/modules/`; keep route
 files thin.
 
-## RSC / Client boundaries (read this before adding components)
+## RSC / Client boundaries (consult when adding or changing component boundaries)
 
 - Server Components are the default. Add `"use client"` only when a component
   needs state, effects, browser APIs, or event handlers.
@@ -83,8 +84,8 @@ Start independent requests together, then give slow optional data its own async
 Server Component and `Suspense` boundary. For example, overview host probes must
 not delay counters or recent servers; preserve per-section failure/empty states
 and locale behavior. Associate batches with a server-ID `Map`, preserving the
-response order. Guard streaming with a controlled mock-backend gate so tests
-prove the fast content is visible while slow data is still pending.
+response order. When changing streaming behavior, use a controlled mock-backend
+gate so tests prove the fast content is visible while slow data is still pending.
 
 ### Caching & navigation: why `cacheComponents` is off
 
@@ -103,8 +104,9 @@ prove the fast content is visible while slow data is still pending.
 Navigation uses the shared App Shell (persistent sidebar/topbar), per-route
 `loading.tsx` skeletons, `<Suspense>`-streamed server data, and `<Link>` prefetch.
 Historical Lighthouse runs recorded Performance 100 and CLS 0 on `/login` and
-`/overview`; those observations are not a current performance guarantee. Measure
-the changed route under controlled delays and real browser navigation. Revisit
+`/overview`; those observations are not a current performance guarantee. When
+changing navigation or loading behavior, measure the changed route under
+controlled delays and real browser navigation. Revisit
 `cacheComponents` once it is stable for cookie-driven apps and the memory gate
 is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-partial-prefetching.md`.
 
@@ -268,9 +270,10 @@ npx playwright test --config=playwright.overview.config.ts # isolated streaming 
 Completion scope is defined in the root `AGENTS.md` under **Task Completion
 Checks**. Its full baseline already runs `npm run test:unit`, `npm run lint`,
 `npm run typecheck`, `npm run build`, and `npm run check:bundle`; a successful
-run satisfies these frontend gates without a second execution. When checking
-frontend changes separately during development, run the applicable commands
-and run `npm run check:bundle` after the production build. The bundle check
+run satisfies these frontend gates without a second execution. For an isolated
+frontend change, run only the applicable commands and tests. Run
+`npm run check:bundle` when the change can affect client bundles or route
+loading, rather than after every production build. The bundle check
 checks the gzip size of every route's initial client
 chunks (250 KiB per route, 150 KiB per chunk). Heavy editors and terminal
 libraries must remain in lazy chunks. The CI `frontend-playwright-smoke` job also

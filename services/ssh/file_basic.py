@@ -188,6 +188,156 @@ class BasicFileOperationsMixin(SSHMixinBase):
         except Exception as e:
             return False, f"Error deleting: {str(e)}"
 
+    async def delete_paths(self, paths: List[str], server: Server) -> Tuple[bool, str]:
+        """Delete a batch with one remote command and one SSH connection.
+
+        ``rm -rf`` removes a symlink itself and does not traverse its target;
+        ``--`` also prevents names beginning with a dash being interpreted as
+        options. Path and root checks are performed by the API before queuing.
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        if not paths:
+            return True, "Nothing to delete"
+        # Resolve every existing path before handing it to the shell. A final
+        # symlink is safe to remove itself, while a symlink in a parent path
+        # is rejected instead of allowing ``rm`` to escape the game root.
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                canonical_base = posixpath.normpath(str(await sftp.realpath(server.game_directory)))
+                for raw_path in paths:
+                    path = posixpath.normpath(raw_path)
+                    attrs = await sftp.lstat(path)
+                    probe = posixpath.dirname(path) if attrs.type == FILEXFER_TYPE_SYMLINK else path
+                    canonical = posixpath.normpath(str(await sftp.realpath(probe)))
+                    if canonical != canonical_base and not canonical.startswith(
+                        canonical_base.rstrip("/") + "/"
+                    ):
+                        return False, "Remote path resolves outside the server directory"
+        except asyncssh.SFTPNoSuchFile, asyncssh.SFTPNoSuchPath:
+            return False, "One or more selected paths no longer exist"
+        except asyncssh.SFTPError as exc:
+            return False, f"Delete path validation failed: {exc}"
+        command = "rm -rf -- " + " ".join(shlex.quote(posixpath.normpath(path)) for path in paths)
+        success, stdout, stderr = await self.execute_command(command, timeout=900)
+        if success:
+            return True, f"Deleted {len(paths)} selected item(s)."
+        return False, self._short_command_error(stdout, stderr)
+
+    async def _remove_move_target(self, sftp, path: str, attrs) -> None:
+        if attrs.type == FILEXFER_TYPE_DIRECTORY:
+            await sftp.rmtree(path)
+        else:
+            await sftp.remove(path)
+
+    async def _merge_move_directory(
+        self, sftp, source: str, target: str, conflict: str
+    ) -> Tuple[int, int]:
+        moved = skipped = 0
+        async for entry in sftp.scandir(source):
+            child = posixpath.join(source, entry.filename)
+            target_child = posixpath.join(target, entry.filename)
+            try:
+                target_attrs = await sftp.lstat(target_child)
+            except asyncssh.SFTPNoSuchFile, asyncssh.SFTPNoSuchPath:
+                target_attrs = None
+            if target_attrs is None:
+                await sftp.rename(child, target_child)
+                moved += 1
+            elif (
+                entry.attrs.type == FILEXFER_TYPE_DIRECTORY
+                and target_attrs.type == FILEXFER_TYPE_DIRECTORY
+            ):
+                nested_moved, nested_skipped = await self._merge_move_directory(
+                    sftp, child, target_child, conflict
+                )
+                moved += nested_moved
+                skipped += nested_skipped
+            elif conflict == "overwrite":
+                await self._remove_move_target(sftp, target_child, target_attrs)
+                await sftp.rename(child, target_child)
+                moved += 1
+            else:
+                skipped += 1
+        try:
+            await sftp.rmdir(source)
+        except asyncssh.SFTPError:
+            # Skipped conflicts leave source children in place; preserve them.
+            pass
+        return moved, skipped
+
+    async def _move_one_path(
+        self, sftp, source: str, destination: str, conflict: str
+    ) -> Tuple[int, int]:
+        target = posixpath.join(destination, posixpath.basename(source))
+        if target == source:
+            return 0, 1
+        source_attrs = await sftp.lstat(source)
+        try:
+            target_attrs = await sftp.lstat(target)
+        except asyncssh.SFTPNoSuchFile, asyncssh.SFTPNoSuchPath:
+            target_attrs = None
+        if target_attrs is None:
+            await sftp.rename(source, target)
+            return 1, 0
+        if (
+            source_attrs.type == FILEXFER_TYPE_DIRECTORY
+            and target_attrs.type == FILEXFER_TYPE_DIRECTORY
+        ):
+            return await self._merge_move_directory(sftp, source, target, conflict)
+        if conflict == "overwrite":
+            await self._remove_move_target(sftp, target, target_attrs)
+            await sftp.rename(source, target)
+            return 1, 0
+        return 0, 1
+
+    async def move_paths(
+        self, sources: List[str], destination: str, server: Server, *, conflict: str = "skip"
+    ) -> Tuple[bool, str]:
+        """Move paths in one SFTP session, merging directories when requested."""
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        if conflict not in {"skip", "overwrite"}:
+            return False, "Invalid conflict policy"
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                destination_attrs = await sftp.lstat(destination)
+                if destination_attrs.type != FILEXFER_TYPE_DIRECTORY:
+                    return False, "Destination is not a directory"
+                canonical_base = posixpath.normpath(str(await sftp.realpath(server.game_directory)))
+                canonical_destination = posixpath.normpath(str(await sftp.realpath(destination)))
+                if canonical_destination != canonical_base and not canonical_destination.startswith(
+                    canonical_base.rstrip("/") + "/"
+                ):
+                    return False, "Destination resolves outside the server directory"
+                moved = skipped = 0
+                for source in dict.fromkeys(posixpath.normpath(item) for item in sources):
+                    attrs = await sftp.lstat(source)
+                    probe = (
+                        posixpath.dirname(source) if attrs.type == FILEXFER_TYPE_SYMLINK else source
+                    )
+                    canonical_source = posixpath.normpath(str(await sftp.realpath(probe)))
+                    if canonical_source != canonical_base and not canonical_source.startswith(
+                        canonical_base.rstrip("/") + "/"
+                    ):
+                        return False, "Source resolves outside the server directory"
+                    one_moved, one_skipped = await self._move_one_path(
+                        sftp, source, destination, conflict
+                    )
+                    moved += one_moved
+                    skipped += one_skipped
+            if skipped:
+                return True, f"Moved {moved} item(s); skipped {skipped} conflicting item(s)."
+            return True, f"Moved {moved} item(s)."
+        except asyncssh.SFTPError as exc:
+            return False, f"Move failed: {exc}"
+        except Exception as exc:
+            return False, f"Move failed: {exc}"
+
     async def create_directory(self, path: str, server: Server) -> Tuple[bool, str]:
         """
         Create directory

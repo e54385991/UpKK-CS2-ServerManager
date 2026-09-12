@@ -7,6 +7,7 @@ import {
   createDirectory,
   createDownloadTicket,
   deleteFilePath,
+  deleteFilePaths,
   extractArchive,
   getExtractStatus,
   getFileContent,
@@ -14,6 +15,8 @@ import {
   getUrlDownloadStatus,
   inspectArchive,
   renameFilePath,
+  moveFilePaths,
+  previewMovePaths,
   startUrlDownload,
   updateFileContent,
 } from "@/modules/files/api";
@@ -74,6 +77,13 @@ export async function deleteFileAction(
   return result;
 }
 
+export async function deleteFilesAction(
+  serverId: number,
+  paths: readonly string[],
+): Promise<ApiResult<ServerOperation>> {
+  return deleteFilePaths(serverId, paths);
+}
+
 export async function copyFilesAction(
   serverId: number,
   sources: readonly string[],
@@ -82,6 +92,23 @@ export async function copyFilesAction(
   const result = await copyFilePaths(serverId, sources, destination);
   if (result.ok) revalidateFiles(serverId);
   return result;
+}
+
+export async function moveFilesAction(
+  serverId: number,
+  sources: readonly string[],
+  destination: string,
+  conflict: "skip" | "overwrite" = "skip",
+): Promise<ApiResult<ServerOperation>> {
+  return moveFilePaths(serverId, sources, destination, conflict);
+}
+
+export async function previewMoveFilesAction(
+  serverId: number,
+  sources: readonly string[],
+  destination: string,
+): Promise<ApiResult<{ destination: string; conflicts: string[]; missing: string[] }>> {
+  return previewMovePaths(serverId, sources, destination);
 }
 
 export async function renameFileAction(

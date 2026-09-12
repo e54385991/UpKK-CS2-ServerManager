@@ -1,7 +1,7 @@
 "use client";
 
 import { GitHubTokenCheck } from "@/modules/settings/github-token-check";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import {
   CloudDownload,
@@ -53,10 +53,28 @@ import { Select } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 import { Textarea } from "@/shared/ui/textarea";
 import { cn } from "@/shared/lib/cn";
+import { Field, GmailSetupGuide } from "@/modules/settings/settings-fields";
 
 type Banner = { readonly tone: "ok" | "warn" | "danger"; readonly text: string };
 
-export function SettingsForm({ initial }: { initial: SystemSettings }) {
+export type SettingsSectionKey =
+  | "downloads"
+  | "notifications"
+  | "security"
+  | "logging"
+  | "hidden";
+
+export function SettingsForm({
+  initial,
+  activeSection = "downloads",
+  onDirty,
+  onSaved,
+}: {
+  initial: SystemSettings;
+  activeSection?: SettingsSectionKey;
+  onDirty?: () => void;
+  onSaved?: () => void;
+}) {
   const t = useTranslations("settings");
   const [settings, setSettings] = useState(initial);
   const [proxyMode, setProxyMode] = useState<ProxyMode>(initial.defaultProxyMode);
@@ -101,49 +119,62 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const clientIpHeader = clientIpHeaderOf(clientIpChoice, clientIpCustom);
-    if (clientIpHeader !== null && !isClientIpHeader(clientIpHeader)) {
+    if (
+      activeSection === "security" &&
+      clientIpHeader !== null &&
+      !isClientIpHeader(clientIpHeader)
+    ) {
       setBanner({ tone: "warn", text: t("clientIp.invalid") });
       return;
     }
     setSaving(true);
     setBanner(null);
     const parsedPort = Number(smtpPort);
-    const result = await saveSettingsAction({
-      defaultProxyMode: proxyMode,
-      githubProxyUrl: githubProxyUrl.trim() || null,
-      captchaEnabled,
-      registrationEnabled,
-      clientIpHeader,
-      logLevel: logLevelOf(logLevel),
-      ...(clearGithubToken
-        ? { clearGlobalGithubToken: true }
-        : githubToken.trim()
-          ? { globalGithubToken: githubToken.trim() }
-          : {}),
-      emailEnabled,
-      emailProvider,
-      emailFromAddress: fromAddress.trim() || null,
-      emailFromName: fromName.trim() || null,
-      smtpHost: smtpHost.trim() || null,
-      smtpPort: Number.isInteger(parsedPort) ? parsedPort : 587,
-      smtpUsername: smtpUsername.trim() || null,
-      ...(smtpPassword.trim() ? { smtpPassword: smtpPassword.trim() } : {}),
-      smtpUseTls,
-    });
+    const patch =
+      activeSection === "downloads"
+        ? {
+            defaultProxyMode: proxyMode,
+            githubProxyUrl: githubProxyUrl.trim() || null,
+            ...(clearGithubToken
+              ? { clearGlobalGithubToken: true }
+              : githubToken.trim()
+                ? { globalGithubToken: githubToken.trim() }
+                : {}),
+          }
+        : activeSection === "notifications"
+          ? {
+              emailEnabled,
+              emailProvider,
+              emailFromAddress: fromAddress.trim() || null,
+              emailFromName: fromName.trim() || null,
+              smtpHost: smtpHost.trim() || null,
+              smtpPort: Number.isInteger(parsedPort) ? parsedPort : 587,
+              smtpUsername: smtpUsername.trim() || null,
+              ...(smtpPassword.trim() ? { smtpPassword: smtpPassword.trim() } : {}),
+              smtpUseTls,
+            }
+          : activeSection === "security"
+            ? { captchaEnabled, registrationEnabled, clientIpHeader }
+            : activeSection === "logging"
+              ? { logLevel: logLevelOf(logLevel) }
+              : {};
+    const result = await saveSettingsAction(patch);
     setSaving(false);
     if (!result.ok) {
       setBanner({ tone: "danger", text: result.error || t("saveFailed") });
       return;
     }
     setSettings(result.data);
-    setCaptchaEnabled(result.data.captchaEnabled);
-    setRegistrationEnabled(result.data.registrationEnabled);
-    setClientIpChoice(clientIpChoiceOf(result.data.clientIpHeader));
-    setClientIpCustom(customClientIpOf(result.data.clientIpHeader));
-    setLogLevel(result.data.logLevel ?? ENVIRONMENT_LOG_LEVEL);
-    setGithubToken("");
-    setClearGithubToken(false);
-    setSmtpPassword("");
+    if (activeSection === "security") {
+      setCaptchaEnabled(result.data.captchaEnabled);
+      setRegistrationEnabled(result.data.registrationEnabled);
+      setClientIpChoice(clientIpChoiceOf(result.data.clientIpHeader));
+      setClientIpCustom(customClientIpOf(result.data.clientIpHeader));
+    }
+    if (activeSection === "logging") setLogLevel(result.data.logLevel ?? ENVIRONMENT_LOG_LEVEL);
+    if (activeSection === "downloads") { setGithubToken(""); setClearGithubToken(false); }
+    if (activeSection === "notifications") setSmtpPassword("");
+    onSaved?.();
     setBanner({ tone: "ok", text: t("saved") });
   }
 
@@ -234,7 +265,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
   }
 
   return (
-    <form onSubmit={onSave} className="space-y-6">
+    <form onSubmit={onSave} onChange={onDirty} noValidate className="space-y-6">
       {banner ? (
         <div
           role="status"
@@ -257,7 +288,24 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
         </div>
       ) : null}
 
+      <div
+        className={cn(
+          "sticky top-4 z-10 flex items-center justify-between gap-3 border border-line bg-surface/95 px-3 py-2 backdrop-blur",
+          !["downloads", "notifications", "security", "logging"].includes(activeSection) &&
+            "hidden",
+        )}
+      >
+        <span className="text-xs text-fg-subtle">
+          {activeSection === "hidden" ? "" : t(`categories.${activeSection}`)}
+        </span>
+        <Button type="submit" disabled={saving}>
+          <Save className="size-4" />
+          {saving ? t("saving") : t("save")}
+        </Button>
+      </div>
+
       <SettingsSection
+        className={activeSection === "downloads" ? undefined : "hidden"}
         id="settings-downloads"
         title={t("sections.downloads.title")}
         description={t("sections.downloads.description")}
@@ -350,6 +398,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
       </SettingsSection>
 
       <SettingsSection
+        className={activeSection === "notifications" ? undefined : "hidden"}
         id="settings-notifications"
         title={t("sections.notifications.title")}
         description={t("sections.notifications.description")}
@@ -593,6 +642,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
       </SettingsSection>
 
       <SettingsSection
+        className={activeSection === "security" ? undefined : "hidden"}
         id="settings-security"
         title={t("sections.security.title")}
         description={t("sections.security.description")}
@@ -664,6 +714,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
       </SettingsSection>
 
       <SettingsSection
+        className={activeSection === "logging" ? undefined : "hidden"}
         id="settings-logging"
         title={t("sections.logging.title")}
         description={t("sections.logging.description")}
@@ -676,97 +727,6 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
         />
       </SettingsSection>
 
-      <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
-        <p className="text-xs text-fg-subtle">
-          {settings.updatedAt
-            ? t("updatedAt", {
-                time: settings.updatedAt.slice(0, 19).replace("T", " "),
-              })
-            : t("neverSaved")}
-        </p>
-        <Button type="submit" disabled={saving}>
-          <Save className="size-4" />
-          {saving ? t("saving") : t("save")}
-        </Button>
-      </div>
     </form>
-  );
-}
-
-function GmailSetupGuide() {
-  const t = useTranslations("settings");
-  const [copied, setCopied] = useState(false);
-  const redirectPath = "/api/gmail-oauth/callback";
-
-  async function copyUri() {
-    const absolute = `${window.location.origin}${redirectPath}`;
-    try {
-      await navigator.clipboard.writeText(absolute);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  }
-
-  return (
-    <details className="rounded-md border border-line px-3 py-2">
-      <summary className="cursor-pointer text-sm font-medium text-fg">
-        {t("gmail.guide.title")}
-      </summary>
-      <div className="mt-3 space-y-3 text-xs text-fg-muted">
-        <div>
-          <p className="font-medium text-fg">{t("gmail.guide.step1Title")}</p>
-          <ol className="mt-1 list-decimal space-y-1 pl-4">
-            <li>{t("gmail.guide.step1a")}</li>
-            <li>{t("gmail.guide.step1b")}</li>
-            <li>{t("gmail.guide.step1c")}</li>
-          </ol>
-        </div>
-        <div>
-          <p className="font-medium text-fg">{t("gmail.guide.step2Title")}</p>
-          <ol className="mt-1 list-decimal space-y-1 pl-4">
-            <li>{t("gmail.guide.step2a")}</li>
-            <li>{t("gmail.guide.step2b")}</li>
-            <li>{t("gmail.guide.step2c")}</li>
-          </ol>
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-warn/30 bg-warn-muted/30 px-3 py-2">
-            <code className="min-w-0 flex-1 break-all text-fg">{redirectPath}</code>
-            <Button type="button" size="sm" variant="outline" onClick={() => void copyUri()}>
-              {copied ? t("gmail.guide.copied") : t("gmail.guide.copy")}
-            </Button>
-          </div>
-        </div>
-        <div>
-          <p className="font-medium text-fg">{t("gmail.guide.step3Title")}</p>
-          <ol className="mt-1 list-decimal space-y-1 pl-4">
-            <li>{t("gmail.guide.step3a")}</li>
-            <li>{t("gmail.guide.step3b")}</li>
-            <li>{t("gmail.guide.step3c")}</li>
-          </ol>
-        </div>
-        <p>{t("gmail.guide.notes")}</p>
-      </div>
-    </details>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: {
-  label?: string;
-  htmlFor?: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      {label ? <Label htmlFor={htmlFor}>{label}</Label> : null}
-      {children}
-      {hint ? <p className="mt-1.5 text-xs text-fg-subtle">{hint}</p> : null}
-    </div>
   );
 }

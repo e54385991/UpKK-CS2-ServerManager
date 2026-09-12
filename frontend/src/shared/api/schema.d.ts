@@ -3908,6 +3908,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servers/{server_id}/files/batch-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch Delete Paths */
+        post: operations["batch_delete_paths_api_v1_servers__server_id__files_batch_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers/{server_id}/files/content": {
         parameters: {
             query?: never;
@@ -4022,6 +4039,40 @@ export interface paths {
         put?: never;
         /** Create Directory */
         post: operations["create_directory_api_v1_servers__server_id__files_mkdir_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move Paths */
+        post: operations["move_paths_api_v1_servers__server_id__files_move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/move/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Move Paths */
+        post: operations["preview_move_paths_api_v1_servers__server_id__files_move_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10135,6 +10186,11 @@ export interface components {
             /** Folders */
             folders?: string[];
         };
+        /** FileBatchDeleteRequest */
+        FileBatchDeleteRequest: {
+            /** Paths */
+            paths: string[];
+        };
         /**
          * FileContentRequest
          * @description File content update request
@@ -10246,6 +10302,31 @@ export interface components {
         FileMkdirRequest: {
             /** Name */
             name: string;
+        };
+        /** FileMovePreviewView */
+        FileMovePreviewView: {
+            /** Conflicts */
+            conflicts?: string[];
+            /** Destination */
+            destination: string;
+            /** Missing */
+            missing?: string[];
+        };
+        /**
+         * FileMoveRequest
+         * @description Move one or more paths into a destination directory.
+         */
+        FileMoveRequest: {
+            /**
+             * Conflict
+             * @default skip
+             * @enum {string}
+             */
+            conflict: "skip" | "overwrite";
+            /** Destination */
+            destination: string;
+            /** Sources */
+            sources: string[];
         };
         /** FileMutationResult */
         FileMutationResult: {
@@ -12639,7 +12720,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command" | "test_initialized_ssh";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command" | "test_initialized_ssh" | "batch_delete" | "move_paths";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -15704,7 +15785,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command" | "test_initialized_ssh";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command" | "test_initialized_ssh" | "batch_delete" | "move_paths";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -24705,6 +24786,41 @@ export interface operations {
             };
         };
     };
+    batch_delete_paths_api_v1_servers__server_id__files_batch_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileBatchDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_file_content_api_v1_servers__server_id__files_content_get: {
         parameters: {
             query: {
@@ -24972,6 +25088,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FileMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_paths_api_v1_servers__server_id__files_move_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_move_paths_api_v1_servers__server_id__files_move_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileMovePreviewView"];
                 };
             };
             /** @description Validation Error */

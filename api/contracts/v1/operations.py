@@ -66,6 +66,8 @@ ServerOperationAction = Literal[
     "plugin_diagnostic_resume",
     "send_game_command",
     "test_initialized_ssh",
+    "batch_delete",
+    "move_paths",
 ]
 ServerOperationStatus = Literal["queued", "running", "completed", "failed"]
 

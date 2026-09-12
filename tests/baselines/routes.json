@@ -2956,6 +2956,30 @@
     "methods": [
       "POST"
     ],
+    "name": "batch_delete_paths",
+    "path": "/api/v1/servers/{server_id}/files/batch-delete"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "preview_move_paths",
+    "path": "/api/v1/servers/{server_id}/files/move/preview"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "move_paths",
+    "path": "/api/v1/servers/{server_id}/files/move"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
     "name": "rename_path",
     "path": "/api/v1/servers/{server_id}/files/rename"
   },

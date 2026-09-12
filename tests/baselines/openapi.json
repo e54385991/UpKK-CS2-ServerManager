@@ -7673,6 +7673,25 @@
         "title": "FileArchiveInspectView",
         "type": "object"
       },
+      "FileBatchDeleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Paths",
+            "type": "array"
+          }
+        },
+        "required": [
+          "paths"
+        ],
+        "title": "FileBatchDeleteRequest",
+        "type": "object"
+      },
       "FileContentRequest": {
         "description": "File content update request",
         "properties": {
@@ -7927,6 +7946,70 @@
           "name"
         ],
         "title": "FileMkdirRequest",
+        "type": "object"
+      },
+      "FileMovePreviewView": {
+        "additionalProperties": false,
+        "properties": {
+          "conflicts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "destination"
+        ],
+        "title": "FileMovePreviewView",
+        "type": "object"
+      },
+      "FileMoveRequest": {
+        "additionalProperties": false,
+        "description": "Move one or more paths into a destination directory.",
+        "properties": {
+          "conflict": {
+            "default": "skip",
+            "enum": [
+              "skip",
+              "overwrite"
+            ],
+            "title": "Conflict",
+            "type": "string"
+          },
+          "destination": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Destination",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources",
+          "destination"
+        ],
+        "title": "FileMoveRequest",
         "type": "object"
       },
       "FileMutationResult": {
@@ -14807,7 +14890,9 @@
               "plugin_diagnostic_restore",
               "plugin_diagnostic_resume",
               "send_game_command",
-              "test_initialized_ssh"
+              "test_initialized_ssh",
+              "batch_delete",
+              "move_paths"
             ],
             "title": "Action",
             "type": "string"
@@ -22171,7 +22256,9 @@
               "plugin_diagnostic_restore",
               "plugin_diagnostic_resume",
               "send_game_command",
-              "test_initialized_ssh"
+              "test_initialized_ssh",
+              "batch_delete",
+              "move_paths"
             ],
             "title": "Action",
             "type": "string"
@@ -38966,6 +39053,63 @@
         ]
       }
     },
+    "/api/v1/servers/{server_id}/files/batch-delete": {
+      "post": {
+        "operationId": "batch_delete_paths_api_v1_servers__server_id__files_batch_delete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileBatchDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerOperationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Batch Delete Paths",
+        "tags": [
+          "v1-files"
+        ]
+      }
+    },
     "/api/v1/servers/{server_id}/files/content": {
       "get": {
         "operationId": "get_file_content_api_v1_servers__server_id__files_content_get",
@@ -39455,6 +39599,120 @@
           }
         ],
         "summary": "Create Directory",
+        "tags": [
+          "v1-files"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/files/move": {
+      "post": {
+        "operationId": "move_paths_api_v1_servers__server_id__files_move_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerOperationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Move Paths",
+        "tags": [
+          "v1-files"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/files/move/preview": {
+      "post": {
+        "operationId": "preview_move_paths_api_v1_servers__server_id__files_move_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileMovePreviewView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Preview Move Paths",
         "tags": [
           "v1-files"
         ]

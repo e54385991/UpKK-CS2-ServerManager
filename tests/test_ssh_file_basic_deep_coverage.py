@@ -74,6 +74,12 @@ class _Sftp:
             raise self.stat_error
         return self.attrs
 
+    async def realpath(self, path):
+        return path
+
+    async def rmdir(self, path):
+        self.calls.append(("rmdir", path))
+
     def open(self, *_args, **_kwargs):
         self.calls.append(("open", _args))
         return _Context(self.file)
@@ -260,4 +266,24 @@ async def test_remote_exists_and_copy_path_validation_failures():
     manager.execute_command = AsyncMock(return_value=(False, "", "copy error"))
     assert (
         "copy error" in (await manager.copy_into_directory("/srv/cs2/a", "/srv/cs2/d", server))[2]
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_uses_one_remote_command_and_move_rejects_invalid_policy():
+    server = _server()
+    sftp = _Sftp()
+    manager = _manager(sftp)
+    manager.execute_command = AsyncMock(return_value=(True, "", ""))
+    assert await manager.delete_paths(["/srv/cs2/a", "/srv/cs2/b"], server) == (
+        True,
+        "Deleted 2 selected item(s).",
+    )
+    command = manager.execute_command.await_args.args[0]
+    assert command.startswith("rm -rf -- ")
+    assert manager.execute_command.await_count == 1
+
+    assert await manager.move_paths(["/srv/cs2/a"], "/srv/cs2", server, conflict="bad") == (
+        False,
+        "Invalid conflict policy",
     )

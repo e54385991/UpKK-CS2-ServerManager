@@ -489,3 +489,40 @@ def test_v1_files_upload_audits_size_without_body(monkeypatch):
     assert details["size"] == len(b"hello-secret")
     assert "hello-secret" not in str(details)
     assert "content" not in details
+
+
+def test_v1_files_batch_delete_enqueues_single_operation(monkeypatch):
+    client, _server, _user = _client(monkeypatch)
+    record = _queued_file_record(action="batch_delete", operation_id="op-delete-1")
+    monkeypatch.setattr("api.routes.v1.files.enqueue_batch_delete", AsyncMock(return_value=record))
+    monkeypatch.setattr("api.routes.v1.files.reject_stuck_lock_unless_active", AsyncMock())
+    monkeypatch.setattr("api.routes.v1.files.record_audit_event", AsyncMock())
+    response = client.post(
+        "/api/v1/servers/1/files/batch-delete",
+        json={"paths": ["/tmp/cs2-ops-verify/a", "/tmp/cs2-ops-verify/b"]},
+    )
+    assert response.status_code == 202
+    assert response.json()["operation_id"] == "op-delete-1"
+
+
+def test_v1_files_move_rejects_escape_and_queues_valid_request(monkeypatch):
+    client, _server, _user = _client(monkeypatch)
+    response = client.post(
+        "/api/v1/servers/1/files/move",
+        json={"sources": ["/etc/passwd"], "destination": "/tmp/cs2-ops-verify"},
+    )
+    assert response.status_code == 403
+    record = _queued_file_record(action="move_paths", operation_id="op-move-1")
+    monkeypatch.setattr("api.routes.v1.files.enqueue_move_paths", AsyncMock(return_value=record))
+    monkeypatch.setattr("api.routes.v1.files.reject_stuck_lock_unless_active", AsyncMock())
+    monkeypatch.setattr("api.routes.v1.files.record_audit_event", AsyncMock())
+    response = client.post(
+        "/api/v1/servers/1/files/move",
+        json={
+            "sources": ["/tmp/cs2-ops-verify/folder", "/tmp/cs2-ops-verify/folder/a"],
+            "destination": "/tmp/cs2-ops-verify/target",
+            "conflict": "overwrite",
+        },
+    )
+    assert response.status_code == 202
+    assert response.json()["operation_id"] == "op-move-1"

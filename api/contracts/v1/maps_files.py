@@ -263,6 +263,44 @@ class FileCopyRequest(ApiRequest):
         return cleaned
 
 
+class FileMoveRequest(ApiRequest):
+    """Move one or more paths into a destination directory."""
+
+    sources: list[str] = Field(min_length=1, max_length=50)
+    destination: str = Field(min_length=1, max_length=4096)
+    conflict: Literal["skip", "overwrite"] = "skip"
+
+    @field_validator("sources")
+    @classmethod
+    def validate_move_sources(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value if item and item.strip()]
+        if len(cleaned) != len(value):
+            raise ValueError("source paths cannot be empty")
+        if any(len(item) > 4096 for item in cleaned):
+            raise ValueError("source path is too long")
+        return cleaned
+
+
+class FileBatchDeleteRequest(ApiRequest):
+    paths: list[str] = Field(min_length=1, max_length=50)
+
+    @field_validator("paths")
+    @classmethod
+    def validate_delete_paths(cls, value: list[str]) -> list[str]:
+        cleaned = list(dict.fromkeys(item.strip() for item in value if item and item.strip()))
+        if not cleaned:
+            raise ValueError("paths cannot be empty")
+        if any(len(item) > 4096 for item in cleaned):
+            raise ValueError("path is too long")
+        return cleaned
+
+
+class FileMovePreviewView(V1Model):
+    destination: str
+    conflicts: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+
+
 class FileMutationResult(V1Model):
     success: bool = True
     message: str
@@ -342,6 +380,9 @@ __all__ = [
     "FileMkdirRequest",
     "FileRenameRequest",
     "FileCopyRequest",
+    "FileMoveRequest",
+    "FileBatchDeleteRequest",
+    "FileMovePreviewView",
     "FileMutationResult",
     "FileDownloadTicketView",
     "FileUrlDownloadRequest",

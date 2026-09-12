@@ -587,22 +587,28 @@ test("settings and profile render parity fields", async ({ page }) => {
     "#settings-transfer",
   );
   await expect(page.getByTestId("settings-section-downloads")).toBeVisible();
-  await expect(page.getByTestId("settings-section-notifications")).toBeVisible();
-  await expect(page.getByTestId("settings-section-security")).toBeVisible();
+  await expect(page.getByTestId("settings-section-notifications")).toBeHidden();
+  await expect(page.getByTestId("settings-section-security")).toBeHidden();
   await expect(
     page.getByRole("switch", { name: /允许公开注册|Allow public registration/ }),
   ).toBeVisible();
-  await expect(page.getByTestId("settings-section-logging")).toBeVisible();
-  await expect(page.getByTestId("settings-section-download-cache")).toBeVisible();
+  await expect(page.getByTestId("settings-section-logging")).toBeHidden();
+  await expect(page.getByTestId("settings-section-download-cache")).toBeHidden();
+  await expect(page.getByTestId("settings-section-ai")).toBeHidden();
+  await expect(page.getByTestId("settings-section-transfer")).toBeHidden();
+  await expect(page.getByText(/下载代理|Download proxy/)).toBeVisible();
+  await expect(page.getByText(/全局 GitHub Token|Global GitHub token/)).toBeVisible();
+  await settingsNav.getByRole("link", { name: /邮件通知|Email notifications/ }).click();
+  await expect(page.getByTestId("settings-section-notifications")).toBeVisible();
+  await expect(page.getByText(/密码重置|password resets|Outbound mail/)).toBeVisible();
+  await settingsNav.getByRole("link", { name: /AI 助手|AI assistant/ }).click();
   await expect(page.getByTestId("settings-section-ai")).toBeVisible();
+  await expect(page.getByTestId("ai-settings-card")).toBeVisible();
+  await expect(page.getByTestId("ai-settings-test")).toBeVisible();
+  await settingsNav.getByRole("link", { name: /迁移|Migration/ }).click();
   await expect(page.getByTestId("settings-section-transfer")).toBeVisible();
   await expect(page.getByTestId("settings-transfer-card")).toBeVisible();
   await expect(page.getByText(/不包含 Discord|Discord data is not included/)).toBeVisible();
-  await expect(page.getByText(/下载代理|Download proxy/)).toBeVisible();
-  await expect(page.getByText(/全局 GitHub Token|Global GitHub token/)).toBeVisible();
-  await expect(page.getByText(/密码重置|password resets|Outbound mail/)).toBeVisible();
-  await expect(page.getByTestId("ai-settings-card")).toBeVisible();
-  await expect(page.getByTestId("ai-settings-test")).toBeVisible();
 
   await page.goto("/settings/profile");
   await expect(

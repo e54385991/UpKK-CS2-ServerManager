@@ -13,11 +13,13 @@ import {
   FileArchive,
   FileText,
   Folder,
+  FolderInput,
   FolderPlus,
   FolderUp,
   Pencil,
   RefreshCw,
   Search,
+  Scissors,
   Trash2,
   TriangleAlert,
   Upload,
@@ -28,21 +30,17 @@ import {
   createDirectoryAction,
   createDownloadTicketAction,
   deleteFileAction,
+  deleteFilesAction,
   getFileContentAction,
   listFilesAction,
+  moveFilesAction,
   renameFileAction,
   saveFileContentAction,
   startUrlDownloadAction,
 } from "@/modules/files/actions";
 import { useFileClipboard, writeFileClipboard } from "@/modules/files/clipboard";
 import { ExtractDialog } from "@/modules/files/lazy-dialogs";
-import {
-  extractRevealOpenPath,
-  guessExtractedFolderName,
-  pickRevealedFolder,
-  revealDelayMs,
-  type ExtractRevealHint,
-} from "@/modules/files/extract-reveal";
+import { MoveDialog } from "@/modules/files/move-dialog";
 import { FileEditorDialog, type EditorFile } from "@/modules/files/lazy-dialogs";
 import { FilesPathBar } from "@/modules/files/path-bar";
 import { FilesShortcuts } from "@/modules/files/files-shortcuts";
@@ -120,6 +118,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const [banner, setBanner] = useState<Banner | null>(null);
   const [folderName, setFolderName] = useState("");
   const [renameFrom, setRenameFrom] = useState<FileEntry | null>(null);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [editing, setEditing] = useState<EditorFile | null>(null);
   const editorRequestRef = useRef(0);
   const [urlForm, setUrlForm] = useState({
@@ -128,12 +127,10 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     overwrite: false,
   });
   const [urlTaskId, setUrlTaskId] = useState<string | null>(null);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+  const [moveTaskId, setMoveTaskId] = useState<string | null>(null); const [moveClipboardPending, setMoveClipboardPending] = useState(false);
   const [extractEntry, setExtractEntry] = useState<FileEntry | null>(null);
   const [extractTaskId, setExtractTaskId] = useState<string | null>(null);
-  const [extractFinishDest, setExtractFinishDest] = useState<string | null>(null);
-  const [extractReveal, setExtractReveal] = useState<readonly string[]>([]);
-  const [extractListEnter, setExtractListEnter] = useState(false);
-  const extractHintRef = useRef<ExtractRevealHint | null>(null);
   const [copiedEntry, setCopiedEntry] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<FileKindFilter>("all");
@@ -145,7 +142,8 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const [dragOver, setDragOver] = useState(false);
 
   const serverId = workspace.serverId;
-  const clipboard = useFileClipboard(serverId);
+  const clipboardState = useFileClipboard(serverId);
+  const clipboard = clipboardState.paths;
   const canMutate = workspace.sshOk && !pending;
   const listedFiles = useMemo(
     () => filterAndSortEntries(workspace.files, query, kind, sortKey, sortDir),
@@ -218,11 +216,14 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     if (status === "completed") void load(workspace.path);
   });
 
+  useQueuedOperationTerminal(deleteTaskId, serverId, (status, message) => { setDeleteTaskId(null); setBanner({ tone: status === "completed" ? "ok" : "danger", text: message || t("removeSelected") }); if (status === "completed") void loadRef.current(workspace.path); });
+
+  useQueuedOperationTerminal(moveTaskId, serverId, (status, message) => { setMoveTaskId(null); setBanner({ tone: status === "completed" ? "ok" : "danger", text: message || t("move") }); if (moveClipboardPending) { if (status === "completed" && !(message || "").toLowerCase().includes("skipped")) writeFileClipboard(serverId, [], "move"); setMoveClipboardPending(false); } if (status === "completed") void loadRef.current(workspace.path); });
+
   useQueuedOperationTerminal(extractTaskId, serverId, (status, message) => {
     setExtractTaskId(null);
     setExtractEntry(null);
     if (status === "failed") {
-      extractHintRef.current = null;
       setBanner({
         tone: "danger",
         text: message || t("extractDone"),
@@ -233,64 +234,8 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
       tone: "ok",
       text: message || t("extractDone"),
     });
-    setExtractFinishDest(
-      extractHintRef.current?.destination || workspace.path,
-    );
+    void loadRef.current(workspace.path);
   });
-
-  useEffect(() => {
-    if (!extractFinishDest) return;
-    let cancelled = false;
-    let revealTimer = 0;
-    let clearTimer = 0;
-    void (async () => {
-      const listing = await loadRef.current(extractFinishDest);
-      if (cancelled || !listing) {
-        if (!cancelled) setExtractFinishDest(null);
-        return;
-      }
-      const hint = extractHintRef.current;
-      extractHintRef.current = null;
-      const folder = pickRevealedFolder(
-        listing.files,
-        hint ? guessExtractedFolderName(hint, archiveStem(hint.archiveName)) : null,
-      );
-      const openPath = extractRevealOpenPath(listing.path, folder);
-      setExtractReveal(folder ? [folder.name] : []);
-      const delay = revealDelayMs();
-      if (folder && openPath) {
-        revealTimer = window.setTimeout(() => {
-          if (cancelled) return;
-          setExtractListEnter(true);
-          setBanner({ tone: "ok", text: t("extractOpened", { name: folder.name }) });
-          void loadRef.current(openPath);
-        }, delay);
-        clearTimer = window.setTimeout(() => {
-          if (cancelled) return;
-          setExtractReveal([]);
-          setExtractListEnter(false);
-          setExtractFinishDest(null);
-        }, delay + 1600);
-        return;
-      }
-      clearTimer = window.setTimeout(() => {
-        if (cancelled) return;
-        setExtractReveal([]);
-        setExtractFinishDest(null);
-      }, 1600);
-    })();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(revealTimer);
-      window.clearTimeout(clearTimer);
-    };
-  }, [extractFinishDest, t]);
-
-  useEffect(() => {
-    if (extractReveal.length === 0) return;
-    const node = listAnchorRef.current?.querySelector("[data-revealed='true']");
-    node?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [extractReveal]);
 
   const copyItems = useCallback(
     (paths: readonly string[]) => {
@@ -298,11 +243,17 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
         notify.error(t("clipboardEmpty"));
         return;
       }
-      writeFileClipboard(serverId, paths);
+      writeFileClipboard(serverId, paths, "copy");
       notify.success(t("copiedItems", { count: paths.length }));
     },
     [serverId, t],
   );
+
+  const cutItems = useCallback((paths: readonly string[]) => {
+      if (paths.length === 0) { notify.error(t("clipboardEmpty")); return; }
+      writeFileClipboard(serverId, paths, "move");
+      notify.success(t("cutItems", { count: paths.length }));
+    }, [serverId, t]);
 
   const pasteItems = useCallback(async () => {
     if (clipboard.length === 0) {
@@ -311,18 +262,19 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     }
     setPending("paste");
     setBanner(null);
-    const result = await copyFilesAction(serverId, clipboard, workspace.path);
+    const conflict = clipboardState.mode === "move"
+      ? (await confirm(t("movePasteConflictConfirm")) ? "overwrite" : "skip")
+      : "skip";
+    const result = clipboardState.mode === "move"
+      ? await moveFilesAction(serverId, clipboard, workspace.path, conflict)
+      : await copyFilesAction(serverId, clipboard, workspace.path);
     setPending(null);
     if (!result.ok) {
       setBanner({ tone: "danger", text: result.error || t("failed") });
       return;
     }
-    setBanner({
-      tone: "ok",
-      text: result.data.message || t("pastedItems", { count: result.data.paths.length || clipboard.length }),
-    });
-    await load(workspace.path);
-  }, [clipboard, load, serverId, t, workspace.path]);
+    if (clipboardState.mode === "move" && "operationId" in result.data) { setBanner({ tone: "ok", text: t("queuedToTray") }); trackQueuedOperation(result.data); setMoveClipboardPending(true); setMoveTaskId(result.data.operationId); } else { setBanner({ tone: "ok", text: result.data.message || t("pastedItems", { count: clipboard.length }) }); await load(workspace.path); }
+  }, [clipboard, clipboardState.mode, load, serverId, t, workspace.path]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -357,6 +309,11 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
         if (selected.size > 0) copyItems([...selected]);
         return;
       }
+      if (meta && event.key.toLowerCase() === "x") {
+        event.preventDefault();
+        if (selected.size > 0) cutItems([...selected]);
+        return;
+      }
       if (meta && event.key.toLowerCase() === "v") {
         event.preventDefault();
         if (canMutate) void pasteItems();
@@ -364,7 +321,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canMutate, copyItems, editing, listedFiles, pasteItems, renameFrom, selected]);
+  }, [canMutate, copyItems, cutItems, editing, listedFiles, pasteItems, renameFrom, selected]);
 
   function toggleSort(next: FileSortKey) {
     if (sortKey === next) {
@@ -610,6 +567,29 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                 <ClipboardPaste />
                 {t("pasteItems")}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="files-cut-items"
+                disabled={selected.size === 0}
+                title={t("cutItemsHint")}
+                onClick={() => cutItems([...selected])}
+              >
+                <Scissors />
+                {t("cutItems")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="files-move-items"
+                disabled={!canMutate || selected.size === 0}
+                onClick={() => setMoveOpen(true)}
+              >
+                <FolderInput />
+                {t("move")}
+              </Button>
               <input
                 ref={uploadRef}
                 type="file"
@@ -706,7 +686,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
           ) : listedFiles.length === 0 ? (
             <p className="text-sm text-fg-muted">{t("searchEmpty")}</p>
           ) : (
-            <div className={cn("overflow-x-auto", extractListEnter && "motion-safe:animate-file-list-enter")}>
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="text-xs text-fg-subtle">
                   <tr className="border-b border-line">
@@ -759,15 +739,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                   {listedFiles.map((entry) => (
                     <tr
                       key={entry.path}
-                      data-revealed={extractReveal.includes(entry.name) ? "true" : undefined}
-                      data-testid={
-                        extractReveal.includes(entry.name) ? "files-extract-reveal" : undefined
-                      }
-                      className={cn(
-                        selected.has(entry.path) && "bg-primary-muted/35",
-                        extractReveal.includes(entry.name) &&
-                          "motion-safe:animate-file-reveal ring-1 ring-inset ring-primary/40",
-                      )}
+                      className={cn(selected.has(entry.path) && "bg-primary-muted/35")}
                     >
                       <td className="py-2 pr-2">
                         <input
@@ -925,6 +897,17 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                                   return;
                                 }
                                 void run(`delete:${entry.path}`, async () => {
+                                  if (entry.type === "directory") {
+                                    const queued = await deleteFilesAction(serverId, [entry.path]);
+                                    if (!queued.ok) {
+                                      setBanner({ tone: "danger", text: queued.error || t("failed") });
+                                      return false;
+                                    }
+                                    trackQueuedOperation(queued.data);
+                                    setDeleteTaskId(queued.data.operationId);
+                                    setBanner({ tone: "ok", text: t("queuedToTray") });
+                                    return true;
+                                  }
                                   const result = await deleteFileAction(
                                     serverId,
                                     entry.path,
@@ -965,8 +948,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
           entry={extractEntry}
           destination={workspace.path}
           onClose={() => setExtractEntry(null)}
-          onStarted={(operation, reveal) => {
-            extractHintRef.current = reveal;
+          onStarted={(operation, _reveal) => {
             setExtractEntry(null);
             setExtractTaskId(operation.operationId);
             trackQueuedOperation(operation);
@@ -992,6 +974,23 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
             setBanner({ tone: "ok", text: result.data.message });
             await load(workspace.path);
             return true;
+          }}
+        />
+      ) : null}
+
+      {moveOpen ? (
+        <MoveDialog
+          serverId={serverId}
+          sources={[...selected]}
+          destination={workspace.path}
+          onClose={() => setMoveOpen(false)}
+          onStarted={(operation) => {
+            setMoveOpen(false);
+            setSelected(new Set());
+            setMoveClipboardPending(false);
+            setMoveTaskId(operation.operationId);
+            trackQueuedOperation(operation);
+            setBanner({ tone: "ok", text: t("queuedToTray") });
           }}
         />
       ) : null}
@@ -1219,16 +1218,15 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     if (!(await confirm(t("removeSelectedConfirm", { count: paths.length })))) return;
     setPending("delete-selected");
     try {
-      for (const path of paths) {
-        const result = await deleteFileAction(serverId, path);
-        if (!result.ok) {
-          setBanner({ tone: "danger", text: result.error || t("failed") });
-          return;
-        }
+      const result = await deleteFilesAction(serverId, paths);
+      if (!result.ok) {
+        setBanner({ tone: "danger", text: result.error || t("failed") });
+        return;
       }
+      trackQueuedOperation(result.data);
+      setDeleteTaskId(result.data.operationId);
       setSelected(new Set());
-      setBanner({ tone: "ok", text: t("removeSelected") });
-      await load(workspace.path);
+      setBanner({ tone: "ok", text: t("queuedToTray") });
     } finally {
       setPending(null);
     }
