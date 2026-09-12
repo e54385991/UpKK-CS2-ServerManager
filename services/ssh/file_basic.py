@@ -331,7 +331,7 @@ class BasicFileOperationsMixin(SSHMixinBase):
                     moved += one_moved
                     skipped += one_skipped
             if skipped:
-                return True, f"Moved {moved} item(s); skipped {skipped} conflicting item(s)."
+                return False, f"Moved {moved} item(s); skipped {skipped} conflicting item(s)."
             return True, f"Moved {moved} item(s)."
         except asyncssh.SFTPError as exc:
             return False, f"Move failed: {exc}"
