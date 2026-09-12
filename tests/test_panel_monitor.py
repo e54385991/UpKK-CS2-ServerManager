@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from time import time
 from types import SimpleNamespace
 
@@ -10,25 +11,33 @@ import pytest
 from modules.observability import clear_all, instance_id, reset_for_tests, set_enabled
 from services.panel_monitor.aggregation import display_series
 from services.panel_monitor.alerts import evaluate_alerts
-from services.panel_monitor.history import history
+from services.panel_monitor.history import MEMORY_ERRORS, MEMORY_POINTS, history
 from services.panel_monitor.queries import get_monitor
 from services.panel_monitor.types import MonitorQuery
+
+
+def _reset_history() -> None:
+    history.history_available = True
+    history.history_error = None
+    history.last_sample_at = None
+    history.dropped_errors = 0
+    history.truncated_summaries = 0
+    history._snapshot = None
+    history._memory_points = deque(maxlen=MEMORY_POINTS)
+    history._memory_errors = deque(maxlen=MEMORY_ERRORS)
+    history._pending_points = deque(maxlen=MEMORY_POINTS)
+    history._pending_errors = deque(maxlen=MEMORY_ERRORS)
 
 
 @pytest.fixture(autouse=True)
 def _reset():
     reset_for_tests()
     clear_all()
-    history.clear_buffers()
-    history.history_available = True
-    history.history_error = None
-    history.last_sample_at = None
-    history._snapshot = None
+    _reset_history()
     yield
     reset_for_tests()
     clear_all()
-    history.clear_buffers()
-    history._snapshot = None
+    _reset_history()
 
 
 def test_display_series_peaks_p95_and_sums_requests():
@@ -193,6 +202,101 @@ async def test_history_replays_pending_points_after_redis_recovers(monkeypatch):
     assert history.history_available is True
     loaded = await history.load_points(instance=instance_id(), start_ts=0, end_ts=time() + 10)
     assert {int(point["req"]) for point in loaded} >= {1, 2}
+
+
+@pytest.mark.asyncio
+async def test_error_cap_increments_dropped_count(monkeypatch):
+    class Store:
+        def __init__(self) -> None:
+            self.zsets: dict[str, list[tuple[str, float]]] = {}
+
+        async def zadd(self, key, mapping):
+            items = self.zsets.setdefault(key, [])
+            for member, score in mapping.items():
+                items[:] = [(item, value) for item, value in items if item != member]
+                items.append((str(member), float(score)))
+
+        async def zremrangebyscore(self, key, lo, hi):
+            items = self.zsets.get(key, [])
+            kept = [(member, score) for member, score in items if score < lo or score > hi]
+            removed = len(items) - len(kept)
+            self.zsets[key] = kept
+            return removed
+
+        async def zremrangebyrank(self, key, start, stop):
+            items = self.zsets.get(key, [])
+            items.sort(key=lambda pair: pair[1])
+            length = len(items)
+            if length == 0:
+                return 0
+            lo = start if start >= 0 else length + start
+            hi = stop if stop >= 0 else length + stop
+            if lo > hi:
+                return 0
+            lo = max(0, lo)
+            hi = min(length - 1, hi)
+            removed = hi - lo + 1
+            del items[lo : hi + 1]
+            self.zsets[key] = items
+            return removed
+
+        async def expire(self, key, _ttl):
+            return True
+
+        async def zrangebyscore(self, key, lo, hi, withscores=False):
+            items = [
+                (member, score) for member, score in self.zsets.get(key, []) if lo <= score <= hi
+            ]
+            if withscores:
+                return items
+            return [member for member, _score in items]
+
+    import sys
+
+    monkeypatch.setattr(sys.modules["services.panel_monitor.history"], "MAX_ERRORS", 2)
+    fake = SimpleNamespace(client=Store(), prefixed_key=lambda key: key)
+    monkeypatch.setattr(sys.modules["services.panel_monitor.history"], "redis_manager", fake)
+    now = time()
+    await history.write_errors(
+        [
+            {"ts": now - 2, "id": "a", "summary": "a"},
+            {"ts": now - 1, "id": "b", "summary": "b"},
+            {"ts": now, "id": "c", "summary": "c"},
+        ]
+    )
+    assert history.dropped_errors == 1
+
+
+@pytest.mark.asyncio
+async def test_memory_error_overflow_counts_when_redis_is_down(monkeypatch):
+    class Broken:
+        async def zadd(self, *args, **kwargs):
+            raise ConnectionError("down")
+
+        async def zremrangebyscore(self, *args, **kwargs):
+            raise ConnectionError("down")
+
+        async def zremrangebyrank(self, *args, **kwargs):
+            raise ConnectionError("down")
+
+        async def expire(self, *args, **kwargs):
+            raise ConnectionError("down")
+
+    import sys
+
+    history._memory_errors = deque(maxlen=2)
+    fake = SimpleNamespace(client=Broken(), prefixed_key=lambda key: key)
+    monkeypatch.setattr(sys.modules["services.panel_monitor.history"], "redis_manager", fake)
+    now = time()
+    await history.write_errors(
+        [
+            {"ts": now - 2, "summary": "a"},
+            {"ts": now - 1, "summary": "b"},
+            {"ts": now, "summary": "c"},
+        ]
+    )
+    assert history.dropped_errors == 1
+    assert history.history_available is False
 
 
 @pytest.mark.asyncio

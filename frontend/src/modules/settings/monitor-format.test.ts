@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  formatAlertDetail,
+  formatAlertTitle,
   formatCpu,
+  formatMonitorInstant,
   formatRpm,
   isLocalizedAlert,
   monitorExportFilename,
@@ -131,5 +134,45 @@ test("formatters stay compact and export names include the range", () => {
   assert.deepEqual(
     sparkValues([{ ts: "a", value: 1 }, { ts: "b", value: null }], (point) => (point as { value: number | null }).value),
     [1, null],
+  );
+});
+
+test("sample times combine relative language with a local clock", () => {
+  const now = Date.parse("2026-09-13T04:00:12.000Z");
+  const english = formatMonitorInstant("2026-09-13T04:00:00.000Z", "en-US", now);
+  const chinese = formatMonitorInstant("2026-09-13T04:00:00.000Z", "zh-CN", now);
+  assert.match(english, /12 seconds ago/);
+  assert.match(english, /\(/);
+  assert.match(chinese, /秒/);
+  assert.equal(formatMonitorInstant(null, "en-US", now), "—");
+});
+
+test("localized alert details pick watch vs critical copy", () => {
+  const t = (key: string) => key;
+  const base = {
+    title: "fallback-title",
+    detail: "fallback-detail",
+    guidance: "fallback-guidance",
+    value: 1200,
+  };
+  assert.equal(
+    formatAlertTitle(t, { ...base, id: "request_p95", severity: "critical" }),
+    "alerts.request_p95.titleCritical",
+  );
+  assert.equal(
+    formatAlertDetail(t, { ...base, id: "request_p95", severity: "critical" }),
+    "alerts.request_p95.detailCritical",
+  );
+  assert.equal(
+    formatAlertDetail(t, { ...base, id: "http_5xx", severity: "watch", value: 6 }),
+    "alerts.http_5xx.detail",
+  );
+  assert.equal(
+    formatAlertDetail(t, { ...base, id: "http_5xx", severity: "critical", value: 0.15 }),
+    "alerts.http_5xx.detailCritical",
+  );
+  assert.equal(
+    formatAlertDetail(t, { ...base, id: "unknown", severity: "critical" }),
+    "fallback-detail",
   );
 });

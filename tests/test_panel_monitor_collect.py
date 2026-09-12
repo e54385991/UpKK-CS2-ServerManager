@@ -260,6 +260,7 @@ async def test_get_monitor_and_errors_use_history_and_filters():
     listed = await get_errors(ErrorQuery(range="1h", source="request", limit=1))
     assert listed.items
     assert listed.items[0]["source"] == "request"
+    assert listed.dropped >= 0
     assert listed.next_cursor is None or listed.next_cursor
 
 

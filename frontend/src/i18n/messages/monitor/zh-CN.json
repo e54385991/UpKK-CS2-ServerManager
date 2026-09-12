@@ -8,6 +8,7 @@
   "export": "导出诊断包",
   "exportSuccess": "已下载监控导出。",
   "fetchError": "暂时无法加载系统监控（{status}）。",
+  "errorsFetchError": "暂时无法加载错误详情（{status}）。",
   "loading": "正在加载监控…",
   "healthy": "运行正常",
   "watch": "需要关注",
@@ -18,6 +19,8 @@
   "collecting": "正在采集首批样本",
   "lastSample": "最近采样 {time}",
   "stoppedAt": "采集已于 {time} 停止。图中数值是历史，不是当前状态。",
+  "focusHint": "图表已缩到 {time} 前后 15 分钟。",
+  "clearFocus": "显示完整范围",
   "alertCount": "{count} 条异常",
   "currentInstance": "（当前进程）",
   "kpiP95": "请求 P95",
@@ -47,13 +50,20 @@
   "unitRpm": "请求/分钟",
   "unitCount": "次数",
   "errors": "错误中心",
+  "errorGroups": "分组摘要",
+  "errorDetails": "脱敏事件",
   "errorsEmpty": "该时间范围内没有脱敏错误详情。",
+  "errorsLoading": "正在加载错误详情…",
+  "loadMore": "加载更多",
+  "droppedDetails": "已丢弃 {count} 条最旧的错误详情（超出保留上限）。",
+  "truncatedNotice": "部分摘要已被截断。",
   "filterAll": "全部",
   "filterSeverity": "级别",
   "errorSource": "来源",
   "errorCount": "次数",
   "errorSummary": "摘要",
   "errorIds": "关联 ID",
+  "errorTime": "时间",
   "slowRoutes": "最慢接口",
   "inFlight": "处理中请求",
   "statusMix": "2xx / 4xx / 5xx",
@@ -83,45 +93,84 @@
     "resources": "依赖与资源",
     "tasks": "任务与后台"
   },
+  "sources": {
+    "request": "请求",
+    "database": "数据库",
+    "redis": "Redis",
+    "ssh": "SSH",
+    "http": "外部 HTTP",
+    "task": "任务",
+    "log": "日志"
+  },
   "alerts": {
     "stale": {
       "title": "监控数据已过期",
+      "titleCritical": "监控数据已过期",
+      "detail": "最近一次采样已超过 30 秒。",
+      "detailCritical": "最近一次采样已超过 30 秒。",
       "guidance": "确认面板进程仍在运行，采集任务没有卡住。"
     },
     "request_p95": {
       "title": "请求 P95 偏高",
+      "titleCritical": "请求 P95 严重偏高",
+      "detail": "连续 {samples} 次采样的请求 P95 达到 {ms} ms（每次至少 {minRequests} 个请求）。",
+      "detailCritical": "连续 {samples} 次采样的请求 P95 达到 {ms} ms（每次至少 {minRequests} 个请求）。",
       "guidance": "对照同一时间段的慢接口、事件循环延迟和数据库／Redis 延迟。"
     },
     "http_5xx": {
       "title": "出现 5xx 响应",
+      "titleCritical": "5xx 错误率偏高",
+      "detail": "最近一次采样出现 {count} 个 5xx 响应。",
+      "detailCritical": "5xx 错误率达到 {percent}（至少 {minRequests} 个请求）。",
       "guidance": "按接口筛选错误中心，确认是否集中在同一条路由。"
     },
     "loop_lag": {
       "title": "事件循环延迟偏高",
+      "titleCritical": "事件循环延迟严重",
+      "detail": "事件循环延迟连续 {samples} 次采样保持在 {ms} ms。",
+      "detailCritical": "事件循环延迟连续 {samples} 次采样保持在 {ms} ms。",
       "guidance": "排查阻塞式 I/O 和过长的 CPU 占用。"
     },
     "db_pool": {
       "title": "数据库连接池压力高",
+      "titleCritical": "数据库连接池已耗尽",
+      "detail": "连接占用连续 {samples} 次采样保持在容量的 {percent}。",
+      "detailCritical": "已检出连接连续 {samples} 次采样打满连接池（含溢出）。",
       "guidance": "容量已计入溢出连接。关注慢查询和并发占用。"
     },
     "fd": {
       "title": "文件描述符占用高",
+      "titleCritical": "文件描述符占用危急",
+      "detail": "打开的文件描述符连续保持在进程上限的 {percent}。",
+      "detailCritical": "打开的文件描述符连续保持在进程上限的 {percent}。",
       "guidance": "检查 SSH、HTTP 和数据库连接是否在泄漏。"
     },
     "redis": {
       "title": "Redis 已断开",
+      "titleCritical": "Redis 已断开",
+      "detail": "面板无法 ping 通 Redis。",
+      "detailCritical": "面板无法 ping 通 Redis。",
       "guidance": "检查 Redis 连通性、凭据和配置的主机／端口。"
     },
     "unhandled": {
       "title": "出现未处理请求异常",
+      "titleCritical": "出现未处理请求异常",
+      "detail": "最近窗口内有 {count} 个未处理异常。",
+      "detailCritical": "最近窗口内有 {count} 个未处理异常。",
       "guidance": "打开错误中心，查看关联的请求 ID 和调用位置。"
     },
     "failed_tasks": {
       "title": "后台任务失败",
+      "titleCritical": "后台任务失败",
+      "detail": "有 {count} 个任务以失败结束。",
+      "detailCritical": "有 {count} 个任务以失败结束。",
       "guidance": "打开任务托盘或对应操作日志查看失败原因。"
     },
     "log_errors": {
       "title": "后台 ERROR 日志增多",
+      "titleCritical": "后台 ERROR 日志增多",
+      "detail": "最近窗口内有 {count} 条 ERROR／CRITICAL 日志。",
+      "detailCritical": "最近窗口内有 {count} 条 ERROR／CRITICAL 日志。",
       "guidance": "查看错误中心的脱敏摘要；其中不含请求体。"
     }
   }

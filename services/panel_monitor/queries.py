@@ -122,7 +122,7 @@ async def get_errors(query: ErrorQuery) -> ErrorListResult:
     return ErrorListResult(
         items=page,
         next_cursor=next_cursor,
-        dropped=history.dropped_errors,
+        dropped=history.dropped_errors + error_stats()["dropped"],
         truncated=any(bool(item.get("truncated")) for item in page),
     )
 

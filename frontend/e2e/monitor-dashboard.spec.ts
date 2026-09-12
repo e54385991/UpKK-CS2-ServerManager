@@ -41,12 +41,22 @@ test("latency spikes surface critical alerts and error groups", async ({ page, c
   await setScenario(request, "spike");
   await login(context);
   await openSettings(page);
-  await expect(page.getByTestId("monitor-alerts")).toContainText(/Request p95|P95|延迟/);
+  await expect(page.getByTestId("monitor-alerts")).toContainText(/P95|延迟/);
+  await expect(page.getByTestId("monitor-alerts")).toContainText("1200");
+  await expect(page.getByTestId("monitor-alerts")).not.toContainText("Request p95 reached");
   await page.getByTestId("monitor-view-requests").click();
   await expect(page.getByText("GET /api/v1/servers")).toBeVisible();
-  await expect(page.getByText(/fixture failure/)).toBeVisible();
+  await expect(page.getByTestId("monitor-error-group")).toBeVisible();
+  await expect(page.getByTestId("monitor-error-details")).toContainText("fixture failure");
   await page.getByTestId("monitor-error-source").selectOption("request");
-  await expect(page.getByText(/fixture failure/)).toBeVisible();
+  await expect(page.getByTestId("monitor-error-details")).toContainText("fixture failure");
+  await page.getByTestId("monitor-error-group").first().click();
+  await expect(page.getByTestId("monitor-focus")).toBeVisible();
+  await page.getByTestId("monitor-clear-focus").click();
+  await expect(page.getByTestId("monitor-focus")).toHaveCount(0);
+  await expect(page.getByTestId("monitor-dropped")).toContainText("4");
+  await page.getByTestId("monitor-error-more").click();
+  await expect(page.getByTestId("monitor-error-details")).toContainText(/fixture failure later/);
 });
 
 test("redis disconnect is a critical state, not healthy", async ({ page, context, request }) => {

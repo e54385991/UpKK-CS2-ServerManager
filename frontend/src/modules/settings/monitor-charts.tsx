@@ -20,6 +20,7 @@ export function MonitorChart({
   thresholds = [],
   hint,
   testId,
+  markerTs,
 }: {
   title: string;
   unit: string;
@@ -28,6 +29,7 @@ export function MonitorChart({
   thresholds?: readonly { readonly value: number; readonly label: string; readonly tone: "warn" | "danger" }[];
   hint?: string;
   testId?: string;
+  markerTs?: string | null;
 }) {
   const [active, setActive] = useState<number | null>(null);
   const gradientId = useId();
@@ -47,6 +49,7 @@ export function MonitorChart({
     PAD.left + (series.length <= 1 ? innerW / 2 : (index / (series.length - 1)) * innerW);
   const y = (value: number) => PAD.top + innerH - (value / maxValue) * innerH;
   const activePoint = active != null ? series[active] : null;
+  const markerIndex = nearestIndex(series, markerTs);
 
   function move(next: number) {
     if (series.length === 0) return;
@@ -102,6 +105,17 @@ export function MonitorChart({
             <path d={path.d} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
           </g>
         ))}
+        {markerIndex >= 0 ? (
+          <line
+            x1={x(markerIndex)}
+            x2={x(markerIndex)}
+            y1={PAD.top}
+            y2={HEIGHT - PAD.bottom}
+            stroke="var(--color-warn)"
+            strokeDasharray="3 3"
+            strokeWidth="1.5"
+          />
+        ) : null}
         {series.map((point, index) =>
           point.value == null ? null : (
             <circle
@@ -190,6 +204,22 @@ function linePaths(
     paths.push({ d, area: `${d} L${x(last)} ${y(0)} L${x(start)} ${y(0)} Z` });
   }
   return paths;
+}
+
+function nearestIndex(series: readonly ChartPoint[], markerTs: string | null | undefined): number {
+  if (!markerTs || series.length === 0) return -1;
+  const target = Date.parse(markerTs);
+  if (Number.isNaN(target)) return -1;
+  let best = 0;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < series.length; index += 1) {
+    const dist = Math.abs(Date.parse(series[index]!.ts) - target);
+    if (dist < bestDist) {
+      best = index;
+      bestDist = dist;
+    }
+  }
+  return best;
 }
 
 function formatClock(value: string): string {

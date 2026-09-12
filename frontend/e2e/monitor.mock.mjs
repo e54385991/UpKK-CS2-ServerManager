@@ -176,12 +176,35 @@ const app = createServer(async (req, res) => {
     return json(monitor(lastRange));
   }
   if (url.pathname === "/api/v1/diagnostics/errors") {
-    return json({ items: monitor(lastRange).error_groups.map((group, index) => ({
-      id: `err-${index}`, ts: stamp, source: group.source, severity: group.severity,
-      error_code: group.error_code, exception_type: group.exception_type, summary: group.summary,
-      truncated: false, route: group.route, operation_id: group.operation_id, request_id: group.request_id,
-      frames: group.frames,
-    })), next_cursor: null, dropped: 0, truncated: false });
+    const cursor = url.searchParams.get("cursor");
+    const source = url.searchParams.get("source");
+    const all = scenario === "spike" ? [
+      {
+        id: "err-1", ts: stamp, source: "request", severity: "error",
+        error_code: "unhandled", exception_type: "RuntimeError", summary: "fixture failure",
+        truncated: false, route: "/api/v1/servers", operation_id: null, request_id: "req-fixture",
+        frames: [{ file: "api/routes/v1/servers.py", function: "list_servers", line: 12 }],
+      },
+      {
+        id: "err-2", ts: new Date(Date.parse(stamp) - 30_000).toISOString(), source: "request", severity: "error",
+        error_code: "unhandled", exception_type: "RuntimeError", summary: "fixture failure later",
+        truncated: false, route: "/api/v1/servers", operation_id: null, request_id: "req-fixture-2",
+        frames: [{ file: "api/routes/v1/servers.py", function: "list_servers", line: 12 }],
+      },
+      {
+        id: "err-3", ts: new Date(Date.parse(stamp) - 60_000).toISOString(), source: "task", severity: "error",
+        error_code: "failed", exception_type: "RuntimeError", summary: "job failed",
+        truncated: false, route: null, operation_id: "op-fixture", request_id: null, frames: [],
+      },
+    ] : [];
+    const filtered = source ? all.filter((item) => item.source === source) : all;
+    const page = cursor ? filtered.slice(1) : filtered.slice(0, 1);
+    return json({
+      items: page,
+      next_cursor: !cursor && filtered.length > 1 ? "1" : null,
+      dropped: scenario === "spike" ? 4 : 0,
+      truncated: false,
+    });
   }
   if (url.pathname === "/api/v1/diagnostics") return json(snapshot());
   return json({ detail: `Unused fixture route: ${url.pathname}` }, 404);

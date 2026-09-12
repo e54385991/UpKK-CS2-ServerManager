@@ -66,15 +66,22 @@ class MonitorHistory:
     async def write_errors(self, events: list[dict[str, Any]]) -> None:
         if not events:
             return
+        persisted = await self._persist_errors(events)
         for event in events:
-            self._memory_errors.append(event)
             if event.get("truncated"):
                 self.truncated_summaries += 1
-        if await self._persist_errors(events):
+            memory_limit = self._memory_errors.maxlen
+            if (
+                not persisted
+                and memory_limit is not None
+                and len(self._memory_errors) >= memory_limit
+            ):
+                self.dropped_errors += 1
+            self._memory_errors.append(event)
+            if not persisted:
+                self._pending_errors.append(event)
+        if persisted:
             await self._flush_pending()
-            return
-        for event in events:
-            self._pending_errors.append(event)
 
     async def load_points(
         self, *, instance: str, start_ts: float, end_ts: float
@@ -180,7 +187,13 @@ class MonitorHistory:
         ok = True
         for event in events:
             member = json.dumps(event, separators=(",", ":"), default=str)
-            if not await self._zadd(key, float(event["ts"]), member, MAX_ERRORS):
+            if not await self._zadd(
+                key,
+                float(event["ts"]),
+                member,
+                MAX_ERRORS,
+                count_drops=True,
+            ):
                 ok = False
         return ok
 
@@ -201,14 +214,24 @@ class MonitorHistory:
                 return
             self._pending_errors.popleft()
 
-    async def _zadd(self, key: str, score: float, member: str, max_items: int) -> bool:
+    async def _zadd(
+        self,
+        key: str,
+        score: float,
+        member: str,
+        max_items: int,
+        *,
+        count_drops: bool = False,
+    ) -> bool:
         async with _monitor_io():
             try:
                 namespaced = redis_manager.prefixed_key(key)
                 client = redis_manager.client
                 await client.zadd(namespaced, {member: score})
                 await client.zremrangebyscore(namespaced, 0, time() - RETENTION_SECONDS)
-                await client.zremrangebyrank(namespaced, 0, -(max_items + 1))
+                removed = await client.zremrangebyrank(namespaced, 0, -(max_items + 1))
+                if count_drops and isinstance(removed, int) and removed > 0:
+                    self.dropped_errors += removed
                 await client.expire(namespaced, TTL_SECONDS)
                 self._mark_available()
                 return True

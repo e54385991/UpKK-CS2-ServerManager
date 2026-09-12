@@ -1,26 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Download,
   LoaderCircle,
   RefreshCw,
   TriangleAlert,
 } from "lucide-react";
-import { getMonitorAction, saveSettingsAction } from "@/modules/settings/actions";
+import { getMonitorAction, getMonitorErrorsAction, saveSettingsAction } from "@/modules/settings/actions";
 import { collectBrowserMetrics } from "@/modules/settings/browser-metrics";
 import { MonitorChart, Sparkline } from "@/modules/settings/monitor-charts";
 import { MonitorErrorCenter } from "@/modules/settings/monitor-errors";
 import { formatBytes, formatMs, formatPercent } from "@/modules/settings/diagnostics-format";
 import {
+  formatAlertDetail,
+  formatAlertGuidance,
+  formatAlertTitle,
   formatCpu,
+  formatMonitorInstant,
   formatRpm,
   lastPoint,
   monitorExportFilename,
   overallTone,
   sparkValues,
-  isLocalizedAlert,
+  type MonitorTranslate,
 } from "@/modules/settings/monitor-format";
 import {
   MONITOR_RANGES,
@@ -41,6 +45,8 @@ const EMPTY_INSTANCES: NonNullable<PanelMonitorViewDto["instances"]> = [];
 
 export function MonitorDashboard() {
   const t = useTranslations("settings.monitor");
+  const locale = useLocale();
+  const translate = t as unknown as MonitorTranslate;
   const [view, setView] = useState<PanelMonitorViewDto | null>(null);
   const [range, setRange] = useState<MonitorRange>("1h");
   const [instanceId, setInstanceId] = useState<string | undefined>();
@@ -49,6 +55,7 @@ export function MonitorDashboard() {
   const [pending, setPending] = useState<"load" | "export" | "toggle" | null>("load");
   const [banner, setBanner] = useState<Banner | null>(null);
   const [focusTs, setFocusTs] = useState<string | null>(null);
+  const [errorEpoch, setErrorEpoch] = useState(0);
   const enabledRef = useRef(true);
   const inflightRef = useRef(false);
   const loadRef = useRef<(silent?: boolean) => Promise<void>>(async () => {});
@@ -98,6 +105,7 @@ export function MonitorDashboard() {
 
   async function load(silent = false) {
     await loadRef.current(silent);
+    if (!silent) setErrorEpoch((value) => value + 1);
   }
 
   async function onToggle(next: boolean) {
@@ -114,11 +122,16 @@ export function MonitorDashboard() {
     await load();
   }
 
-  function onExport() {
+  async function onExport() {
     if (view == null) return;
     setPending("export");
+    const listed = await getMonitorErrorsAction({ range, instanceId, limit: 100 });
     const blob = new Blob(
-      [`${JSON.stringify({ ...view, browser: collectBrowserMetrics() }, null, 2)}\n`],
+      [`${JSON.stringify({
+        ...view,
+        errors: listed.ok ? listed.data : { error: listed.status || "network" },
+        browser: collectBrowserMetrics(),
+      }, null, 2)}\n`],
       { type: "application/json" },
     );
     const url = URL.createObjectURL(blob);
@@ -160,9 +173,13 @@ export function MonitorDashboard() {
                 </Badge>
               ) : null}
             </div>
-            <p className="mt-1 text-sm text-fg-muted">{t("lastSample", { time: view?.status.last_sample_at ?? "—" })}</p>
+            <p className="mt-1 text-sm text-fg-muted">
+              {t("lastSample", { time: formatMonitorInstant(view?.status.last_sample_at, locale) })}
+            </p>
             {view?.status.stopped_at && !view.status.enabled ? (
-              <p className="mt-1 text-sm text-warn">{t("stoppedAt", { time: view.status.stopped_at })}</p>
+              <p className="mt-1 text-sm text-warn">
+                {t("stoppedAt", { time: formatMonitorInstant(view.status.stopped_at, locale) })}
+              </p>
             ) : null}
             {view?.integrity.gap ? <p className="mt-1 text-sm text-warn">{t("gap")}</p> : null}
             {view?.integrity.partial_latency ? <p className="mt-1 text-sm text-warn">{t("partialLatency")}</p> : null}
@@ -171,8 +188,8 @@ export function MonitorDashboard() {
             <div className="flex items-center gap-2 rounded-md border border-line px-3 py-1.5">
               <Switch
                 id="panel-monitoring-enabled"
-                checked={view?.status.enabled ?? true}
-                disabled={pending === "toggle"}
+                checked={view?.status.enabled === true}
+                disabled={pending === "toggle" || view == null}
                 onCheckedChange={(next) => void onToggle(next)}
                 label={t("toggle")}
               />
@@ -187,7 +204,7 @@ export function MonitorDashboard() {
               {pending === "load" ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
               {t("refresh")}
             </Button>
-            <Button type="button" variant="secondary" size="sm" disabled={pending !== null || view == null} onClick={onExport}>
+            <Button type="button" variant="secondary" size="sm" disabled={pending !== null || view == null} onClick={() => void onExport()}>
               {pending === "export" ? <LoaderCircle className="animate-spin" /> : <Download />}
               {t("export")}
             </Button>
@@ -201,7 +218,10 @@ export function MonitorDashboard() {
               size="sm"
               variant={range === item ? "primary" : "outline"}
               data-testid={`monitor-range-${item}`}
-              onClick={() => setRange(item)}
+              onClick={() => {
+                setRange(item);
+                setFocusTs(null);
+              }}
             >
               {t(`range.${item}`)}
             </Button>
@@ -210,7 +230,10 @@ export function MonitorDashboard() {
             <select
               className="h-8 rounded-md border border-line bg-surface px-2 text-sm"
               value={instanceId ?? view?.instance_id}
-              onChange={(event) => setInstanceId(event.target.value)}
+              onChange={(event) => {
+                setInstanceId(event.target.value);
+                setFocusTs(null);
+              }}
             >
               {instances.map((item) => (
                 <option key={item.instance_id} value={item.instance_id}>
@@ -222,6 +245,18 @@ export function MonitorDashboard() {
         </div>
         <p className="mt-3 text-xs text-fg-subtle">{t("toggleHelp")}</p>
       </header>
+
+      {focusTs ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-warn/30 bg-warn-muted/40 px-3 py-2 text-sm text-fg"
+          data-testid="monitor-focus"
+        >
+          <span>{t("focusHint", { time: formatMonitorInstant(focusTs, locale) })}</span>
+          <Button type="button" size="sm" variant="outline" data-testid="monitor-clear-focus" onClick={() => setFocusTs(null)}>
+            {t("clearFocus")}
+          </Button>
+        </div>
+      ) : null}
 
       {banner ? (
         <div
@@ -249,9 +284,9 @@ export function MonitorDashboard() {
                   : "border-warn/40 bg-warn-muted/40",
               )}
             >
-              <p className="font-medium text-fg">{alertTitle(t, alert.id, alert.title)}</p>
-              <p className="mt-1 text-sm text-fg-muted">{alert.detail}</p>
-              <p className="mt-1 text-xs text-fg-subtle">{alertGuidance(t, alert.id, alert.guidance)}</p>
+              <p className="font-medium text-fg">{formatAlertTitle(translate, alert)}</p>
+              <p className="mt-1 text-sm text-fg-muted">{formatAlertDetail(translate, alert)}</p>
+              <p className="mt-1 text-xs text-fg-subtle">{formatAlertGuidance(translate, alert)}</p>
             </li>
           ))}
         </ol>
@@ -316,6 +351,7 @@ export function MonitorDashboard() {
             title={t("chartLatency")}
             unit="ms"
             testId="monitor-chart-latency"
+            markerTs={focusTs}
             series={focused.map((point) => ({ ts: point.ts, value: point.latency_p95_ms ?? null }))}
             thresholds={[
               { value: 500, label: "500", tone: "warn" },
@@ -324,6 +360,7 @@ export function MonitorDashboard() {
             hint={t("p95Peak")}
           />
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartTraffic")}
             unit={t("unitRpm")}
             color="var(--color-info)"
@@ -331,12 +368,14 @@ export function MonitorDashboard() {
             hint={t("kpiRpm", { value: formatRpm(latest?.requests_per_minute) })}
           />
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartErrors")}
             unit={t("unitCount")}
             color="var(--color-danger)"
             series={focused.map((point) => ({ ts: point.ts, value: point.status_5xx }))}
           />
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartUnhandled")}
             unit={t("unitCount")}
             color="var(--color-warn)"
@@ -348,17 +387,20 @@ export function MonitorDashboard() {
       {tab === "overview" || tab === "resources" ? (
         <div className="grid gap-4 xl:grid-cols-2">
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartCpu")}
             unit="%"
             series={focused.map((point) => ({ ts: point.ts, value: point.cpu_percent ?? null }))}
             hint={t("cpuHint")}
           />
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartRss")}
             unit="bytes"
             series={focused.map((point) => ({ ts: point.ts, value: point.rss_bytes ?? null }))}
           />
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartLoop")}
             unit="ms"
             thresholds={[
@@ -368,11 +410,13 @@ export function MonitorDashboard() {
             series={focused.map((point) => ({ ts: point.ts, value: point.loop_lag_p95_ms ?? null }))}
           />
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartDb")}
             unit={t("unitCount")}
             series={focused.map((point) => ({ ts: point.ts, value: point.db_checked_out ?? null }))}
           />
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartRedis")}
             unit="ms"
             color="var(--color-info)"
@@ -384,11 +428,13 @@ export function MonitorDashboard() {
       {tab === "overview" || tab === "tasks" ? (
         <div className="grid gap-4 xl:grid-cols-2">
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartQueue")}
             unit={t("unitCount")}
             series={focused.map((point) => ({ ts: point.ts, value: point.queue_queued }))}
           />
           <MonitorChart
+            markerTs={focusTs}
             title={t("chartFailedTasks")}
             unit={t("unitCount")}
             color="var(--color-danger)"
@@ -401,7 +447,15 @@ export function MonitorDashboard() {
 
       <section>
         <h3 className="mb-2 text-sm font-semibold text-fg">{t("errors")}</h3>
-        <MonitorErrorCenter groups={view?.error_groups} onFocus={setFocusTs} />
+        <MonitorErrorCenter
+          range={range}
+          instanceId={instanceId}
+          groups={view?.error_groups}
+          dropped={view?.status.dropped_error_details}
+          truncated={view?.status.truncated_summaries}
+          refreshEpoch={errorEpoch}
+          onFocus={setFocusTs}
+        />
       </section>
     </div>
   );
@@ -517,50 +571,6 @@ function statusLabel(
   if (tone === "warn") return t("watch");
   if ((view.series?.length ?? 0) === 0) return t("collecting");
   return t("healthy");
-}
-
-const ALERT_TITLE = {
-  stale: "alerts.stale.title",
-  request_p95: "alerts.request_p95.title",
-  http_5xx: "alerts.http_5xx.title",
-  loop_lag: "alerts.loop_lag.title",
-  db_pool: "alerts.db_pool.title",
-  fd: "alerts.fd.title",
-  redis: "alerts.redis.title",
-  unhandled: "alerts.unhandled.title",
-  failed_tasks: "alerts.failed_tasks.title",
-  log_errors: "alerts.log_errors.title",
-} as const;
-
-const ALERT_GUIDANCE = {
-  stale: "alerts.stale.guidance",
-  request_p95: "alerts.request_p95.guidance",
-  http_5xx: "alerts.http_5xx.guidance",
-  loop_lag: "alerts.loop_lag.guidance",
-  db_pool: "alerts.db_pool.guidance",
-  fd: "alerts.fd.guidance",
-  redis: "alerts.redis.guidance",
-  unhandled: "alerts.unhandled.guidance",
-  failed_tasks: "alerts.failed_tasks.guidance",
-  log_errors: "alerts.log_errors.guidance",
-} as const;
-
-function alertTitle(
-  t: ReturnType<typeof useTranslations>,
-  id: string,
-  fallback: string,
-): string {
-  if (!isLocalizedAlert(id)) return fallback;
-  return t(ALERT_TITLE[id as keyof typeof ALERT_TITLE]);
-}
-
-function alertGuidance(
-  t: ReturnType<typeof useTranslations>,
-  id: string,
-  fallback: string,
-): string {
-  if (!isLocalizedAlert(id)) return fallback;
-  return t(ALERT_GUIDANCE[id as keyof typeof ALERT_GUIDANCE]);
 }
 
 function kpiTone(value: number | null | undefined, watch: number, critical: number): "ok" | "warn" | "danger" {

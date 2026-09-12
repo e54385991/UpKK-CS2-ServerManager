@@ -5,6 +5,7 @@ import type { ApiResult } from "@/shared/api/server-fetch";
 import type {
   ActionResultDto,
   EmailTestResultDto,
+  PanelErrorListViewDto,
   PanelPerformanceSnapshotDto,
   SystemSettingsExportDto,
   SystemSettingsImportRequestDto,
@@ -17,6 +18,7 @@ import {
   getDiagnostics,
   getGmailAuthorize,
   getMonitor,
+  getMonitorErrors,
   getSettings,
   importSettings,
   postPluginDownloadCache,
@@ -138,4 +140,15 @@ export async function getMonitorAction(
   instanceId?: string,
 ): Promise<ApiResult<import("@/shared/api/types").PanelMonitorViewDto>> {
   return getMonitor(range, instanceId);
+}
+
+export async function getMonitorErrorsAction(query: {
+  range: string;
+  instanceId?: string;
+  source?: string;
+  severity?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<ApiResult<PanelErrorListViewDto>> {
+  return getMonitorErrors(query);
 }

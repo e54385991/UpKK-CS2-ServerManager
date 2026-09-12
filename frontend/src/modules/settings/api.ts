@@ -257,11 +257,15 @@ export async function getMonitorErrors(query: {
   range: string;
   instanceId?: string;
   source?: string;
+  severity?: string;
   cursor?: string;
+  limit?: number;
 }): Promise<ApiResult<PanelErrorListViewDto>> {
   const params = new URLSearchParams({ range: query.range });
   if (query.instanceId) params.set("instance_id", query.instanceId);
   if (query.source) params.set("source", query.source);
+  if (query.severity) params.set("severity", query.severity);
   if (query.cursor) params.set("cursor", query.cursor);
+  if (query.limit != null) params.set("limit", String(query.limit));
   return apiFetch<PanelErrorListViewDto>(`/api/v1/diagnostics/errors?${params.toString()}`);
 }
