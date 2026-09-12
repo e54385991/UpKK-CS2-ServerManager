@@ -13,14 +13,29 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
   );
 }
 
-export function Label({ className, ...props }: ComponentProps<"label">) {
-  return (
+export function Label({
+  className,
+  required = false,
+  children,
+  ...props
+}: ComponentProps<"label"> & { required?: boolean }) {
+  const label = (
     <label
       className={cn(
-        "mb-1.5 block text-sm font-medium text-fg-muted",
+        "text-sm font-medium text-fg-muted",
+        required ? undefined : "mb-1.5 block",
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+    </label>
+  );
+  if (!required) return label;
+  return (
+    <span className="mb-1.5 flex items-baseline gap-1">
+      {label}
+      <span aria-hidden="true">*</span>
+    </span>
   );
 }

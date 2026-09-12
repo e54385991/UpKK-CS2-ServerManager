@@ -73,7 +73,7 @@ const app = createServer(async (req, res) => {
   }
   if (path.endsWith('/dependency-options') || path.endsWith('/categories')) return json({ items: [] });
   if (/\/servers\/\d+\/plugins$/.test(path)) return json([]);
-  if (path === '/api/v1/plugins/github/releases') return json({ releases: [{ tag_name: 'v1.0', name: 'v1.0', assets: [{ name: 'plugin.zip', size: 100, browser_download_url: 'https://example.invalid/plugin.zip' }] }] });
+  if (path === '/api/v1/plugins/github/releases') return json({ releases: [{ tag_name: 'v1.0', name: 'v1.0', prerelease: false, assets: [{ name: 'plugin.zip', size: 100, browser_download_url: 'https://example.invalid/plugin.zip', runtime_compatibility: 'not_applicable' }] }] });
   if (path.endsWith('/plugins/market/1/install')) return json({ operation_id: '00000000-0000-4000-8000-000000000001', server_id: 1, action: 'install_plugin', status: 'queued', started_at: stamp, actor_user_id: 1, stream_url: '/unused', command: 'fixture install' }, 202);
   if (path.endsWith('/preflight')) return json({ server_id: 1, plugin: { id: 1, title: plugin.title }, plan_hash: 'fixture-plan', installed: [], ordered: [], warnings: [], hard_conflicts: [], steps: [], blocked: false, framework: { plugin: 'counterstrikesharp', conflicting: ['swiftly'], installed: ['swiftly'], missing: false, mismatch: true } });
   if (path === '/api/v1/profile') return json({ id: 1, username: 'fixture-admin', has_github_token: true, steamcmd_max_retries: 3 });

@@ -18,6 +18,7 @@ import {
   installOptionDefaults,
   pickDefaultAssetIndex,
   pluginTrackedOnServer,
+  shouldRefreshInstallDefaults,
   toggleExclusion,
 } from "@/modules/plugins/market-install-options";
 import type {
@@ -148,7 +149,9 @@ export function InstallForm({
       const exists =
         result.ok && pluginTrackedOnServer(result.data, pluginId);
       presenceByServer.current.set(serverId, exists);
-      apply(exists);
+      // Optimistic default is "not installed". Re-applying that same
+      // guess would wipe a plan the operator already checked.
+      if (shouldRefreshInstallDefaults(false, exists)) apply(exists);
     });
     return () => {
       cancelled = true;
@@ -659,7 +662,7 @@ export function InstallForm({
         <Button
           type="button"
           variant="secondary"
-          disabled={busy || serverId == null}
+          disabled={busy || serverId == null || !selectedAsset}
           onClick={() => void checkPlan()}
         >
           {pending && !plan ? t("checking") : t("checkPlan")}

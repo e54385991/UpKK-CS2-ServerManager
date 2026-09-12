@@ -290,7 +290,9 @@ export function MarketPluginEditDialog({
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="market-edit-title">{t("create.titleField")} *</Label>
+            <Label htmlFor="market-edit-title" required>
+              {t("create.titleField")}
+            </Label>
             <Input
               id="market-edit-title"
               value={form.title}
@@ -318,7 +320,9 @@ export function MarketPluginEditDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="market-edit-category">{t("create.category")} *</Label>
+            <Label htmlFor="market-edit-category" required>
+              {t("create.category")}
+            </Label>
             <Select
               id="market-edit-category"
               value={form.category}
@@ -337,7 +341,9 @@ export function MarketPluginEditDialog({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="market-edit-framework">{t("create.framework")} *</Label>
+            <Label htmlFor="market-edit-framework" required>
+              {t("create.framework")}
+            </Label>
             <Select
               id="market-edit-framework"
               value={form.framework}

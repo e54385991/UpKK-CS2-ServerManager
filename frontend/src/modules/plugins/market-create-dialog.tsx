@@ -228,8 +228,8 @@ export function MarketPluginCreateDialog({
         onSubmit={(event) => void submit(event)}
       >
         <div className="space-y-1.5">
-          <Label htmlFor="market-create-github-url">
-            {t("create.githubUrl")} *
+          <Label htmlFor="market-create-github-url" required>
+            {t("create.githubUrl")}
           </Label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
@@ -262,7 +262,9 @@ export function MarketPluginCreateDialog({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="market-create-title">{t("create.titleField")} *</Label>
+            <Label htmlFor="market-create-title" required>
+              {t("create.titleField")}
+            </Label>
             <Input
               id="market-create-title"
               value={title}
@@ -290,8 +292,8 @@ export function MarketPluginCreateDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="market-create-category">
-              {t("create.category")} *
+            <Label htmlFor="market-create-category" required>
+              {t("create.category")}
             </Label>
             <Select
               id="market-create-category"
@@ -312,8 +314,8 @@ export function MarketPluginCreateDialog({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="market-create-framework">
-              {t("create.framework")} *
+            <Label htmlFor="market-create-framework" required>
+              {t("create.framework")}
             </Label>
             <Select
               id="market-create-framework"

@@ -218,6 +218,7 @@ for (const locale of ['en-US', 'zh-CN']) {
     await page.keyboard.press('Escape');
     await page.getByTestId('market-install-open').click();
     const installDialog = page.getByRole('dialog');
+    await expect(installDialog.locator('#install-version-1')).toHaveValue('0');
     await installDialog.getByRole('button', { name: m.plugins.checkPlan, exact: true }).click();
     await expect(installDialog.getByRole('button', { name: m.plugins.install, exact: true })).toBeEnabled();
     await installDialog.getByRole('button', { name: m.plugins.install, exact: true }).click();

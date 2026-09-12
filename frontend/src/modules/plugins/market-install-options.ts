@@ -14,6 +14,14 @@ export function installOptionDefaults(existsOnServer: boolean): {
     : { upgradeMode: false, installDependencies: true };
 }
 
+/** Re-apply install defaults only when the presence lookup disagrees with the optimistic guess. */
+export function shouldRefreshInstallDefaults(
+  optimisticInstalled: boolean,
+  resolvedInstalled: boolean,
+): boolean {
+  return optimisticInstalled !== resolvedInstalled;
+}
+
 export function pickDefaultAssetIndex(
   assets: readonly { readonly runtimeCompatibility: string }[],
 ): number | null {
