@@ -6,6 +6,7 @@ import { Crosshair } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { activeNavHref, NAV_SECTIONS } from "@/shared/config/navigation";
 import { NavLink } from "@/modules/shell/nav-link";
+import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 
 /**
  * Persistent desktop sidebar. A client component because it renders icon
@@ -19,15 +20,23 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
   const tSite = useTranslations("site");
 
   return (
-    <aside className="hidden h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface/60 md:flex">
+    <aside
+      data-testid="console-sidebar"
+      className="hidden h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface/60 md:flex"
+    >
       <div className="flex min-h-14 items-center gap-2.5 border-b border-line px-5 py-2">
-        <Link href="/overview" className="flex min-w-0 items-center gap-2.5">
+        <Link
+          href="/overview"
+          data-nav-key="home"
+          className="flex min-w-0 items-center gap-2.5"
+        >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">
             <Crosshair className="size-4.5" />
           </span>
           <span className="min-w-0 text-[12px] font-semibold leading-snug tracking-tight text-fg">
             {tSite("name")}
           </span>
+          <LinkPendingHint />
         </Link>
       </div>
 
@@ -50,6 +59,7 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
                     href={item.href}
                     label={t(item.key)}
                     icon={item.icon}
+                    navKey={item.key}
                     active={item.href === activeHref}
                   />
                 ))}

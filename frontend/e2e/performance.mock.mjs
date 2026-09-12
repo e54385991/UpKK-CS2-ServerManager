@@ -53,6 +53,22 @@ const app = createServer(async (req, res) => {
   if (path === '/api/v1/operations/inbox') return json(inbox);
   if (path === '/api/v1/ssh-pool') return json({ connections: 0, in_use: 0, idle: 0, leases: 0 });
   if (path === '/api/v1/plugins/market/ai-imports') return json([]);
+  if (path === '/api/v1/overview/summary') {
+    return json({
+      total: 2,
+      running: 2,
+      attention: 0,
+      capacity: 64,
+      ssh_connections: 0,
+      ssh_in_use: 0,
+      ssh_idle: 0,
+      ssh_leases: 0,
+    });
+  }
+  if (path === '/api/v1/overview/host-system-info') {
+    return json({ servers: [], timestamp: stamp });
+  }
+  if (path === '/api/v1/setup/initialized-servers') return json([]);
   if (path === '/api/v1/servers') return json([server(1), server(2)]);
   if (/^\/api\/v1\/servers\/\d+$/.test(path)) {
     const id = Number(path.split('/').at(-1));
@@ -64,7 +80,12 @@ const app = createServer(async (req, res) => {
   if (path.endsWith('/operations/lock')) return json({ lock_active: false, server_status: 'running' });
   if (path.endsWith('/operations/logs')) return json([]);
   if (path.endsWith('/quick-commands')) return json({ items: [] });
-  if (path.endsWith('/disk-space')) return json({ server_id: 1, cached: false });
+  if (path === '/api/v1/overview/disk-space') return json({ servers: [] });
+  if (path === '/api/v1/overview/a2s-cache') return json({ servers: [] });
+  if (path === '/api/v1/overview/steam-version') {
+    return json({ available: false, version: null, message: null, timestamp: null });
+  }
+  if (/\/servers\/\d+\/disk-space$/.test(path)) return json({ server_id: 1, cached: false });
   if (path.endsWith('/startup-command')) return json({ startup_command: './cs2 -dedicated', cs2_command: './cs2 -dedicated' });
   if (path === '/api/v1/plugins/market') return json({ items: [plugin], total: 1, limit: 20, offset: 0 });
   if (path === '/api/v1/plugins/market/1') {

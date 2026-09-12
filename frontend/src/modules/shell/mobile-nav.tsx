@@ -7,7 +7,8 @@ import { usePathname } from "next/navigation";
 import { Menu, X, Crosshair } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { activeNavHref, NAV_SECTIONS } from "@/shared/config/navigation";
-import { cn } from "@/shared/lib/cn";
+import { NavLink } from "@/modules/shell/nav-link";
+import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 import { Button } from "@/shared/ui/button";
 
 /**
@@ -49,16 +50,27 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
         className="absolute inset-0 bg-canvas/80 backdrop-blur-sm"
         onClick={() => setOpenPath(null)}
       />
-      <div className="absolute inset-y-0 left-0 flex w-72 flex-col border-r border-line bg-surface shadow-panel">
+      <div
+        data-testid="console-mobile-drawer"
+        className="absolute inset-y-0 left-0 flex w-72 flex-col border-r border-line bg-surface shadow-panel"
+      >
         <div className="flex h-14 items-center justify-between border-b border-line px-5">
-          <span className="flex items-center gap-2.5">
+          <Link
+            href="/overview"
+            data-nav-key="home"
+            onClick={
+              pathname === "/overview" ? () => setOpenPath(null) : undefined
+            }
+            className="flex min-w-0 items-center gap-2.5"
+          >
             <span className="flex size-8 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">
               <Crosshair className="size-4.5" />
             </span>
             <span className="min-w-0 text-[12px] font-semibold leading-snug text-fg">
               {tSite("name")}
             </span>
-          </span>
+            <LinkPendingHint />
+          </Link>
           <Button
             variant="ghost"
             size="icon"
@@ -81,30 +93,21 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
                   {t(section.titleKey)}
                 </p>
                 <div className="space-y-1">
-                  {items.map((item) => {
-                    const active = item.href === activeHref;
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setOpenPath(null)}
-                        className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium",
-                          active
-                            ? "bg-surface-overlay text-fg"
-                            : "text-fg-muted hover:bg-surface-overlay/60 hover:text-fg",
-                        )}
-                      >
-                        <item.icon
-                          className={cn(
-                            "size-4",
-                            active ? "text-primary" : "text-fg-subtle",
-                          )}
-                        />
-                        {t(item.key)}
-                      </Link>
-                    );
-                  })}
+                  {items.map((item) => (
+                    <NavLink
+                      key={item.href}
+                      href={item.href}
+                      label={t(item.key)}
+                      icon={item.icon}
+                      navKey={item.key}
+                      active={item.href === activeHref}
+                      onClick={
+                        item.href === activeHref
+                          ? () => setOpenPath(null)
+                          : undefined
+                      }
+                    />
+                  ))}
                 </div>
               </div>
             );
@@ -120,6 +123,7 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
         variant="ghost"
         size="icon"
         className="md:hidden"
+        data-testid="console-mobile-open"
         aria-label={tShell("openNav")}
         aria-expanded={open}
         onClick={() => setOpenPath(pathname)}

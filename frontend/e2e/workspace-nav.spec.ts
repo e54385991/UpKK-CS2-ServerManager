@@ -51,15 +51,15 @@ function categoryLink(page: Page, category: string) {
   return page.locator(`a[data-workspace-category="${category}"]`);
 }
 
-async function clickShowsPending(page: Page, category: string) {
+async function clickShowsPending(page: Page, selector: string) {
   return page.evaluate(async (target) => {
-    const link = document.querySelector(`a[data-workspace-category="${target}"]`);
+    const link = document.querySelector(target);
     if (!(link instanceof HTMLAnchorElement)) {
       throw new Error(`missing ${target}`);
     }
     const hint = link.querySelector("[data-testid='link-pending-hint']");
     if (!(hint instanceof HTMLElement)) {
-      throw new Error("missing pending hint");
+      throw new Error(`missing pending hint for ${target}`);
     }
     const started = performance.now();
     link.click();
@@ -70,7 +70,7 @@ async function clickShowsPending(page: Page, category: string) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     }
     throw new Error(`pending not set within 100ms for ${target}`);
-  }, category);
+  }, selector);
 }
 
 test("all 19 workspace tabs keep the current page marker while switching", async ({
@@ -127,7 +127,7 @@ test("unprefetched tab click feedback stays under 100ms with 3s network and back
     downloadThroughput: -1,
     uploadThroughput: -1,
   });
-  const elapsed = await clickShowsPending(page, "files");
+  const elapsed = await clickShowsPending(page, 'a[data-workspace-category="files"]');
   expect(elapsed).toBeLessThan(100);
   await expect(categoryLink(page, "files").locator("[data-testid='link-pending-hint']")).toHaveAttribute(
     "data-pending",
@@ -149,8 +149,8 @@ test("consecutive tab clicks move pending to the last target", async ({ page, co
     downloadThroughput: -1,
     uploadThroughput: -1,
   });
-  await clickShowsPending(page, "files");
-  await clickShowsPending(page, "console");
+  await clickShowsPending(page, 'a[data-workspace-category="files"]');
+  await clickShowsPending(page, 'a[data-workspace-category="console"]');
   await expect(categoryLink(page, "console").locator("[data-testid='link-pending-hint']")).toHaveAttribute(
     "data-pending",
     "true",
@@ -272,3 +272,138 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     );
   });
 }
+
+const SIDEBAR_ITEMS = [
+  { href: "/overview", key: "overview" },
+  { href: "/servers", key: "servers" },
+  { href: "/servers/initialized", key: "initializedServers" },
+  { href: "/plugins", key: "plugins" },
+  { href: "/assistant", key: "assistant" },
+  { href: "/settings/discord", key: "discord" },
+  { href: "/audit", key: "audit" },
+  { href: "/settings", key: "settings" },
+] as const;
+
+function sidebarLink(page: Page, key: string) {
+  return page.getByTestId("console-sidebar").locator(`a[data-nav-key="${key}"]`);
+}
+
+async function waitForHydratedOverview(page: Page) {
+  await expect(page.getByTestId("overview-stats")).toBeVisible();
+}
+
+async function delayPathnames(page: Page, pathnames: readonly string[], delayMs = 3000) {
+  await page.route(
+    (url) => pathnames.includes(url.pathname),
+    async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      await route.continue();
+    },
+  );
+}
+
+test("all sidebar entries keep the current page marker while switching", async ({
+  page,
+  context,
+  request,
+}) => {
+  test.setTimeout(90_000);
+  await request.post(`${mock}/__test__/reset`);
+  await login(context);
+  await page.goto("/overview");
+  await expect(page.getByTestId("console-sidebar")).toBeVisible();
+  await waitForHydratedOverview(page);
+  expect(SIDEBAR_ITEMS).toHaveLength(8);
+
+  for (const item of SIDEBAR_ITEMS) {
+    const link = sidebarLink(page, item.key);
+    await expect(link).toBeVisible();
+    if ((await link.getAttribute("aria-current")) !== "page") {
+      await link.click({ noWaitAfter: true });
+    }
+    await expect(page).toHaveURL((url) => url.pathname === item.href);
+    await expect(link).toHaveAttribute("aria-current", "page");
+    for (const other of SIDEBAR_ITEMS) {
+      if (other.key === item.key) continue;
+      await expect(sidebarLink(page, other.key)).not.toHaveAttribute("aria-current", "page");
+    }
+  }
+
+  await sidebarLink(page, "plugins").click();
+  await expect(page).toHaveURL(/\/plugins$/);
+  await sidebarLink(page, "home").click();
+  await expect(page).toHaveURL((url) => url.pathname === "/overview");
+  await expect(sidebarLink(page, "overview")).toHaveAttribute("aria-current", "page");
+});
+
+test("unprefetched sidebar click feedback stays under 100ms with 3s delay", async ({
+  page,
+  context,
+  request,
+}) => {
+  await login(context);
+  await request.post(`${mock}/__test__/reset`);
+  await delayPathnames(page, ["/plugins"]);
+  await page.goto("/overview");
+  await expect(page.getByTestId("console-sidebar")).toBeVisible();
+  await waitForHydratedOverview(page);
+  const elapsed = await clickShowsPending(
+    page,
+    '[data-testid="console-sidebar"] a[data-nav-key="plugins"]',
+  );
+  expect(elapsed).toBeLessThan(100);
+  await expect(sidebarLink(page, "plugins").locator("[data-testid='link-pending-hint']")).toHaveAttribute(
+    "data-pending",
+    "true",
+  );
+  await expect(sidebarLink(page, "overview")).toHaveAttribute("aria-current", "page");
+});
+
+test("consecutive sidebar clicks move pending to the last target", async ({
+  page,
+  context,
+  request,
+}) => {
+  await login(context);
+  await request.post(`${mock}/__test__/reset`);
+  await delayPathnames(page, ["/plugins", "/servers"]);
+  await page.goto("/overview");
+  await expect(page.getByTestId("console-sidebar")).toBeVisible();
+  await waitForHydratedOverview(page);
+  await clickShowsPending(page, '[data-testid="console-sidebar"] a[data-nav-key="plugins"]');
+  await clickShowsPending(page, '[data-testid="console-sidebar"] a[data-nav-key="servers"]');
+  await expect(sidebarLink(page, "servers").locator("[data-testid='link-pending-hint']")).toHaveAttribute(
+    "data-pending",
+    "true",
+  );
+  await expect(sidebarLink(page, "plugins").locator("[data-testid='link-pending-hint']")).toHaveAttribute(
+    "data-pending",
+    "false",
+  );
+  await expect(sidebarLink(page, "overview")).toHaveAttribute("aria-current", "page");
+});
+
+test("mobile drawer uses the same pending nav links", async ({ page, context, request }) => {
+  await login(context);
+  await request.post(`${mock}/__test__/reset`);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await delayPathnames(page, ["/plugins"]);
+  await page.goto("/overview");
+  await waitForHydratedOverview(page);
+  await page.getByTestId("console-mobile-open").click();
+  const drawer = page.getByTestId("console-mobile-drawer");
+  await expect(drawer).toBeVisible();
+  for (const item of SIDEBAR_ITEMS) {
+    await expect(drawer.locator(`a[data-nav-key="${item.key}"]`)).toBeVisible();
+  }
+  const elapsed = await clickShowsPending(
+    page,
+    '[data-testid="console-mobile-drawer"] a[data-nav-key="plugins"]',
+  );
+  expect(elapsed).toBeLessThan(100);
+  await expect(drawer.locator('a[data-nav-key="plugins"] [data-testid="link-pending-hint"]')).toHaveAttribute(
+    "data-pending",
+    "true",
+  );
+});
+

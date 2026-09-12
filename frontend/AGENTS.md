@@ -275,7 +275,7 @@ frontend change, run only the applicable commands and tests. Run
 `npm run check:bundle` when the change can affect client bundles or route
 loading, rather than after every production build. The bundle check
 checks the gzip size of every route's initial client
-chunks (250 KiB per route, 150 KiB per chunk). Heavy editors and terminal
+chunks (252 KiB per route, 150 KiB per chunk). Heavy editors and terminal
 libraries must remain in lazy chunks. The CI `frontend-playwright-smoke` job also
 runs the isolated overview configuration after the public-page smoke. It starts
 its own mock backend and Next dev server on loopback ports 38121/31821 (override

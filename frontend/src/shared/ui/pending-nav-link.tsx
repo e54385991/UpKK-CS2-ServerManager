@@ -1,30 +1,9 @@
 "use client";
 
-import Link, { useLinkStatus } from "next/link";
+import Link from "next/link";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import type { Route } from "next";
-import { cn } from "@/shared/lib/cn";
-
-/**
- * Fixed-size pending hint for a `<Link>`. Always rendered so toggling
- * `pending` cannot shift the tab label; `useLinkStatus` only works in a
- * descendant of `Link`.
- */
-export function LinkPendingHint({ className }: { className?: string }) {
-  const { pending } = useLinkStatus();
-  return (
-    <span
-      aria-hidden
-      data-testid="link-pending-hint"
-      data-pending={pending ? "true" : "false"}
-      className={cn(
-        "inline-block size-1.5 shrink-0 rounded-full bg-current",
-        pending ? "animate-pulse opacity-70" : "opacity-0",
-        className,
-      )}
-    />
-  );
-}
+import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 
 type PendingNavLinkProps = Omit<
   ComponentProps<typeof Link>,

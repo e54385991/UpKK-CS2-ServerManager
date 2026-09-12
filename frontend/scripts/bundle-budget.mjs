@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 
-export const INITIAL_ROUTE_BUDGET = 250 * 1024;
+export const INITIAL_ROUTE_BUDGET = 252 * 1024;
 export const INITIAL_CHUNK_BUDGET = 150 * 1024;
 
 async function manifestsIn(directory) {

@@ -4,24 +4,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import type { LucideIcon } from "lucide-react";
+import type { MouseEventHandler } from "react";
 import { cn } from "@/shared/lib/cn";
 import { navPathMatches } from "@/shared/config/navigation";
+import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 
 /**
- * Sidebar navigation link. Uses the default `<Link>` prefetch so the shared App
- * Shell and route payload are fetched ahead of the click — navigation swaps the
- * page region instantly while the shell stays mounted.
+ * Sidebar / mobile-drawer navigation link. Keeps the default `<Link>` prefetch
+ * so the App Shell and route payload load ahead of the click, and uses
+ * `useLinkStatus` so a slow or unprefetched transition still marks the target
+ * immediately.
  */
 export function NavLink({
   href,
   label,
   icon: Icon,
   active: activeOverride,
+  navKey,
+  onClick,
 }: {
   href: Route;
   label: string;
   icon: LucideIcon;
   active?: boolean;
+  navKey?: string;
+  onClick?: MouseEventHandler<HTMLAnchorElement>;
 }) {
   const pathname = usePathname();
   const active = activeOverride ?? navPathMatches(pathname, href);
@@ -30,6 +37,8 @@ export function NavLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
+      data-nav-key={navKey}
+      onClick={onClick}
       className={cn(
         "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
         active
@@ -49,7 +58,8 @@ export function NavLink({
           active ? "text-primary" : "text-fg-subtle group-hover:text-fg-muted",
         )}
       />
-      <span className="truncate">{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <LinkPendingHint />
     </Link>
   );
 }
