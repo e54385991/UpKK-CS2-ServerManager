@@ -11,7 +11,7 @@ from services.concurrency_limiter import KeyedConcurrencyLimiter
 
 MAX_CONCURRENT_SSH_PROBES = 4
 ssh_probe_limiter = KeyedConcurrencyLimiter[tuple[str, int]](
-    global_limit=MAX_CONCURRENT_SSH_PROBES, per_key_limit=1
+    global_limit=MAX_CONCURRENT_SSH_PROBES, per_key_limit=1, name="ssh"
 )
 
 

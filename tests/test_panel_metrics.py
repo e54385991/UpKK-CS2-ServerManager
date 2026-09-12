@@ -73,6 +73,8 @@ def test_route_label_normalizes_ids_and_prefers_template():
 def test_health_and_diagnostics_are_not_recorded():
     assert should_record_path("/health") is False
     assert should_record_path("/api/v1/diagnostics") is False
+    assert should_record_path("/api/v1/diagnostics/monitor") is False
+    assert should_record_path("/api/v1/diagnostics/errors") is False
     assert should_record_path("/api/v1/ssh-pool") is True
 
 
@@ -105,6 +107,10 @@ def test_v1_diagnostics_rejects_non_admin():
 
 
 def test_v1_diagnostics_returns_priority_snapshot(monkeypatch):
+    from modules.observability import reset_for_tests, set_enabled
+
+    reset_for_tests()
+    set_enabled(True)
     metrics_store.clear()
     metrics_store.record_request(
         method="GET",
@@ -149,6 +155,19 @@ def test_v1_diagnostics_returns_priority_snapshot(monkeypatch):
     health = client.get("/health")
     assert health.status_code == 200
     assert health.headers.get("server-timing", "").startswith("app;dur=")
+
+
+def test_v1_diagnostics_disabled_without_snapshot_is_conflict():
+    from modules.observability import reset_for_tests
+
+    reset_for_tests()
+    from services.panel_monitor.history import history
+
+    history.clear_buffers()
+    client = _client()
+    response = client.get("/api/v1/diagnostics")
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "MONITORING_DISABLED"
 
 
 @pytest.mark.asyncio

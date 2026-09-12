@@ -26,7 +26,7 @@ const SECTIONS = [
 
 function keyFromHash(hash: string): SectionKey {
   const found = SECTIONS.find((section) => `#${section.id}` === hash);
-  if (!found) return "downloads";
+  if (!found) return "performance";
   return found.key === "downloadCache" ? "download-cache" : (found.key as SectionKey);
 }
 
@@ -39,11 +39,14 @@ export function SettingsWorkspace({
 }) {
   const t = useTranslations("settings");
   const [active, setActive] = useState<SectionKey>(() =>
-    typeof window === "undefined" ? "downloads" : keyFromHash(window.location.hash),
+    typeof window === "undefined" ? "performance" : keyFromHash(window.location.hash),
   );
   const [dirty, setDirty] = useState<ReadonlySet<SectionKey>>(() => new Set());
 
   useEffect(() => {
+    if (!window.location.hash) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#settings-performance`);
+    }
     const onHash = () => setActive(keyFromHash(window.location.hash));
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);

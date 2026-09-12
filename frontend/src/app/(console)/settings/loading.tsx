@@ -1,5 +1,5 @@
 import { Skeleton } from "@/shared/ui/skeleton";
-import { SettingsPanelSkeleton } from "@/modules/settings/settings-panel";
+import { SettingsPanelSkeleton } from "@/modules/settings/settings-panel-skeleton";
 
 export default function Loading() {
   return (

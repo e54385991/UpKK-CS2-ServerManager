@@ -200,7 +200,7 @@ jobs:
 
   frontend-playwright-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -230,3 +230,6 @@ jobs:
 
       - name: Verify isolated render deduplication, streaming and lazy dialogs
         run: npx playwright test --config=playwright.performance.config.ts
+
+      - name: Verify isolated system-monitoring dashboard
+        run: npx playwright test --config=playwright.monitor.config.ts

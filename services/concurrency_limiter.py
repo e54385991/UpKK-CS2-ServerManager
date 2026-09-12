@@ -6,7 +6,10 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Generic, TypeVar
+
+from modules.observability import record_limiter_wait
 
 Key = TypeVar("Key")
 
@@ -15,6 +18,7 @@ Key = TypeVar("Key")
 class _SemaphoreEntry:
     semaphore: asyncio.Semaphore
     borrowers: int = 0
+    executing: int = 0
 
 
 class KeyedConcurrencyLimiter(Generic[Key]):
@@ -25,12 +29,13 @@ class KeyedConcurrencyLimiter(Generic[Key]):
     borrower exits, including when a waiting task is cancelled.
     """
 
-    def __init__(self, *, global_limit: int, per_key_limit: int) -> None:
+    def __init__(self, *, global_limit: int, per_key_limit: int, name: str = "generic") -> None:
         if global_limit < 1:
             raise ValueError("global_limit must be at least 1")
         if per_key_limit < 1:
             raise ValueError("per_key_limit must be at least 1")
 
+        self.name = name
         self._global_limit = global_limit
         self._global_semaphore = asyncio.Semaphore(global_limit)
         self._per_key_limit = per_key_limit
@@ -43,11 +48,15 @@ class KeyedConcurrencyLimiter(Generic[Key]):
 
     def snapshot(self) -> dict[str, int]:
         """Return occupancy counters without listing keys or waiters."""
+        borrowers = sum(entry.borrowers for entry in self._entries.values())
+        executing = sum(entry.executing for entry in self._entries.values())
         return {
             "global_limit": self._global_limit,
             "per_key_limit": self._per_key_limit,
             "active_keys": len(self._entries),
-            "borrowers": sum(entry.borrowers for entry in self._entries.values()),
+            "borrowers": borrowers,
+            "executing": executing,
+            "waiting": max(0, borrowers - executing),
         }
 
     @asynccontextmanager
@@ -58,13 +67,19 @@ class KeyedConcurrencyLimiter(Generic[Key]):
             entry = _SemaphoreEntry(asyncio.Semaphore(self._per_key_limit))
             self._entries[key] = entry
         entry.borrowers += 1
+        wait_start = perf_counter()
 
         try:
             # Preserve the existing scheduling policy: a task first reserves
             # user capacity and then competes for global capacity.
             async with entry.semaphore:
                 async with self._global_semaphore:
-                    yield
+                    record_limiter_wait(self.name, (perf_counter() - wait_start) * 1000)
+                    entry.executing += 1
+                    try:
+                        yield
+                    finally:
+                        entry.executing -= 1
         finally:
             entry.borrowers -= 1
             if entry.borrowers == 0 and self._entries.get(key) is entry:

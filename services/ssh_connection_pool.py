@@ -7,15 +7,36 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
+from time import perf_counter
 from typing import Dict, List, Optional, Tuple
 from weakref import WeakValueDictionary
 
 import asyncssh
 
 from modules.models import Server
+from modules.observability import record_error, record_ssh
 from services.ssh_pool_types import ConnectionKey, PooledConnection
 
 logger = logging.getLogger(__name__)
+
+
+def _observe_ssh_connect_failure(
+    *,
+    reconnecting: bool,
+    auth_failed: bool = False,
+    timeout: bool = False,
+    error: BaseException | None = None,
+    error_code: str | None = None,
+) -> None:
+    if auth_failed:
+        record_ssh(auth_failed=True)
+        record_error(source="ssh", summary="Authentication failed", error_code="ssh_auth")
+    if timeout:
+        record_ssh(timeout=True)
+    if reconnecting:
+        record_ssh(reconnect_failed=True)
+    if error_code is not None and error is not None:
+        record_error(source="ssh", summary=str(error), error_code=error_code, exception=error)
 
 
 class SSHConnectionPool:
@@ -356,34 +377,52 @@ class SSHConnectionPool:
                     if pooled_conn.is_alive() and connection_age <= self.max_lifetime:
                         pooled_conn.acquire()
                         logger.debug(f"Reusing existing connection: {key}")
+                        record_ssh(reused=True)
                         return True, pooled_conn.conn, "Reused existing connection"
                     stale_connection = self._retire_connection_locked(pooled_conn)
 
             if stale_connection is not None:
                 await self._close_connections_safely([stale_connection])
+            return await self._create_connection(
+                server, key, reconnecting=stale_connection is not None
+            )
 
-            try:
-                logger.debug(f"Creating new SSH connection: {key}")
-                conn = await self._open_connection(server)
-                pooled_conn = PooledConnection(conn, key)
-                pooled_conn.acquire()
-                total = await self._register_acquired_connection(server, pooled_conn)
-                logger.info(f"Created new SSH connection: {key}. Total connections: {total}")
-                return True, conn, "Connected successfully"
-            except asyncssh.PermissionDenied:
-                return False, None, "Authentication failed"
-            except asyncio.TimeoutError:
-                return (
-                    False,
-                    None,
-                    "SSH connection timeout - server may be unreachable or too slow to respond",
-                )
-            except asyncssh.Error as e:
-                return False, None, f"SSH error: {str(e)}"
-            except ValueError as e:
-                return False, None, str(e)
-            except Exception as e:
-                return False, None, f"Connection error: {str(e)}"
+    async def _create_connection(
+        self, server: Server, key: ConnectionKey, *, reconnecting: bool
+    ) -> Tuple[bool, Optional[asyncssh.SSHClientConnection], str]:
+        try:
+            logger.debug(f"Creating new SSH connection: {key}")
+            if reconnecting:
+                record_ssh(reconnect_attempt=True)
+            started = perf_counter()
+            conn = await self._open_connection(server)
+            record_ssh(connect_ms=(perf_counter() - started) * 1000)
+            pooled_conn = PooledConnection(conn, key)
+            pooled_conn.acquire()
+            total = await self._register_acquired_connection(server, pooled_conn)
+            logger.info(f"Created new SSH connection: {key}. Total connections: {total}")
+            return True, conn, "Connected successfully"
+        except asyncssh.PermissionDenied:
+            _observe_ssh_connect_failure(reconnecting=reconnecting, auth_failed=True)
+            return False, None, "Authentication failed"
+        except asyncio.TimeoutError:
+            _observe_ssh_connect_failure(reconnecting=reconnecting, timeout=True)
+            return (
+                False,
+                None,
+                "SSH connection timeout - server may be unreachable or too slow to respond",
+            )
+        except asyncssh.Error as e:
+            _observe_ssh_connect_failure(reconnecting=reconnecting, error=e, error_code="ssh_error")
+            return False, None, f"SSH error: {str(e)}"
+        except ValueError as e:
+            _observe_ssh_connect_failure(reconnecting=reconnecting)
+            return False, None, str(e)
+        except Exception as e:
+            _observe_ssh_connect_failure(
+                reconnecting=reconnecting, error=e, error_code="ssh_connect"
+            )
+            return False, None, f"Connection error: {str(e)}"
 
     @asynccontextmanager
     async def lease(self, server: Server):

@@ -113,6 +113,7 @@ def test_v1_settings_get_exposes_presence_flags_not_secrets(monkeypatch):
     assert body["default_proxy_mode"] == "panel"
     assert body["captcha_enabled"] is True
     assert body["registration_enabled"] is True
+    assert body["panel_monitoring_enabled"] is True
     dumped = response.text
     assert "github_pat_secret123456" not in dumped
     assert "smtp-secret" not in dumped
@@ -204,6 +205,7 @@ def test_v1_settings_import_updates_system_and_ai_but_preserves_redacted_secrets
     assert settings.default_proxy_mode == "direct"
     assert settings.captcha_enabled is False
     assert settings.registration_enabled is False
+    assert settings.panel_monitoring_enabled is True
     assert settings.global_github_token == "github_pat_secret123456"
     assert settings.smtp_password == "smtp-secret"
     assert ai_settings.model == "migrated-model"
@@ -336,6 +338,25 @@ def test_v1_settings_put_updates_captcha_policy(monkeypatch):
     assert response.status_code == 200
     assert settings.captcha_enabled is False
     assert response.json()["captcha_enabled"] is False
+
+
+def test_v1_settings_put_toggles_panel_monitoring(monkeypatch):
+    applied: list[bool] = []
+
+    async def _apply(enabled: bool) -> None:
+        applied.append(enabled)
+
+    monkeypatch.setattr("services.panel_monitor.set_monitoring_enabled", _apply)
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    response = client.put("/api/v1/settings", json={"panel_monitoring_enabled": False})
+    assert response.status_code == 200
+    assert settings.panel_monitoring_enabled is False
+    assert response.json()["panel_monitoring_enabled"] is False
+    assert applied == [False]
+    omitted = client.put("/api/v1/settings", json={"captcha_enabled": True})
+    assert omitted.status_code == 200
+    assert settings.panel_monitoring_enabled is False
+    assert applied == [False]
 
 
 def test_v1_settings_put_updates_registration_policy(monkeypatch):

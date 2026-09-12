@@ -7,6 +7,8 @@ import type {
   EmailTestResultDto,
   GmailAuthorizeResultDto,
   PanelPerformanceSnapshotDto,
+  PanelMonitorViewDto,
+  PanelErrorListViewDto,
   SystemSettingsExportDto,
   SystemSettingsImportRequestDto,
   SystemSettingsImportResultDto,
@@ -36,6 +38,7 @@ function toSettings(raw: SystemSettingsViewDto): SystemSettings {
     pluginDownloadCacheBytes: raw.plugin_download_cache_bytes ?? 0,
     pluginDownloadCacheMaxAgeDays: raw.plugin_download_cache_max_age_days ?? 30,
     pluginDownloadCacheMaxMegabytes: raw.plugin_download_cache_max_megabytes ?? 4096,
+    panelMonitoringEnabled: raw.panel_monitoring_enabled ?? true,
     captchaEnabled: raw.captcha_enabled ?? true,
     registrationEnabled: raw.registration_enabled ?? true,
     clientIpHeader: raw.client_ip_header ?? null,
@@ -84,6 +87,9 @@ export function toWirePatch(patch: SettingsPatch): Record<string, unknown> {
     ...(patch.pluginDownloadCachePath !== undefined ? { plugin_download_cache_path: patch.pluginDownloadCachePath } : {}),
     ...(patch.pluginDownloadCacheMaxAgeDays !== undefined ? { plugin_download_cache_max_age_days: patch.pluginDownloadCacheMaxAgeDays } : {}),
     ...(patch.pluginDownloadCacheMaxMegabytes !== undefined ? { plugin_download_cache_max_megabytes: patch.pluginDownloadCacheMaxMegabytes } : {}),
+    ...(patch.panelMonitoringEnabled !== undefined
+      ? { panel_monitoring_enabled: patch.panelMonitoringEnabled }
+      : {}),
     ...(patch.captchaEnabled !== undefined
       ? { captcha_enabled: patch.captchaEnabled }
       : {}),
@@ -236,4 +242,26 @@ export async function testAiSettings(): Promise<ApiResult<AssistantProviderTestV
 
 export async function getDiagnostics(): Promise<ApiResult<PanelPerformanceSnapshotDto>> {
   return apiFetch<PanelPerformanceSnapshotDto>("/api/v1/diagnostics");
+}
+
+export async function getMonitor(
+  range: string,
+  instanceId?: string,
+): Promise<ApiResult<PanelMonitorViewDto>> {
+  const params = new URLSearchParams({ range });
+  if (instanceId) params.set("instance_id", instanceId);
+  return apiFetch<PanelMonitorViewDto>(`/api/v1/diagnostics/monitor?${params.toString()}`);
+}
+
+export async function getMonitorErrors(query: {
+  range: string;
+  instanceId?: string;
+  source?: string;
+  cursor?: string;
+}): Promise<ApiResult<PanelErrorListViewDto>> {
+  const params = new URLSearchParams({ range: query.range });
+  if (query.instanceId) params.set("instance_id", query.instanceId);
+  if (query.source) params.set("source", query.source);
+  if (query.cursor) params.set("cursor", query.cursor);
+  return apiFetch<PanelErrorListViewDto>(`/api/v1/diagnostics/errors?${params.toString()}`);
 }

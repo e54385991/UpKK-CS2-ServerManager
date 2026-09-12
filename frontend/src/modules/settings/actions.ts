@@ -16,6 +16,7 @@ import {
   getAiSettings,
   getDiagnostics,
   getGmailAuthorize,
+  getMonitor,
   getSettings,
   importSettings,
   postPluginDownloadCache,
@@ -130,4 +131,11 @@ export async function getDiagnosticsAction(): Promise<
   ApiResult<PanelPerformanceSnapshotDto>
 > {
   return getDiagnostics();
+}
+
+export async function getMonitorAction(
+  range: string,
+  instanceId?: string,
+): Promise<ApiResult<import("@/shared/api/types").PanelMonitorViewDto>> {
+  return getMonitor(range, instanceId);
 }

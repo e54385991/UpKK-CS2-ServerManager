@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .config import settings
+from .observability import install_database_observers
 
 engine = create_async_engine(
     settings.database_url,
@@ -17,6 +18,7 @@ engine = create_async_engine(
     echo=settings.DB_ECHO,
     connect_args={"application_name": "upkk-cs2-server-manager"},
 )
+install_database_observers(engine)
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 

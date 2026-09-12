@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from modules.observability import record_outbound
+
 
 class AIProviderTransport:
     """Reuse connections while allowing deterministic client injection in tests."""
@@ -85,9 +87,29 @@ class AIProviderTransport:
         url: str,
         **kwargs: Any,
     ) -> AsyncIterator[httpx.Response]:
-        client = await self._get_client()
-        async with client.stream(method, url, follow_redirects=False, **kwargs) as response:
-            yield response
+        started = time.perf_counter()
+        status: int | None = None
+        timeout = False
+        network = False
+        try:
+            client = await self._get_client()
+            async with client.stream(method, url, follow_redirects=False, **kwargs) as response:
+                status = response.status_code
+                yield response
+        except httpx.TimeoutException:
+            timeout = True
+            raise
+        except httpx.RequestError:
+            network = True
+            raise
+        finally:
+            record_outbound(
+                "ai",
+                (time.perf_counter() - started) * 1000,
+                status=status,
+                timeout=timeout,
+                network=network,
+            )
 
     async def close(self) -> None:
         async with self._lock:

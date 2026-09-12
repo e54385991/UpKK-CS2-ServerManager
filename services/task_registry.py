@@ -42,6 +42,14 @@ class BackgroundTaskRegistry:
                 return
             if error is None:
                 return
+            from modules.observability import record_error
+
+            record_error(
+                source="task",
+                summary=f"Background task in {self.name} failed: {error}",
+                error_code="background_task",
+                exception=error,
+            )
             if on_error is not None:
                 on_error(completed, error)
             else:

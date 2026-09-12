@@ -58,6 +58,7 @@ class SystemSettingsView(V1Model):
     # None means the console follows the LOG_LEVEL environment variable.
     log_level: LogLevel | None = None
     effective_log_level: LogLevel
+    panel_monitoring_enabled: bool = True
     github_token_verification: GitHubTokenVerificationView | None = None
     has_global_github_token: bool
     global_github_token_prefix: str | None = None
@@ -89,6 +90,7 @@ class SystemSettingsPatch(ApiRequest):
     registration_enabled: bool | None = None
     client_ip_header: str | None = Field(default=None, max_length=64)
     log_level: str | None = Field(default=None, max_length=16)
+    panel_monitoring_enabled: bool | None = None
     global_github_token: str | None = Field(default=None, max_length=255)
     clear_global_github_token: bool = False
     email_enabled: bool | None = None
@@ -147,6 +149,7 @@ class SystemSettingsTransfer(V1Model):
     registration_enabled: bool = True
     client_ip_header: str | None = Field(default=None, max_length=64)
     log_level: LogLevel | None = None
+    panel_monitoring_enabled: bool | None = None
     email_enabled: bool = False
     email_provider: EmailProvider = "gmail"
     email_from_address: str | None = Field(default=None, max_length=255)

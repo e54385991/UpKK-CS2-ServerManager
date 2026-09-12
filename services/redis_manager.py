@@ -13,9 +13,19 @@ from typing import Any, Optional
 import redis.asyncio as aioredis
 
 from modules.config import settings
+from modules.observability import is_monitor_io, record_redis
 from services.bounded_output import truncate_utf8_tail
 
 logger = logging.getLogger(__name__)
+
+
+def _observe_redis(
+    *, duration_ms: float | None = None, failed: bool = False, timeout: bool = False
+) -> None:
+    if is_monitor_io():
+        record_redis(monitor=True)
+        return
+    record_redis(duration_ms=duration_ms, failed=failed, timeout=timeout)
 
 
 class RedisManager:
@@ -69,11 +79,18 @@ class RedisManager:
     async def set(self, key: str, value: Any, expire: int = 300) -> bool:
         """Set a value in Redis with optional expiration"""
         key = self.prefixed_key(key)
+        started = time.monotonic()
         try:
             if isinstance(value, (dict, list)):
                 value = json.dumps(value)
-            return await self._set_with_expiry(key, value, expire)
+            result = await self._set_with_expiry(key, value, expire)
+            _observe_redis(duration_ms=(time.monotonic() - started) * 1000)
+            return result
+        except TimeoutError:
+            _observe_redis(timeout=True, failed=True)
+            return False
         except Exception as e:
+            _observe_redis(failed=True)
             print(f"Redis set error: {e}")
             return False
 
@@ -90,8 +107,12 @@ class RedisManager:
     async def get(self, key: str) -> Optional[Any]:
         """Get a value from Redis."""
         try:
-            return self._decode_value(await self.client.get(self.prefixed_key(key)))
+            started = time.monotonic()
+            value = await self.client.get(self.prefixed_key(key))
+            _observe_redis(duration_ms=(time.monotonic() - started) * 1000)
+            return self._decode_value(value)
         except Exception as e:
+            _observe_redis(failed=True)
             print(f"Redis get error: {e}")
             return None
 
@@ -100,18 +121,28 @@ class RedisManager:
         if not keys:
             return []
         try:
+            started = time.monotonic()
             values = await self.client.mget([self.prefixed_key(key) for key in keys])
+            _observe_redis(duration_ms=(time.monotonic() - started) * 1000)
             return [self._decode_value(value) for value in values]
         except Exception:
+            _observe_redis(failed=True)
             logger.warning("Redis batch cache read failed (keys=%d)", len(keys))
             return [None] * len(keys)
 
     async def delete(self, key: str) -> bool:
         """Delete a key from Redis"""
         key = self.prefixed_key(key)
+        started = time.monotonic()
         try:
-            return bool(await self.client.delete(key))
+            result = bool(await self.client.delete(key))
+            _observe_redis(duration_ms=(time.monotonic() - started) * 1000)
+            return result
+        except TimeoutError:
+            _observe_redis(timeout=True, failed=True)
+            return False
         except Exception as e:
+            _observe_redis(failed=True)
             print(f"Redis delete error: {e}")
             return False
 
@@ -260,9 +291,16 @@ class RedisManager:
 
     async def ping(self) -> bool:
         """Check Redis connection"""
+        started = time.monotonic()
         try:
-            return await self.client.ping()
+            result = await self.client.ping()
+            _observe_redis(duration_ms=(time.monotonic() - started) * 1000, failed=not result)
+            return bool(result)
+        except TimeoutError:
+            _observe_redis(timeout=True, failed=True)
+            return False
         except Exception as e:
+            _observe_redis(failed=True)
             print(f"Redis ping error: {e}")
             return False
 

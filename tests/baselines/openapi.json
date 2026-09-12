@@ -5678,6 +5678,11 @@
         "additionalProperties": false,
         "description": "SQLAlchemy pool occupancy for this worker. None when the pool has no gauge.",
         "properties": {
+          "capacity": {
+            "default": 0,
+            "title": "Capacity",
+            "type": "integer"
+          },
           "checked_in": {
             "anyOf": [
               {
@@ -5700,6 +5705,27 @@
             ],
             "title": "Checked Out"
           },
+          "errors": {
+            "default": 0,
+            "title": "Errors",
+            "type": "integer"
+          },
+          "execute_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execute P95 Ms"
+          },
+          "invalidations": {
+            "default": 0,
+            "title": "Invalidations",
+            "type": "integer"
+          },
           "max_overflow": {
             "title": "Max Overflow",
             "type": "integer"
@@ -5717,6 +5743,11 @@
           },
           "pool_size": {
             "title": "Pool Size",
+            "type": "integer"
+          },
+          "slow_executions": {
+            "default": 0,
+            "title": "Slow Executions",
             "type": "integer"
           }
         },
@@ -12120,6 +12151,11 @@
             "title": "Borrowers",
             "type": "integer"
           },
+          "executing": {
+            "default": 0,
+            "title": "Executing",
+            "type": "integer"
+          },
           "global_limit": {
             "title": "Global Limit",
             "type": "integer"
@@ -12130,6 +12166,22 @@
           },
           "per_key_limit": {
             "title": "Per Key Limit",
+            "type": "integer"
+          },
+          "wait_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait P95 Ms"
+          },
+          "waiting": {
+            "default": 0,
+            "title": "Waiting",
             "type": "integer"
           }
         },
@@ -14914,6 +14966,754 @@
         "title": "MarketPluginView",
         "type": "object"
       },
+      "MonitorAlertView": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "guidance": {
+            "title": "Guidance",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "watch",
+              "critical"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "severity",
+          "metric",
+          "title",
+          "detail",
+          "guidance",
+          "threshold"
+        ],
+        "title": "MonitorAlertView",
+        "type": "object"
+      },
+      "MonitorErrorDetailView": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "title": "Error Code",
+            "type": "string"
+          },
+          "exception_type": {
+            "title": "Exception Type",
+            "type": "string"
+          },
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/MonitorFrameView"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "operation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ts",
+          "source",
+          "severity",
+          "error_code",
+          "exception_type",
+          "summary"
+        ],
+        "title": "MonitorErrorDetailView",
+        "type": "object"
+      },
+      "MonitorErrorGroupView": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "exception_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception Type"
+          },
+          "first_ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Ts"
+          },
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/MonitorFrameView"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "last_ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Ts"
+          },
+          "operation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "title": "MonitorErrorGroupView",
+        "type": "object"
+      },
+      "MonitorFrameView": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "function": {
+            "title": "Function",
+            "type": "string"
+          },
+          "line": {
+            "default": 0,
+            "title": "Line",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file",
+          "function"
+        ],
+        "title": "MonitorFrameView",
+        "type": "object"
+      },
+      "MonitorInstanceView": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "default": false,
+            "title": "Current",
+            "type": "boolean"
+          },
+          "instance_id": {
+            "title": "Instance Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance_id",
+          "last_seen_at"
+        ],
+        "title": "MonitorInstanceView",
+        "type": "object"
+      },
+      "MonitorIntegrityView": {
+        "additionalProperties": false,
+        "properties": {
+          "display_bucket_seconds": {
+            "default": 30,
+            "title": "Display Bucket Seconds",
+            "type": "integer"
+          },
+          "gap": {
+            "default": false,
+            "title": "Gap",
+            "type": "boolean"
+          },
+          "partial_latency": {
+            "default": false,
+            "title": "Partial Latency",
+            "type": "boolean"
+          },
+          "point_count": {
+            "default": 0,
+            "title": "Point Count",
+            "type": "integer"
+          },
+          "sample_interval_seconds": {
+            "default": 10,
+            "title": "Sample Interval Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "MonitorIntegrityView",
+        "type": "object"
+      },
+      "MonitorSelfView": {
+        "additionalProperties": false,
+        "description": "Integrity of the collector itself.",
+        "properties": {
+          "collection_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Ms"
+          },
+          "dropped_error_details": {
+            "default": 0,
+            "title": "Dropped Error Details",
+            "type": "integer"
+          },
+          "history_available": {
+            "default": true,
+            "title": "History Available",
+            "type": "boolean"
+          },
+          "history_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History Error"
+          },
+          "truncated_summaries": {
+            "default": 0,
+            "title": "Truncated Summaries",
+            "type": "integer"
+          }
+        },
+        "title": "MonitorSelfView",
+        "type": "object"
+      },
+      "MonitorSeriesPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "cpu_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpu Percent"
+          },
+          "db_capacity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db Capacity"
+          },
+          "db_checked_out": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db Checked Out"
+          },
+          "error_rate": {
+            "default": 0,
+            "title": "Error Rate",
+            "type": "number"
+          },
+          "failed_tasks": {
+            "default": 0,
+            "title": "Failed Tasks",
+            "type": "integer"
+          },
+          "fd_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fd Limit"
+          },
+          "fd_open": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fd Open"
+          },
+          "latency_max_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Max Ms"
+          },
+          "latency_p50_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency P50 Ms"
+          },
+          "latency_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency P95 Ms"
+          },
+          "latency_p99_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency P99 Ms"
+          },
+          "latency_partial": {
+            "default": false,
+            "title": "Latency Partial",
+            "type": "boolean"
+          },
+          "loop_lag_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loop Lag P95 Ms"
+          },
+          "oldest_queue_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Queue Ms"
+          },
+          "queue_queued": {
+            "default": 0,
+            "title": "Queue Queued",
+            "type": "integer"
+          },
+          "queue_running": {
+            "default": 0,
+            "title": "Queue Running",
+            "type": "integer"
+          },
+          "redis_connected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redis Connected"
+          },
+          "redis_ping_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redis Ping Ms"
+          },
+          "request_count": {
+            "default": 0,
+            "title": "Request Count",
+            "type": "integer"
+          },
+          "requests_per_minute": {
+            "default": 0,
+            "title": "Requests Per Minute",
+            "type": "number"
+          },
+          "rss_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rss Bytes"
+          },
+          "rss_peak_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rss Peak Bytes"
+          },
+          "status_5xx": {
+            "default": 0,
+            "title": "Status 5Xx",
+            "type": "integer"
+          },
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          },
+          "unhandled_exceptions": {
+            "default": 0,
+            "title": "Unhandled Exceptions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ts"
+        ],
+        "title": "MonitorSeriesPoint",
+        "type": "object"
+      },
+      "MonitorStatusView": {
+        "additionalProperties": false,
+        "properties": {
+          "collecting": {
+            "default": false,
+            "title": "Collecting",
+            "type": "boolean"
+          },
+          "collection_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Ms"
+          },
+          "config_sync_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Sync Error"
+          },
+          "dropped_error_details": {
+            "default": 0,
+            "title": "Dropped Error Details",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "history_available": {
+            "title": "History Available",
+            "type": "boolean"
+          },
+          "history_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History Error"
+          },
+          "instance_id": {
+            "title": "Instance Id",
+            "type": "string"
+          },
+          "last_sample_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sample At"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "sample_interval_seconds": {
+            "default": 10,
+            "title": "Sample Interval Seconds",
+            "type": "integer"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "stopped_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped At"
+          },
+          "truncated_summaries": {
+            "default": 0,
+            "title": "Truncated Summaries",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "running",
+          "stale",
+          "history_available",
+          "instance_id"
+        ],
+        "title": "MonitorStatusView",
+        "type": "object"
+      },
       "MonitoringLogListView": {
         "additionalProperties": false,
         "properties": {
@@ -15323,6 +16123,27 @@
         "additionalProperties": false,
         "description": "In-memory operation hub occupancy for this worker.",
         "properties": {
+          "cancelled": {
+            "default": 0,
+            "title": "Cancelled",
+            "type": "integer"
+          },
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "oldest_queue_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Queue Ms"
+          },
           "queued": {
             "default": 0,
             "title": "Queued",
@@ -15338,9 +16159,19 @@
             "title": "Running",
             "type": "integer"
           },
+          "submitted": {
+            "default": 0,
+            "title": "Submitted",
+            "type": "integer"
+          },
           "subscribers": {
             "default": 0,
             "title": "Subscribers",
+            "type": "integer"
+          },
+          "succeeded": {
+            "default": 0,
+            "title": "Succeeded",
             "type": "integer"
           },
           "tracked": {
@@ -15412,6 +16243,68 @@
           "elapsed_seconds"
         ],
         "title": "OperationTransferProgress",
+        "type": "object"
+      },
+      "OutboundHttpView": {
+        "additionalProperties": false,
+        "description": "Shared HTTPHelper / download / AI transport totals for one group.",
+        "properties": {
+          "calls": {
+            "default": 0,
+            "title": "Calls",
+            "type": "integer"
+          },
+          "group": {
+            "enum": [
+              "github",
+              "download",
+              "ai",
+              "other"
+            ],
+            "title": "Group",
+            "type": "string"
+          },
+          "network_errors": {
+            "default": 0,
+            "title": "Network Errors",
+            "type": "integer"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Ms"
+          },
+          "retries": {
+            "default": 0,
+            "title": "Retries",
+            "type": "integer"
+          },
+          "status_429": {
+            "default": 0,
+            "title": "Status 429",
+            "type": "integer"
+          },
+          "status_5xx": {
+            "default": 0,
+            "title": "Status 5Xx",
+            "type": "integer"
+          },
+          "timeouts": {
+            "default": 0,
+            "title": "Timeouts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group"
+        ],
+        "title": "OutboundHttpView",
         "type": "object"
       },
       "OverviewSummary": {
@@ -15528,6 +16421,112 @@
         "title": "Page[MarketPluginView]",
         "type": "object"
       },
+      "PanelErrorListView": {
+        "additionalProperties": false,
+        "properties": {
+          "dropped": {
+            "default": 0,
+            "title": "Dropped",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MonitorErrorDetailView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "title": "PanelErrorListView",
+        "type": "object"
+      },
+      "PanelMonitorView": {
+        "additionalProperties": false,
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/MonitorAlertView"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "error_groups": {
+            "items": {
+              "$ref": "#/components/schemas/MonitorErrorGroupView"
+            },
+            "title": "Error Groups",
+            "type": "array"
+          },
+          "instance_id": {
+            "title": "Instance Id",
+            "type": "string"
+          },
+          "instances": {
+            "items": {
+              "$ref": "#/components/schemas/MonitorInstanceView"
+            },
+            "title": "Instances",
+            "type": "array"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/MonitorIntegrityView"
+          },
+          "range": {
+            "enum": [
+              "15m",
+              "1h",
+              "6h",
+              "24h"
+            ],
+            "title": "Range",
+            "type": "string"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/MonitorSeriesPoint"
+            },
+            "title": "Series",
+            "type": "array"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PanelPerformanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/MonitorStatusView"
+          }
+        },
+        "required": [
+          "range",
+          "instance_id",
+          "status",
+          "integrity"
+        ],
+        "title": "PanelMonitorView",
+        "type": "object"
+      },
       "PanelPerformanceSnapshot": {
         "additionalProperties": false,
         "description": "Admin-only panel snapshot. Field order is the export priority order.",
@@ -15553,8 +16552,25 @@
             "title": "Limiters",
             "type": "array"
           },
+          "monitor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonitorSelfView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "operations": {
             "$ref": "#/components/schemas/OperationOccupancyView"
+          },
+          "outbound_http": {
+            "items": {
+              "$ref": "#/components/schemas/OutboundHttpView"
+            },
+            "title": "Outbound Http",
+            "type": "array"
           },
           "priority": {
             "items": {
@@ -18239,6 +19255,17 @@
             "title": "Cpu User Seconds",
             "type": "number"
           },
+          "event_loop_lag_max_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Loop Lag Max Ms"
+          },
           "event_loop_lag_ms": {
             "anyOf": [
               {
@@ -18249,6 +19276,39 @@
               }
             ],
             "title": "Event Loop Lag Ms"
+          },
+          "event_loop_lag_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Loop Lag P95 Ms"
+          },
+          "fd_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fd Limit"
+          },
+          "fd_open": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fd Open"
           },
           "pid": {
             "title": "Pid",
@@ -18959,6 +20019,27 @@
             "title": "Connected",
             "type": "boolean"
           },
+          "failures": {
+            "default": 0,
+            "title": "Failures",
+            "type": "integer"
+          },
+          "monitor_ops": {
+            "default": 0,
+            "title": "Monitor Ops",
+            "type": "integer"
+          },
+          "op_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Op P95 Ms"
+          },
           "ping_ms": {
             "anyOf": [
               {
@@ -18973,6 +20054,11 @@
           "pool_max_connections": {
             "default": 0,
             "title": "Pool Max Connections",
+            "type": "integer"
+          },
+          "timeouts": {
+            "default": 0,
+            "title": "Timeouts",
             "type": "integer"
           }
         },
@@ -19176,13 +20262,33 @@
             "title": "By Route",
             "type": "array"
           },
+          "cancellations": {
+            "default": 0,
+            "title": "Cancellations",
+            "type": "integer"
+          },
           "error_rate": {
             "default": 0,
             "title": "Error Rate",
             "type": "number"
           },
+          "http_count": {
+            "default": 0,
+            "title": "Http Count",
+            "type": "integer"
+          },
+          "in_flight": {
+            "default": 0,
+            "title": "In Flight",
+            "type": "integer"
+          },
           "latency_ms": {
             "$ref": "#/components/schemas/LatencyPercentiles"
+          },
+          "latency_partial": {
+            "default": false,
+            "title": "Latency Partial",
+            "type": "boolean"
           },
           "requests_per_minute": {
             "default": 0,
@@ -19203,9 +20309,44 @@
             "title": "Slow Request Threshold Ms",
             "type": "integer"
           },
+          "sse_count": {
+            "default": 0,
+            "title": "Sse Count",
+            "type": "integer"
+          },
           "status_2xx": {
             "default": 0,
             "title": "Status 2Xx",
+            "type": "integer"
+          },
+          "status_401": {
+            "default": 0,
+            "title": "Status 401",
+            "type": "integer"
+          },
+          "status_403": {
+            "default": 0,
+            "title": "Status 403",
+            "type": "integer"
+          },
+          "status_404": {
+            "default": 0,
+            "title": "Status 404",
+            "type": "integer"
+          },
+          "status_409": {
+            "default": 0,
+            "title": "Status 409",
+            "type": "integer"
+          },
+          "status_422": {
+            "default": 0,
+            "title": "Status 422",
+            "type": "integer"
+          },
+          "status_429": {
+            "default": 0,
+            "title": "Status 429",
             "type": "integer"
           },
           "status_4xx": {
@@ -19216,6 +20357,16 @@
           "status_5xx": {
             "default": 0,
             "title": "Status 5Xx",
+            "type": "integer"
+          },
+          "stream_errors": {
+            "default": 0,
+            "title": "Stream Errors",
+            "type": "integer"
+          },
+          "unhandled_exceptions": {
+            "default": 0,
+            "title": "Unhandled Exceptions",
             "type": "integer"
           },
           "window_seconds": {
@@ -25561,6 +26712,22 @@
         "additionalProperties": false,
         "description": "Non-secret SSH connection-pool snapshot for the console chrome.",
         "properties": {
+          "auth_failures": {
+            "default": 0,
+            "title": "Auth Failures",
+            "type": "integer"
+          },
+          "connect_p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connect P95 Ms"
+          },
           "connections": {
             "default": 0,
             "title": "Connections",
@@ -25604,6 +26771,26 @@
           "max_lifetime": {
             "default": 3600,
             "title": "Max Lifetime",
+            "type": "integer"
+          },
+          "reconnect_attempts": {
+            "default": 0,
+            "title": "Reconnect Attempts",
+            "type": "integer"
+          },
+          "reconnect_failures": {
+            "default": 0,
+            "title": "Reconnect Failures",
+            "type": "integer"
+          },
+          "reuses": {
+            "default": 0,
+            "title": "Reuses",
+            "type": "integer"
+          },
+          "timeouts": {
+            "default": 0,
+            "title": "Timeouts",
             "type": "integer"
           }
         },
@@ -25994,6 +27181,17 @@
               }
             ],
             "title": "Log Level"
+          },
+          "panel_monitoring_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Panel Monitoring Enabled"
           },
           "plugin_download_cache_enabled": {
             "anyOf": [
@@ -26460,6 +27658,17 @@
             ],
             "title": "Log Level"
           },
+          "panel_monitoring_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Panel Monitoring Enabled"
+          },
           "plugin_download_cache_enabled": {
             "default": true,
             "title": "Plugin Download Cache Enabled",
@@ -26877,6 +28086,11 @@
               }
             ],
             "title": "Log Level"
+          },
+          "panel_monitoring_enabled": {
+            "default": true,
+            "title": "Panel Monitoring Enabled",
+            "type": "boolean"
           },
           "plugin_download_cache_bytes": {
             "default": 0,
@@ -34551,6 +35765,238 @@
           }
         ],
         "summary": "Read Panel Performance",
+        "tags": [
+          "v1-diagnostics"
+        ]
+      }
+    },
+    "/api/v1/diagnostics/errors": {
+      "get": {
+        "operationId": "read_panel_errors_api_v1_diagnostics_errors_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "default": "1h",
+              "enum": [
+                "15m",
+                "1h",
+                "6h",
+                "24h"
+              ],
+              "title": "Range",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instance_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instance Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "route",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Route"
+            }
+          },
+          {
+            "in": "query",
+            "name": "operation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelErrorListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Panel Errors",
+        "tags": [
+          "v1-diagnostics"
+        ]
+      }
+    },
+    "/api/v1/diagnostics/monitor": {
+      "get": {
+        "operationId": "read_panel_monitor_api_v1_diagnostics_monitor_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "default": "1h",
+              "enum": [
+                "15m",
+                "1h",
+                "6h",
+                "24h"
+              ],
+              "title": "Range",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instance_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instance Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelMonitorView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Panel Monitor",
         "tags": [
           "v1-diagnostics"
         ]

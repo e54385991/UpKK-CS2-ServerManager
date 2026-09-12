@@ -6,7 +6,11 @@ type Catalog = Record<string, string | Catalog>;
 
 function readCatalog(locale: "en-US" | "zh-CN"): Catalog {
   const url = new URL(`./messages/${locale}.json`, import.meta.url);
-  return JSON.parse(readFileSync(url, "utf8")) as Catalog;
+  const monitorUrl = new URL(`./messages/monitor/${locale}.json`, import.meta.url);
+  const main = JSON.parse(readFileSync(url, "utf8")) as Catalog;
+  const monitor = JSON.parse(readFileSync(monitorUrl, "utf8")) as Catalog;
+  const settings = (main.settings ?? {}) as Catalog;
+  return { ...main, settings: { ...settings, monitor } };
 }
 
 function flatten(catalog: Catalog, prefix = ""): Map<string, string> {

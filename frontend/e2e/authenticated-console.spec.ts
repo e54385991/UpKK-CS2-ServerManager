@@ -562,6 +562,10 @@ test("settings and profile render parity fields", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /系统设置|Settings/ })).toBeVisible();
   const settingsNav = page.getByTestId("settings-category-nav");
   await expect(settingsNav).toBeVisible();
+  await expect(settingsNav.getByRole("link", { name: /系统监控|System monitoring/ })).toHaveAttribute(
+    "href",
+    "#settings-performance",
+  );
   await expect(settingsNav.getByRole("link", { name: /资源下载|Resources & downloads/ })).toHaveAttribute(
     "href",
     "#settings-downloads",
@@ -586,6 +590,10 @@ test("settings and profile render parity fields", async ({ page }) => {
     "href",
     "#settings-transfer",
   );
+  await expect(page.getByTestId("settings-section-performance")).toBeVisible();
+  await expect(page.getByTestId("settings-performance-card")).toBeVisible();
+  await expect(page.getByTestId("settings-section-downloads")).toBeHidden();
+  await settingsNav.getByRole("link", { name: /资源下载|Resources & downloads/ }).click();
   await expect(page.getByTestId("settings-section-downloads")).toBeVisible();
   await expect(page.getByTestId("settings-section-notifications")).toBeHidden();
   await expect(page.getByTestId("settings-section-security")).toBeHidden();

@@ -1194,7 +1194,7 @@
   },
   "settings": {
     "title": "系统设置",
-    "description": "面板级配置：下载代理、全局 GitHub 凭据、邮件投递、系统 AI 与面板性能。",
+    "description": "面板级配置：下载代理、全局 GitHub 凭据、邮件投递、系统 AI 与系统监控。",
     "forbidden": "仅管理员可以查看或修改系统设置。",
     "fetchError": "暂时无法获取系统设置（{status}）。",
   "adminOnly": "仅管理员",
@@ -1205,7 +1205,7 @@
     "notifications": "邮件通知",
     "security": "安全与访问",
     "logging": "日志",
-    "performance": "面板性能",
+    "performance": "系统监控",
     "ai": "AI 助手",
     "transfer": "迁移"
   },
@@ -1227,8 +1227,8 @@
       "description": "控制面板控制台输出的详细程度。"
     },
     "performance": {
-      "title": "面板性能",
-      "description": "当前面板进程的实时指标。可导出 JSON，便于分析延迟、连接池与队列。"
+      "title": "系统监控",
+      "description": "当前面板进程的实时图表：请求延迟、错误、资源占用与最近 24 小时趋势。"
     },
     "downloadCache": {
       "title": "下载缓存",
@@ -1250,43 +1250,6 @@
     "saveFailed": "保存失败，请检查输入后重试。",
     "updatedAt": "上次更新 {time}",
     "neverSaved": "尚未保存过设置。",
-    "performance": {
-      "refresh": "刷新",
-      "export": "导出 JSON",
-      "exporting": "正在导出…",
-      "exportSuccess": "已下载性能快照。",
-      "fetchError": "暂时无法获取面板性能（{status}）。",
-      "capturedAt": "采集于 {time}",
-      "processLocal": "这些数字仅表示当前工作进程，不是集群合计。",
-      "requests": "HTTP 请求",
-      "process": "进程",
-      "database": "数据库连接池",
-      "redis": "Redis",
-      "sshPool": "SSH 连接池",
-      "limiters": "遥测限流",
-      "operations": "操作队列",
-      "runtime": "运行时",
-      "p95": "p95",
-      "errorRate": "5xx 比例",
-      "rpm": "每分钟请求",
-      "rss": "RSS",
-      "loopLag": "事件循环延迟",
-      "tasks": "异步任务",
-      "checkedOut": "已借出",
-      "overflow": "溢出",
-      "ping": "Ping",
-      "connected": "已连接",
-      "disconnected": "未连接",
-      "inUse": "使用中",
-      "leases": "租约",
-      "queued": "排队",
-      "running": "运行中",
-      "pid": "PID",
-      "slow": "最慢路由（阈值 ≥{ms} ms）",
-      "samples": "{seconds} 秒内 {count} 个样本",
-      "route": "路由",
-      "count": "次数"
-    },
     "captcha": {
       "title": "验证码",
       "description": "控制登录、注册和敏感操作是否要求验证码。",

@@ -1,0 +1,128 @@
+{
+  "toggle": "后台采集",
+  "toggleHelp": "关闭后停止本面板的采样、错误收集和历史写入。暂停刷新只影响当前页面。",
+  "toggleError": "无法保存监控开关（{status}）。",
+  "refresh": "刷新",
+  "pause": "暂停刷新",
+  "resume": "恢复刷新",
+  "export": "导出诊断包",
+  "exportSuccess": "已下载监控导出。",
+  "fetchError": "暂时无法加载系统监控（{status}）。",
+  "loading": "正在加载监控…",
+  "healthy": "运行正常",
+  "watch": "需要关注",
+  "critical": "严重",
+  "disabled": "监控已关闭",
+  "stale": "数据已过期",
+  "historyUnavailable": "历史存储不可用",
+  "collecting": "正在采集首批样本",
+  "lastSample": "最近采样 {time}",
+  "stoppedAt": "采集已于 {time} 停止。图中数值是历史，不是当前状态。",
+  "alertCount": "{count} 条异常",
+  "currentInstance": "（当前进程）",
+  "kpiP95": "请求 P95",
+  "kpiError": "5xx 错误率",
+  "kpiCpu": "CPU",
+  "kpiRss": "RSS",
+  "kpiFailed": "失败任务",
+  "failedHint": "本桶内新失败的后台任务",
+  "p95Peak": "桶内 P95 峰值，不是平均值",
+  "gap": "该范围内存在数据断档，曲线会断开，不会补零。",
+  "partialLatency": "延迟统计使用了部分样本，百分位可能偏低。",
+  "errorHint": "最近桶内 {count} 个 5xx",
+  "cpuHint": "单核 100%",
+  "rssHint": "峰值 {peak}",
+  "kpiRpm": "{value} 请求/分钟",
+  "chartLatency": "请求延迟",
+  "chartTraffic": "请求速率",
+  "chartErrors": "5xx 响应",
+  "chartUnhandled": "未处理异常",
+  "chartCpu": "进程 CPU",
+  "chartRss": "进程内存",
+  "chartLoop": "事件循环延迟",
+  "chartDb": "数据库连接池",
+  "chartRedis": "Redis 延迟",
+  "chartQueue": "排队任务",
+  "chartFailedTasks": "失败任务",
+  "unitRpm": "请求/分钟",
+  "unitCount": "次数",
+  "errors": "错误中心",
+  "errorsEmpty": "该时间范围内没有脱敏错误详情。",
+  "filterAll": "全部",
+  "filterSeverity": "级别",
+  "errorSource": "来源",
+  "errorCount": "次数",
+  "errorSummary": "摘要",
+  "errorIds": "关联 ID",
+  "slowRoutes": "最慢接口",
+  "inFlight": "处理中请求",
+  "statusMix": "2xx / 4xx / 5xx",
+  "unhandledCount": "未处理异常",
+  "cancellations": "取消 / 断开",
+  "fd": "文件描述符",
+  "borrowers": "限流执行及等待",
+  "redis": "Redis",
+  "connected": "已连接",
+  "disconnected": "未连接",
+  "dbPool": "数据库连接池",
+  "ssh": "SSH 连接池",
+  "outbound": "外部 HTTP",
+  "queued": "排队",
+  "running": "运行中",
+  "failed": "失败",
+  "oldest": "最老排队",
+  "range": {
+    "15m": "15 分钟",
+    "1h": "1 小时",
+    "6h": "6 小时",
+    "24h": "24 小时"
+  },
+  "views": {
+    "overview": "总览",
+    "requests": "请求与错误",
+    "resources": "依赖与资源",
+    "tasks": "任务与后台"
+  },
+  "alerts": {
+    "stale": {
+      "title": "监控数据已过期",
+      "guidance": "确认面板进程仍在运行，采集任务没有卡住。"
+    },
+    "request_p95": {
+      "title": "请求 P95 偏高",
+      "guidance": "对照同一时间段的慢接口、事件循环延迟和数据库／Redis 延迟。"
+    },
+    "http_5xx": {
+      "title": "出现 5xx 响应",
+      "guidance": "按接口筛选错误中心，确认是否集中在同一条路由。"
+    },
+    "loop_lag": {
+      "title": "事件循环延迟偏高",
+      "guidance": "排查阻塞式 I/O 和过长的 CPU 占用。"
+    },
+    "db_pool": {
+      "title": "数据库连接池压力高",
+      "guidance": "容量已计入溢出连接。关注慢查询和并发占用。"
+    },
+    "fd": {
+      "title": "文件描述符占用高",
+      "guidance": "检查 SSH、HTTP 和数据库连接是否在泄漏。"
+    },
+    "redis": {
+      "title": "Redis 已断开",
+      "guidance": "检查 Redis 连通性、凭据和配置的主机／端口。"
+    },
+    "unhandled": {
+      "title": "出现未处理请求异常",
+      "guidance": "打开错误中心，查看关联的请求 ID 和调用位置。"
+    },
+    "failed_tasks": {
+      "title": "后台任务失败",
+      "guidance": "打开任务托盘或对应操作日志查看失败原因。"
+    },
+    "log_errors": {
+      "title": "后台 ERROR 日志增多",
+      "guidance": "查看错误中心的脱敏摘要；其中不含请求体。"
+    }
+  }
+}

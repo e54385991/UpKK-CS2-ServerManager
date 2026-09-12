@@ -1,8 +1,11 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { getTranslations } from "next-intl/server";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { requireSession } from "@/modules/auth/render-session";
-import { SettingsPanel, SettingsPanelSkeleton } from "@/modules/settings/settings-panel";
+import { withMonitorMessages } from "@/i18n/monitor-messages";
+import { SettingsPanel } from "@/modules/settings/settings-panel";
+import { SettingsPanelSkeleton } from "@/modules/settings/settings-panel-skeleton";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Badge } from "@/shared/ui/badge";
 import { Card } from "@/shared/ui/card";
@@ -15,9 +18,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function SettingsPage() {
-  const [session, t] = await Promise.all([
+  const [session, t, locale, messages] = await Promise.all([
     requireSession(),
     getTranslations("settings"),
+    getLocale(),
+    getMessages(),
   ]);
 
   if (!session.isAdmin) {
@@ -31,8 +36,10 @@ export default async function SettingsPage() {
     );
   }
 
+  const monitorMessages = await withMonitorMessages(locale, messages);
+
   return (
-    <>
+    <NextIntlClientProvider locale={locale} messages={monitorMessages}>
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -41,6 +48,6 @@ export default async function SettingsPage() {
       <Suspense fallback={<SettingsPanelSkeleton />}>
         <SettingsPanel />
       </Suspense>
-    </>
+    </NextIntlClientProvider>
   );
 }

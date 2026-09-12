@@ -13,6 +13,8 @@ from typing import Any, Dict, Optional, Tuple
 import anyio
 import httpx
 
+from modules.observability.http import record_outbound_http
+
 logger = logging.getLogger(__name__)
 
 # GitHub URL patterns for proxy detection
@@ -144,11 +146,13 @@ class HTTPHelper:
         attempts = MAX_RETRIES if retries is None else max(1, int(retries))
 
         for attempt in range(attempts):
+            attempt_start = time.perf_counter()
             try:
                 if attempt > 0:
                     delay = RETRY_DELAY * (2 ** (attempt - 1))  # Exponential backoff
                     logger.info(f"Retry attempt {attempt + 1}/{attempts} after {delay}s delay...")
                     await asyncio.sleep(delay)
+                    record_outbound_http(url, 0, retry=True)
 
                 # Add GitHub token to headers if provided and URL is a GitHub API request
                 request_headers = headers.copy() if headers else {}
@@ -193,15 +197,30 @@ class HTTPHelper:
                     try:
                         response_data = response.json()
                         logger.debug(f"Request successful: {response.status_code}")
+                        record_outbound_http(
+                            url,
+                            (time.perf_counter() - attempt_start) * 1000,
+                            status=response.status_code,
+                        )
                         return True, response_data, None
                     except Exception as e:
                         # If JSON parsing fails, return the text response
                         logger.warning(f"Failed to parse JSON response: {e}")
+                        record_outbound_http(
+                            url,
+                            (time.perf_counter() - attempt_start) * 1000,
+                            status=response.status_code,
+                        )
                         return True, {"text": response.text}, None
                 else:
                     error_msg = f"HTTP {response.status_code}: {response.text}"
                     logger.error(f"Request failed: {error_msg}")
                     last_error = error_msg
+                    record_outbound_http(
+                        url,
+                        (time.perf_counter() - attempt_start) * 1000,
+                        status=response.status_code,
+                    )
                     # Don't retry on 4xx errors (client errors)
                     if 400 <= response.status_code < 500:
                         return False, None, error_msg
@@ -212,6 +231,9 @@ class HTTPHelper:
                 error_msg = f"Request timeout: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
+                record_outbound_http(
+                    url, (time.perf_counter() - attempt_start) * 1000, timeout=True
+                )
                 # Retry on timeout
                 continue
 
@@ -219,6 +241,9 @@ class HTTPHelper:
                 error_msg = f"Request error: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
+                record_outbound_http(
+                    url, (time.perf_counter() - attempt_start) * 1000, network=True
+                )
                 # Retry on network errors
                 continue
 
@@ -343,6 +368,7 @@ class HTTPHelper:
         last_event_at = 0.0
 
         for attempt in range(MAX_RETRIES):
+            attempt_start = time.perf_counter()
             try:
                 if attempt > 0:
                     delay = RETRY_DELAY * (2 ** (attempt - 1))  # Exponential backoff
@@ -350,6 +376,7 @@ class HTTPHelper:
                         f"Retry attempt {attempt + 1}/{MAX_RETRIES} after {delay}s delay..."
                     )
                     await asyncio.sleep(delay)
+                    record_outbound_http(url, 0, group="download", retry=True)
 
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -427,12 +454,24 @@ class HTTPHelper:
                                 retry_count=attempt,
                                 force=True,
                             )
+                            record_outbound_http(
+                                url,
+                                (time.perf_counter() - attempt_start) * 1000,
+                                group="download",
+                                status=response.status_code,
+                            )
                             return True, None
                         error_body = await response.aread()
                         error_text = error_body.decode("utf-8", errors="ignore")[:500]
                         error_msg = f"HTTP {response.status_code}: {error_text}"
                         logger.error(f"Download failed: {error_msg}")
                         last_error = error_msg
+                        record_outbound_http(
+                            url,
+                            (time.perf_counter() - attempt_start) * 1000,
+                            group="download",
+                            status=response.status_code,
+                        )
                         if 400 <= response.status_code < 500:
                             return False, error_msg
                         last_event_at = await _emit_retry_progress(
@@ -447,6 +486,12 @@ class HTTPHelper:
                 error_msg = f"Download timeout: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
+                record_outbound_http(
+                    url,
+                    (time.perf_counter() - attempt_start) * 1000,
+                    group="download",
+                    timeout=True,
+                )
                 last_event_at = await _emit_retry_progress(
                     progress_event_callback,
                     started_at=started_at,
@@ -460,6 +505,12 @@ class HTTPHelper:
                 error_msg = f"Download error: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
+                record_outbound_http(
+                    url,
+                    (time.perf_counter() - attempt_start) * 1000,
+                    group="download",
+                    network=True,
+                )
                 last_event_at = await _emit_retry_progress(
                     progress_event_callback,
                     started_at=started_at,

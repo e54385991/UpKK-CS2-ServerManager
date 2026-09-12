@@ -1,0 +1,128 @@
+{
+  "toggle": "Background collection",
+  "toggleHelp": "Turns off sampling, error capture, and history writes on this panel. Pause only stops this page from refreshing.",
+  "toggleError": "Could not save the monitoring switch ({status}).",
+  "refresh": "Refresh",
+  "pause": "Pause refresh",
+  "resume": "Resume refresh",
+  "export": "Export diagnostics",
+  "exportSuccess": "Monitor export downloaded.",
+  "fetchError": "Unable to load system monitoring ({status}).",
+  "loading": "Loading monitoring…",
+  "healthy": "Healthy",
+  "watch": "Needs attention",
+  "critical": "Critical",
+  "disabled": "Monitoring is off",
+  "stale": "Data is stale",
+  "historyUnavailable": "History storage unavailable",
+  "collecting": "Collecting first samples",
+  "lastSample": "Last sample {time}",
+  "stoppedAt": "Collection stopped at {time}. Charts are history, not the current state.",
+  "alertCount": "{count} alerts",
+  "currentInstance": " (this process)",
+  "kpiP95": "Request p95",
+  "kpiError": "5xx rate",
+  "kpiCpu": "CPU",
+  "kpiRss": "RSS",
+  "kpiFailed": "Failed tasks",
+  "failedHint": "New background-task failures in this bucket",
+  "p95Peak": "Bucket p95 peak, not an average",
+  "gap": "This range has gaps; the line breaks instead of filling zeros.",
+  "partialLatency": "Latency stats used a partial sample, so percentiles may be low.",
+  "errorHint": "{count} 5xx in the latest bucket",
+  "cpuHint": "Single-core 100%",
+  "rssHint": "Peak {peak}",
+  "kpiRpm": "{value} req/min",
+  "chartLatency": "Request latency",
+  "chartTraffic": "Request rate",
+  "chartErrors": "5xx responses",
+  "chartUnhandled": "Unhandled exceptions",
+  "chartCpu": "Process CPU",
+  "chartRss": "Process memory",
+  "chartLoop": "Event-loop lag",
+  "chartDb": "Database pool",
+  "chartRedis": "Redis latency",
+  "chartQueue": "Queued jobs",
+  "chartFailedTasks": "Failed tasks",
+  "unitRpm": "req/min",
+  "unitCount": "count",
+  "errors": "Error center",
+  "errorsEmpty": "No redacted error details in this range.",
+  "filterAll": "All",
+  "filterSeverity": "Severity",
+  "errorSource": "Source",
+  "errorCount": "Count",
+  "errorSummary": "Summary",
+  "errorIds": "IDs",
+  "slowRoutes": "Slowest routes",
+  "inFlight": "In-flight requests",
+  "statusMix": "2xx / 4xx / 5xx",
+  "unhandledCount": "Unhandled exceptions",
+  "cancellations": "Cancels / disconnects",
+  "fd": "File descriptors",
+  "borrowers": "Limiter executing + waiting",
+  "redis": "Redis",
+  "connected": "Connected",
+  "disconnected": "Disconnected",
+  "dbPool": "DB pool",
+  "ssh": "SSH pool",
+  "outbound": "Outbound HTTP",
+  "queued": "Queued",
+  "running": "Running",
+  "failed": "Failed",
+  "oldest": "Oldest wait",
+  "range": {
+    "15m": "15 min",
+    "1h": "1 hour",
+    "6h": "6 hours",
+    "24h": "24 hours"
+  },
+  "views": {
+    "overview": "Overview",
+    "requests": "Requests & errors",
+    "resources": "Dependencies & resources",
+    "tasks": "Tasks & background"
+  },
+  "alerts": {
+    "stale": {
+      "title": "Monitoring data is stale",
+      "guidance": "Confirm the panel process is running and the collector has not stalled."
+    },
+    "request_p95": {
+      "title": "Request p95 is elevated",
+      "guidance": "Inspect slow routes, event-loop lag, and database/Redis latency on the same timeline."
+    },
+    "http_5xx": {
+      "title": "5xx responses observed",
+      "guidance": "Filter the error center by request source and inspect the slow-route table."
+    },
+    "loop_lag": {
+      "title": "Event-loop lag is elevated",
+      "guidance": "Look for blocking I/O on the event loop and long CPU stretches in this worker."
+    },
+    "db_pool": {
+      "title": "Database pool occupancy is high",
+      "guidance": "Capacity includes overflow connections. Watch slow SQL and concurrent checkout."
+    },
+    "fd": {
+      "title": "File descriptor usage is high",
+      "guidance": "Inspect SSH, HTTP, and database connection leaks."
+    },
+    "redis": {
+      "title": "Redis is disconnected",
+      "guidance": "Check Redis connectivity, credentials, and the configured host/port."
+    },
+    "unhandled": {
+      "title": "Unhandled request exceptions",
+      "guidance": "Open the error center and inspect the associated request ID and frames."
+    },
+    "failed_tasks": {
+      "title": "Background tasks failed",
+      "guidance": "Open the activity tray or the matching operation log for the failed job."
+    },
+    "log_errors": {
+      "title": "Background ERROR logs",
+      "guidance": "Review the error center summaries; they are redacted and do not include bodies."
+    }
+  }
+}

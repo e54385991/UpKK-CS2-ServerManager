@@ -2796,6 +2796,22 @@
     "methods": [
       "GET"
     ],
+    "name": "read_panel_monitor",
+    "path": "/api/v1/diagnostics/monitor"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "read_panel_errors",
+    "path": "/api/v1/diagnostics/errors"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "get_maps_workspace",
     "path": "/api/v1/servers/{server_id}/maps"
   },

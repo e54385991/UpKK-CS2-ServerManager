@@ -27,7 +27,7 @@ class A2SCacheService:
 
     def __init__(self):
         self._probe_limiter = KeyedConcurrencyLimiter[int](
-            global_limit=MAX_CONCURRENT_A2S_QUERIES, per_key_limit=1
+            global_limit=MAX_CONCURRENT_A2S_QUERIES, per_key_limit=1, name="a2s"
         )
         self.query_interval = 30  # Query every 30 seconds
         # A full scan is a bounded background operation.  A slow or unreachable

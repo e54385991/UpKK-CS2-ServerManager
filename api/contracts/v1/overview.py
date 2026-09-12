@@ -157,6 +157,12 @@ class SshPoolView(V1Model):
     max_lifetime: int = 3600
     keepalive_interval: int = 30
     keepalive_count_max: int = 3
+    connect_p95_ms: float | None = None
+    reuses: int = 0
+    auth_failures: int = 0
+    timeouts: int = 0
+    reconnect_attempts: int = 0
+    reconnect_failures: int = 0
 
 
 class AuditEntry(V1Model):

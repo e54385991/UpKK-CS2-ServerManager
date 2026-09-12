@@ -300,3 +300,15 @@ async def test_list_for_server_and_lost_pending_worker(hub):
     hub._records["lost"] = _record("lost", server_id=2)
     await hub._promote_next(2, "finished")
     assert hub._records["lost"]["status"] == "failed"
+
+
+def test_occupancy_reports_oldest_queue_wait():
+    hub = module.ServerOperationHub()
+    started = datetime.now(timezone.utc) - timedelta(seconds=12)
+    hub._records["queued-op"] = _record("queued-op", started_at=started.isoformat())
+    hub._pending[1] = ["queued-op"]
+    snapshot = hub.occupancy_snapshot()
+    assert snapshot["queued"] == 1
+    assert snapshot["running"] == 0
+    assert snapshot["oldest_queue_ms"] is not None
+    assert snapshot["oldest_queue_ms"] >= 11_000

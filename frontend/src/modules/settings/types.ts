@@ -51,6 +51,7 @@ export type SystemSettings = {
   readonly pluginDownloadCacheBytes: number;
   readonly pluginDownloadCacheMaxAgeDays: number;
   readonly pluginDownloadCacheMaxMegabytes: number;
+  readonly panelMonitoringEnabled: boolean;
   readonly captchaEnabled: boolean;
   readonly registrationEnabled: boolean;
   readonly clientIpHeader: string | null;
@@ -81,6 +82,7 @@ export type SettingsPatch = {
   readonly pluginDownloadCachePath?: string | null;
   readonly pluginDownloadCacheMaxAgeDays?: number;
   readonly pluginDownloadCacheMaxMegabytes?: number;
+  readonly panelMonitoringEnabled?: boolean;
   readonly captchaEnabled?: boolean;
   readonly registrationEnabled?: boolean;
   readonly clientIpHeader?: string | null;

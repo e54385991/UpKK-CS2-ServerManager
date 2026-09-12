@@ -218,11 +218,18 @@ def request_metrics_payload(samples: list[RequestSample]) -> dict[str, object]:
         "status_2xx": status_2xx,
         "status_4xx": status_4xx,
         "status_5xx": status_5xx,
+        "status_401": sum(1 for sample in samples if sample.status == 401),
+        "status_403": sum(1 for sample in samples if sample.status == 403),
+        "status_404": sum(1 for sample in samples if sample.status == 404),
+        "status_409": sum(1 for sample in samples if sample.status == 409),
+        "status_422": sum(1 for sample in samples if sample.status == 422),
+        "status_429": sum(1 for sample in samples if sample.status == 429),
         "error_rate": (status_5xx / count) if count else 0.0,
         "latency_ms": _latency_block(durations),
         "slow_request_count": sum(1 for sample in samples if sample.duration_ms >= SLOW_REQUEST_MS),
         "slow_request_threshold_ms": SLOW_REQUEST_MS,
         "by_route": _route_rows(samples),
+        "latency_partial": count >= SAMPLE_LIMIT,
     }
 
 
@@ -252,6 +259,7 @@ def _asyncio_task_count() -> int | None:
 
 def process_metrics_payload() -> dict[str, object]:
     usage = resource.getrusage(resource.RUSAGE_SELF)
+    fd_open, fd_limit = fd_usage()
     return {
         "pid": os.getpid(),
         "uptime_seconds": max(0.0, monotonic() - metrics_store.started_monotonic),
@@ -262,18 +270,40 @@ def process_metrics_payload() -> dict[str, object]:
         "threads": threading.active_count(),
         "asyncio_tasks": _asyncio_task_count(),
         "event_loop_lag_ms": metrics_store.loop_lag_latest(),
+        "fd_open": fd_open,
+        "fd_limit": fd_limit,
     }
+
+
+def fd_usage() -> tuple[int | None, int | None]:
+    try:
+        used = len(os.listdir("/proc/self/fd"))
+    except OSError:
+        used = None
+    try:
+        soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        limit = None if soft == resource.RLIM_INFINITY else int(soft)
+    except OSError, ValueError:
+        limit = None
+    return used, limit
 
 
 def database_pool_payload() -> dict[str, object]:
     settings = get_settings()
     pool = engine.sync_engine.pool
+    pool_size = settings.DB_POOL_SIZE
+    max_overflow = settings.DB_MAX_OVERFLOW
     return {
-        "pool_size": settings.DB_POOL_SIZE,
-        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_size": pool_size,
+        "max_overflow": max_overflow,
+        "capacity": pool_size + max_overflow,
         "checked_out": _pool_metric(pool, "checkedout"),
         "checked_in": _pool_metric(pool, "checkedin"),
         "overflow": _pool_metric(pool, "overflow"),
+        "invalidations": 0,
+        "slow_executions": 0,
+        "errors": 0,
+        "execute_p95_ms": None,
     }
 
 
@@ -291,12 +321,17 @@ def _pool_metric(pool: object, name: str) -> int | None:
 
 
 def limiter_payload(name: str, snapshot: dict[str, int]) -> dict[str, object]:
+    borrowers = int(snapshot.get("borrowers") or 0)
+    executing = int(snapshot.get("executing") or 0)
+    waiting = int(snapshot.get("waiting") or max(0, borrowers - executing))
     return {
         "name": name,
         "global_limit": int(snapshot.get("global_limit") or 0),
         "per_key_limit": int(snapshot.get("per_key_limit") or 0),
         "active_keys": int(snapshot.get("active_keys") or 0),
-        "borrowers": int(snapshot.get("borrowers") or 0),
+        "borrowers": borrowers,
+        "executing": executing,
+        "waiting": waiting,
     }
 
 
@@ -361,7 +396,12 @@ async def _loop_lag_loop(stop: asyncio.Event) -> None:
             return
         except TimeoutError:
             delay = loop.time() - started - LOOP_LAG_INTERVAL_SECONDS
-            metrics_store.record_loop_lag(delay * 1000)
+            lag_ms = delay * 1000
+            metrics_store.record_loop_lag(lag_ms)
+            from modules.observability import is_enabled, record_loop_lag
+
+            if is_enabled():
+                record_loop_lag(lag_ms)
 
 
 async def start_loop_sampler() -> None:

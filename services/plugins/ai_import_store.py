@@ -22,6 +22,7 @@ from modules.models import (
     SystemSettings,
     User,
 )
+from modules.observability import record_error, record_task
 from modules.plugin_ai import (
     DiscoveryProgress,
     GitHubVerification,
@@ -44,6 +45,24 @@ FAILED_RETENTION = timedelta(days=7)
 COMPLETED_RETENTION = timedelta(hours=24)
 WORKER_LOCK = "plugin_import:worker"
 worker_lease: ContextVar[str | None] = ContextVar("plugin_import_worker_lease", default=None)
+
+
+def _observe_import_status(status: str, message: str, job_id: str) -> None:
+    if status == "completed":
+        record_task("succeeded")
+        return
+    if status == "cancelled":
+        record_task("cancelled")
+        return
+    if status != "failed":
+        return
+    record_task("failed")
+    record_error(
+        source="task",
+        summary=message,
+        error_code="ai_import_failed",
+        operation_id=job_id,
+    )
 
 
 async def check_lease() -> None:
@@ -258,6 +277,7 @@ async def enqueue(actor_id: int, options: ImportOptions, request_id: UUID) -> Jo
             db.add(job)
             await db.commit()
             await db.refresh(job)
+            record_task("submitted")
             return snapshot(job)
     finally:
         await redis_manager.release_lock("plugin_import:enqueue", lease)
@@ -378,6 +398,7 @@ async def cancel_job(job_id: str, actor_id: int) -> JobSnapshot:
             if job.status == "queued":
                 job.status, job.stop_reason, job.completed_at = "cancelled", "cancelled", now()
                 append_event(job, "cancelled", "Cancelled before execution")
+                record_task("cancelled")
             db.add(job)
             await db.commit()
             await db.refresh(job)
@@ -420,8 +441,10 @@ async def update_job(
             job.status = status
             if status == "running":
                 job.started_at = now()
+                record_task("running")
             else:
                 job.completed_at, job.stop_reason, job.retry_at = now(), reason, retry_at
+                _observe_import_status(status, message, job_id)
         db.add(job)
         await db.commit()
 

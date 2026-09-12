@@ -2396,6 +2396,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/diagnostics/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Panel Errors */
+        get: operations["read_panel_errors_api_v1_diagnostics_errors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/monitor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Panel Monitor */
+        get: operations["read_panel_monitor_api_v1_diagnostics_monitor_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/discord": {
         parameters: {
             query?: never;
@@ -9413,16 +9447,38 @@ export interface components {
          * @description SQLAlchemy pool occupancy for this worker. None when the pool has no gauge.
          */
         DatabasePoolView: {
+            /**
+             * Capacity
+             * @default 0
+             */
+            capacity: number;
             /** Checked In */
             checked_in?: number | null;
             /** Checked Out */
             checked_out?: number | null;
+            /**
+             * Errors
+             * @default 0
+             */
+            errors: number;
+            /** Execute P95 Ms */
+            execute_p95_ms?: number | null;
+            /**
+             * Invalidations
+             * @default 0
+             */
+            invalidations: number;
             /** Max Overflow */
             max_overflow: number;
             /** Overflow */
             overflow?: number | null;
             /** Pool Size */
             pool_size: number;
+            /**
+             * Slow Executions
+             * @default 0
+             */
+            slow_executions: number;
         };
         /**
          * DependencyInfo
@@ -11858,12 +11914,24 @@ export interface components {
              * @default 0
              */
             borrowers: number;
+            /**
+             * Executing
+             * @default 0
+             */
+            executing: number;
             /** Global Limit */
             global_limit: number;
             /** Name */
             name: string;
             /** Per Key Limit */
             per_key_limit: number;
+            /** Wait P95 Ms */
+            wait_p95_ms?: number | null;
+            /**
+             * Waiting
+             * @default 0
+             */
+            waiting: number;
         };
         /**
          * LinuxRuntimeProfile
@@ -12780,6 +12848,302 @@ export interface components {
             /** Version */
             version?: string | null;
         };
+        /** MonitorAlertView */
+        MonitorAlertView: {
+            /** Detail */
+            detail: string;
+            /** Guidance */
+            guidance: string;
+            /** Id */
+            id: string;
+            /** Metric */
+            metric: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "watch" | "critical";
+            /** Since */
+            since?: string | null;
+            /** Threshold */
+            threshold: string;
+            /** Title */
+            title: string;
+            /** Value */
+            value?: number | null;
+        };
+        /** MonitorErrorDetailView */
+        MonitorErrorDetailView: {
+            /** Error Code */
+            error_code: string;
+            /** Exception Type */
+            exception_type: string;
+            /** Frames */
+            frames?: components["schemas"]["MonitorFrameView"][];
+            /** Id */
+            id: string;
+            /** Operation Id */
+            operation_id?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Route */
+            route?: string | null;
+            /** Severity */
+            severity: string;
+            /** Source */
+            source: string;
+            /** Summary */
+            summary: string;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+        };
+        /** MonitorErrorGroupView */
+        MonitorErrorGroupView: {
+            /**
+             * Count
+             * @default 0
+             */
+            count: number;
+            /** Error Code */
+            error_code?: string | null;
+            /** Exception Type */
+            exception_type?: string | null;
+            /** First Ts */
+            first_ts?: string | null;
+            /** Frames */
+            frames?: components["schemas"]["MonitorFrameView"][];
+            /** Last Ts */
+            last_ts?: string | null;
+            /** Operation Id */
+            operation_id?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Route */
+            route?: string | null;
+            /** Severity */
+            severity?: string | null;
+            /** Source */
+            source?: string | null;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+        };
+        /** MonitorFrameView */
+        MonitorFrameView: {
+            /** File */
+            file: string;
+            /** Function */
+            function: string;
+            /**
+             * Line
+             * @default 0
+             */
+            line: number;
+        };
+        /** MonitorInstanceView */
+        MonitorInstanceView: {
+            /**
+             * Current
+             * @default false
+             */
+            current: boolean;
+            /** Instance Id */
+            instance_id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+        };
+        /** MonitorIntegrityView */
+        MonitorIntegrityView: {
+            /**
+             * Display Bucket Seconds
+             * @default 30
+             */
+            display_bucket_seconds: number;
+            /**
+             * Gap
+             * @default false
+             */
+            gap: boolean;
+            /**
+             * Partial Latency
+             * @default false
+             */
+            partial_latency: boolean;
+            /**
+             * Point Count
+             * @default 0
+             */
+            point_count: number;
+            /**
+             * Sample Interval Seconds
+             * @default 10
+             */
+            sample_interval_seconds: number;
+        };
+        /**
+         * MonitorSelfView
+         * @description Integrity of the collector itself.
+         */
+        MonitorSelfView: {
+            /** Collection Ms */
+            collection_ms?: number | null;
+            /**
+             * Dropped Error Details
+             * @default 0
+             */
+            dropped_error_details: number;
+            /**
+             * History Available
+             * @default true
+             */
+            history_available: boolean;
+            /** History Error */
+            history_error?: string | null;
+            /**
+             * Truncated Summaries
+             * @default 0
+             */
+            truncated_summaries: number;
+        };
+        /** MonitorSeriesPoint */
+        MonitorSeriesPoint: {
+            /** Cpu Percent */
+            cpu_percent?: number | null;
+            /** Db Capacity */
+            db_capacity?: number | null;
+            /** Db Checked Out */
+            db_checked_out?: number | null;
+            /**
+             * Error Rate
+             * @default 0
+             */
+            error_rate: number;
+            /**
+             * Failed Tasks
+             * @default 0
+             */
+            failed_tasks: number;
+            /** Fd Limit */
+            fd_limit?: number | null;
+            /** Fd Open */
+            fd_open?: number | null;
+            /** Latency Max Ms */
+            latency_max_ms?: number | null;
+            /** Latency P50 Ms */
+            latency_p50_ms?: number | null;
+            /** Latency P95 Ms */
+            latency_p95_ms?: number | null;
+            /** Latency P99 Ms */
+            latency_p99_ms?: number | null;
+            /**
+             * Latency Partial
+             * @default false
+             */
+            latency_partial: boolean;
+            /** Loop Lag P95 Ms */
+            loop_lag_p95_ms?: number | null;
+            /** Oldest Queue Ms */
+            oldest_queue_ms?: number | null;
+            /**
+             * Queue Queued
+             * @default 0
+             */
+            queue_queued: number;
+            /**
+             * Queue Running
+             * @default 0
+             */
+            queue_running: number;
+            /** Redis Connected */
+            redis_connected?: boolean | null;
+            /** Redis Ping Ms */
+            redis_ping_ms?: number | null;
+            /**
+             * Request Count
+             * @default 0
+             */
+            request_count: number;
+            /**
+             * Requests Per Minute
+             * @default 0
+             */
+            requests_per_minute: number;
+            /** Rss Bytes */
+            rss_bytes?: number | null;
+            /** Rss Peak Bytes */
+            rss_peak_bytes?: number | null;
+            /**
+             * Status 5Xx
+             * @default 0
+             */
+            status_5xx: number;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+            /**
+             * Unhandled Exceptions
+             * @default 0
+             */
+            unhandled_exceptions: number;
+        };
+        /** MonitorStatusView */
+        MonitorStatusView: {
+            /**
+             * Collecting
+             * @default false
+             */
+            collecting: boolean;
+            /** Collection Ms */
+            collection_ms?: number | null;
+            /** Config Sync Error */
+            config_sync_error?: string | null;
+            /**
+             * Dropped Error Details
+             * @default 0
+             */
+            dropped_error_details: number;
+            /** Enabled */
+            enabled: boolean;
+            /** History Available */
+            history_available: boolean;
+            /** History Error */
+            history_error?: string | null;
+            /** Instance Id */
+            instance_id: string;
+            /** Last Sample At */
+            last_sample_at?: string | null;
+            /** Running */
+            running: boolean;
+            /**
+             * Sample Interval Seconds
+             * @default 10
+             */
+            sample_interval_seconds: number;
+            /** Stale */
+            stale: boolean;
+            /** Stopped At */
+            stopped_at?: string | null;
+            /**
+             * Truncated Summaries
+             * @default 0
+             */
+            truncated_summaries: number;
+        };
         /** MonitoringLogListView */
         MonitoringLogListView: {
             /** Items */
@@ -12925,6 +13289,18 @@ export interface components {
          */
         OperationOccupancyView: {
             /**
+             * Cancelled
+             * @default 0
+             */
+            cancelled: number;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /** Oldest Queue Ms */
+            oldest_queue_ms?: number | null;
+            /**
              * Queued
              * @default 0
              */
@@ -12940,10 +13316,20 @@ export interface components {
              */
             running: number;
             /**
+             * Submitted
+             * @default 0
+             */
+            submitted: number;
+            /**
              * Subscribers
              * @default 0
              */
             subscribers: number;
+            /**
+             * Succeeded
+             * @default 0
+             */
+            succeeded: number;
             /**
              * Tracked
              * @default 0
@@ -12973,6 +13359,49 @@ export interface components {
             retry_count: number;
             /** Total Bytes */
             total_bytes?: number | null;
+        };
+        /**
+         * OutboundHttpView
+         * @description Shared HTTPHelper / download / AI transport totals for one group.
+         */
+        OutboundHttpView: {
+            /**
+             * Calls
+             * @default 0
+             */
+            calls: number;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "github" | "download" | "ai" | "other";
+            /**
+             * Network Errors
+             * @default 0
+             */
+            network_errors: number;
+            /** P95 Ms */
+            p95_ms?: number | null;
+            /**
+             * Retries
+             * @default 0
+             */
+            retries: number;
+            /**
+             * Status 429
+             * @default 0
+             */
+            status_429: number;
+            /**
+             * Status 5Xx
+             * @default 0
+             */
+            status_5xx: number;
+            /**
+             * Timeouts
+             * @default 0
+             */
+            timeouts: number;
         };
         /**
          * OverviewSummary
@@ -13030,6 +13459,44 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** PanelErrorListView */
+        PanelErrorListView: {
+            /**
+             * Dropped
+             * @default 0
+             */
+            dropped: number;
+            /** Items */
+            items?: components["schemas"]["MonitorErrorDetailView"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /** PanelMonitorView */
+        PanelMonitorView: {
+            /** Alerts */
+            alerts?: components["schemas"]["MonitorAlertView"][];
+            /** Error Groups */
+            error_groups?: components["schemas"]["MonitorErrorGroupView"][];
+            /** Instance Id */
+            instance_id: string;
+            /** Instances */
+            instances?: components["schemas"]["MonitorInstanceView"][];
+            integrity: components["schemas"]["MonitorIntegrityView"];
+            /**
+             * Range
+             * @enum {string}
+             */
+            range: "15m" | "1h" | "6h" | "24h";
+            /** Series */
+            series?: components["schemas"]["MonitorSeriesPoint"][];
+            snapshot?: components["schemas"]["PanelPerformanceSnapshot"] | null;
+            status: components["schemas"]["MonitorStatusView"];
+        };
         /**
          * PanelPerformanceSnapshot
          * @description Admin-only panel snapshot. Field order is the export priority order.
@@ -13049,7 +13516,10 @@ export interface components {
             format: "upkk-panel-performance";
             /** Limiters */
             limiters?: components["schemas"]["LimiterView"][];
+            monitor?: components["schemas"]["MonitorSelfView"] | null;
             operations: components["schemas"]["OperationOccupancyView"];
+            /** Outbound Http */
+            outbound_http?: components["schemas"]["OutboundHttpView"][];
             /** Priority */
             priority: string[];
             process: components["schemas"]["ProcessMetricsView"];
@@ -14144,8 +14614,16 @@ export interface components {
              * @default 0
              */
             cpu_user_seconds: number;
+            /** Event Loop Lag Max Ms */
+            event_loop_lag_max_ms?: number | null;
             /** Event Loop Lag Ms */
             event_loop_lag_ms?: number | null;
+            /** Event Loop Lag P95 Ms */
+            event_loop_lag_p95_ms?: number | null;
+            /** Fd Limit */
+            fd_limit?: number | null;
+            /** Fd Open */
+            fd_open?: number | null;
             /** Pid */
             pid: number;
             /** Rss Bytes */
@@ -14392,6 +14870,18 @@ export interface components {
         RedisMetricsView: {
             /** Connected */
             connected: boolean;
+            /**
+             * Failures
+             * @default 0
+             */
+            failures: number;
+            /**
+             * Monitor Ops
+             * @default 0
+             */
+            monitor_ops: number;
+            /** Op P95 Ms */
+            op_p95_ms?: number | null;
             /** Ping Ms */
             ping_ms?: number | null;
             /**
@@ -14399,6 +14889,11 @@ export interface components {
              * @default 0
              */
             pool_max_connections: number;
+            /**
+             * Timeouts
+             * @default 0
+             */
+            timeouts: number;
         };
         /**
          * RedisServerDetail
@@ -14499,11 +14994,31 @@ export interface components {
             /** By Route */
             by_route?: components["schemas"]["RouteLatencyView"][];
             /**
+             * Cancellations
+             * @default 0
+             */
+            cancellations: number;
+            /**
              * Error Rate
              * @default 0
              */
             error_rate: number;
+            /**
+             * Http Count
+             * @default 0
+             */
+            http_count: number;
+            /**
+             * In Flight
+             * @default 0
+             */
+            in_flight: number;
             latency_ms: components["schemas"]["LatencyPercentiles"];
+            /**
+             * Latency Partial
+             * @default false
+             */
+            latency_partial: boolean;
             /**
              * Requests Per Minute
              * @default 0
@@ -14522,10 +15037,45 @@ export interface components {
              */
             slow_request_threshold_ms: number;
             /**
+             * Sse Count
+             * @default 0
+             */
+            sse_count: number;
+            /**
              * Status 2Xx
              * @default 0
              */
             status_2xx: number;
+            /**
+             * Status 401
+             * @default 0
+             */
+            status_401: number;
+            /**
+             * Status 403
+             * @default 0
+             */
+            status_403: number;
+            /**
+             * Status 404
+             * @default 0
+             */
+            status_404: number;
+            /**
+             * Status 409
+             * @default 0
+             */
+            status_409: number;
+            /**
+             * Status 422
+             * @default 0
+             */
+            status_422: number;
+            /**
+             * Status 429
+             * @default 0
+             */
+            status_429: number;
             /**
              * Status 4Xx
              * @default 0
@@ -14536,6 +15086,16 @@ export interface components {
              * @default 0
              */
             status_5xx: number;
+            /**
+             * Stream Errors
+             * @default 0
+             */
+            stream_errors: number;
+            /**
+             * Unhandled Exceptions
+             * @default 0
+             */
+            unhandled_exceptions: number;
             /** Window Seconds */
             window_seconds: number;
         };
@@ -16972,6 +17532,13 @@ export interface components {
          */
         SshPoolView: {
             /**
+             * Auth Failures
+             * @default 0
+             */
+            auth_failures: number;
+            /** Connect P95 Ms */
+            connect_p95_ms?: number | null;
+            /**
              * Connections
              * @default 0
              */
@@ -17016,6 +17583,26 @@ export interface components {
              * @default 3600
              */
             max_lifetime: number;
+            /**
+             * Reconnect Attempts
+             * @default 0
+             */
+            reconnect_attempts: number;
+            /**
+             * Reconnect Failures
+             * @default 0
+             */
+            reconnect_failures: number;
+            /**
+             * Reuses
+             * @default 0
+             */
+            reuses: number;
+            /**
+             * Timeouts
+             * @default 0
+             */
+            timeouts: number;
         };
         /**
          * StartupCommandView
@@ -17158,6 +17745,8 @@ export interface components {
             global_github_token?: string | null;
             /** Log Level */
             log_level?: string | null;
+            /** Panel Monitoring Enabled */
+            panel_monitoring_enabled?: boolean | null;
             /** Plugin Download Cache Enabled */
             plugin_download_cache_enabled?: boolean | null;
             /** Plugin Download Cache Max Age Days */
@@ -17277,6 +17866,8 @@ export interface components {
             github_proxy_url?: string | null;
             /** Log Level */
             log_level?: ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL") | null;
+            /** Panel Monitoring Enabled */
+            panel_monitoring_enabled?: boolean | null;
             /**
              * Plugin Download Cache Enabled
              * @default true
@@ -17407,6 +17998,11 @@ export interface components {
             has_smtp_password: boolean;
             /** Log Level */
             log_level?: ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL") | null;
+            /**
+             * Panel Monitoring Enabled
+             * @default true
+             */
+            panel_monitoring_enabled: boolean;
             /**
              * Plugin Download Cache Bytes
              * @default 0
@@ -21909,6 +22505,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PanelPerformanceSnapshot"];
+                };
+            };
+        };
+    };
+    read_panel_errors_api_v1_diagnostics_errors_get: {
+        parameters: {
+            query?: {
+                range?: "15m" | "1h" | "6h" | "24h";
+                instance_id?: string | null;
+                source?: string | null;
+                severity?: string | null;
+                route?: string | null;
+                operation_id?: string | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelErrorListView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_panel_monitor_api_v1_diagnostics_monitor_get: {
+        parameters: {
+            query?: {
+                range?: "15m" | "1h" | "6h" | "24h";
+                instance_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelMonitorView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

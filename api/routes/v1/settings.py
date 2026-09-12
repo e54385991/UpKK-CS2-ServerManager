@@ -162,6 +162,7 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
         client_ip_header=settings.client_ip_header,
         log_level=_log_level(settings.log_level),
         effective_log_level=_log_level(effective_console_log_level(settings.log_level)) or "INFO",
+        panel_monitoring_enabled=bool(getattr(settings, "panel_monitoring_enabled", True)),
         github_token_verification=_github_verification_view(settings),
         has_global_github_token=settings.has_global_github_token,
         global_github_token_prefix=settings.global_github_token_prefix,
@@ -193,6 +194,7 @@ def _system_transfer(settings: SystemSettings) -> SystemSettingsTransfer:
         registration_enabled=settings.registration_enabled,
         client_ip_header=settings.client_ip_header,
         log_level=_log_level(settings.log_level),
+        panel_monitoring_enabled=bool(getattr(settings, "panel_monitoring_enabled", True)),
         email_enabled=settings.email_enabled,
         email_provider="gmail" if settings.email_provider == "gmail" else "smtp",
         email_from_address=settings.email_from_address,
@@ -301,6 +303,8 @@ async def import_system_settings(
     settings = await SystemSettings.get_or_create_settings(db)
     ai_settings = await AISystemSettings.get_or_create(db)
     system_data = body.system.model_dump()
+    if system_data.get("panel_monitoring_enabled") is None:
+        system_data.pop("panel_monitoring_enabled", None)
     old_cache_policy = (
         settings.plugin_download_cache_path,
         settings.plugin_download_cache_max_age_days,
@@ -379,6 +383,10 @@ async def import_system_settings(
 
     set_client_ip_header(settings.client_ip_header)
     apply_console_log_level(settings.log_level)
+    if "panel_monitoring_enabled" in system_data:
+        from services.panel_monitor import set_monitoring_enabled
+
+        await set_monitoring_enabled(bool(settings.panel_monitoring_enabled))
     new_cache_policy = (
         settings.plugin_download_cache_path,
         settings.plugin_download_cache_max_age_days,
@@ -430,6 +438,8 @@ async def update_system_settings(
     clear_global_github_token = update_data.pop("clear_global_github_token", False)
     global_github_token = update_data.pop("global_github_token", None)
     smtp_password = update_data.pop("smtp_password", None)
+    if update_data.get("panel_monitoring_enabled") is None:
+        update_data.pop("panel_monitoring_enabled", None)
     settings.sqlmodel_update(update_data)
 
     if clear_global_github_token or (global_github_token and global_github_token.strip()):
@@ -450,6 +460,10 @@ async def update_system_settings(
     # Attribution and console verbosity must follow the policy saved just now.
     set_client_ip_header(settings.client_ip_header)
     apply_console_log_level(settings.log_level)
+    if "panel_monitoring_enabled" in update_data:
+        from services.panel_monitor import set_monitoring_enabled
+
+        await set_monitoring_enabled(bool(settings.panel_monitoring_enabled))
     # A tightened retention limit should take effect now, not at the next download.
     if {
         "plugin_download_cache_path",

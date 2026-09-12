@@ -10,6 +10,7 @@ import uuid
 from collections import defaultdict
 from typing import Any
 
+from modules.observability import bind_operation, record_error, record_task, reset_operation
 from modules.utils import get_current_time
 from services.ai_security import redact_sensitive_text
 from services.redis_manager import redis_manager
@@ -71,14 +72,25 @@ class ServerOperationHub(ServerOperationHistoryMixin):
     def _history_redis(self) -> Any:
         return redis_manager
 
-    def occupancy_snapshot(self) -> dict[str, int]:
+    def occupancy_snapshot(self) -> dict[str, Any]:
         """Return in-memory queue occupancy without operation payloads."""
+        now = get_current_time()
+        oldest_ms: float | None = None
+        for pending in self._pending.values():
+            for operation_id in pending:
+                record = self._records.get(operation_id)
+                started = _as_datetime((record or {}).get("started_at"))
+                if started is None:
+                    continue
+                age = (now - started).total_seconds() * 1000
+                oldest_ms = age if oldest_ms is None else max(oldest_ms, age)
         return {
             "running": len(self._current),
             "queued": sum(len(item) for item in self._pending.values()),
             "runners": len(self._runners),
             "subscribers": sum(len(item) for item in self._queues.values()),
             "tracked": len(self._records),
+            "oldest_queue_ms": oldest_ms,
         }
 
     def _record_key(self, operation_id: str) -> str:
@@ -125,6 +137,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
                 "server_status": None,
                 "actor_user_id": actor_user_id,
                 "started_at": get_current_time().isoformat(),
+                "execution_started_at": None,
                 "completed_at": None,
             }
             if extra:
@@ -172,6 +185,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
                 message=f"Operation accepted: {action} (queued)"
                 + (f": {command}" if command else ""),
             )
+        record_task("submitted")
         return dict(record)
 
     async def get(self, operation_id: str) -> dict[str, Any] | None:
@@ -189,9 +203,17 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             return await self._read_current(server_id)
 
     async def mark_running(self, operation_id: str) -> dict[str, Any] | None:
-        record = await self._update(operation_id, status="running")
+        started = get_current_time()
+        record = await self._update(
+            operation_id,
+            status="running",
+            execution_started_at=started.isoformat(),
+        )
         if record is None:
             return None
+        queued_at = _as_datetime(record.get("started_at"))
+        queue_ms = (started - queued_at).total_seconds() * 1000 if queued_at else None
+        record_task("running", queue_ms=queue_ms)
         action = str(record.get("action") or "operation")
         await self.emit(
             operation_id,
@@ -223,7 +245,14 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             return
         from services.task_registry import action_task_registry
 
-        task = action_task_registry.create(runner())
+        async def bound_runner() -> None:
+            token = bind_operation(operation_id)
+            try:
+                await runner()
+            finally:
+                reset_operation(token)
+
+        task = action_task_registry.create(bound_runner())
         self.bind_task(operation_id, task)
 
     async def list_for_server(self, server_id: int) -> list[dict[str, Any]]:
@@ -278,7 +307,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         task = self._tasks.pop(operation_id, None)
         if task is not None and not task.done():
             task.cancel()
-        return await self.finish(operation_id, success=False, message=message)
+        return await self.finish(operation_id, success=False, message=message, cancelled=True)
 
     async def cancel(self, operation_id: str, *, message: str) -> dict[str, Any] | None:
         """Force-stop one queued or running operation and retain its failure record."""
@@ -314,7 +343,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             await self._persist_pending(server_id)
         if task is not None and not task.done():
             task.cancel()
-        return await self.finish(operation_id, success=False, message=message)
+        return await self.finish(operation_id, success=False, message=message, cancelled=True)
 
     async def finish(
         self,
@@ -323,19 +352,37 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         success: bool,
         message: str,
         server_status: str | None = None,
+        cancelled: bool = False,
     ) -> dict[str, Any] | None:
         current = await self.get(operation_id)
         if current is not None and current.get("status") not in ACTIVE_STATUSES:
             return current
         self._tasks.pop(operation_id, None)
+        completed = get_current_time()
         record = await self._update(
             operation_id,
             status="completed" if success else "failed",
             success=success,
             message=redact_sensitive_text(message, limit=2000),
             server_status=server_status,
-            completed_at=get_current_time().isoformat(),
+            completed_at=completed.isoformat(),
         )
+        execution_started = _as_datetime((record or {}).get("execution_started_at"))
+        execute_ms = (
+            (completed - execution_started).total_seconds() * 1000 if execution_started else None
+        )
+        if success:
+            record_task("succeeded", execute_ms=execute_ms)
+        elif cancelled:
+            record_task("cancelled", execute_ms=execute_ms)
+        else:
+            record_task("failed", execute_ms=execute_ms)
+            record_error(
+                source="task",
+                summary=message,
+                error_code="task_failed",
+                operation_id=operation_id,
+            )
         event_type = "operation_completed" if success else "operation_failed"
         await self.emit(
             operation_id,

@@ -265,6 +265,7 @@ npm run typecheck  # tsc --noEmit
 npm run test:unit  # TypeScript module tests (Node's built-in test runner)
 npm run gen:api    # regenerate OpenAPI types from ../tests/baselines/openapi.json
 npx playwright test --config=playwright.overview.config.ts # isolated streaming regression
+npx playwright test --config=playwright.monitor.config.ts    # isolated settings monitoring charts
 ```
 
 Completion scope is defined in the root `AGENTS.md` under **Task Completion
@@ -281,6 +282,8 @@ runs the isolated overview configuration after the public-page smoke. It starts
 its own mock backend and Next dev server on loopback ports 38121/31821 (override
 with `OVERVIEW_MOCK_PORT` / `OVERVIEW_TEST_PORT`); never point this fixture at a
 live backend or run a production build concurrently against the same `.next`.
+The same job also runs `playwright.monitor.config.ts` on 38141/31841
+(`MONITOR_MOCK_PORT` / `MONITOR_TEST_PORT`) for the settings monitoring dashboard.
 
 ## DTO and boundary rules
 
