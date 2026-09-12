@@ -1,7 +1,7 @@
 # Alpine keeps the production image small and avoids shipping Debian's
 # perl/apt runtime packages.  The Python 3.14.7 wheels exported by uv include
 # musllinux artifacts for every native dependency used by the application.
-FROM ghcr.io/astral-sh/uv:0.12.3-alpine@sha256:5c122244bea9d255105d4d4400de450ec171296733a326eba624e0278cf0c75e AS uv
+FROM ghcr.io/astral-sh/uv:0.12.13-alpine@sha256:e73003739c99f562680444e8e9a0c605dad7a87ff2fbcc0a715efe875713623e AS uv
 FROM python:3.14.7-alpine3.24@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
 
 ARG GIT_SHA=unknown

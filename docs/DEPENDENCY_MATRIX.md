@@ -16,10 +16,10 @@
 | Starlette 测试客户端 | `httpx2>=2.12.0`（开发） | 仅用于测试兼容层 |
 | SSH | `asyncssh>=2.24.0` | 显式 lease 和连接池 |
 | Node.js | 26 Current（Docker `node:26.8.1-alpine`） | CI `setup-node` 与前端镜像对齐 |
-| 前端控制台 | Next.js 16.3.4、React 19.2.8 | `frontend/package-lock.json`，TypeScript 钉 5.9.3、ESLint 钉 9 |
+| 前端控制台 | Next.js 16.3.5、React 19.3.0 | `frontend/package-lock.json`，TypeScript 钉 5.9.3、ESLint 钉 9 |
 | 遗留静态资源 | Alpine.js、Bootstrap、xterm 6 | 根目录 `package-lock.json` 锁定，`npm run vendor:frontend` |
 
-关键安全包当前下限为 `boto3>=1.43.88`、`cryptography>=50.0.1`。Dependabot 每周检查
+关键安全包当前下限为 `boto3>=1.43.93`、`cryptography>=50.0.1`。Dependabot 每周检查
 uv、npm（仓库根与 `frontend/`）、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 与 ESLint 10 在 typescript-eslint 支持前保持忽略；架构检查使用 `grimp>=3.16,<3.17` 与 `import-linter>=2.14,<2.15`。
 
 ## 更新流程
