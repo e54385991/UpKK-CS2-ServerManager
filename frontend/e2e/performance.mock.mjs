@@ -80,6 +80,9 @@ const app = createServer(async (req, res) => {
   if (path === '/api/v1/plugin-catalog') return json({ format: 'upkk-cs2-plugin-catalog', version: 1, plugins: [], conflicts: [] });
   if (path === '/api/v1/assistant') return json({ provider_ready: true, mode: 'global', model: 'fixture-model', conversations: [{ id: 'conversation-1', title: 'Fixture conversation' }] });
   if (path === '/api/v1/assistant/conversations/conversation-1') return json({ id: 'conversation-1', title: 'Fixture conversation', messages: [] });
+  if (path.endsWith('/plugin-diagnostics/recommendation')) return json({ recommended: false, recently_updated: false, restart_count: 0, max_restarts: 3, window_minutes: 10 });
+  if (path.endsWith('/a2s')) return json({ query_host: 'fixture-1.invalid', query_port: 27015, success: true, cached: true, live: false, server_info: { server_name: 'fixture', map_name: 'de_dust2', game: 'cs2', player_count: 0, max_players: 32, bot_count: 0, password_protected: false, vac_enabled: true, version: '1', platform: 'linux' }, players: [], timestamp: stamp, last_updated: stamp, response_time_ms: 12 });
+  if (path.endsWith('/monitoring-logs')) return json({ items: [{ id: 'log-1', event_type: 'a2s_check', status: 'ok', message: 'Fixture A2S log', created_at: stamp }] });
   if (path.endsWith('/files')) return json({ server_id: 1, root: '/srv/cs2', path: '/srv/cs2', ssh_ok: true, files: ['server.cfg', 'plugin.zip'].map(name => ({ name, path: `/srv/cs2/${name}`, type: 'file', size: 100, modified: Date.parse(stamp) / 1000, permissions: '-rw-r--r--', is_symlink: false })) });
   if (path.endsWith('/files/content')) {
     if (req.method === 'PUT') { savedContent = input.content; return json({ success: true, message: 'Saved' }); }

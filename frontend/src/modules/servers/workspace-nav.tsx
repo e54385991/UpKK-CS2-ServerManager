@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -27,11 +26,12 @@ import {
 import type { LucideIcon } from "lucide-react";
 import {
   SERVER_WORKSPACE_NAV_ROWS,
-  WORKSPACE_NAV_PREFETCH,
   isWorkspaceCategoryActive,
   workspaceHref,
+  workspaceNavPrefetchOnIntent,
   type ServerWorkspaceCategory,
 } from "@/modules/servers/workspace";
+import { PendingNavLink } from "@/shared/ui/pending-nav-link";
 import { cn } from "@/shared/lib/cn";
 
 const CATEGORY_ICONS: Record<ServerWorkspaceCategory, LucideIcon> = {
@@ -63,6 +63,7 @@ export function ServerWorkspaceNav({ serverId }: { serverId: number }) {
   return (
     <nav
       aria-label={t("navLabel")}
+      data-testid="server-workspace-nav"
       className="mb-6 overflow-hidden rounded-lg border border-line bg-surface"
     >
       {SERVER_WORKSPACE_NAV_ROWS.map((row, index) => (
@@ -87,10 +88,11 @@ export function ServerWorkspaceNav({ serverId }: { serverId: number }) {
               );
               return (
                 <li key={category}>
-                  <Link
+                  <PendingNavLink
                     href={href}
-                    prefetch={WORKSPACE_NAV_PREFETCH}
+                    prefetchOnIntent={workspaceNavPrefetchOnIntent(category)}
                     aria-current={active ? "page" : undefined}
+                    data-workspace-category={category}
                     className={cn(
                       "inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium transition-colors",
                       active
@@ -105,7 +107,7 @@ export function ServerWorkspaceNav({ serverId }: { serverId: number }) {
                       )}
                     />
                     {t(`categories.${category}`)}
-                  </Link>
+                  </PendingNavLink>
                 </li>
               );
             })}

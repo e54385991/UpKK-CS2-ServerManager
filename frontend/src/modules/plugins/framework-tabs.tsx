@@ -24,8 +24,9 @@ export function frameworkHref(
 
 /**
  * The marketplace's top-level sections, one per runtime plus the
- * framework-agnostic "other" section. Switching sections resets paging because
- * offsets do not carry across a different result set.
+ * framework-agnostic "other" section ("模式 / 其他 / 通用"). Switching
+ * sections resets paging because offsets do not carry across a different
+ * result set.
  */
 export async function FrameworkTabs({
   active,

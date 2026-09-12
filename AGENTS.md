@@ -128,12 +128,12 @@ HTTP request.
 # 插件中心（marketplace）
 
 - 插件市场按 `MarketPlugin.framework` 分成三个一级分区：CounterStrikeSharp、
-  SwiftlyS2 与「其他 / 通用」（取值 `counterstrikesharp` / `swiftly` / `other`，
+  SwiftlyS2 与「模式 / 其他 / 通用」（取值 `counterstrikesharp` / `swiftly` / `other`，
   前两个与面板其余地方的 framework key 一致）。新增插件默认落在
   CounterStrikeSharp；控制台 `/plugins` 默认打开该分区，列表通过
   `GET /api/v1/plugins/market?framework=` 过滤，可移植目录（导入/导出）也带上该
   字段。**分区是精确匹配**：`search_plugins(framework=...)` 只返回该取值，
-  `other` 只出现在自己的分区，不会混进两个运行时分区（那会让「其他 / 通用」的
+  `other` 只出现在自己的分区，不会混进两个运行时分区（那会让「模式 / 其他 / 通用」的
   条目看起来被归到了 SwiftlyS2）。`other` 表示插件不属于任何一套运行时，仍不受
   下面的运行时校验限制。
 - 列表还支持按时间浏览：`GET /api/v1/plugins/market?sort=recommended|newest|oldest`

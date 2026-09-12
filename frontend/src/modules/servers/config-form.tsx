@@ -26,7 +26,7 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 import { Input, Label } from "@/shared/ui/input";
-import { LinkButton } from "@/shared/ui/link-button";
+import { PendingNavLink } from "@/shared/ui/pending-nav-link";
 import { Select } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
 import { cn } from "@/shared/lib/cn";
@@ -72,20 +72,34 @@ function ServerConfigTabs({
   const t = useTranslations("serverWorkspace");
   return (
     <div className="mb-6 flex flex-wrap gap-2" data-testid="server-config-tabs">
-      <LinkButton
-        href={workspaceHref(serverId, "config")}
+      <Button
+        asChild
         variant={section === "game" ? "primary" : "outline"}
         className={cn(section === "game" && "pointer-events-none")}
       >
-        {t("categories.config")}
-      </LinkButton>
-      <LinkButton
-        href={workspaceHref(serverId, "host-config")}
+        <PendingNavLink
+          href={workspaceHref(serverId, "config")}
+          prefetchOnIntent
+          aria-current={section === "game" ? "page" : undefined}
+          data-config-section="game"
+        >
+          {t("categories.config")}
+        </PendingNavLink>
+      </Button>
+      <Button
+        asChild
         variant={section === "host" ? "primary" : "outline"}
         className={cn(section === "host" && "pointer-events-none")}
       >
-        {t("categories.host-config")}
-      </LinkButton>
+        <PendingNavLink
+          href={workspaceHref(serverId, "host-config")}
+          prefetchOnIntent
+          aria-current={section === "host" ? "page" : undefined}
+          data-config-section="host"
+        >
+          {t("categories.host-config")}
+        </PendingNavLink>
+      </Button>
     </div>
   );
 }

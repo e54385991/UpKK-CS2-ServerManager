@@ -70,12 +70,24 @@ export function serversHref(input: {
 }
 
 /**
- * Workspace nav renders ~17 in-viewport links. Default `<Link>` prefetch would
+ * Workspace nav renders 19 in-viewport links. Default `<Link>` prefetch would
  * open that many RSC requests at once; files/cleanup also hit SSH. Together
  * with the always-on inbox EventSource this fills Chrome's 6 HTTP/1.1 sockets
  * per host, so the tab looks frozen while a fresh incognito window works.
+ * Config / host-config flip to the default prefetch only after hover or focus.
  */
 export const WORKSPACE_NAV_PREFETCH = false;
+
+export const WORKSPACE_NAV_INTENT_PREFETCH_CATEGORIES = [
+  "config",
+  "host-config",
+] as const satisfies readonly ServerWorkspaceCategory[];
+
+export function workspaceNavPrefetchOnIntent(
+  category: ServerWorkspaceCategory,
+): boolean {
+  return WORKSPACE_NAV_INTENT_PREFETCH_CATEGORIES.some((item) => item === category);
+}
 
 export function workspaceHref(
   serverId: number,

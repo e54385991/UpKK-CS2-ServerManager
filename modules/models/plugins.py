@@ -29,7 +29,7 @@ class PluginFramework(str, enum.Enum):
     SwiftlyS2. ``other`` marks a listing that does not belong to either runtime
     (a Metamod-only plugin, a config pack, …). Every value is also one of the
     marketplace's browse sections, and a section shows exactly its own value —
-    ``other`` listings stay in the "其他 / 通用" section instead of leaking into
+    ``other`` listings stay in the "模式 / 其他 / 通用" section instead of leaking into
     the two runtime sections. They remain exempt from the install-time runtime
     check.
     """

@@ -1,17 +1,16 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
-import { ChevronLeft, ChevronRight, RefreshCw, Save, Search, TriangleAlert } from "lucide-react";
-import { formatA2SDuration, paginateA2SLogs } from "@/modules/servers/a2s";
+import { Save, Search, TriangleAlert } from "lucide-react";
+import { formatA2SDuration } from "@/modules/servers/a2s";
 import {
-  listMonitoringLogsAction,
   queryServerA2SAction,
   updateServerAction,
 } from "@/modules/servers/actions";
 import type { ServerDetail } from "@/modules/servers/api";
-import type { A2SQuery, MonitoringLog } from "@/modules/servers/types";
+import type { A2SQuery } from "@/modules/servers/types";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -27,11 +26,9 @@ import { Switch } from "@/shared/ui/switch";
 export function ServerA2SPanel({
   server,
   initialQuery,
-  initialLogs,
 }: {
   server: ServerDetail;
   initialQuery: A2SQuery | null;
-  initialLogs: readonly MonitoringLog[];
 }) {
   const t = useTranslations("serverMonitoring");
   const format = useFormatter();
@@ -42,17 +39,11 @@ export function ServerA2SPanel({
     server.a2sQueryPort != null ? String(server.a2sQueryPort) : "",
   );
   const [snapshot, setSnapshot] = useState<A2SQuery | null>(initialQuery);
-  const [logs, setLogs] = useState<readonly MonitoringLog[]>(initialLogs);
-  const [logPage, setLogPage] = useState(0);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const lastCheckAt = snapshot?.lastUpdated || snapshot?.timestamp;
-  const logPageView = useMemo(
-    () => paginateA2SLogs(logs, logPage),
-    [logPage, logs],
-  );
 
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,21 +80,8 @@ export function ServerA2SPanel({
     setSnapshot(result.data);
   }
 
-  async function refreshLogs() {
-    setPending("logs");
-    const result = await listMonitoringLogsAction(server.id, "a2s_check");
-    setPending(null);
-    if (!result.ok) {
-      setError(result.error || t("failed"));
-      return;
-    }
-    setLogs(result.data);
-    setLogPage(0);
-  }
-
   return (
-    <div className="space-y-6">
-      <Card data-testid="a2s-panel">
+    <Card data-testid="a2s-panel">
         <CardHeader>
           <div>
             <CardTitle>{t("a2sTitle")}</CardTitle>
@@ -368,83 +346,5 @@ export function ServerA2SPanel({
           ) : null}
         </CardContent>
       </Card>
-
-      {enableA2s ? (
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>{t("a2sLogs")}</CardTitle>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={pending !== null}
-              onClick={() => void refreshLogs()}
-            >
-              <RefreshCw />
-              {t("refreshLogs")}
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {logs.length === 0 ? (
-              <p className="text-sm text-fg-muted">{t("noA2sLogs")}</p>
-            ) : (
-              <div data-testid="a2s-logs">
-                <ul className="space-y-3">
-                  {logPageView.items.map((log) => (
-                    <li key={log.id} className="text-sm">
-                      <p className="text-fg">{log.message}</p>
-                      <p className="text-xs text-fg-subtle">
-                        {log.status}
-                        {log.createdAt
-                          ? ` · ${format.dateTime(new Date(log.createdAt), {
-                              dateStyle: "medium",
-                              timeStyle: "medium",
-                            })}`
-                          : ""}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3 text-xs text-fg-muted">
-                  <span className="tabular-nums" data-testid="a2s-logs-page-info">
-                    {t("logPageInfo", {
-                      from: logPageView.from,
-                      to: logPageView.to,
-                      total: logPageView.total,
-                    })}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      data-testid="a2s-logs-prev"
-                      disabled={!logPageView.hasPrev}
-                      aria-label={t("logPrev")}
-                      onClick={() => setLogPage(logPageView.page - 1)}
-                    >
-                      <ChevronLeft className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      data-testid="a2s-logs-next"
-                      disabled={!logPageView.hasNext}
-                      aria-label={t("logNext")}
-                      onClick={() => setLogPage(logPageView.page + 1)}
-                    >
-                      <ChevronRight className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ) : null}
-    </div>
-  );
+    );
 }

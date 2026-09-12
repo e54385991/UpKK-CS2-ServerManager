@@ -50,7 +50,11 @@ export function ServerMonitoringForm({ server }: { server: ServerDetail }) {
   }
 
   return (
-    <form onSubmit={(event) => void onSubmit(event)} className="max-w-2xl space-y-6">
+    <form
+      onSubmit={(event) => void onSubmit(event)}
+      className="max-w-2xl space-y-6"
+      data-testid="monitoring-form"
+    >
       {server.isSshDown ? (
         <Card className="border-warn/30 bg-warn-muted/30 px-5 py-4 text-sm text-warn">
           <p>{t("sshDown")}</p>

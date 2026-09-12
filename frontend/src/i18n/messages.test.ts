@@ -53,3 +53,12 @@ test("the English catalog contains no Chinese copy", () => {
     assert.doesNotMatch(message, /[\u3400-\u9fff]/u, `${key} contains Chinese copy`);
   }
 });
+
+test("plugin other section labels stay distinct from the Other category", () => {
+  const english = flatten(readCatalog("en-US"));
+  const chinese = flatten(readCatalog("zh-CN"));
+  assert.equal(chinese.get("plugins.frameworks.other"), "模式 / 其他 / 通用");
+  assert.equal(english.get("plugins.frameworks.other"), "Modes / Other / Any runtime");
+  assert.equal(chinese.get("plugins.categories.other"), "其他");
+  assert.equal(english.get("plugins.categories.other"), "Other");
+});

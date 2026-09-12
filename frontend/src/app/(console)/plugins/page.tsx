@@ -48,8 +48,8 @@ export default async function PluginsPage({
   const offset = Math.max(0, Number(sp.offset ?? 0)) || 0;
   const serverId = Number(sp.serverId);
   // The marketplace opens on the CounterStrikeSharp section; SwiftlyS2 and the
-  // framework-agnostic "other" section are the remaining top-level tabs. Each
-  // one lists exactly its own framework value.
+  // framework-agnostic "other" section ("模式 / 其他 / 通用") are the remaining
+  // top-level tabs. Each one lists exactly its own framework value.
   const framework = toPluginFrameworkSection(sp.framework?.trim());
   const sort = toMarketSort(sp.sort?.trim());
   const query = {

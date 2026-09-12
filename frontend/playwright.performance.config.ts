@@ -6,7 +6,7 @@ const production = process.env.PERF_PRODUCTION === "1";
 const baseURL = `http://127.0.0.1:${port}`;
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /performance\.spec\.ts/,
+  testMatch: /(?:performance|workspace-nav)\.spec\.ts/,
   testIgnore: /overview-performance/,
   outputDir: "test-results/performance-runs",
   workers: 1, retries: 0, timeout: 45_000,
