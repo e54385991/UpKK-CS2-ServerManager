@@ -128,6 +128,7 @@ async def run_plugin_install(
                 exclude_files=list(exclude_files or []),
                 acknowledge_framework_mismatch=acknowledge_framework_mismatch,
                 acknowledge_ai_unreviewed=acknowledge_ai_unreviewed,
+                force_reinstall=True,
             )
             await server_operation_hub.finish(
                 operation_id,

@@ -457,6 +457,7 @@ async def test_market_runners_cover_plugin_install_github_install_and_uninstall(
         operation_id="op-1", plugin_id=4, acknowledge_warning_rule_ids=[], plan_hash="h"
     )
     assert hub.finished[-1][1]["success"] is True
+    assert market.execute_plugin_install_plan.await_args.kwargs["force_reinstall"] is True
 
     monkeypatch.setattr(
         market,

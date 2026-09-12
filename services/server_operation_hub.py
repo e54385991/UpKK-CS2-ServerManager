@@ -17,8 +17,8 @@ from services.server_operation_history import (
     COMPLETED_RETENTION_SECONDS,
     FAILED_RETENTION_SECONDS,
     ServerOperationHistoryMixin,
-    _as_datetime as _history_as_datetime,
 )
+from services.server_operation_history import _as_datetime as _history_as_datetime
 
 _as_datetime = _history_as_datetime
 

@@ -470,6 +470,30 @@ async def test_prepare_execution_and_lock_progress_error_paths(monkeypatch):
         "https://github.com/a/b/releases/download/v2/p.zip",
     )
     assert prepared[4] == {"reason": "x"} and prepared[3][1]["release_tag"] == "v2"
+
+    dependency = _plugin(2)
+    installed_plan = {
+        **plan,
+        "installation_order": [1, 2],
+        "already_installed": [1, 2],
+    }
+    monkeypatch.setattr(module, "build_plugin_install_plan", AsyncMock(return_value=installed_plan))
+    monkeypatch.setattr(
+        module.MarketPlugin, "get_by_ids", AsyncMock(return_value=[plugin, dependency])
+    )
+    forced = await module._prepare_plugin_execution(
+        _Db(),
+        server,
+        SimpleNamespace(id=3),
+        1,
+        set(),
+        "h" * 64,
+        True,
+        "https://github.com/a/b/releases/download/v2/p.zip",
+        force_reinstall=True,
+    )
+    assert forced[1] == set() and set(forced[3]) == {1, 2}
+
     with pytest.raises(module.PluginPlanError, match="changed"):
         await module._prepare_plugin_execution(
             _Db(), server, SimpleNamespace(id=3), 1, set(), "x", True, None

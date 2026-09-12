@@ -658,6 +658,7 @@ async def _prepare_plugin_execution(
     download_url: str | None,
     acknowledge_framework_mismatch: bool = False,
     acknowledge_ai_unreviewed: bool = False,
+    force_reinstall: bool = False,
 ) -> tuple[
     dict[str, Any], set[int], dict[int, MarketPlugin], dict[int, dict[str, Any]], dict | None
 ]:
@@ -677,6 +678,8 @@ async def _prepare_plugin_execution(
         acknowledge_ai_unreviewed=acknowledge_ai_unreviewed,
     )
     installed = set(refreshed_plan["already_installed"])
+    if force_reinstall:
+        installed.clear()
     plugins = await MarketPlugin.get_by_ids(db, refreshed_plan["installation_order"])
     by_id = {plugin.id: plugin for plugin in plugins}
     ordinary_plugin_ids = [
@@ -728,6 +731,7 @@ async def execute_plugin_install_plan(
     exclude_files: list[str] | None = None,
     acknowledge_framework_mismatch: bool = False,
     acknowledge_ai_unreviewed: bool = False,
+    force_reinstall: bool = False,
 ) -> dict[str, Any]:
     """Recompute and execute a plan, stopping immediately after any failure."""
     plan = await build_plugin_install_plan(
@@ -774,6 +778,7 @@ async def execute_plugin_install_plan(
             download_url,
             acknowledge_framework_mismatch,
             acknowledge_ai_unreviewed,
+            force_reinstall,
         )
 
         for current_id in refreshed_plan["installation_order"]:
