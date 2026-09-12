@@ -2257,6 +2257,7 @@
     "uploadCancelled": "已取消上传。",
     "uploadPartial": "已上传 {done}/{total}，{failed} 个失败。",
     "uploadTooMany": "一次最多上传 {max} 个文件。",
+    "mutationTooMany": "一次最多删除、复制或移动 {max} 个文件或文件夹。",
     "uploadEmpty": "这个文件夹里没有可上传的文件。",
     "uploadFolderFailed": "无法读取该文件夹。",
     "dropHint": "将文件或文件夹拖到此处上传",

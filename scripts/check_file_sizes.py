@@ -34,7 +34,7 @@ LEGACY_SIZE_LIMITS = {
     "tests/test_discord_bot_agent_policy.py": 1867,
     "frontend/src/modules/plugin-configs/plugin-configs-console.tsx": 983,
     "frontend/src/modules/maps/maps-console.tsx": 864,
-    "frontend/src/modules/files/files-console.tsx": 1318,
+    "frontend/src/modules/files/files-console.tsx": 1306,
     "frontend/src/modules/servers/api.ts": 1211,
 }
 

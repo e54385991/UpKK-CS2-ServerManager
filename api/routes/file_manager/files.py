@@ -4,6 +4,7 @@
 
 from fastapi import Request
 
+from api.contracts.v1.maps_files import MAX_FILE_MUTATION_PATHS
 from api.dependencies import ActiveUser, DatabaseSession
 from services.audit_log_service import record_audit_event
 
@@ -449,10 +450,10 @@ async def copy_paths(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="destination is required",
         )
-    if not sources or len(sources) > 50:
+    if not sources or len(sources) > MAX_FILE_MUTATION_PATHS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Provide between 1 and 50 source paths",
+            detail=f"Provide between 1 and {MAX_FILE_MUTATION_PATHS} source paths",
         )
     if not is_path_safe(server.game_directory, destination):
         raise HTTPException(

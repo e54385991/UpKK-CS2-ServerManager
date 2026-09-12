@@ -38,7 +38,7 @@ import {
   saveFileContentAction,
   startUrlDownloadAction,
 } from "@/modules/files/actions";
-import { useFileClipboard, writeFileClipboard } from "@/modules/files/clipboard";
+import { MAX_FILE_MUTATION_PATHS, useFileClipboard, writeFileClipboard } from "@/modules/files/clipboard";
 import { ExtractDialog } from "@/modules/files/lazy-dialogs";
 import { MoveDialog } from "@/modules/files/move-dialog";
 import { FileEditorDialog, type EditorFile } from "@/modules/files/lazy-dialogs";
@@ -237,23 +237,12 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     void loadRef.current(workspace.path);
   });
 
-  const copyItems = useCallback(
-    (paths: readonly string[]) => {
-      if (paths.length === 0) {
-        notify.error(t("clipboardEmpty"));
-        return;
-      }
-      writeFileClipboard(serverId, paths, "copy");
-      notify.success(t("copiedItems", { count: paths.length }));
-    },
-    [serverId, t],
-  );
-
-  const cutItems = useCallback((paths: readonly string[]) => {
-      if (paths.length === 0) { notify.error(t("clipboardEmpty")); return; }
-      writeFileClipboard(serverId, paths, "move");
-      notify.success(t("cutItems", { count: paths.length }));
-    }, [serverId, t]);
+  const stageClipboard = useCallback((paths: readonly string[], mode: "copy" | "move") => {
+    if (paths.length === 0) { notify.error(t("clipboardEmpty")); return; }
+    if (paths.length > MAX_FILE_MUTATION_PATHS) { notify.error(t("mutationTooMany", { max: MAX_FILE_MUTATION_PATHS })); return; }
+    writeFileClipboard(serverId, paths, mode);
+    notify.success(t(mode === "copy" ? "copiedItems" : "cutItems", { count: paths.length }));
+  }, [serverId, t]);
 
   const pasteItems = useCallback(async () => {
     if (clipboard.length === 0) {
@@ -306,12 +295,12 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
       }
       if (meta && event.key.toLowerCase() === "c") {
         event.preventDefault();
-        if (selected.size > 0) copyItems([...selected]);
+        if (selected.size > 0) stageClipboard([...selected], "copy");
         return;
       }
       if (meta && event.key.toLowerCase() === "x") {
         event.preventDefault();
-        if (selected.size > 0) cutItems([...selected]);
+        if (selected.size > 0) stageClipboard([...selected], "move");
         return;
       }
       if (meta && event.key.toLowerCase() === "v") {
@@ -321,7 +310,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canMutate, copyItems, cutItems, editing, listedFiles, pasteItems, renameFrom, selected]);
+  }, [canMutate, editing, listedFiles, pasteItems, renameFrom, selected, stageClipboard]);
 
   function toggleSort(next: FileSortKey) {
     if (sortKey === next) {
@@ -550,7 +539,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                 data-testid="files-copy-items"
                 disabled={selected.size === 0}
                 title={t("copyItemsHint")}
-                onClick={() => copyItems([...selected])}
+                onClick={() => stageClipboard([...selected], "copy")}
               >
                 <ClipboardCopy />
                 {t("copyItems")}
@@ -574,7 +563,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                 data-testid="files-cut-items"
                 disabled={selected.size === 0}
                 title={t("cutItemsHint")}
-                onClick={() => cutItems([...selected])}
+                onClick={() => stageClipboard([...selected], "move")}
               >
                 <Scissors />
                 {t("cutItems")}
@@ -585,7 +574,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                 size="sm"
                 data-testid="files-move-items"
                 disabled={!canMutate || selected.size === 0}
-                onClick={() => setMoveOpen(true)}
+                onClick={() => { if (selected.size > MAX_FILE_MUTATION_PATHS) notify.error(t("mutationTooMany", { max: MAX_FILE_MUTATION_PATHS })); else setMoveOpen(true); }}
               >
                 <FolderInput />
                 {t("move")}
@@ -823,7 +812,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                             size="icon"
                             variant="ghost"
                             aria-label={t("copyItems")}
-                            onClick={() => copyItems([entry.path])}
+                            onClick={() => stageClipboard([entry.path], "copy")}
                           >
                             <ClipboardCopy />
                           </Button>
@@ -1215,6 +1204,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   async function deleteSelected() {
     const paths = [...selected];
     if (paths.length === 0) return;
+    if (paths.length > MAX_FILE_MUTATION_PATHS) { notify.error(t("mutationTooMany", { max: MAX_FILE_MUTATION_PATHS })); return; }
     if (!(await confirm(t("removeSelectedConfirm", { count: paths.length })))) return;
     setPending("delete-selected");
     try {

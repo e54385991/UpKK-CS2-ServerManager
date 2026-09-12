@@ -6,6 +6,31 @@ from asyncssh.constants import FILEXFER_TYPE_DIRECTORY, FILEXFER_TYPE_SYMLINK
 
 from .common import *
 
+REMOTE_DELETE_ARG_BUDGET = 32 * 1024
+_RM_PREFIX = "rm -rf -- "
+
+
+def rm_delete_commands(
+    paths: List[str], *, arg_budget: int = REMOTE_DELETE_ARG_BUDGET
+) -> List[str]:
+    """Build ``rm -rf`` commands that stay under the remote argv budget."""
+    commands: List[str] = []
+    current: List[str] = []
+    used = len(_RM_PREFIX)
+    for raw_path in paths:
+        quoted = shlex.quote(posixpath.normpath(raw_path))
+        extra = len(quoted) + (1 if current else 0)
+        if current and used + extra > arg_budget:
+            commands.append(_RM_PREFIX + " ".join(current))
+            current = [quoted]
+            used = len(_RM_PREFIX) + len(quoted)
+            continue
+        current.append(quoted)
+        used += extra
+    if current:
+        commands.append(_RM_PREFIX + " ".join(current))
+    return commands
+
 
 class BasicFileOperationsMixin(SSHMixinBase):
     """Focused file-system capability."""
@@ -189,11 +214,12 @@ class BasicFileOperationsMixin(SSHMixinBase):
             return False, f"Error deleting: {str(e)}"
 
     async def delete_paths(self, paths: List[str], server: Server) -> Tuple[bool, str]:
-        """Delete a batch with one remote command and one SSH connection.
+        """Delete a batch over one SSH connection.
 
         ``rm -rf`` removes a symlink itself and does not traverse its target;
         ``--`` also prevents names beginning with a dash being interpreted as
-        options. Path and root checks are performed by the API before queuing.
+        options. Long selections are split so remote argv stays under ARG_MAX.
+        Path and root checks are performed by the API before queuing.
         """
         if not self.conn:
             success, msg = await self.connect(server)
@@ -220,11 +246,11 @@ class BasicFileOperationsMixin(SSHMixinBase):
             return False, "One or more selected paths no longer exist"
         except asyncssh.SFTPError as exc:
             return False, f"Delete path validation failed: {exc}"
-        command = "rm -rf -- " + " ".join(shlex.quote(posixpath.normpath(path)) for path in paths)
-        success, stdout, stderr = await self.execute_command(command, timeout=900)
-        if success:
-            return True, f"Deleted {len(paths)} selected item(s)."
-        return False, self._short_command_error(stdout, stderr)
+        for command in rm_delete_commands(paths):
+            success, stdout, stderr = await self.execute_command(command, timeout=900)
+            if not success:
+                return False, self._short_command_error(stdout, stderr)
+        return True, f"Deleted {len(paths)} selected item(s)."
 
     async def _remove_move_target(self, sftp, path: str, attrs) -> None:
         if attrs.type == FILEXFER_TYPE_DIRECTORY:

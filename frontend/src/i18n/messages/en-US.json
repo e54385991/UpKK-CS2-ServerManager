@@ -2257,6 +2257,7 @@
     "uploadCancelled": "Upload cancelled.",
     "uploadPartial": "Uploaded {done}/{total}, {failed} failed.",
     "uploadTooMany": "You can upload at most {max} files at once.",
+    "mutationTooMany": "You can delete, copy, or move at most {max} items at once.",
     "uploadEmpty": "This folder has no files to upload.",
     "uploadFolderFailed": "Could not read that folder.",
     "dropHint": "Drop files or folders here to upload",

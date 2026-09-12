@@ -3,6 +3,9 @@ import { useMemo, useSyncExternalStore } from "react";
 const STORAGE_PREFIX = "upkk.files.clipboard.v1.";
 const clipboardListeners = new Set<() => void>();
 
+/** Must match ``MAX_FILE_MUTATION_PATHS`` on the file mutation request DTOs. */
+export const MAX_FILE_MUTATION_PATHS = 1000;
+
 function emitClipboard() {
   for (const listener of clipboardListeners) listener();
 }
@@ -23,7 +26,7 @@ export function parseFileClipboard(raw: unknown): string[] {
   return paths
     .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     .map((item) => item.trim())
-    .slice(0, 50);
+    .slice(0, MAX_FILE_MUTATION_PATHS);
 }
 
 export function parseFileClipboardPayload(raw: unknown): FileClipboard {
@@ -52,7 +55,7 @@ export function writeFileClipboard(
 ): void {
   window.sessionStorage.setItem(
     clipboardStorageKey(serverId),
-    JSON.stringify({ paths: paths.slice(0, 50), mode }),
+    JSON.stringify({ paths: paths.slice(0, MAX_FILE_MUTATION_PATHS), mode }),
   );
   emitClipboard();
 }

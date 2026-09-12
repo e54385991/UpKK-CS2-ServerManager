@@ -11,6 +11,10 @@ from pydantic import Field, field_validator
 from api.contracts.base import ApiRequest
 from api.contracts.v1.identity import V1Model
 
+# Select-all in a maps or plugins folder routinely exceeds the old 50-item cap.
+# SSH ``rm`` is chunked separately so this bound is about request size, not ARG_MAX.
+MAX_FILE_MUTATION_PATHS = 1000
+
 
 class MapEntryView(V1Model):
     """One MapChooser pool entry. Official maps use an empty workshop_id."""
@@ -246,7 +250,7 @@ class FileRenameRequest(ApiRequest):
 
 
 class FileCopyRequest(ApiRequest):
-    sources: list[str] = Field(min_length=1, max_length=50)
+    sources: list[str] = Field(min_length=1, max_length=MAX_FILE_MUTATION_PATHS)
     destination: str = Field(min_length=1, max_length=4096)
 
     @field_validator("sources")
@@ -266,7 +270,7 @@ class FileCopyRequest(ApiRequest):
 class FileMoveRequest(ApiRequest):
     """Move one or more paths into a destination directory."""
 
-    sources: list[str] = Field(min_length=1, max_length=50)
+    sources: list[str] = Field(min_length=1, max_length=MAX_FILE_MUTATION_PATHS)
     destination: str = Field(min_length=1, max_length=4096)
     conflict: Literal["skip", "overwrite"] = "skip"
 
@@ -282,7 +286,7 @@ class FileMoveRequest(ApiRequest):
 
 
 class FileBatchDeleteRequest(ApiRequest):
-    paths: list[str] = Field(min_length=1, max_length=50)
+    paths: list[str] = Field(min_length=1, max_length=MAX_FILE_MUTATION_PATHS)
 
     @field_validator("paths")
     @classmethod
@@ -350,6 +354,7 @@ class FileTaskView(V1Model):
 
 
 __all__ = [
+    "MAX_FILE_MUTATION_PATHS",
     "MapEntryView",
     "MapPluginFieldView",
     "MapPluginConfigView",

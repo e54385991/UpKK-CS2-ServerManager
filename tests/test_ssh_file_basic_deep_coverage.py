@@ -9,6 +9,7 @@ import asyncssh
 import pytest
 from asyncssh.constants import FILEXFER_TYPE_DIRECTORY, FILEXFER_TYPE_REGULAR
 
+from services.ssh.file_basic import rm_delete_commands
 from services.ssh_manager import SSHManager
 
 
@@ -287,3 +288,12 @@ async def test_batch_delete_uses_one_remote_command_and_move_rejects_invalid_pol
         False,
         "Invalid conflict policy",
     )
+
+
+def test_rm_delete_commands_split_only_when_argv_budget_is_tight():
+    assert rm_delete_commands(["/a", "/b"]) == ["rm -rf -- /a /b"]
+    assert rm_delete_commands(["/a", "/b"], arg_budget=len("rm -rf -- ") + 2) == [
+        "rm -rf -- /a",
+        "rm -rf -- /b",
+    ]
+    assert rm_delete_commands(["/srv/cs2/a b"]) == ["rm -rf -- '/srv/cs2/a b'"]

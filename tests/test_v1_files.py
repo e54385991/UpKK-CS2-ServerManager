@@ -5,9 +5,17 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from api.application import create_app
+from api.contracts.v1.maps_files import (
+    MAX_FILE_MUTATION_PATHS,
+    FileBatchDeleteRequest,
+    FileCopyRequest,
+    FileMoveRequest,
+)
 from modules import get_current_active_user, get_current_user, get_db
 
 
@@ -503,6 +511,48 @@ def test_v1_files_batch_delete_enqueues_single_operation(monkeypatch):
     )
     assert response.status_code == 202
     assert response.json()["operation_id"] == "op-delete-1"
+
+
+def test_file_mutation_requests_allow_more_than_fifty_paths():
+    paths = [f"/tmp/cs2-ops-verify/{index}" for index in range(51)]
+    assert len(FileBatchDeleteRequest(paths=paths).paths) == 51
+    assert len(FileCopyRequest(sources=paths, destination="/tmp/cs2-ops-verify").sources) == 51
+    assert len(FileMoveRequest(sources=paths, destination="/tmp/cs2-ops-verify").sources) == 51
+
+
+def test_file_mutation_requests_reject_over_path_limit():
+    paths = [f"/tmp/cs2-ops-verify/{index}" for index in range(MAX_FILE_MUTATION_PATHS + 1)]
+    with pytest.raises(ValidationError):
+        FileBatchDeleteRequest(paths=paths)
+    with pytest.raises(ValidationError):
+        FileCopyRequest(sources=paths, destination="/tmp/cs2-ops-verify")
+    with pytest.raises(ValidationError):
+        FileMoveRequest(sources=paths, destination="/tmp/cs2-ops-verify")
+
+
+def test_v1_files_batch_delete_accepts_more_than_fifty_paths(monkeypatch):
+    client, _server, _user = _client(monkeypatch)
+    record = _queued_file_record(action="batch_delete", operation_id="op-delete-51")
+    captured: list[list[str]] = []
+
+    async def enqueue(**kwargs):
+        captured.append(list(kwargs["paths"]))
+        return record
+
+    monkeypatch.setattr("api.routes.v1.files.enqueue_batch_delete", enqueue)
+    monkeypatch.setattr("api.routes.v1.files.reject_stuck_lock_unless_active", AsyncMock())
+    monkeypatch.setattr("api.routes.v1.files.record_audit_event", AsyncMock())
+    paths = [f"/tmp/cs2-ops-verify/f{index}" for index in range(51)]
+    response = client.post("/api/v1/servers/1/files/batch-delete", json={"paths": paths})
+    assert response.status_code == 202
+    assert len(captured[0]) == 51
+
+
+def test_v1_files_batch_delete_rejects_over_path_limit(monkeypatch):
+    client, _server, _user = _client(monkeypatch)
+    paths = [f"/tmp/cs2-ops-verify/f{index}" for index in range(MAX_FILE_MUTATION_PATHS + 1)]
+    response = client.post("/api/v1/servers/1/files/batch-delete", json={"paths": paths})
+    assert response.status_code == 422
 
 
 def test_v1_files_move_rejects_escape_and_queues_valid_request(monkeypatch):

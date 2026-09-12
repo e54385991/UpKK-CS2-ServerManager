@@ -7733,7 +7733,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 50,
+            "maxItems": 1000,
             "minItems": 1,
             "title": "Paths",
             "type": "array"
@@ -7806,7 +7806,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 50,
+            "maxItems": 1000,
             "minItems": 1,
             "title": "Sources",
             "type": "array"
@@ -8052,7 +8052,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 50,
+            "maxItems": 1000,
             "minItems": 1,
             "title": "Sources",
             "type": "array"
