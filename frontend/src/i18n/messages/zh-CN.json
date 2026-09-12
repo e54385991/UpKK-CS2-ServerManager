@@ -2244,6 +2244,7 @@
     "moveDestination": "目标目录",
     "moveDestinationHelp": "请输入服务器游戏目录内的绝对路径。",
     "moveBrowse": "浏览目录",
+    "moveBreadcrumb": "目标路径面包屑",
     "moveConflict": "遇到同名项目时",
     "moveConflictSkip": "跳过并报告",
     "moveConflictOverwrite": "确认覆盖",

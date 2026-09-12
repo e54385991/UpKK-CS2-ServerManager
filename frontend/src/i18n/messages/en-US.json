@@ -2244,6 +2244,7 @@
     "moveDestination": "Destination directory",
     "moveDestinationHelp": "Use an absolute path inside the server game directory.",
     "moveBrowse": "Browse folders",
+    "moveBreadcrumb": "Destination breadcrumbs",
     "moveConflict": "When a name already exists",
     "moveConflictSkip": "Skip and report",
     "moveConflictOverwrite": "Confirm overwrite",

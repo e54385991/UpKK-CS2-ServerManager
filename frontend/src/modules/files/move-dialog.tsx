@@ -29,6 +29,7 @@ export function MoveDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [folders, setFolders] = useState<readonly { name: string; path: string }[]>([]);
+  const [root, setRoot] = useState<string | null>(null);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [conflicts, setConflicts] = useState<readonly string[]>([]);
 
@@ -40,9 +41,12 @@ export function MoveDialog({
       setError(result.error || t("failed"));
       return;
     }
+    setRoot(result.data.root);
     setFolders(result.data.files.filter((entry) => entry.type === "directory"));
     setError(null);
   }
+
+  const crumbs = root && target.startsWith(root) ? target.slice(root.length).split("/").filter(Boolean) : [];
 
   async function submit() {
     if (!target.trim() || busy) return;
@@ -102,6 +106,15 @@ export function MoveDialog({
             autoFocus
           />
           <p className="mt-1.5 text-xs text-fg-subtle">{t("moveDestinationHelp")}</p>
+          {root ? (
+            <nav aria-label={t("moveBreadcrumb")} className="mt-2 flex flex-wrap items-center gap-1 text-xs text-fg-muted">
+              <button type="button" className="hover:text-primary" onClick={() => setTarget(root)}>{root}</button>
+              {crumbs.map((name, index) => {
+                const path = `${root}/${crumbs.slice(0, index + 1).join("/")}`;
+                return <span key={path} className="inline-flex items-center gap-1"><span>/</span><button type="button" className="hover:text-primary" onClick={() => setTarget(path)}>{name}</button></span>;
+              })}
+            </nav>
+          ) : null}
           <div className="mt-2 flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" disabled={loadingFolders || !target.trim()} onClick={() => void browse()}>
               {loadingFolders ? <LoaderCircle className="animate-spin" /> : <Folder />}
