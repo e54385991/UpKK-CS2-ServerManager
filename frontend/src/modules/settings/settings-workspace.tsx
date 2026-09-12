@@ -89,7 +89,7 @@ export function SettingsWorkspace({
                 )}
               >
                 <span>{t(`categories.${section.key}`)}</span>
-                {dirty.has(sectionKey) ? <span className="size-1.5 rounded-full bg-warn" title={t("unsaved")} /> : null}
+                {dirty.has(sectionKey) ? <span className="text-xs text-warn">{t("unsaved")}</span> : null}
               </a>
             );
           })}
