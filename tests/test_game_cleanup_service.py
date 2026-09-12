@@ -63,8 +63,13 @@ class GameCleanupServiceTests(unittest.TestCase):
             self.service.css_logs_dir(self.server),
             f"{self.base}/game/csgo/addons/counterstrikesharp/logs",
         )
+        self.assertEqual(
+            self.service.swiftly_logs_dir(self.server),
+            f"{self.base}/game/csgo/addons/swiftlys2/logs",
+        )
         self.assertEqual(self.service.csgo_logs_dir(self.server), f"{self.base}/game/csgo/logs")
         self.assertNotIn("/cs2/game/", self.service.css_logs_dir(self.server))
+        self.assertNotIn("/cs2/game/", self.service.swiftly_logs_dir(self.server))
 
     def test_path_safety_stays_inside_game_directory(self):
         self.assertTrue(self.service.is_path_safe(self.server, f"{self.base}/game/csgo/server.log"))
@@ -76,6 +81,7 @@ class GameCleanupServiceTests(unittest.TestCase):
         outputs = [
             self.record("f", 10, f"{self.base}/game/csgo/logs/server.log")
             + self.record("l", 0, f"{self.base}/game/csgo/logs/link"),
+            "",
             "",
             self.record("f", 20, f"{self.workshop}/temp/download.tmp"),
             self.record("f", 50, f"{self.base}/game/csgo/console.log"),
@@ -133,7 +139,7 @@ class GameCleanupServiceTests(unittest.TestCase):
         self.assertEqual(ssh.deleted_paths, [])
 
     def test_scan_uses_named_finds_instead_of_listing_every_file(self):
-        ssh = FakeSSHManager(["", "", "", "", "", "", "0\n"])
+        ssh = FakeSSHManager(["", "", "", "", "", "", "", "0\n"])
         asyncio.run(self.service.scan(ssh, self.server))
         joined = "\n".join(ssh.commands)
         self.assertIn("-iname '*.log'", joined)
@@ -182,7 +188,7 @@ class GameCleanupServiceTests(unittest.TestCase):
         self.assertEqual(result["deleted_count"], 1)
 
     def test_iter_scan_emits_phases_before_done(self):
-        ssh = FakeSSHManager(["", "", "", "", "", "", "0\n"])
+        ssh = FakeSSHManager(["", "", "", "", "", "", "", "0\n"])
 
         async def collect():
             return [event async for event in self.service.iter_scan(ssh, self.server)]

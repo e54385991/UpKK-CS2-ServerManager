@@ -63,6 +63,12 @@ class GameCleanupService(CleanupDeleteMixin):
             "game/csgo/addons/counterstrikesharp/logs",
         )
 
+    def swiftly_logs_dir(self, server) -> str:
+        return posixpath.join(
+            self.game_dir(server),
+            "game/csgo/addons/swiftlys2/logs",
+        )
+
     def workshop_dir(self, server) -> str:
         return posixpath.join(
             self.game_dir(server),
@@ -76,6 +82,7 @@ class GameCleanupService(CleanupDeleteMixin):
         return [
             (self.csgo_logs_dir(server), "CSGO log directory contents"),
             (self.css_logs_dir(server), "CounterStrikeSharp log directory contents"),
+            (self.swiftly_logs_dir(server), "SwiftlyS2 log directory contents"),
             (self.workshop_temp_dir(server), "Steam Workshop temp directory contents"),
         ]
 

@@ -32,8 +32,9 @@ def test_cleanup_paths_parsers_and_commands_cover_safety_edges():
     assert service.game_dir(server) == "/srv/cs2"
     assert service.csgo_logs_dir(server).endswith("game/csgo/logs")
     assert service.css_logs_dir(server).endswith("counterstrikesharp/logs")
+    assert service.swiftly_logs_dir(server).endswith("swiftlys2/logs")
     assert service.workshop_temp_dir(server).endswith("workshop/temp")
-    assert len(service.safe_roots(server)) == 3
+    assert len(service.safe_roots(server)) == 4
     assert service.is_archive_path("/tmp/A.ZIP")
     assert not service.is_archive_path("/tmp/readme")
     assert service.is_workshop_temp_path(server, service.workshop_temp_dir(server) + "/x")
@@ -116,6 +117,7 @@ async def test_cleanup_iter_scan_projects_all_phases(monkeypatch):
     safe = [
         [_record(service.csgo_logs_dir(server) + "/old.log")],
         [_record(service.css_logs_dir(server) + "/sharp.log")],
+        [_record(service.swiftly_logs_dir(server) + "/swiftly.log")],
         [_record(service.workshop_temp_dir(server) + "/temp.log")],
         [_record("/srv/cs2/other.log")],
         [_record("/srv/cs2/backups/a.zip")],
@@ -146,7 +148,7 @@ async def test_cleanup_iter_scan_projects_all_phases(monkeypatch):
     assert events[0]["phase"] == "safe_roots"
     assert any(event.get("phase") == "archives" for event in events)
     done = events[-1]["data"]
-    assert len(done["safe_items"]) == 4
+    assert len(done["safe_items"]) == 5
     assert len(done["archive_items"]) == 1
     assert done["workshop_summary"]["item_count"] == 1
     assert done["total_size"] > 0
