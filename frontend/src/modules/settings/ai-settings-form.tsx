@@ -263,7 +263,7 @@ export function AiSettingsForm({
             id="ai-enabled"
             label={t("enabled")}
             checked={enabled}
-            onCheckedChange={setEnabled}
+            onCheckedChange={(next) => { setEnabled(next); onDirty?.(); }}
           />
         </div>
         <div className="space-y-2">
@@ -301,7 +301,7 @@ export function AiSettingsForm({
             id="ai-clear"
             label={t("clearKey")}
             checked={clearKey}
-            onCheckedChange={setClearKey}
+            onCheckedChange={(next) => { setClearKey(next); onDirty?.(); }}
           />
         </div>
         <details className="rounded-md border border-line px-3 py-2">

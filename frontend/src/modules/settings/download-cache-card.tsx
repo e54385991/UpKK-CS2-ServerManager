@@ -109,7 +109,7 @@ export function DownloadCacheCard({ initial, onDirty, onSaved }: { initial: Syst
             label={t("enabled")}
             descriptionId="plugin-cache-enabled-help"
             checked={enabled}
-            onCheckedChange={setEnabled}
+            onCheckedChange={(next) => { setEnabled(next); onDirty?.(); }}
           />
         </div>
 

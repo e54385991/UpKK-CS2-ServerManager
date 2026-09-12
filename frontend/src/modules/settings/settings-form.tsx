@@ -420,7 +420,7 @@ export function SettingsForm({
                 id="email-enabled"
                 label={t("email.enabled")}
                 checked={emailEnabled}
-                onCheckedChange={setEmailEnabled}
+                onCheckedChange={(next) => { setEmailEnabled(next); onDirty?.(); }}
               />
             </div>
           </CardHeader>
@@ -532,7 +532,7 @@ export function SettingsForm({
                     label={t("smtp.useTls")}
                     checked={smtpUseTls}
                     disabled={!emailEnabled}
-                    onCheckedChange={setSmtpUseTls}
+                    onCheckedChange={(next) => { setSmtpUseTls(next); onDirty?.(); }}
                   />
                 </div>
               </div>
@@ -672,7 +672,7 @@ export function SettingsForm({
                 id="captcha-enabled"
                 label={t("captcha.enabled")}
                 checked={captchaEnabled}
-                onCheckedChange={setCaptchaEnabled}
+                onCheckedChange={(next) => { setCaptchaEnabled(next); onDirty?.(); }}
               />
             </div>
           </CardHeader>
@@ -699,7 +699,7 @@ export function SettingsForm({
                 id="registration-enabled"
                 label={t("registration.enabled")}
                 checked={registrationEnabled}
-                onCheckedChange={setRegistrationEnabled}
+                onCheckedChange={(next) => { setRegistrationEnabled(next); onDirty?.(); }}
               />
             </div>
           </CardHeader>
