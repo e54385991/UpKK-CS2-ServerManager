@@ -22,9 +22,9 @@ const geistMono = Geist_Mono({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("site");
+  const [t, headerList] = await Promise.all([getTranslations("site"), headers()]);
   return {
-    metadataBase: new URL(publicAppUrlFromHeaders(await headers())),
+    metadataBase: new URL(publicAppUrlFromHeaders(headerList)),
     title: {
       default: t("name"),
       template: `%s · ${t("name")}`,
@@ -47,8 +47,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const locale = await getLocale();
-  const messages = await getMessages();
+  const [locale, messages] = await Promise.all([getLocale(), getMessages()]);
 
   return (
     <html lang={locale} suppressHydrationWarning>

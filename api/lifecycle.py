@@ -223,6 +223,13 @@ class ApplicationLifecycle:
             await self._start_service(
                 "plugin AI imports", plugin_import_worker.start, plugin_import_worker.stop
             )
+            from services.panel_metrics import start_loop_sampler, stop_loop_sampler
+
+            await self._start_service(
+                "panel metrics sampler",
+                start_loop_sampler,
+                stop_loop_sampler,
+            )
             self._started = True
             logger.info("CS2 Server Manager started successfully")
 

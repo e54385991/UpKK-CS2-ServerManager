@@ -71,6 +71,16 @@ class ServerOperationHub(ServerOperationHistoryMixin):
     def _history_redis(self) -> Any:
         return redis_manager
 
+    def occupancy_snapshot(self) -> dict[str, int]:
+        """Return in-memory queue occupancy without operation payloads."""
+        return {
+            "running": len(self._current),
+            "queued": sum(len(item) for item in self._pending.values()),
+            "runners": len(self._runners),
+            "subscribers": sum(len(item) for item in self._queues.values()),
+            "tracked": len(self._records),
+        }
+
     def _record_key(self, operation_id: str) -> str:
         return f"server_op:{operation_id}"
 

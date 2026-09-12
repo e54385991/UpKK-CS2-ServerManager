@@ -8,6 +8,7 @@ from starlette.types import Lifespan
 from api.legacy_html import LegacyHtmlRedirectMiddleware
 from api.lifecycle import application_lifespan
 from api.metadata import APP_DESCRIPTION, APP_TITLE, APP_VERSION
+from api.request_metrics import RequestMetricsMiddleware
 from api.routes import (
     actions,
     ai,
@@ -101,6 +102,7 @@ def create_app(
 
     register_exception_handlers(app)
     app.add_middleware(LegacyHtmlRedirectMiddleware)
+    app.add_middleware(RequestMetricsMiddleware)
     if STATIC_DIRECTORY.is_dir():
         app.mount(
             "/static",

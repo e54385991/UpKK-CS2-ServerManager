@@ -6,8 +6,10 @@ import { GithubIcon } from "@/shared/ui/github-icon";
 const PROJECT_URL = "https://github.com/e54385991/upkK-CS2-ServerManager/";
 
 export async function RuntimeFooter() {
-  const t = await getTranslations("site");
-  const versions = await loadRuntimeVersions();
+  const [t, versions] = await Promise.all([
+    getTranslations("site"),
+    loadRuntimeVersions(),
+  ]);
   const lines = formatRuntimeLines(versions, {
     frontend: t("frontendBuild"),
     backend: t("backendBuild"),

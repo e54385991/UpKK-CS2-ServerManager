@@ -6,12 +6,15 @@ import { SettingsForm, type SettingsSectionKey } from "@/modules/settings/settin
 import { DownloadCacheCard } from "@/modules/settings/download-cache-card";
 import { AiSettingsForm } from "@/modules/settings/ai-settings-form";
 import { SettingsTransferCard } from "@/modules/settings/settings-transfer-card";
+import { PerformanceDiagnosticsCard } from "@/modules/settings/diagnostics-card";
+import { SettingsSection } from "@/modules/settings/settings-section";
 import type { AiSystemSettings, SystemSettings } from "@/modules/settings/types";
 import { cn } from "@/shared/lib/cn";
 
-type SectionKey = SettingsSectionKey | "download-cache" | "ai" | "transfer";
+type SectionKey = SettingsSectionKey | "download-cache" | "ai" | "transfer" | "performance";
 
 const SECTIONS = [
+  { id: "settings-performance", key: "performance" },
   { id: "settings-downloads", key: "downloads" },
   { id: "settings-download-cache", key: "downloadCache" },
   { id: "settings-notifications", key: "notifications" },
@@ -97,6 +100,16 @@ export function SettingsWorkspace({
       </nav>
 
       <div className="min-w-0">
+        {active === "performance" ? (
+          <SettingsSection
+            id="settings-performance"
+            title={t("sections.performance.title")}
+            description={t("sections.performance.description")}
+            testId="settings-section-performance"
+          >
+            <PerformanceDiagnosticsCard />
+          </SettingsSection>
+        ) : null}
         <SettingsForm
           initial={settings}
           activeSection={mainSection}

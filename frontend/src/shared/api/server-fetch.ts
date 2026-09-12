@@ -26,8 +26,7 @@ const CLIENT_ADDRESS_HEADERS = [
   "forwarded",
 ] as const;
 
-async function clientAddressHeaders(): Promise<Record<string, string>> {
-  const incoming = await headers();
+function clientAddressHeadersFrom(incoming: Headers): Record<string, string> {
   const forwarded: Record<string, string> = {};
   for (const name of CLIENT_ADDRESS_HEADERS) {
     const value = incoming.get(name);
@@ -49,8 +48,9 @@ export async function apiFetch<T>(
   path: string,
   init?: ApiFetchInit,
 ): Promise<ApiResult<T>> {
-  const token = sessionTokenFrom(await cookies());
-  const clientAddress = await clientAddressHeaders();
+  const [cookieStore, incoming] = await Promise.all([cookies(), headers()]);
+  const token = sessionTokenFrom(cookieStore);
+  const clientAddress = clientAddressHeadersFrom(incoming);
   const { timeoutMs, signal, headers: extraHeaders, ...rest } = init ?? {};
   try {
     const response = await fetch(`${internalApiUrl()}${path}`, {

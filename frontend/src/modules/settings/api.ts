@@ -6,6 +6,7 @@ import type {
   AssistantSystemSettingsViewDto,
   EmailTestResultDto,
   GmailAuthorizeResultDto,
+  PanelPerformanceSnapshotDto,
   SystemSettingsExportDto,
   SystemSettingsImportRequestDto,
   SystemSettingsImportResultDto,
@@ -231,4 +232,8 @@ export async function testAiSettings(): Promise<ApiResult<AssistantProviderTestV
     // Text + streamed tool probe can each use the provider timeout (default 60s).
     timeoutMs: 180_000,
   });
+}
+
+export async function getDiagnostics(): Promise<ApiResult<PanelPerformanceSnapshotDto>> {
+  return apiFetch<PanelPerformanceSnapshotDto>("/api/v1/diagnostics");
 }

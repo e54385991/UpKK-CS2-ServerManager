@@ -2,6 +2,7 @@
 
 from .assistant import *  # noqa: F401,F403
 from .cleanup import *  # noqa: F401,F403
+from .diagnostics import *  # noqa: F401,F403
 from .gamemode import *  # noqa: F401,F403
 from .identity import *  # noqa: F401,F403
 from .maps_files import *  # noqa: F401,F403

@@ -31,6 +31,7 @@ class KeyedConcurrencyLimiter(Generic[Key]):
         if per_key_limit < 1:
             raise ValueError("per_key_limit must be at least 1")
 
+        self._global_limit = global_limit
         self._global_semaphore = asyncio.Semaphore(global_limit)
         self._per_key_limit = per_key_limit
         self._entries: dict[Key, _SemaphoreEntry] = {}
@@ -39,6 +40,15 @@ class KeyedConcurrencyLimiter(Generic[Key]):
     def active_key_count(self) -> int:
         """Return the number of keys with active or waiting borrowers."""
         return len(self._entries)
+
+    def snapshot(self) -> dict[str, int]:
+        """Return occupancy counters without listing keys or waiters."""
+        return {
+            "global_limit": self._global_limit,
+            "per_key_limit": self._per_key_limit,
+            "active_keys": len(self._entries),
+            "borrowers": sum(entry.borrowers for entry in self._entries.values()),
+        }
 
     @asynccontextmanager
     async def slot(self, key: Key) -> AsyncIterator[None]:

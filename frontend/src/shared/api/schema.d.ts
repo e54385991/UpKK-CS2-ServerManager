@@ -2376,6 +2376,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Panel Performance
+         * @description Return an in-process performance snapshot suitable for JSON export.
+         */
+        get: operations["read_panel_performance_api_v1_diagnostics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/discord": {
         parameters: {
             query?: never;
@@ -9389,6 +9409,22 @@ export interface components {
             url: string;
         };
         /**
+         * DatabasePoolView
+         * @description SQLAlchemy pool occupancy for this worker. None when the pool has no gauge.
+         */
+        DatabasePoolView: {
+            /** Checked In */
+            checked_in?: number | null;
+            /** Checked Out */
+            checked_out?: number | null;
+            /** Max Overflow */
+            max_overflow: number;
+            /** Overflow */
+            overflow?: number | null;
+            /** Pool Size */
+            pool_size: number;
+        };
+        /**
          * DependencyInfo
          * @description Schema for dependency information
          */
@@ -11782,6 +11818,54 @@ export interface components {
             target: string;
         };
         /**
+         * LatencyPercentiles
+         * @description Nearest-rank latency percentiles in milliseconds.
+         */
+        LatencyPercentiles: {
+            /**
+             * Max
+             * @default 0
+             */
+            max: number;
+            /**
+             * P50
+             * @default 0
+             */
+            p50: number;
+            /**
+             * P95
+             * @default 0
+             */
+            p95: number;
+            /**
+             * P99
+             * @default 0
+             */
+            p99: number;
+        };
+        /**
+         * LimiterView
+         * @description Telemetry limiter occupancy without host or server identities.
+         */
+        LimiterView: {
+            /**
+             * Active Keys
+             * @default 0
+             */
+            active_keys: number;
+            /**
+             * Borrowers
+             * @default 0
+             */
+            borrowers: number;
+            /** Global Limit */
+            global_limit: number;
+            /** Name */
+            name: string;
+            /** Per Key Limit */
+            per_key_limit: number;
+        };
+        /**
          * LinuxRuntimeProfile
          * @description Detected Linux userspace information used for Steam Runtime selection.
          */
@@ -12836,6 +12920,37 @@ export interface components {
             type: string;
         };
         /**
+         * OperationOccupancyView
+         * @description In-memory operation hub occupancy for this worker.
+         */
+        OperationOccupancyView: {
+            /**
+             * Queued
+             * @default 0
+             */
+            queued: number;
+            /**
+             * Runners
+             * @default 0
+             */
+            runners: number;
+            /**
+             * Running
+             * @default 0
+             */
+            running: number;
+            /**
+             * Subscribers
+             * @default 0
+             */
+            subscribers: number;
+            /**
+             * Tracked
+             * @default 0
+             */
+            tracked: number;
+        };
+        /**
          * OperationTransferProgress
          * @description Bounded transport progress attached to a replayable operation event.
          */
@@ -12914,6 +13029,39 @@ export interface components {
             offset: number;
             /** Total */
             total: number;
+        };
+        /**
+         * PanelPerformanceSnapshot
+         * @description Admin-only panel snapshot. Field order is the export priority order.
+         */
+        PanelPerformanceSnapshot: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            database: components["schemas"]["DatabasePoolView"];
+            /**
+             * Format
+             * @default upkk-panel-performance
+             * @constant
+             */
+            format: "upkk-panel-performance";
+            /** Limiters */
+            limiters?: components["schemas"]["LimiterView"][];
+            operations: components["schemas"]["OperationOccupancyView"];
+            /** Priority */
+            priority: string[];
+            process: components["schemas"]["ProcessMetricsView"];
+            redis: components["schemas"]["RedisMetricsView"];
+            requests: components["schemas"]["RequestMetricsView"];
+            runtime: components["schemas"]["RuntimeMetricsView"];
+            ssh_pool: components["schemas"]["SshPoolView"];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
         };
         /**
          * PasswordReset
@@ -13978,6 +14126,39 @@ export interface components {
             type: string;
         };
         /**
+         * ProcessMetricsView
+         * @description Panel process resource gauges. RSS may fall back to peak on some hosts.
+         */
+        ProcessMetricsView: {
+            /** Asyncio Tasks */
+            asyncio_tasks?: number | null;
+            /** Cpu Percent */
+            cpu_percent?: number | null;
+            /**
+             * Cpu System Seconds
+             * @default 0
+             */
+            cpu_system_seconds: number;
+            /**
+             * Cpu User Seconds
+             * @default 0
+             */
+            cpu_user_seconds: number;
+            /** Event Loop Lag Ms */
+            event_loop_lag_ms?: number | null;
+            /** Pid */
+            pid: number;
+            /** Rss Bytes */
+            rss_bytes?: number | null;
+            /**
+             * Threads
+             * @default 0
+             */
+            threads: number;
+            /** Uptime Seconds */
+            uptime_seconds: number;
+        };
+        /**
          * ProfileApiKeyGenerate
          * @description Optional captcha when rotating the personal API key from the console.
          */
@@ -14205,6 +14386,21 @@ export interface components {
             username: string;
         };
         /**
+         * RedisMetricsView
+         * @description Redis ping latency. Disconnected is a field, not an HTTP error.
+         */
+        RedisMetricsView: {
+            /** Connected */
+            connected: boolean;
+            /** Ping Ms */
+            ping_ms?: number | null;
+            /**
+             * Pool Max Connections
+             * @default 0
+             */
+            pool_max_connections: number;
+        };
+        /**
          * RedisServerDetail
          * @description Schema for Redis-stored server detail (with password)
          */
@@ -14296,6 +14492,54 @@ export interface components {
             old_name: string;
         };
         /**
+         * RequestMetricsView
+         * @description In-process HTTP timings. Health and this snapshot are excluded.
+         */
+        RequestMetricsView: {
+            /** By Route */
+            by_route?: components["schemas"]["RouteLatencyView"][];
+            /**
+             * Error Rate
+             * @default 0
+             */
+            error_rate: number;
+            latency_ms: components["schemas"]["LatencyPercentiles"];
+            /**
+             * Requests Per Minute
+             * @default 0
+             */
+            requests_per_minute: number;
+            /** Sample Count */
+            sample_count: number;
+            /**
+             * Slow Request Count
+             * @default 0
+             */
+            slow_request_count: number;
+            /**
+             * Slow Request Threshold Ms
+             * @default 500
+             */
+            slow_request_threshold_ms: number;
+            /**
+             * Status 2Xx
+             * @default 0
+             */
+            status_2xx: number;
+            /**
+             * Status 4Xx
+             * @default 0
+             */
+            status_4xx: number;
+            /**
+             * Status 5Xx
+             * @default 0
+             */
+            status_5xx: number;
+            /** Window Seconds */
+            window_seconds: number;
+        };
+        /**
          * ResetPasswordRequest
          * @description Schema for reset password request
          */
@@ -14304,6 +14548,42 @@ export interface components {
             new_password: string;
             /** Token */
             token: string;
+        };
+        /**
+         * RouteLatencyView
+         * @description One matched route in the current sample window.
+         */
+        RouteLatencyView: {
+            /** Count */
+            count: number;
+            /**
+             * Error Count
+             * @default 0
+             */
+            error_count: number;
+            latency_ms: components["schemas"]["LatencyPercentiles"];
+            /** Method */
+            method: string;
+            /** Route */
+            route: string;
+        };
+        /**
+         * RuntimeMetricsView
+         * @description Build identity already used by ``/health``. Unknown values stay placeholders.
+         */
+        RuntimeMetricsView: {
+            /** Build Time */
+            build_time: string;
+            /** Fastapi */
+            fastapi: string;
+            /** Git Sha */
+            git_sha: string;
+            /** Python */
+            python: string;
+            /** Version */
+            version: string;
+            /** Worker Pid */
+            worker_pid: number;
         };
         /**
          * S3BackupItem
@@ -21609,6 +21889,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_panel_performance_api_v1_diagnostics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelPerformanceSnapshot"];
                 };
             };
         };

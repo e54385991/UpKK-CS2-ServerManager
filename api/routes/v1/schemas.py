@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from api.contracts.v1.assistant import *  # noqa: F401,F403
 from api.contracts.v1.cleanup import *  # noqa: F401,F403
+from api.contracts.v1.diagnostics import *  # noqa: F401,F403
 from api.contracts.v1.gamemode import *  # noqa: F401,F403
 from api.contracts.v1.identity import *  # noqa: F401,F403
 from api.contracts.v1.maps_files import *  # noqa: F401,F403

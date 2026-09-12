@@ -5,6 +5,7 @@ import type { ApiResult } from "@/shared/api/server-fetch";
 import type {
   ActionResultDto,
   EmailTestResultDto,
+  PanelPerformanceSnapshotDto,
   SystemSettingsExportDto,
   SystemSettingsImportRequestDto,
   SystemSettingsImportResultDto,
@@ -13,6 +14,7 @@ import {
   deleteGmailAuthorization,
   exportSettings,
   getAiSettings,
+  getDiagnostics,
   getGmailAuthorize,
   getSettings,
   importSettings,
@@ -122,4 +124,10 @@ export async function testAiSettingsAction(): Promise<
   const result = await testAiSettings();
   if (result.ok) revalidatePath("/assistant");
   return result;
+}
+
+export async function getDiagnosticsAction(): Promise<
+  ApiResult<PanelPerformanceSnapshotDto>
+> {
+  return getDiagnostics();
 }

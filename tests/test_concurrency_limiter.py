@@ -50,6 +50,11 @@ async def test_limiter_enforces_both_limits_and_forgets_completed_keys():
     assert maximum_total == 2
     assert maximum_by_key == {"user-1": 1, "user-2": 1}
     assert limiter.active_key_count == 2
+    occupancy = limiter.snapshot()
+    assert occupancy["global_limit"] == 2
+    assert occupancy["per_key_limit"] == 1
+    assert occupancy["active_keys"] == 2
+    assert occupancy["borrowers"] >= 2
 
     release.set()
     await asyncio.gather(first, same_user, other_user)

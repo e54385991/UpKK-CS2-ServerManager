@@ -45,6 +45,7 @@ export type SystemSettingsPatchDto = Schemas["SystemSettingsPatch"];
 export type SystemSettingsExportDto = Schemas["SystemSettingsExport"];
 export type SystemSettingsImportRequestDto = Schemas["SystemSettingsImportRequest"];
 export type SystemSettingsImportResultDto = Schemas["SystemSettingsImportResult"];
+export type PanelPerformanceSnapshotDto = Schemas["PanelPerformanceSnapshot"];
 export type EmailTestResultDto = Schemas["EmailTestResult"];
 export type GmailAuthorizeResultDto = Schemas["GmailAuthorizeResult"];
 export type ActionResultDto = Schemas["ActionResult"];

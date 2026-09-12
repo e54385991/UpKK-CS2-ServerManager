@@ -5674,6 +5674,59 @@
         "title": "CustomMapSyncUpdateRequest",
         "type": "object"
       },
+      "DatabasePoolView": {
+        "additionalProperties": false,
+        "description": "SQLAlchemy pool occupancy for this worker. None when the pool has no gauge.",
+        "properties": {
+          "checked_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked In"
+          },
+          "checked_out": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked Out"
+          },
+          "max_overflow": {
+            "title": "Max Overflow",
+            "type": "integer"
+          },
+          "overflow": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overflow"
+          },
+          "pool_size": {
+            "title": "Pool Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pool_size",
+          "max_overflow"
+        ],
+        "title": "DatabasePoolView",
+        "type": "object"
+      },
       "DependencyInfo": {
         "description": "Schema for dependency information",
         "properties": {
@@ -12025,6 +12078,69 @@
         "title": "InstallationMapping",
         "type": "object"
       },
+      "LatencyPercentiles": {
+        "additionalProperties": false,
+        "description": "Nearest-rank latency percentiles in milliseconds.",
+        "properties": {
+          "max": {
+            "default": 0,
+            "title": "Max",
+            "type": "number"
+          },
+          "p50": {
+            "default": 0,
+            "title": "P50",
+            "type": "number"
+          },
+          "p95": {
+            "default": 0,
+            "title": "P95",
+            "type": "number"
+          },
+          "p99": {
+            "default": 0,
+            "title": "P99",
+            "type": "number"
+          }
+        },
+        "title": "LatencyPercentiles",
+        "type": "object"
+      },
+      "LimiterView": {
+        "additionalProperties": false,
+        "description": "Telemetry limiter occupancy without host or server identities.",
+        "properties": {
+          "active_keys": {
+            "default": 0,
+            "title": "Active Keys",
+            "type": "integer"
+          },
+          "borrowers": {
+            "default": 0,
+            "title": "Borrowers",
+            "type": "integer"
+          },
+          "global_limit": {
+            "title": "Global Limit",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "per_key_limit": {
+            "title": "Per Key Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "global_limit",
+          "per_key_limit"
+        ],
+        "title": "LimiterView",
+        "type": "object"
+      },
       "LinuxRuntimeProfile": {
         "description": "Detected Linux userspace information used for Steam Runtime selection.",
         "properties": {
@@ -15203,6 +15319,39 @@
         "title": "OperationJournalEvent",
         "type": "object"
       },
+      "OperationOccupancyView": {
+        "additionalProperties": false,
+        "description": "In-memory operation hub occupancy for this worker.",
+        "properties": {
+          "queued": {
+            "default": 0,
+            "title": "Queued",
+            "type": "integer"
+          },
+          "runners": {
+            "default": 0,
+            "title": "Runners",
+            "type": "integer"
+          },
+          "running": {
+            "default": 0,
+            "title": "Running",
+            "type": "integer"
+          },
+          "subscribers": {
+            "default": 0,
+            "title": "Subscribers",
+            "type": "integer"
+          },
+          "tracked": {
+            "default": 0,
+            "title": "Tracked",
+            "type": "integer"
+          }
+        },
+        "title": "OperationOccupancyView",
+        "type": "object"
+      },
       "OperationTransferProgress": {
         "additionalProperties": false,
         "description": "Bounded transport progress attached to a replayable operation event.",
@@ -15377,6 +15526,76 @@
           "offset"
         ],
         "title": "Page[MarketPluginView]",
+        "type": "object"
+      },
+      "PanelPerformanceSnapshot": {
+        "additionalProperties": false,
+        "description": "Admin-only panel snapshot. Field order is the export priority order.",
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "database": {
+            "$ref": "#/components/schemas/DatabasePoolView"
+          },
+          "format": {
+            "const": "upkk-panel-performance",
+            "default": "upkk-panel-performance",
+            "title": "Format",
+            "type": "string"
+          },
+          "limiters": {
+            "items": {
+              "$ref": "#/components/schemas/LimiterView"
+            },
+            "title": "Limiters",
+            "type": "array"
+          },
+          "operations": {
+            "$ref": "#/components/schemas/OperationOccupancyView"
+          },
+          "priority": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Priority",
+            "type": "array"
+          },
+          "process": {
+            "$ref": "#/components/schemas/ProcessMetricsView"
+          },
+          "redis": {
+            "$ref": "#/components/schemas/RedisMetricsView"
+          },
+          "requests": {
+            "$ref": "#/components/schemas/RequestMetricsView"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/RuntimeMetricsView"
+          },
+          "ssh_pool": {
+            "$ref": "#/components/schemas/SshPoolView"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "captured_at",
+          "priority",
+          "requests",
+          "process",
+          "database",
+          "redis",
+          "ssh_pool",
+          "operations",
+          "runtime"
+        ],
+        "title": "PanelPerformanceSnapshot",
         "type": "object"
       },
       "PasswordReset": {
@@ -17984,6 +18203,85 @@
         "title": "ProblemDetail",
         "type": "object"
       },
+      "ProcessMetricsView": {
+        "additionalProperties": false,
+        "description": "Panel process resource gauges. RSS may fall back to peak on some hosts.",
+        "properties": {
+          "asyncio_tasks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asyncio Tasks"
+          },
+          "cpu_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpu Percent"
+          },
+          "cpu_system_seconds": {
+            "default": 0,
+            "title": "Cpu System Seconds",
+            "type": "number"
+          },
+          "cpu_user_seconds": {
+            "default": 0,
+            "title": "Cpu User Seconds",
+            "type": "number"
+          },
+          "event_loop_lag_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Loop Lag Ms"
+          },
+          "pid": {
+            "title": "Pid",
+            "type": "integer"
+          },
+          "rss_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rss Bytes"
+          },
+          "threads": {
+            "default": 0,
+            "title": "Threads",
+            "type": "integer"
+          },
+          "uptime_seconds": {
+            "title": "Uptime Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "pid",
+          "uptime_seconds"
+        ],
+        "title": "ProcessMetricsView",
+        "type": "object"
+      },
       "ProfileApiKeyGenerate": {
         "additionalProperties": false,
         "description": "Optional captcha when rotating the personal API key from the console.",
@@ -18653,6 +18951,37 @@
         "title": "ProfileView",
         "type": "object"
       },
+      "RedisMetricsView": {
+        "additionalProperties": false,
+        "description": "Redis ping latency. Disconnected is a field, not an HTTP error.",
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "ping_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ping Ms"
+          },
+          "pool_max_connections": {
+            "default": 0,
+            "title": "Pool Max Connections",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connected"
+        ],
+        "title": "RedisMetricsView",
+        "type": "object"
+      },
       "RedisServerDetail": {
         "description": "Schema for Redis-stored server detail (with password)",
         "properties": {
@@ -18836,6 +19165,72 @@
         "title": "RenameRequest",
         "type": "object"
       },
+      "RequestMetricsView": {
+        "additionalProperties": false,
+        "description": "In-process HTTP timings. Health and this snapshot are excluded.",
+        "properties": {
+          "by_route": {
+            "items": {
+              "$ref": "#/components/schemas/RouteLatencyView"
+            },
+            "title": "By Route",
+            "type": "array"
+          },
+          "error_rate": {
+            "default": 0,
+            "title": "Error Rate",
+            "type": "number"
+          },
+          "latency_ms": {
+            "$ref": "#/components/schemas/LatencyPercentiles"
+          },
+          "requests_per_minute": {
+            "default": 0,
+            "title": "Requests Per Minute",
+            "type": "number"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "slow_request_count": {
+            "default": 0,
+            "title": "Slow Request Count",
+            "type": "integer"
+          },
+          "slow_request_threshold_ms": {
+            "default": 500,
+            "title": "Slow Request Threshold Ms",
+            "type": "integer"
+          },
+          "status_2xx": {
+            "default": 0,
+            "title": "Status 2Xx",
+            "type": "integer"
+          },
+          "status_4xx": {
+            "default": 0,
+            "title": "Status 4Xx",
+            "type": "integer"
+          },
+          "status_5xx": {
+            "default": 0,
+            "title": "Status 5Xx",
+            "type": "integer"
+          },
+          "window_seconds": {
+            "title": "Window Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_seconds",
+          "sample_count",
+          "latency_ms"
+        ],
+        "title": "RequestMetricsView",
+        "type": "object"
+      },
       "ResetPasswordRequest": {
         "description": "Schema for reset password request",
         "properties": {
@@ -18856,6 +19251,80 @@
           "new_password"
         ],
         "title": "ResetPasswordRequest",
+        "type": "object"
+      },
+      "RouteLatencyView": {
+        "additionalProperties": false,
+        "description": "One matched route in the current sample window.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "error_count": {
+            "default": 0,
+            "title": "Error Count",
+            "type": "integer"
+          },
+          "latency_ms": {
+            "$ref": "#/components/schemas/LatencyPercentiles"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "route": {
+            "title": "Route",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "route",
+          "count",
+          "latency_ms"
+        ],
+        "title": "RouteLatencyView",
+        "type": "object"
+      },
+      "RuntimeMetricsView": {
+        "additionalProperties": false,
+        "description": "Build identity already used by ``/health``. Unknown values stay placeholders.",
+        "properties": {
+          "build_time": {
+            "title": "Build Time",
+            "type": "string"
+          },
+          "fastapi": {
+            "title": "Fastapi",
+            "type": "string"
+          },
+          "git_sha": {
+            "title": "Git Sha",
+            "type": "string"
+          },
+          "python": {
+            "title": "Python",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "worker_pid": {
+            "title": "Worker Pid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "python",
+          "fastapi",
+          "git_sha",
+          "build_time",
+          "worker_pid"
+        ],
+        "title": "RuntimeMetricsView",
         "type": "object"
       },
       "S3BackupItem": {
@@ -34057,6 +34526,33 @@
         "summary": "Reset Password",
         "tags": [
           "v1-auth"
+        ]
+      }
+    },
+    "/api/v1/diagnostics": {
+      "get": {
+        "description": "Return an in-process performance snapshot suitable for JSON export.",
+        "operationId": "read_panel_performance_api_v1_diagnostics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelPerformanceSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Panel Performance",
+        "tags": [
+          "v1-diagnostics"
         ]
       }
     },

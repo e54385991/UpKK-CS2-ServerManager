@@ -16,6 +16,7 @@ from . import (
     cleanup,
     console,
     custom_commands,
+    diagnostics,
     discord,
     discord_servers,
     files,
@@ -65,6 +66,7 @@ router.include_router(plugin_configs.router)
 router.include_router(overview.router)
 router.include_router(audit.router)
 router.include_router(settings.router)
+router.include_router(diagnostics.router)
 router.include_router(maps.router)
 router.include_router(game_modes.router)
 router.include_router(files.router)

@@ -304,6 +304,10 @@ class A2SCacheService:
         await self._limited_query(server)
         return await self.get_cached_info(int(server.id))
 
+    def limiter_snapshot(self) -> dict[str, int]:
+        """Return A2S probe limiter occupancy without server identities."""
+        return self._probe_limiter.snapshot()
+
     async def get_cached_info(self, server_id: int) -> Optional[Dict]:
         """Get cached A2S info for a server"""
         cache_key = f"a2s:server:{server_id}"

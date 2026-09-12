@@ -1194,7 +1194,7 @@
   },
   "settings": {
     "title": "Settings",
-    "description": "Panel-level configuration: download proxy, the global GitHub credential, outbound email, and system AI.",
+    "description": "Panel-level configuration: download proxy, the global GitHub credential, outbound email, system AI, and panel performance.",
     "forbidden": "Only administrators can view or change system settings.",
     "fetchError": "Unable to load system settings ({status}).",
   "adminOnly": "Admin only",
@@ -1205,6 +1205,7 @@
     "notifications": "Email notifications",
     "security": "Security & access",
     "logging": "Logging",
+    "performance": "Panel performance",
     "ai": "AI assistant",
     "transfer": "Migration"
   },
@@ -1224,6 +1225,10 @@
     "logging": {
       "title": "Logging",
       "description": "Control how much detail the panel prints to its console."
+    },
+    "performance": {
+      "title": "Panel performance",
+      "description": "Live gauges for this panel worker. Export JSON for latency, pools, and queue analysis."
     },
     "downloadCache": {
       "title": "Download cache",
@@ -1245,6 +1250,43 @@
     "saveFailed": "Could not save settings. Check the inputs and try again.",
     "updatedAt": "Last updated {time}",
     "neverSaved": "Settings have not been saved yet.",
+    "performance": {
+      "refresh": "Refresh",
+      "export": "Export JSON",
+      "exporting": "Exporting…",
+      "exportSuccess": "Performance snapshot downloaded.",
+      "fetchError": "Unable to load panel performance ({status}).",
+      "capturedAt": "Captured {time}",
+      "processLocal": "These figures are for this worker process, not a cluster total.",
+      "requests": "HTTP requests",
+      "process": "Process",
+      "database": "Database pool",
+      "redis": "Redis",
+      "sshPool": "SSH pool",
+      "limiters": "Telemetry limiters",
+      "operations": "Operation queue",
+      "runtime": "Runtime",
+      "p95": "p95",
+      "errorRate": "5xx rate",
+      "rpm": "req/min",
+      "rss": "RSS",
+      "loopLag": "Event-loop lag",
+      "tasks": "Async tasks",
+      "checkedOut": "Checked out",
+      "overflow": "Overflow",
+      "ping": "Ping",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "inUse": "In use",
+      "leases": "Leases",
+      "queued": "Queued",
+      "running": "Running",
+      "pid": "PID",
+      "slow": "Slowest routes (≥{ms} ms threshold)",
+      "samples": "{count} samples in {seconds}s",
+      "route": "Route",
+      "count": "Count"
+    },
     "captcha": {
       "title": "CAPTCHA",
       "description": "Choose whether sign-in, registration, and sensitive actions require CAPTCHA.",

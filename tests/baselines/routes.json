@@ -2788,6 +2788,14 @@
     "methods": [
       "GET"
     ],
+    "name": "read_panel_performance",
+    "path": "/api/v1/diagnostics"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "get_maps_workspace",
     "path": "/api/v1/servers/{server_id}/maps"
   },

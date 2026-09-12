@@ -9,10 +9,11 @@ import { LOCALE_COOKIE, resolveLocale } from "@/i18n/config";
  * (no /[locale] segment) while remaining SSR-authoritative.
  */
 export default getRequestConfig(async () => {
-  const cookieLocale = (await cookies()).get(LOCALE_COOKIE)?.value;
+  const [cookieStore, incoming] = await Promise.all([cookies(), headers()]);
+  const cookieLocale = cookieStore.get(LOCALE_COOKIE)?.value;
   const active = resolveLocale(
     cookieLocale,
-    (await headers()).get("accept-language"),
+    incoming.get("accept-language"),
   );
   const messages = (await import(`@/i18n/messages/${active}.json`)).default;
 

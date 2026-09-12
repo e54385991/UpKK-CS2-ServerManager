@@ -13,6 +13,7 @@ engine = create_async_engine(
     pool_timeout=settings.DB_POOL_TIMEOUT,
     pool_recycle=settings.DB_POOL_RECYCLE,
     pool_pre_ping=settings.DB_POOL_PRE_PING,
+    pool_use_lifo=True,
     echo=settings.DB_ECHO,
     connect_args={"application_name": "upkk-cs2-server-manager"},
 )
