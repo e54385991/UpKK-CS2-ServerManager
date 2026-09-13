@@ -8,7 +8,6 @@ import type { MouseEventHandler } from "react";
 import { cn } from "@/shared/lib/cn";
 import { navPathMatches } from "@/shared/config/navigation";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
-import { markLinkPending } from "@/shared/ui/nav-pending";
 
 /**
  * Sidebar / mobile-drawer navigation link. Keeps the default `<Link>` prefetch
@@ -38,10 +37,7 @@ export function NavLink({
       href={href}
       aria-current={active ? "page" : undefined}
       data-nav-key={navKey}
-      onClick={(event) => {
-        if (pathname !== href) markLinkPending(href);
-        onClick?.(event);
-      }}
+      onClick={onClick}
       className={cn(
         "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
         active

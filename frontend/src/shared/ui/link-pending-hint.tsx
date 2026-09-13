@@ -1,15 +1,20 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { getLinkPendingHref, subscribeLinkPending } from "@/shared/ui/nav-pending";
+import {
+  clearLinkPending,
+  ensureLinkPendingCapture,
+  getLinkPendingHref,
+  subscribeLinkPending,
+} from "@/shared/ui/nav-pending";
 
 /**
  * Fixed-size pending hint for a `<Link>`. Always rendered so toggling
  * `pending` cannot shift the label; `useLinkStatus` only works in a
- * descendant of `Link`. Click handlers also mark the target immediately so
- * feedback does not wait on the App Router starting a transition.
+ * descendant of `Link`. A document capturing listener marks the target on
+ * click, including Playwright's programmatic `HTMLAnchorElement.click()`.
  */
 export function LinkPendingHint({ href }: { href: string }) {
   const { pending } = useLinkStatus();
@@ -19,6 +24,12 @@ export function LinkPendingHint({ href }: { href: string }) {
     () => getLinkPendingHref() === href && pathname !== href,
     () => false,
   );
+  useEffect(() => {
+    ensureLinkPendingCapture();
+  }, []);
+  useEffect(() => {
+    if (pathname === href) clearLinkPending(href);
+  }, [href, pathname]);
   const active = pending || optimistic;
   return (
     <span

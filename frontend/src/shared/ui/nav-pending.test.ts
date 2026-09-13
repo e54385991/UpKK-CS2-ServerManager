@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   clearLinkPending,
+  ensureLinkPendingCapture,
   getLinkPendingHref,
   markLinkPending,
   subscribeLinkPending,
 } from "./nav-pending.ts";
+
+test("ensureLinkPendingCapture is a no-op without a document", () => {
+  assert.doesNotThrow(() => ensureLinkPendingCapture());
+});
 
 test("markLinkPending replaces the previous target and notifies listeners", () => {
   clearLinkPending();

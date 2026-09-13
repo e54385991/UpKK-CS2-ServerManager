@@ -52,6 +52,17 @@ function categoryLink(page: Page, category: string) {
 }
 
 async function clickShowsPending(page: Page, selector: string) {
+  await page.waitForFunction(
+    (target) =>
+      document.documentElement.getAttribute("data-link-pending-capture") ===
+        "true" &&
+      Boolean(
+        document
+          .querySelector(target)
+          ?.querySelector("[data-testid='link-pending-hint']"),
+      ),
+    selector,
+  );
   return page.evaluate(async (target) => {
     const link = document.querySelector(target);
     if (!(link instanceof HTMLAnchorElement)) {

@@ -7,7 +7,6 @@ import { useTranslations } from "next-intl";
 import { activeNavHref, NAV_SECTIONS } from "@/shared/config/navigation";
 import { NavLink } from "@/modules/shell/nav-link";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
-import { markLinkPending } from "@/shared/ui/nav-pending";
 
 /**
  * Persistent desktop sidebar. A client component because it renders icon
@@ -29,9 +28,6 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
         <Link
           href="/overview"
           data-nav-key="home"
-          onClick={() => {
-            if (pathname !== "/overview") markLinkPending("/overview");
-          }}
           className="flex min-w-0 items-center gap-2.5"
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">

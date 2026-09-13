@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import type { Route } from "next";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
-import { markLinkPending } from "@/shared/ui/nav-pending";
 
 type PendingNavLinkProps = Omit<
   ComponentProps<typeof Link>,
@@ -29,10 +27,8 @@ export function PendingNavLink({
   children,
   onMouseEnter,
   onFocus,
-  onClick,
   ...props
 }: PendingNavLinkProps) {
-  const pathname = usePathname();
   const [intent, setIntent] = useState(false);
   const resolvedPrefetch = prefetchOnIntent ? (intent ? null : false) : prefetch;
 
@@ -47,10 +43,6 @@ export function PendingNavLink({
       onFocus={(event) => {
         if (prefetchOnIntent) setIntent(true);
         onFocus?.(event);
-      }}
-      onClick={(event) => {
-        if (pathname !== href) markLinkPending(href);
-        onClick?.(event);
       }}
       {...props}
     >
