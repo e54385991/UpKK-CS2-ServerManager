@@ -1,0 +1,11 @@
+# Tool handlers live under services/ai/tools after the ai_tools split.
+# They remain in the full --cov=services floor, not this 90% subset gate.
+[run]
+branch = true
+relative_files = true
+omit =
+    */ai/tools/*
+
+[report]
+skip_empty = true
+show_missing = true

@@ -5,50 +5,22 @@ import type {
   ServerDetailDto,
   ServerWriteResultDto,
   ServerCreateResultDto,
-  OverviewSummaryDto,
-  HostSystemInfoListViewDto,
-  OperationJournalDto,
-  OperationJournalEventDto,
-  ServerOperationViewDto,
-  CurrentServerOperationDto,
-  DeploymentLockViewDto,
-  DeploymentLogEntryDto,
   ActionResultDto,
-  InitializedHostOperationViewDto,
   ServerConfigExportDto,
   ServerConfigImportResponseDto,
   S3BackupListViewDto,
+  ServerOperationViewDto,
 } from "@/shared/api/types";
 import type {
-  DeploymentLock,
-  DeploymentLogEntry,
-  OperationInbox,
-  OperationJournal,
-  OperationStreamEvent,
   S3BackupList,
   ServerConfigBundle,
   ServerConfigImportRequest,
   ServerConfigImportSummary,
-  A2SCache,
-  A2SPlayer,
-  A2SQuery,
-  A2SServerInfo,
-  MonitoringLog,
-  BatchAction,
-  BatchActionAccepted,
-  BatchJournal,
-  BatchPlugin,
-  DiskSpace,
-  HostSystemInfo,
   ServerListScope,
   ServerOperation,
-  ServerOperationAction,
-  ServerStatus,
   ServerSummary,
-  SteamLatestVersion,
 } from "@/modules/servers/types";
-import { mapOperationInbox, type InboxSnapshotDto } from "@/modules/servers/operation-inbox";
-import { SERVER_OPERATION_ACTIONS } from "@/modules/servers/types";
+import { mapServerOperation, mapServerStatus } from "@/modules/servers/operation-inbox";
 import {
   getServerCloneTemplate,
   submitCloneServer,
@@ -56,20 +28,39 @@ import {
   type ServerCloneTemplate,
 } from "@/modules/servers/clone-api";
 
-const KNOWN_STATUSES: readonly ServerStatus[] = [
-  "pending",
-  "deploying",
-  "running",
-  "stopped",
-  "error",
-  "unknown",
-];
-
-function toStatus(value: string): ServerStatus {
-  return (KNOWN_STATUSES as readonly string[]).includes(value)
-    ? (value as ServerStatus)
-    : "unknown";
-}
+export {
+  applyAptMirror,
+  cancelInitializedHostOperation,
+  cancelOperation,
+  clearDeploymentLock,
+  clearFailedOperations,
+  dismissFailedOperation,
+  getCurrentServerOperation,
+  getDeploymentLock,
+  getOperationJournal,
+  getServerOperation,
+  listOperationInbox,
+  listOperationLogs,
+  startServerOperation,
+} from "@/modules/servers/operations-api";
+export {
+  getOverviewSummary,
+  getServerA2SCache,
+  getServerA2SQuery,
+  getServerDiskSpace,
+  getSteamLatestVersion,
+  listA2SCache,
+  listDiskSpace,
+  listMonitoringLogs,
+  listOverviewHostSystemInfo,
+  type OverviewSummary,
+} from "@/modules/servers/telemetry-api";
+export {
+  getBatchJournal,
+  startBatchActions,
+  startBatchInstallPlugins,
+  startBatchSendCommand,
+} from "@/modules/servers/batch-api";
 
 function toSessionManager(value: string): "screen" | "tmux" {
   return value === "screen" ? "screen" : "tmux";
@@ -82,7 +73,7 @@ function toSummary(raw: ServerSummaryDto): ServerSummary {
     host: raw.host,
     gamePort: raw.game_port,
     sshUser: raw.ssh_user,
-    status: toStatus(raw.status),
+    status: mapServerStatus(raw.status),
     description: raw.description ?? null,
     defaultMap: raw.default_map,
     maxPlayers: raw.max_players,
@@ -148,7 +139,7 @@ export async function restoreS3Backup(
     },
   );
   if (!result.ok) return result;
-  return { ok: true, data: toOperation(result.data) };
+  return { ok: true, data: mapServerOperation(result.data) };
 }
 
 export type ServerDetail = ServerSummary & {
@@ -200,6 +191,7 @@ export type ServerCreateResult = ServerDetail & {
 
 export { getServerCloneTemplate };
 export type { ServerCloneInput, ServerCloneTemplate };
+
 function toDetail(raw: ServerDetailDto): ServerDetail {
   return {
     ...toSummary(raw),
@@ -243,6 +235,7 @@ function toDetail(raw: ServerDetailDto): ServerDetail {
     lastSshHealthCheck: raw.last_ssh_health_check ?? null,
   };
 }
+
 export async function getServer(
   id: number,
 ): Promise<ApiResult<ServerDetail>> {
@@ -250,6 +243,7 @@ export async function getServer(
   if (!result.ok) return result;
   return { ok: true, data: toDetail(result.data) };
 }
+
 export async function deleteServer(
   id: number,
 ): Promise<ApiResult<ActionResultDto>> {
@@ -257,6 +251,7 @@ export async function deleteServer(
     method: "DELETE",
   });
 }
+
 export type ServerUpdateInput = {
   readonly name?: string;
   readonly host?: string;
@@ -294,6 +289,7 @@ export type ServerUpdateInput = {
   readonly execstackFixOnGameUpdate?: boolean;
   readonly execstackFixTargets?: readonly string[];
 };
+
 export async function updateServer(
   id: number,
   input: ServerUpdateInput,
@@ -348,6 +344,7 @@ export async function updateServer(
     },
   };
 }
+
 export type ServerCreateInput = {
   readonly name: string;
   readonly host: string;
@@ -372,6 +369,7 @@ export type ServerCreateInput = {
   readonly additionalParameters?: string;
   readonly sessionManager: "tmux" | "screen";
 };
+
 export async function cloneServer(
   serverId: number,
   input: ServerCloneInput,
@@ -389,6 +387,7 @@ export async function cloneServer(
     },
   };
 }
+
 export async function createServer(
   input: ServerCreateInput,
 ): Promise<ApiResult<ServerCreateResult>> {
@@ -436,639 +435,6 @@ export async function createServer(
       initializationMessage: result.data.initialization_message ?? "",
     },
   };
-}
-export type OverviewSummary = {
-  readonly total: number;
-  readonly running: number;
-  readonly attention: number;
-  readonly capacity: number;
-  readonly sshConnections: number;
-  readonly sshInUse: number;
-  readonly sshIdle: number;
-  readonly sshLeases: number;
-};
-export async function getSteamLatestVersion(): Promise<
-  ApiResult<SteamLatestVersion>
-> {
-  const result = await apiFetch<{
-    available: boolean;
-    version?: string | null;
-    message?: string | null;
-    timestamp?: string | null;
-  }>("/api/v1/overview/steam-version");
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      available: Boolean(result.data.available && result.data.version),
-      version: result.data.version ?? null,
-      message: result.data.message ?? null,
-      timestamp: result.data.timestamp ?? null,
-    },
-  };
-}
-export async function listDiskSpace(
-  scope: ServerListScope = "mine",
-  forceRefresh = false,
-): Promise<ApiResult<readonly DiskSpace[]>> {
-  const params = new URLSearchParams();
-  if (scope === "all") params.set("scope", "all");
-  if (forceRefresh) params.set("force_refresh", "true");
-  const query = params.toString();
-  const result = await apiFetch<{
-    servers: Array<{
-      server_id: number;
-      cached: boolean;
-      used_gb?: number | null;
-      total_gb?: number | null;
-      available_gb?: number | null;
-      used_percent?: number | null;
-    }>;
-  }>(`/api/v1/overview/disk-space${query ? `?${query}` : ""}`);
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: result.data.servers.map((item) => ({
-      serverId: item.server_id,
-      cached: item.cached,
-      usedGb: item.used_gb ?? null,
-      totalGb: item.total_gb ?? null,
-      availableGb: item.available_gb ?? null,
-      usedPercent: item.used_percent ?? null,
-    })),
-  };
-}
-function toHostSystemInfo(
-  raw: NonNullable<HostSystemInfoListViewDto["servers"]>[number],
-): HostSystemInfo {
-  return {
-    serverId: raw.server_id,
-    cached: raw.cached,
-    success: raw.success,
-    systemType: raw.system_type ?? null,
-    architecture: raw.architecture ?? null,
-    cpuModel: raw.cpu_model ?? null,
-    cpuCores: raw.cpu_cores ?? null,
-    kernelVersion: raw.kernel_version ?? null,
-    distribution: raw.distribution ?? null,
-    distributionVersion: raw.distribution_version ?? null,
-    distributionPrettyName: raw.distribution_pretty_name ?? null,
-    memoryTotalBytes: raw.memory_total_bytes ?? null,
-    memoryAvailableBytes: raw.memory_available_bytes ?? null,
-    collectedAt: raw.collected_at ?? null,
-  };
-}
-export async function listOverviewHostSystemInfo(
-  scope: ServerListScope = "mine",
-  forceRefresh = false,
-): Promise<ApiResult<readonly HostSystemInfo[]>> {
-  const params = new URLSearchParams();
-  if (scope === "all") params.set("scope", "all");
-  if (forceRefresh) params.set("force_refresh", "true");
-  const query = params.toString();
-  const result = await apiFetch<HostSystemInfoListViewDto>(
-    `/api/v1/overview/host-system-info${query ? `?${query}` : ""}`,
-  );
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: (result.data.servers ?? []).map(toHostSystemInfo),
-  };
-}
-function toA2SCache(raw: {
-  server_id: number;
-  cached: boolean;
-  success?: boolean | null;
-  player_count?: number | null;
-  max_players?: number | null;
-  map_name?: string | null;
-  server_name?: string | null;
-  version?: string | null;
-  last_updated?: string | null;
-  response_time_ms?: number | null;
-}): A2SCache {
-  return {
-    serverId: raw.server_id,
-    cached: raw.cached,
-    success: raw.success ?? null,
-    playerCount: raw.player_count ?? null,
-    maxPlayers: raw.max_players ?? null,
-    mapName: raw.map_name ?? null,
-    serverName: raw.server_name ?? null,
-    version: raw.version ?? null,
-    lastUpdated: raw.last_updated ?? null,
-    responseTimeMs: raw.response_time_ms ?? null,
-  };
-}
-export async function listA2SCache(
-  scope: ServerListScope = "mine",
-  forceRefresh = false,
-): Promise<ApiResult<readonly A2SCache[]>> {
-  const params = new URLSearchParams();
-  if (scope === "all") params.set("scope", "all");
-  if (forceRefresh) params.set("force_refresh", "true");
-  const query = params.toString();
-  const result = await apiFetch<{ servers: Array<Parameters<typeof toA2SCache>[0]> }>(
-    `/api/v1/overview/a2s-cache${query ? `?${query}` : ""}`,
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: result.data.servers.map(toA2SCache) };
-}
-export async function getServerA2SCache(
-  serverId: number,
-  forceRefresh = false,
-): Promise<ApiResult<A2SCache>> {
-  const query = forceRefresh ? "?force_refresh=true" : "";
-  const result = await apiFetch<Parameters<typeof toA2SCache>[0]>(
-    `/api/v1/servers/${serverId}/a2s-cache${query}`,
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: toA2SCache(result.data) };
-}
-
-type A2SQueryRaw = {
-  query_host: string;
-  query_port: number;
-  success: boolean;
-  cached?: boolean;
-  live?: boolean;
-  server_info?: {
-    server_name?: string | null;
-    map_name?: string | null;
-    folder?: string | null;
-    game?: string | null;
-    player_count?: number | null;
-    max_players?: number | null;
-    bot_count?: number | null;
-    server_type?: string | null;
-    platform?: string | null;
-    password_protected?: boolean | null;
-    vac_enabled?: boolean | null;
-    version?: string | null;
-    ping?: number | null;
-    keywords?: string | null;
-  } | null;
-  players?: Array<{ name?: string; score?: number; duration?: number }>;
-  timestamp?: string | null;
-  last_updated?: string | null;
-  response_time_ms?: number | null;
-  error?: string | null;
-};
-
-function toA2SServerInfo(
-  raw: NonNullable<A2SQueryRaw["server_info"]>,
-): A2SServerInfo {
-  return {
-    serverName: raw.server_name ?? null,
-    mapName: raw.map_name ?? null,
-    folder: raw.folder ?? null,
-    game: raw.game ?? null,
-    playerCount: raw.player_count ?? null,
-    maxPlayers: raw.max_players ?? null,
-    botCount: raw.bot_count ?? null,
-    serverType: raw.server_type ?? null,
-    platform: raw.platform ?? null,
-    passwordProtected: raw.password_protected ?? null,
-    vacEnabled: raw.vac_enabled ?? null,
-    version: raw.version ?? null,
-    ping: raw.ping ?? null,
-    keywords: raw.keywords ?? null,
-  };
-}
-
-function toA2SQuery(raw: A2SQueryRaw): A2SQuery {
-  const players: A2SPlayer[] = (raw.players ?? []).map((player) => ({
-    name: player.name ?? "",
-    score: player.score ?? 0,
-    duration: player.duration ?? 0,
-  }));
-  return {
-    queryHost: raw.query_host,
-    queryPort: raw.query_port,
-    success: raw.success,
-    cached: raw.cached ?? false,
-    live: raw.live ?? false,
-    serverInfo: raw.server_info ? toA2SServerInfo(raw.server_info) : null,
-    players,
-    timestamp: raw.timestamp ?? null,
-    lastUpdated: raw.last_updated ?? raw.timestamp ?? null,
-    responseTimeMs: raw.response_time_ms ?? null,
-    error: raw.error ?? null,
-  };
-}
-
-export async function getServerA2SQuery(
-  serverId: number,
-  live = false,
-): Promise<ApiResult<A2SQuery>> {
-  const query = live ? "?live=true" : "";
-  const result = await apiFetch<A2SQueryRaw>(`/api/v1/servers/${serverId}/a2s${query}`);
-  if (!result.ok) return result;
-  return { ok: true, data: toA2SQuery(result.data) };
-}
-
-export async function listMonitoringLogs(
-  serverId: number,
-  eventType?: string,
-): Promise<ApiResult<readonly MonitoringLog[]>> {
-  const params = new URLSearchParams();
-  if (eventType) params.set("event_type", eventType);
-  const query = params.toString();
-  const result = await apiFetch<{
-    items?: Array<{
-      id: string;
-      event_type: string;
-      status: string;
-      message: string;
-      created_at?: string | null;
-    }>;
-  }>(`/api/v1/servers/${serverId}/monitoring-logs${query ? `?${query}` : ""}`);
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: (result.data.items ?? []).map((item) => ({
-      id: item.id,
-      eventType: item.event_type,
-      status: item.status,
-      message: item.message,
-      createdAt: item.created_at ?? null,
-    })),
-  };
-}
-
-function toBatchAccepted(raw: {
-  batch_id: string;
-  action: string;
-  server_count: number;
-  accepted_server_ids?: number[];
-  stream_url: string;
-  message: string;
-}): BatchActionAccepted {
-  return {
-    batchId: raw.batch_id,
-    action: raw.action,
-    serverCount: raw.server_count,
-    acceptedServerIds: raw.accepted_server_ids ?? [],
-    streamUrl: raw.stream_url,
-    message: raw.message,
-  };
-}
-
-export async function startBatchActions(
-  serverIds: readonly number[],
-  action: BatchAction,
-): Promise<ApiResult<BatchActionAccepted>> {
-  const result = await apiFetch<Parameters<typeof toBatchAccepted>[0]>(
-    "/api/v1/servers/batch-actions",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ server_ids: serverIds, action }),
-    },
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: toBatchAccepted(result.data) };
-}
-
-export async function startBatchInstallPlugins(
-  serverIds: readonly number[],
-  plugins: readonly BatchPlugin[],
-): Promise<ApiResult<BatchActionAccepted>> {
-  const result = await apiFetch<Parameters<typeof toBatchAccepted>[0]>(
-    "/api/v1/servers/batch-install-plugins",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ server_ids: serverIds, plugins }),
-    },
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: toBatchAccepted(result.data) };
-}
-
-export async function startBatchSendCommand(
-  serverIds: readonly number[],
-  command: string,
-): Promise<ApiResult<BatchActionAccepted>> {
-  const result = await apiFetch<Parameters<typeof toBatchAccepted>[0]>(
-    "/api/v1/servers/batch-send-command",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ server_ids: serverIds, command }),
-    },
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: toBatchAccepted(result.data) };
-}
-
-export async function getBatchJournal(
-  batchId: string,
-): Promise<ApiResult<BatchJournal>> {
-  const result = await apiFetch<{
-    batch_id: string;
-    action?: string | null;
-    servers: Array<{ server_id: number; status: string; message?: string }>;
-    summary: {
-      total: number;
-      completed: number;
-      succeeded: number;
-      failed: number;
-      in_progress: number;
-      is_complete: boolean;
-    };
-  }>(`/api/v1/servers/batch-actions/${batchId}`);
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      batchId: result.data.batch_id,
-      action: result.data.action ?? null,
-      servers: result.data.servers.map((item) => ({
-        serverId: item.server_id,
-        status: item.status,
-        message: item.message ?? "",
-      })),
-      summary: {
-        total: result.data.summary.total,
-        completed: result.data.summary.completed,
-        succeeded: result.data.summary.succeeded,
-        failed: result.data.summary.failed,
-        inProgress: result.data.summary.in_progress,
-        isComplete: result.data.summary.is_complete,
-      },
-    },
-  };
-}
-
-export async function getServerDiskSpace(
-  serverId: number,
-  forceRefresh = false,
-): Promise<ApiResult<DiskSpace>> {
-  const query = forceRefresh ? "?force_refresh=true" : "";
-  const result = await apiFetch<{
-    server_id: number;
-    cached: boolean;
-    used_gb?: number | null;
-    total_gb?: number | null;
-    available_gb?: number | null;
-    used_percent?: number | null;
-  }>(`/api/v1/servers/${serverId}/disk-space${query}`);
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      serverId: result.data.server_id,
-      cached: result.data.cached,
-      usedGb: result.data.used_gb ?? null,
-      totalGb: result.data.total_gb ?? null,
-      availableGb: result.data.available_gb ?? null,
-      usedPercent: result.data.used_percent ?? null,
-    },
-  };
-}
-
-export async function getOverviewSummary(): Promise<
-  ApiResult<OverviewSummary>
-> {
-  const result = await apiFetch<OverviewSummaryDto>("/api/v1/overview/summary");
-  if (!result.ok) return result;
-  const {
-    total,
-    running,
-    attention,
-    capacity,
-    ssh_connections = 0,
-    ssh_in_use = 0,
-    ssh_idle = 0,
-    ssh_leases = 0,
-  } = result.data;
-  return {
-    ok: true,
-    data: {
-      total,
-      running,
-      attention,
-      capacity,
-      sshConnections: ssh_connections,
-      sshInUse: ssh_in_use,
-      sshIdle: ssh_idle,
-      sshLeases: ssh_leases,
-    },
-  };
-}
-
-function toOperationAction(value: string): ServerOperationAction {
-  return (SERVER_OPERATION_ACTIONS as readonly string[]).includes(value)
-    ? (value as ServerOperationAction)
-    : "status";
-}
-
-function toOperationEvent(raw: OperationJournalEventDto): OperationStreamEvent {
-  const transfer = raw.transfer;
-  return {
-    sequence: String(raw.sequence ?? ""),
-    operationId: String(raw.operation_id ?? ""),
-    type: raw.type || "progress",
-    kind: raw.kind || "output",
-    message: raw.message,
-    timestamp: String(raw.timestamp ?? ""),
-    success: typeof raw.success === "boolean" ? raw.success : undefined,
-    serverStatus: raw.server_status ?? null,
-    stepId: raw.step_id ?? null,
-    stepStatus: raw.step_status ?? null,
-    transfer: transfer
-      ? {
-          phase: transfer.phase,
-          bytesTransferred: transfer.bytes_transferred,
-          totalBytes: transfer.total_bytes ?? null,
-          percent: transfer.percent ?? null,
-          elapsedSeconds: transfer.elapsed_seconds,
-          retryCount: transfer.retry_count,
-        }
-      : null,
-  };
-}
-
-function toOperation(raw: ServerOperationViewDto): ServerOperation {
-  return {
-    operationId: raw.operation_id,
-    serverId: raw.server_id,
-    action: toOperationAction(raw.action),
-    status: raw.status,
-    success: raw.success ?? null,
-    message: raw.message ?? null,
-    serverStatus: raw.server_status ? toStatus(raw.server_status) : null,
-    startedAt: raw.started_at,
-    completedAt: raw.completed_at ?? null,
-    actorUserId: raw.actor_user_id,
-    streamUrl: raw.stream_url,
-    command:
-      "command" in raw && typeof raw.command === "string" ? raw.command : null,
-  };
-}
-
-export async function listOperationInbox(): Promise<ApiResult<OperationInbox>> {
-  const result = await apiFetch<InboxSnapshotDto>("/api/v1/operations/inbox");
-  if (!result.ok) return result;
-  return { ok: true, data: mapOperationInbox(result.data) };
-}
-
-export async function clearFailedOperations(): Promise<ApiResult<ActionResultDto>> {
-  return apiFetch<ActionResultDto>("/api/v1/operations/inbox/failed", {
-    method: "DELETE",
-  });
-}
-
-export async function dismissFailedOperation(
-  operationId: string,
-): Promise<ApiResult<ActionResultDto>> {
-  return apiFetch<ActionResultDto>(
-    `/api/v1/operations/inbox/failed/${operationId}`,
-    { method: "DELETE" },
-  );
-}
-
-export async function cancelOperation(
-  serverId: number,
-  operationId: string,
-): Promise<ApiResult<ServerOperation>> {
-  const result = await apiFetch<ServerOperationViewDto>(
-    `/api/v1/servers/${serverId}/operations/${operationId}/cancel`,
-    { method: "POST" },
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: toOperation(result.data) };
-}
-
-export async function cancelInitializedHostOperation(
-  initializedServerId: number,
-  operationId: string,
-): Promise<ApiResult<InitializedHostOperationViewDto>> {
-  return apiFetch<InitializedHostOperationViewDto>(
-    `/api/v1/setup/initialized-servers/${initializedServerId}/operations/${operationId}/cancel`,
-    { method: "POST" },
-  );
-}
-
-export async function applyAptMirror(
-  serverId: number,
-  mirror: string,
-): Promise<ApiResult<ServerOperation>> {
-  const result = await apiFetch<ServerOperationViewDto>(
-    `/api/v1/servers/${serverId}/apt-mirror`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mirror }),
-    },
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: toOperation(result.data) };
-}
-
-// Action only: the strict request contract rejects any extra field.
-export async function startServerOperation(
-  serverId: number,
-  action: ServerOperationAction,
-): Promise<ApiResult<ServerOperation>> {
-  const result = await apiFetch<ServerOperationViewDto>(
-    `/api/v1/servers/${serverId}/operations`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action }),
-      timeoutMs: 20_000,
-    },
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: toOperation(result.data) };
-}
-
-export async function getCurrentServerOperation(
-  serverId: number,
-): Promise<ApiResult<ServerOperation | null>> {
-  const result = await apiFetch<CurrentServerOperationDto>(
-    `/api/v1/servers/${serverId}/operations/current`,
-  );
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: result.data.operation ? toOperation(result.data.operation) : null,
-  };
-}
-
-export async function getServerOperation(
-  serverId: number,
-  operationId: string,
-): Promise<ApiResult<ServerOperation>> {
-  const result = await apiFetch<ServerOperationViewDto>(
-    `/api/v1/servers/${serverId}/operations/${operationId}`,
-  );
-  if (!result.ok) return result;
-  return { ok: true, data: toOperation(result.data) };
-}
-
-export async function getOperationJournal(
-  serverId: number,
-  operationId: string,
-): Promise<ApiResult<OperationJournal>> {
-  const result = await apiFetch<OperationJournalDto>(
-    `/api/v1/servers/${serverId}/operations/${operationId}/journal`,
-  );
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      operation: toOperation(result.data.operation),
-      events: (result.data.events ?? []).map(toOperationEvent),
-    },
-  };
-}
-
-export async function listOperationLogs(
-  serverId: number,
-): Promise<ApiResult<DeploymentLogEntry[]>> {
-  const result = await apiFetch<DeploymentLogEntryDto[]>(
-    `/api/v1/servers/${serverId}/operations/logs?limit=20`,
-  );
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: result.data.map((entry) => ({
-      id: entry.id,
-      action: entry.action,
-      status: entry.status,
-      output: entry.output ?? null,
-      errorMessage: entry.error_message ?? null,
-      createdAt: entry.created_at ?? null,
-    })),
-  };
-}
-
-export async function getDeploymentLock(
-  serverId: number,
-): Promise<ApiResult<DeploymentLock>> {
-  const result = await apiFetch<DeploymentLockViewDto>(
-    `/api/v1/servers/${serverId}/operations/lock`,
-  );
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      lockActive: result.data.lock_active,
-      serverStatus: toStatus(result.data.server_status),
-    },
-  };
-}
-
-export async function clearDeploymentLock(
-  serverId: number,
-): Promise<ApiResult<ActionResultDto>> {
-  return apiFetch<ActionResultDto>(
-    `/api/v1/servers/${serverId}/operations/lock`,
-    { method: "DELETE", timeoutMs: 60_000 },
-  );
 }
 
 export async function reconnectServerSsh(

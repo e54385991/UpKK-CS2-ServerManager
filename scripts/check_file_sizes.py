@@ -28,14 +28,11 @@ LEGACY_SIZE_LIMITS = {
     "services/ai_orchestrator.py": 1235,
     "services/plugin_conflict_service.py": 923,
     "services/plugin_installation.py": 991,
-    "services/ai_tools.py": 2191,
     "tests/test_ai_agent_enhancements.py": 2082,
     "tests/test_file_manager_archive.py": 1371,
     "tests/test_discord_bot_agent_policy.py": 1867,
     "frontend/src/modules/plugin-configs/plugin-configs-console.tsx": 983,
     "frontend/src/modules/maps/maps-console.tsx": 864,
-    "frontend/src/modules/files/files-console.tsx": 1306,
-    "frontend/src/modules/servers/api.ts": 1211,
 }
 
 

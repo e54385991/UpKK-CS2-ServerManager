@@ -49,7 +49,7 @@ export type InboxSnapshotDto = {
   failed_retention_days?: number;
 };
 
-function toStatus(value: string): ServerStatus {
+export function mapServerStatus(value: string): ServerStatus {
   return (KNOWN_STATUSES as readonly string[]).includes(value)
     ? (value as ServerStatus)
     : "unknown";
@@ -84,7 +84,7 @@ export function mapServerOperation(raw: OperationViewDto): ServerOperation {
     status: raw.status,
     success: raw.success ?? null,
     message: raw.message ?? null,
-    serverStatus: raw.server_status ? toStatus(raw.server_status) : null,
+    serverStatus: raw.server_status ? mapServerStatus(raw.server_status) : null,
     startedAt: raw.started_at,
     completedAt: raw.completed_at ?? null,
     actorUserId: raw.actor_user_id,

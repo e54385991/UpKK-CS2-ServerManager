@@ -9,12 +9,8 @@ import type {
   PluginUpdatesViewDto,
   ServerOperationViewDto,
 } from "@/shared/api/types";
-import {
-  SERVER_OPERATION_ACTIONS,
-  type ServerOperation,
-  type ServerOperationAction,
-  type ServerStatus,
-} from "@/modules/servers/types";
+import { mapServerOperation } from "@/modules/servers/operation-inbox";
+import type { ServerOperation } from "@/modules/servers/types";
 import type {
   GameUpdateAction,
   GameUpdates,
@@ -35,49 +31,10 @@ const KNOWN_SOURCES: readonly InstalledVersionSource[] = [
   "unknown",
 ];
 
-const KNOWN_STATUSES: readonly ServerStatus[] = [
-  "pending",
-  "deploying",
-  "running",
-  "stopped",
-  "error",
-  "unknown",
-];
-
 function toSource(value: string): InstalledVersionSource {
   return (KNOWN_SOURCES as readonly string[]).includes(value)
     ? (value as InstalledVersionSource)
     : "unknown";
-}
-
-function toStatus(value: string): ServerStatus {
-  return (KNOWN_STATUSES as readonly string[]).includes(value)
-    ? (value as ServerStatus)
-    : "unknown";
-}
-
-function toOperationAction(value: string): ServerOperationAction {
-  return (SERVER_OPERATION_ACTIONS as readonly string[]).includes(value)
-    ? (value as ServerOperationAction)
-    : "status";
-}
-
-function toOperation(raw: ServerOperationViewDto): ServerOperation {
-  return {
-    operationId: raw.operation_id,
-    serverId: raw.server_id,
-    action: toOperationAction(raw.action),
-    status: raw.status,
-    success: raw.success ?? null,
-    message: raw.message ?? null,
-    serverStatus: raw.server_status ? toStatus(raw.server_status) : null,
-    startedAt: raw.started_at,
-    completedAt: raw.completed_at ?? null,
-    actorUserId: raw.actor_user_id,
-    streamUrl: raw.stream_url,
-    command:
-      "command" in raw && typeof raw.command === "string" ? raw.command : null,
-  };
 }
 
 function toGameUpdates(raw: GameUpdatesViewDto): GameUpdates {
@@ -147,7 +104,7 @@ export async function startGameUpdateOperation(
     },
   );
   if (!result.ok) return result;
-  return { ok: true, data: toOperation(result.data) };
+  return { ok: true, data: mapServerOperation(result.data) };
 }
 
 function toPlugin(raw: ManagedPluginUpdateViewDto): ManagedUpdatePlugin {
@@ -326,7 +283,7 @@ export async function runPluginUpdates(
     { method: "POST" },
   );
   if (!result.ok) return result;
-  return { ok: true, data: toOperation(result.data) };
+  return { ok: true, data: mapServerOperation(result.data) };
 }
 
 export async function testManagedPluginUpdate(
@@ -338,7 +295,7 @@ export async function testManagedPluginUpdate(
     { method: "POST" },
   );
   if (!result.ok) return result;
-  return { ok: true, data: toOperation(result.data) };
+  return { ok: true, data: mapServerOperation(result.data) };
 }
 
 export async function listRegisterMarketOptions(): Promise<

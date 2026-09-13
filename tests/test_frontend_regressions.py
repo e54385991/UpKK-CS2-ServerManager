@@ -300,7 +300,9 @@ def test_console_starts_server_operations_with_the_action_only():
     appends ``clear_execstack`` turns every restart into a 422
     ("Extra inputs are not permitted").
     """
-    source = (PROJECT_ROOT / "frontend/src/modules/servers/api.ts").read_text(encoding="utf-8")
+    source = (PROJECT_ROOT / "frontend/src/modules/servers/operations-api.ts").read_text(
+        encoding="utf-8"
+    )
     body = source.split("export async function startServerOperation(", 1)[1].split("\n}", 1)[0]
 
     assert "JSON.stringify({ action })" in body

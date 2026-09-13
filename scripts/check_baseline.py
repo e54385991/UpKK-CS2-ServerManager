@@ -110,6 +110,7 @@ def main() -> None:
                 "--cov=services.discord",
                 "--cov=services.servers",
                 "--cov-branch",
+                "--cov-config=scripts/split_domain.coveragerc",
                 "--cov-fail-under=90",
                 "--cov-report=term-missing",
             ],
