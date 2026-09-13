@@ -14,21 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from modules.models import CustomCommand, Server, User
 from modules.schemas.discord import AgentCapability
 from services.ai.tools.schemas import ToolInput
+from services.compat import LateBoundModule
 from services.ssh_manager import SSHManager
 
 EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
-
-class _ToolsHost:
-    """Resolve patchable names through ``services.ai_tools`` at call time."""
-
-    def __getattr__(self, name: str) -> Any:
-        from services import ai_tools
-
-        return getattr(ai_tools, name)
-
-
-tools: Any = _ToolsHost()
+tools: Any = LateBoundModule("services.ai_tools")
 
 
 @dataclass(slots=True)

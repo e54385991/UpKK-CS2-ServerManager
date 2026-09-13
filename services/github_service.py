@@ -4,36 +4,18 @@ Provides functionality to fetch repository metadata from GitHub API
 """
 
 import logging
-import re
-from typing import Tuple
 
 from modules.http_helper import http_helper
+from services.github_url import GITHUB_REPO_PATTERN, parse_github_url
 
 logger = logging.getLogger(__name__)
 
-# Regex to parse GitHub repository URL
-GITHUB_REPO_PATTERN = re.compile(
-    r"^https://github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?:/.*)?$"
-)
-
-
-def parse_github_url(url: str) -> Tuple[str, str]:
-    """
-    Parse GitHub repository URL to extract owner and repo name.
-
-    Args:
-        url: GitHub repository URL (e.g., https://github.com/owner/repo)
-
-    Returns:
-        Tuple of (owner, repo_name)
-
-    Raises:
-        ValueError: If URL is invalid
-    """
-    match = GITHUB_REPO_PATTERN.match(url)
-    if not match:
-        raise ValueError("Invalid GitHub repository URL format")
-    return match.group(1), match.group(2)
+__all__ = [
+    "GITHUB_REPO_PATTERN",
+    "determine_category",
+    "fetch_github_repo_info",
+    "parse_github_url",
+]
 
 
 async def fetch_github_repo_info(github_url: str) -> dict:

@@ -7,7 +7,6 @@ import asyncio
 import logging
 import os
 import posixpath
-import re
 import shlex
 from typing import Optional
 from urllib.parse import unquote, urlsplit
@@ -60,15 +59,11 @@ from services.github_plugin_plan_service import (
 from services.github_plugin_plan_service import (
     search_github_plugins as search_github_plugins_service,
 )
+from services.github_url import parse_github_url
 
 router = APIRouter(prefix="/api/github-plugins", tags=["github-plugins"])
 
 logger = logging.getLogger(__name__)
-
-# Regex to validate GitHub repository URL
-GITHUB_REPO_PATTERN = re.compile(
-    r"^https://github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?:/.*)?$"
-)
 
 # Progress update interval (percent) for panel proxy downloads/uploads
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every 10%
@@ -298,40 +293,15 @@ def _build_plugin_copy_command(
     return f"{primary_copy} && {gamedata_copy}"
 
 
-def parse_github_url(url: str) -> tuple[str, str]:
-    """
-    Parse GitHub repository URL to extract owner and repo name.
-
-    Args:
-        url: GitHub repository URL (e.g., https://github.com/Source2ZE/CS2Fixes)
-
-    Returns:
-        Tuple of (owner, repo_name)
-
-    Raises:
-        ValueError: If URL is invalid
-    """
-    match = GITHUB_REPO_PATTERN.match(url)
-    if not match:
-        raise ValueError("Invalid GitHub repository URL format")
-    return match.group(1), match.group(2)
-
-
 async def get_server_and_verify_ownership(db: AsyncSession, server_id: int, user: User) -> Server:
     """
     Get server by ID and verify user ownership.
     Admins can access any server, regular users can only access their own.
     Raises HTTPException if server not found or user doesn't have access.
     """
-    if user.is_admin:
-        server = await Server.get_by_id(db, server_id)
-    else:
-        server = await Server.get_by_id_and_user(db, server_id, user.id)
+    from api.routes.server_lookup import get_server_for_user
 
-    if not server:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
-    await db.commit()
-    return server
+    return await get_server_for_user(server_id, db, user)
 
 
 @router.get("/releases")

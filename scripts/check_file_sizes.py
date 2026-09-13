@@ -18,21 +18,9 @@ GENERATED_NAMES = {"schema.d.ts"}
 # baseline can be green without allowing further growth while preserving the
 # stricter default for every new module.
 LEGACY_SIZE_LIMITS = {
-    "api/routes/map_management.py": 1135,
-    "api/routes/plugin_market.py": 1322,
-    "api/routes/file_manager/common.py": 979,
-    "services/plugin_auto_update_service.py": 1302,
-    "services/github_plugin_plan_service.py": 1221,
-    "services/discord_bot_manager.py": 2758,
-    "services/plugin_diagnostic_service.py": 921,
-    "services/ai_orchestrator.py": 1235,
-    "services/plugin_conflict_service.py": 923,
-    "services/plugin_installation.py": 991,
     "tests/test_ai_agent_enhancements.py": 2082,
     "tests/test_file_manager_archive.py": 1371,
     "tests/test_discord_bot_agent_policy.py": 1867,
-    "frontend/src/modules/plugin-configs/plugin-configs-console.tsx": 983,
-    "frontend/src/modules/maps/maps-console.tsx": 864,
 }
 
 

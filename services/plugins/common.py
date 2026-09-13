@@ -36,8 +36,13 @@ def parse_framework(value: str | None) -> PluginFramework:
         ) from None
 
 
-def parse_dependency_ids(value: str | None) -> list[int]:
-    """Parse the legacy comma-separated dependency field without duplicates."""
+def parse_dependency_ids(value: str | None, *, unique: bool = True) -> list[int]:
+    """Parse the legacy comma-separated dependency field.
+
+    Marketplace listings historically keep repeated IDs in declared order so
+    the console can round-trip the stored string. Planning and catalog graphs
+    pass ``unique=True`` (the default) to collapse duplicates.
+    """
     if not value:
         return []
     result: list[int] = []
@@ -48,6 +53,6 @@ def parse_dependency_ids(value: str | None) -> list[int]:
         if not normalized.isdigit():
             raise PluginPlanError(f"Invalid dependency ID: {normalized}")
         plugin_id = int(normalized)
-        if plugin_id not in result:
+        if not unique or plugin_id not in result:
             result.append(plugin_id)
     return result

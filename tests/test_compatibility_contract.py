@@ -159,3 +159,24 @@ def test_ssh_manager_public_method_signatures_are_stable():
         if callable(member) and not name.startswith("_")
     }
     assert actual == _load_json("ssh_manager_api.json")
+
+
+def test_rewrite_facade_lookups_keeps_call_arguments_and_skips_definitions():
+    from services.compat import rewrite_facade_lookups
+
+    source = (
+        "async def _connect(server: Server) -> SSHManager:\n"
+        "    ssh_manager = SSHManager()\n"
+        "    await fetch_remote_map_pool(url)\n"
+    )
+    rewritten = rewrite_facade_lookups(source, {"SSHManager", "fetch_remote_map_pool"})
+    assert "async def _connect(server: Server) -> host.SSHManager:" in rewritten
+    assert "ssh_manager = host.SSHManager()" in rewritten
+    assert "await host.fetch_remote_map_pool(url)" in rewritten
+
+    assigned = rewrite_facade_lookups(
+        "_HUB_FILE_STATUS = {'queued': 'pending'}\nstatus = _HUB_FILE_STATUS.get('queued')\n",
+        {"_HUB_FILE_STATUS"},
+    )
+    assert assigned.startswith("_HUB_FILE_STATUS = {'queued': 'pending'}")
+    assert "host._HUB_FILE_STATUS.get('queued')" in assigned

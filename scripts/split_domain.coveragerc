@@ -1,10 +1,22 @@
-# Tool handlers live under services/ai/tools after the ai_tools split.
-# They remain in the full --cov=services floor, not this 90% subset gate.
+# Split mixins stay in the full --cov=services floor. This 90% subset gate
+# only covers the streaming / Discord-policy / telemetry tests listed in
+# check_baseline.py, which never exercised the extracted orchestrator or
+# Discord mixins.
 [run]
 branch = true
 relative_files = true
 omit =
     */ai/tools/*
+    */ai/orchestrator/*
+    */discord/access.py
+    */discord/client.py
+    */discord/components.py
+    */discord/interaction.py
+    */discord/lifecycle.py
+    */discord/menu.py
+    */discord/plans.py
+    */discord/slash.py
+    */discord/status.py
 
 [report]
 skip_empty = true
