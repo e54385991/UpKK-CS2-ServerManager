@@ -131,13 +131,8 @@ test("unprefetched tab click feedback stays under 100ms with 3s network and back
   });
   await page.goto("/servers/1/config");
   await expect(page.getByTestId("game-config-form")).toBeVisible();
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Network.emulateNetworkConditions", {
-    offline: false,
-    latency: 3000,
-    downloadThroughput: -1,
-    uploadThroughput: -1,
-  });
+  // Chrome may not throttle loopback via CDP; delay the files RSC path.
+  await delayPathnames(page, ["/servers/1/files"]);
   const elapsed = await clickShowsPending(page, 'a[data-workspace-category="files"]');
   expect(elapsed).toBeLessThan(100);
   await expect(categoryLink(page, "files").locator("[data-testid='link-pending-hint']")).toHaveAttribute(
