@@ -8,12 +8,12 @@ import type { MouseEventHandler } from "react";
 import { cn } from "@/shared/lib/cn";
 import { navPathMatches } from "@/shared/config/navigation";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
+import { markLinkPending } from "@/shared/ui/nav-pending";
 
 /**
  * Sidebar / mobile-drawer navigation link. Keeps the default `<Link>` prefetch
- * so the App Shell and route payload load ahead of the click, and uses
- * `useLinkStatus` so a slow or unprefetched transition still marks the target
- * immediately.
+ * so the App Shell and route payload load ahead of the click, and marks the
+ * target immediately on click so feedback does not wait on `useLinkStatus`.
  */
 export function NavLink({
   href,
@@ -38,7 +38,10 @@ export function NavLink({
       href={href}
       aria-current={active ? "page" : undefined}
       data-nav-key={navKey}
-      onClick={onClick}
+      onClick={(event) => {
+        if (pathname !== href) markLinkPending(href);
+        onClick?.(event);
+      }}
       className={cn(
         "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
         active
@@ -59,7 +62,7 @@ export function NavLink({
         )}
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <LinkPendingHint />
+      <LinkPendingHint href={href} />
     </Link>
   );
 }
