@@ -77,74 +77,11 @@ export const LOCALIZED_ALERT_IDS = [
   "log_errors",
 ] as const;
 
-export function isLocalizedAlert(id: string): boolean {
+export type LocalizedAlertId = (typeof LOCALIZED_ALERT_IDS)[number];
+
+export function isLocalizedAlert(id: string): id is LocalizedAlertId {
   return (LOCALIZED_ALERT_IDS as readonly string[]).includes(id);
 }
-
-const ALERT_TITLE = {
-  stale: "alerts.stale.title",
-  request_p95: "alerts.request_p95.title",
-  http_5xx: "alerts.http_5xx.title",
-  loop_lag: "alerts.loop_lag.title",
-  db_pool: "alerts.db_pool.title",
-  fd: "alerts.fd.title",
-  redis: "alerts.redis.title",
-  unhandled: "alerts.unhandled.title",
-  failed_tasks: "alerts.failed_tasks.title",
-  log_errors: "alerts.log_errors.title",
-} as const;
-
-const ALERT_TITLE_CRITICAL = {
-  stale: "alerts.stale.titleCritical",
-  request_p95: "alerts.request_p95.titleCritical",
-  http_5xx: "alerts.http_5xx.titleCritical",
-  loop_lag: "alerts.loop_lag.titleCritical",
-  db_pool: "alerts.db_pool.titleCritical",
-  fd: "alerts.fd.titleCritical",
-  redis: "alerts.redis.titleCritical",
-  unhandled: "alerts.unhandled.titleCritical",
-  failed_tasks: "alerts.failed_tasks.titleCritical",
-  log_errors: "alerts.log_errors.titleCritical",
-} as const;
-
-const ALERT_DETAIL = {
-  stale: "alerts.stale.detail",
-  request_p95: "alerts.request_p95.detail",
-  http_5xx: "alerts.http_5xx.detail",
-  loop_lag: "alerts.loop_lag.detail",
-  db_pool: "alerts.db_pool.detail",
-  fd: "alerts.fd.detail",
-  redis: "alerts.redis.detail",
-  unhandled: "alerts.unhandled.detail",
-  failed_tasks: "alerts.failed_tasks.detail",
-  log_errors: "alerts.log_errors.detail",
-} as const;
-
-const ALERT_DETAIL_CRITICAL = {
-  stale: "alerts.stale.detailCritical",
-  request_p95: "alerts.request_p95.detailCritical",
-  http_5xx: "alerts.http_5xx.detailCritical",
-  loop_lag: "alerts.loop_lag.detailCritical",
-  db_pool: "alerts.db_pool.detailCritical",
-  fd: "alerts.fd.detailCritical",
-  redis: "alerts.redis.detailCritical",
-  unhandled: "alerts.unhandled.detailCritical",
-  failed_tasks: "alerts.failed_tasks.detailCritical",
-  log_errors: "alerts.log_errors.detailCritical",
-} as const;
-
-const ALERT_GUIDANCE = {
-  stale: "alerts.stale.guidance",
-  request_p95: "alerts.request_p95.guidance",
-  http_5xx: "alerts.http_5xx.guidance",
-  loop_lag: "alerts.loop_lag.guidance",
-  db_pool: "alerts.db_pool.guidance",
-  fd: "alerts.fd.guidance",
-  redis: "alerts.redis.guidance",
-  unhandled: "alerts.unhandled.guidance",
-  failed_tasks: "alerts.failed_tasks.guidance",
-  log_errors: "alerts.log_errors.guidance",
-} as const;
 
 const SOURCE_KEYS = {
   request: "sources.request",
@@ -158,19 +95,17 @@ const SOURCE_KEYS = {
 
 export function formatAlertTitle(t: MonitorTranslate, alert: AlertCopy): string {
   if (!isLocalizedAlert(alert.id)) return alert.title;
-  const keys = alert.severity === "critical" ? ALERT_TITLE_CRITICAL : ALERT_TITLE;
-  return t(keys[alert.id as keyof typeof ALERT_TITLE]);
+  return t(alertCopyKey(alert.id, "title", alert.severity === "critical"));
 }
 
 export function formatAlertDetail(t: MonitorTranslate, alert: AlertCopy): string {
   if (!isLocalizedAlert(alert.id)) return alert.detail;
-  const keys = alert.severity === "critical" ? ALERT_DETAIL_CRITICAL : ALERT_DETAIL;
-  return t(keys[alert.id as keyof typeof ALERT_DETAIL], alertDetailValues(alert));
+  return t(alertCopyKey(alert.id, "detail", alert.severity === "critical"), alertDetailValues(alert));
 }
 
 export function formatAlertGuidance(t: MonitorTranslate, alert: AlertCopy): string {
   if (!isLocalizedAlert(alert.id)) return alert.guidance;
-  return t(ALERT_GUIDANCE[alert.id as keyof typeof ALERT_GUIDANCE]);
+  return t(alertCopyKey(alert.id, "guidance", false));
 }
 
 export function formatErrorSource(t: MonitorTranslate, source: string | null | undefined): string {
@@ -198,6 +133,11 @@ export function formatMonitorInstant(
     second: "2-digit",
   });
   return `${relative} (${clock})`;
+}
+
+function alertCopyKey(id: LocalizedAlertId, field: "title" | "detail" | "guidance", critical: boolean): string {
+  if (field === "guidance" || !critical) return `alerts.${id}.${field}`;
+  return `alerts.${id}.${field}Critical`;
 }
 
 function relativeParts(elapsedMs: number): [number, Intl.RelativeTimeFormatUnit] {

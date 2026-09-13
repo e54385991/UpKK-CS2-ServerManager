@@ -8,6 +8,11 @@ import {
   formatMonitorInstant,
   type MonitorTranslate,
 } from "@/modules/settings/monitor-format";
+import {
+  discardedErrorCount,
+  matchesErrorFilter,
+  uniqueNonEmpty,
+} from "@/modules/settings/monitor-logic";
 import type { MonitorRange } from "@/modules/settings/monitor-types";
 import type { PanelErrorListViewDto, PanelMonitorViewDto } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
@@ -97,32 +102,16 @@ export function MonitorErrorCenter({
     setPending(null);
   }
 
-  const sources = useMemo(() => {
-    const values = new Set<string>();
-    for (const group of summaries) {
-      if (group.source) values.add(group.source);
-    }
-    for (const item of items) {
-      if (item.source) values.add(item.source);
-    }
-    return [...values];
-  }, [items, summaries]);
-  const severities = useMemo(() => {
-    const values = new Set<string>();
-    for (const group of summaries) {
-      if (group.severity) values.add(group.severity);
-    }
-    for (const item of items) {
-      if (item.severity) values.add(item.severity);
-    }
-    return [...values];
-  }, [items, summaries]);
-  const visibleGroups = summaries.filter((group) => {
-    if (source !== "all" && group.source !== source) return false;
-    if (severity !== "all" && group.severity !== severity) return false;
-    return true;
-  });
-  const discarded = Math.max(dropped ?? 0, listedDropped);
+  const sources = useMemo(
+    () => uniqueNonEmpty([...summaries.map((group) => group.source), ...items.map((item) => item.source)]),
+    [items, summaries],
+  );
+  const severities = useMemo(
+    () => uniqueNonEmpty([...summaries.map((group) => group.severity), ...items.map((item) => item.severity)]),
+    [items, summaries],
+  );
+  const visibleGroups = summaries.filter((group) => matchesErrorFilter(group, source, severity));
+  const discarded = discardedErrorCount(dropped, listedDropped);
   const wasTruncated = Boolean(truncated) || listedTruncated;
 
   return (

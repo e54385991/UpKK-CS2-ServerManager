@@ -1,12 +1,17 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import {
+  chartLinePaths,
+  formatChartClock,
+  formatChartNumber,
+  nearestChartIndex,
+  sparkSegments,
+  type ChartPoint,
+} from "@/modules/settings/monitor-chart-geometry";
 import { cn } from "@/shared/lib/cn";
 
-export type ChartPoint = {
-  readonly ts: string;
-  readonly value: number | null;
-};
+export type { ChartPoint };
 
 const WIDTH = 640;
 const HEIGHT = 196;
@@ -33,8 +38,7 @@ export function MonitorChart({
 }) {
   const [active, setActive] = useState<number | null>(null);
   const gradientId = useId();
-  const values = series.map((point) => point.value);
-  const numeric = values.filter((value): value is number => value != null);
+  const numeric = series.map((point) => point.value).filter((value): value is number => value != null);
   const maxThreshold = thresholds.reduce((highest, item) => Math.max(highest, item.value), 0);
   const maxValue = Math.max(numeric.length > 0 ? Math.max(...numeric) : 0, maxThreshold, 1);
   const innerW = WIDTH - PAD.left - PAD.right;
@@ -43,13 +47,13 @@ export function MonitorChart({
     const xAt = (index: number) =>
       PAD.left + (series.length <= 1 ? innerW / 2 : (index / (series.length - 1)) * innerW);
     const yAt = (value: number) => PAD.top + innerH - (value / maxValue) * innerH;
-    return linePaths(series, xAt, yAt);
+    return chartLinePaths(series, xAt, yAt);
   }, [innerH, innerW, maxValue, series]);
   const x = (index: number) =>
     PAD.left + (series.length <= 1 ? innerW / 2 : (index / (series.length - 1)) * innerW);
   const y = (value: number) => PAD.top + innerH - (value / maxValue) * innerH;
   const activePoint = active != null ? series[active] : null;
-  const markerIndex = nearestIndex(series, markerTs);
+  const markerIndex = nearestChartIndex(series, markerTs);
 
   function move(next: number) {
     if (series.length === 0) return;
@@ -129,15 +133,15 @@ export function MonitorChart({
           ),
         )}
         <text x={PAD.left} y={HEIGHT - 8} className="fill-fg-subtle" fontSize="10">
-          {series[0] ? formatClock(series[0].ts) : ""}
+          {series[0] ? formatChartClock(series[0].ts) : ""}
         </text>
         <text x={WIDTH - PAD.right} y={HEIGHT - 8} textAnchor="end" className="fill-fg-subtle" fontSize="10">
-          {series.at(-1) ? formatClock(series.at(-1)!.ts) : ""}
+          {series.at(-1) ? formatChartClock(series.at(-1)!.ts) : ""}
         </text>
       </svg>
       <p className="mt-1 min-h-5 text-xs text-fg-muted" role="status">
         {activePoint?.value != null
-          ? `${formatClock(activePoint.ts)} · ${formatNumber(activePoint.value)} ${unit}`
+          ? `${formatChartClock(activePoint.ts)} · ${formatChartNumber(activePoint.value)} ${unit}`
           : hint}
       </p>
     </section>
@@ -153,82 +157,18 @@ export function Sparkline({
   className?: string;
   tone?: "ok" | "warn" | "danger";
 }) {
-  const numeric = values.filter((value): value is number => value != null);
-  if (numeric.length === 0) {
+  const segments = sparkSegments(values);
+  if (segments.length === 0) {
     return <div className={cn("h-10 w-full rounded-sm bg-surface-overlay", className)} />;
   }
-  const max = Math.max(...numeric, 1);
   const width = Math.max(values.length - 1, 1);
-  const points = values
-    .map((value, index) => (value == null ? null : `${index},${(1 - value / max) * 32}`))
-    .filter((item): item is string => item != null)
-    .join(" ");
   const stroke =
     tone === "danger" ? "var(--color-danger)" : tone === "warn" ? "var(--color-warn)" : "var(--color-primary)";
   return (
     <svg viewBox={`0 0 ${width} 32`} preserveAspectRatio="none" className={cn("h-10 w-full", className)}>
-      <polyline fill="none" stroke={stroke} strokeWidth="1.8" points={points} />
+      {segments.map((points) => (
+        <polyline key={points} fill="none" stroke={stroke} strokeWidth="1.8" points={points} />
+      ))}
     </svg>
   );
-}
-
-function linePaths(
-  series: readonly ChartPoint[],
-  x: (index: number) => number,
-  y: (value: number) => number,
-): Array<{ d: string; area: string | null }> {
-  const paths: Array<{ d: string; area: string | null }> = [];
-  let d = "";
-  let start = 0;
-  let open = false;
-  for (let index = 0; index < series.length; index += 1) {
-    const value = series[index]?.value ?? null;
-    if (value == null) {
-      if (open) {
-        paths.push({ d, area: `${d} L${x(index > 0 ? index - 1 : 0)} ${y(0)} L${x(start)} ${y(0)} Z` });
-        open = false;
-        d = "";
-      }
-      continue;
-    }
-    if (!open) {
-      start = index;
-      d = `M${x(index)} ${y(value)}`;
-      open = true;
-    } else {
-      d += ` L${x(index)} ${y(value)}`;
-    }
-  }
-  if (open) {
-    const last = series.length - 1;
-    paths.push({ d, area: `${d} L${x(last)} ${y(0)} L${x(start)} ${y(0)} Z` });
-  }
-  return paths;
-}
-
-function nearestIndex(series: readonly ChartPoint[], markerTs: string | null | undefined): number {
-  if (!markerTs || series.length === 0) return -1;
-  const target = Date.parse(markerTs);
-  if (Number.isNaN(target)) return -1;
-  let best = 0;
-  let bestDist = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < series.length; index += 1) {
-    const dist = Math.abs(Date.parse(series[index]!.ts) - target);
-    if (dist < bestDist) {
-      best = index;
-      bestDist = dist;
-    }
-  }
-  return best;
-}
-
-function formatClock(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatNumber(value: number): string {
-  if (Math.abs(value) >= 100) return `${Math.round(value)}`;
-  return value.toFixed(value >= 10 ? 1 : 2);
 }

@@ -78,6 +78,7 @@ from services.panel_monitor.types import (
     MonitorResult,
     MonitorStatus,
 )
+from tests.panel_monitor_fakes import FakeRedisClient, patch_history_redis
 
 
 @pytest.fixture(autouse=True)
@@ -317,50 +318,17 @@ def test_display_series_keeps_last_present_percentile():
 
 @pytest.mark.asyncio
 async def test_history_snapshot_instances_and_invalid_payloads(monkeypatch):
-    class Store:
-        def __init__(self) -> None:
-            self.zsets: dict[str, list[tuple[object, float]]] = {
-                "panel_mon:instances": [("other", time())],
-            }
-            self.kv = {
-                "panel_mon:other:snap": "{not-json",
-                "panel_mon:bad:snap": "[]",
-            }
-
-        async def zadd(self, key, mapping):
-            items = self.zsets.setdefault(key, [])
-            for member, score in mapping.items():
-                items.append((str(member), float(score)))
-
-        async def zremrangebyscore(self, key, _lo, _hi):
-            return 0
-
-        async def zremrangebyrank(self, key, _start, _stop):
-            return 0
-
-        async def expire(self, key, _ttl):
-            return True
-
-        async def zrangebyscore(self, key, lo, hi, withscores=False):
-            if "err" in key:
-                return [1, "{", '{"ts": 1}']
-            items = [
-                (member, score) for member, score in self.zsets.get(key, []) if lo <= score <= hi
-            ]
-            if withscores:
-                return items
-            return [member for member, _score in items]
-
-        async def get(self, key):
-            return self.kv.get(key)
-
-        async def set(self, key, value, ex=None):
-            self.kv[key] = value
-
-    import sys
-
-    fake = SimpleNamespace(client=Store(), prefixed_key=lambda key: key)
-    monkeypatch.setattr(sys.modules["services.panel_monitor.history"], "redis_manager", fake)
+    client = patch_history_redis(monkeypatch, FakeRedisClient())
+    client.zsets["panel_mon:instances"] = [("other", time())]
+    client.kv = {
+        "panel_mon:other:snap": "{not-json",
+        "panel_mon:bad:snap": "[]",
+    }
+    client.zsets["panel_mon:err:err"] = [
+        (1, 1.0),
+        ("{", 2.0),
+        ('{"ts": 1}', 3.0),
+    ]
     await history.write_errors([])
     await history.write_errors(
         [{"ts": time(), "summary": "x" * 12, "truncated": True, "source": "log"}]
@@ -372,7 +340,7 @@ async def test_history_snapshot_instances_and_invalid_payloads(monkeypatch):
     assert await history.load_snapshot("other") is None
     assert await history.load_snapshot("bad") is None
     loaded = await history.load_errors(instance="other-missing", start_ts=0, end_ts=time() + 10)
-    assert isinstance(loaded, list)
+    assert loaded == []
     parsed = await history.load_errors(instance="err", start_ts=0, end_ts=time() + 10)
     assert parsed == [{"ts": 1}]
     other_points = await history.load_points(instance="missing", start_ts=0, end_ts=time())
@@ -383,32 +351,7 @@ async def test_history_snapshot_instances_and_invalid_payloads(monkeypatch):
 async def test_history_drops_expired_pending_and_loads_other_instance_from_memory(
     monkeypatch,
 ):
-    class Broken:
-        async def zadd(self, *args, **kwargs):
-            raise ConnectionError("down")
-
-        async def zremrangebyscore(self, *args, **kwargs):
-            raise ConnectionError("down")
-
-        async def zremrangebyrank(self, *args, **kwargs):
-            raise ConnectionError("down")
-
-        async def expire(self, *args, **kwargs):
-            raise ConnectionError("down")
-
-        async def zrangebyscore(self, *args, **kwargs):
-            raise ConnectionError("down")
-
-        async def get(self, *args, **kwargs):
-            raise ConnectionError("down")
-
-        async def set(self, *args, **kwargs):
-            raise ConnectionError("down")
-
-    import sys
-
-    fake = SimpleNamespace(client=Broken(), prefixed_key=lambda key: key)
-    monkeypatch.setattr(sys.modules["services.panel_monitor.history"], "redis_manager", fake)
+    patch_history_redis(monkeypatch, FakeRedisClient(fail=True))
     await history.write_point({"t": time() - 1000, "req": 1})
     await history.write_errors([{"ts": time() - 1, "summary": "late"}])
     assert await history.load_points(instance="other", start_ts=0, end_ts=time()) == []
@@ -646,6 +589,7 @@ def test_presenter_coerces_invalid_values():
     naive = datetime(2026, 1, 1)
     assert _ts(naive).tzinfo is UTC
     assert _ts("nope")
+    assert _ts(10**18).tzinfo is UTC
     listed = to_error_list(
         ErrorListResult(
             items=[
@@ -695,3 +639,57 @@ def test_presenter_coerces_invalid_values():
     assert view.snapshot is None
     assert view.series[0].redis_connected is None
     assert view.error_groups[0].frames == []
+    snapshot_view = to_monitor_view(
+        MonitorResult(
+            range="1h",
+            instance_id="abc",
+            instances=[],
+            status=MonitorStatus(
+                enabled=True,
+                running=True,
+                stale=False,
+                history_available=True,
+                history_error=None,
+                config_sync_error=None,
+                last_sample_at=1.0,
+                stopped_at=None,
+                instance_id="abc",
+            ),
+            snapshot={
+                "captured_at": datetime(2026, 9, 13, tzinfo=UTC),
+                "priority": ["requests"],
+                "requests": {
+                    "window_seconds": 60,
+                    "sample_count": 0,
+                    "latency_ms": {"p50": 0, "p95": 0, "p99": 0, "max": 0},
+                },
+                "process": {"pid": 1, "uptime_seconds": 1},
+                "database": {"pool_size": 1, "max_overflow": 0},
+                "redis": {"connected": False},
+                "ssh_pool": {},
+                "operations": {},
+                "runtime": {
+                    "version": "0",
+                    "python": "3",
+                    "fastapi": "0",
+                    "git_sha": "unknown",
+                    "build_time": "unknown",
+                    "worker_pid": 1,
+                },
+            },
+            series=[],
+            alerts=[],
+            error_groups=[],
+            integrity={},
+        ),
+        runtime={
+            "version": "x",
+            "python": "3",
+            "fastapi": "0",
+            "git_sha": "unknown",
+            "build_time": "unknown",
+            "worker_pid": 2,
+        },
+    )
+    assert snapshot_view.snapshot is not None
+    assert snapshot_view.snapshot.redis.connected is False

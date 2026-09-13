@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   formatAlertDetail,
+  formatAlertGuidance,
   formatAlertTitle,
   formatCpu,
+  formatErrorSource,
   formatMonitorInstant,
   formatRpm,
   isLocalizedAlert,
+  lastPoint,
   monitorExportFilename,
   overallTone,
   sparkValues,
@@ -145,6 +148,10 @@ test("sample times combine relative language with a local clock", () => {
   assert.match(english, /\(/);
   assert.match(chinese, /秒/);
   assert.equal(formatMonitorInstant(null, "en-US", now), "—");
+  assert.equal(formatMonitorInstant("not-a-date", "en-US", now), "—");
+  assert.match(formatMonitorInstant("2026-09-13T03:50:00.000Z", "en-US", now), /minute/);
+  assert.match(formatMonitorInstant("2026-09-13T01:00:00.000Z", "en-US", now), /hour/);
+  assert.match(formatMonitorInstant("2026-09-11T04:00:00.000Z", "en-US", now), /day/);
 });
 
 test("localized alert details pick watch vs critical copy", () => {
@@ -175,4 +182,17 @@ test("localized alert details pick watch vs critical copy", () => {
     formatAlertDetail(t, { ...base, id: "unknown", severity: "critical" }),
     "fallback-detail",
   );
+  assert.equal(
+    formatAlertGuidance(t, { ...base, id: "redis", severity: "critical" }),
+    "alerts.redis.guidance",
+  );
+  assert.equal(
+    formatAlertGuidance(t, { ...base, id: "unknown", severity: "watch" }),
+    "fallback-guidance",
+  );
+  assert.equal(formatErrorSource(t, "request"), "sources.request");
+  assert.equal(formatErrorSource(t, "mystery"), "mystery");
+  assert.equal(formatErrorSource(t, null), "—");
+  assert.equal(lastPoint([]), undefined);
+  assert.equal(lastPoint([1, 2]), 2);
 });

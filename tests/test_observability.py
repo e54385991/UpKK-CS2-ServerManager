@@ -10,6 +10,7 @@ from modules.observability import (
     drain_counters,
     drain_request_buckets,
     end_request,
+    error_stats,
     in_flight,
     nearest_rank,
     record_error,
@@ -43,6 +44,7 @@ def test_nearest_rank_matches_the_panel_metrics_window():
     assert nearest_rank(values, 50) == 50.0
     assert nearest_rank(values, 95) == 95.0
     assert percentile_block(values)["max"] == 100.0
+    assert percentile_block([]) == {"p50": 0.0, "p95": 0.0, "p99": 0.0, "max": 0.0}
 
 
 def test_disabled_switch_drops_samples_and_errors():
@@ -133,3 +135,38 @@ def test_latency_sample_cap_marks_partial_percentiles():
     assert snapshot["requests"] == 4097
     assert snapshot["latency_partial"] is True
     assert snapshot["samples_dropped"] == 1
+
+
+def test_list_errors_filters_source_severity_and_cursor():
+    set_enabled(True)
+    record_error(source="request", summary="req-a", severity="error", route="/api/v1/servers")
+    record_error(source="task", summary="task-b", severity="critical", operation_id="op-1")
+    record_error(source="request", summary="req-c", severity="error", route="/api/v1/servers")
+    by_source, dropped = list_errors(start_ts=0, end_ts=10**12, source="request")
+    assert dropped == 0
+    assert {item["summary"] for item in by_source} == {"req-a", "req-c"}
+    by_severity, _ = list_errors(start_ts=0, end_ts=10**12, severity="critical")
+    assert [item["summary"] for item in by_severity] == ["task-b"]
+    by_operation, _ = list_errors(start_ts=0, end_ts=10**12, operation_id="op-1")
+    assert [item["summary"] for item in by_operation] == ["task-b"]
+    newest = max(item["ts"] for item in by_source)
+    older, _ = list_errors(start_ts=0, end_ts=10**12, source="request", cursor_ts=newest, limit=10)
+    assert all(item["ts"] < newest for item in older)
+    assert any(item["summary"] == "req-a" for item in older)
+
+
+def test_record_error_ignores_stale_generation_and_counts_overflow(monkeypatch):
+    from modules.observability import events as events_mod
+
+    generation = set_enabled(True)
+    record_error(source="request", summary="stale", generation=generation + 99)
+    items, dropped = list_errors(start_ts=0, end_ts=10**12)
+    assert items == []
+    assert dropped == 0
+    monkeypatch.setattr(events_mod, "MEMORY_ERROR_LIMIT", 1)
+    record_error(source="request", summary="one")
+    record_error(source="request", summary="x" * 600)
+    stats = error_stats()
+    assert stats["stored"] >= 1
+    assert stats["dropped"] >= 1
+    assert stats["truncated"] >= 1

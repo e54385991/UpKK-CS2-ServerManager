@@ -10,8 +10,9 @@ import {
 } from "lucide-react";
 import { getMonitorAction, getMonitorErrorsAction, saveSettingsAction } from "@/modules/settings/actions";
 import { collectBrowserMetrics } from "@/modules/settings/browser-metrics";
-import { MonitorChart, Sparkline } from "@/modules/settings/monitor-charts";
+import { MonitorChart } from "@/modules/settings/monitor-charts";
 import { MonitorErrorCenter } from "@/modules/settings/monitor-errors";
+import { MonitorDetailPanels, MonitorKpi } from "@/modules/settings/monitor-facts";
 import { formatBytes, formatMs, formatPercent } from "@/modules/settings/diagnostics-format";
 import {
   formatAlertDetail,
@@ -26,6 +27,7 @@ import {
   sparkValues,
   type MonitorTranslate,
 } from "@/modules/settings/monitor-format";
+import { focusedSeries, kpiTone, monitorStatusKey } from "@/modules/settings/monitor-logic";
 import {
   MONITOR_RANGES,
   MONITOR_VIEWS,
@@ -151,11 +153,7 @@ export function MonitorDashboard() {
   const series = view?.series ?? EMPTY_SERIES;
   const alerts = view?.alerts ?? EMPTY_ALERTS;
   const instances = view?.instances ?? EMPTY_INSTANCES;
-  const focused = useMemo(() => {
-    if (!focusTs) return series;
-    const target = Date.parse(focusTs);
-    return series.filter((point) => Math.abs(Date.parse(point.ts) - target) <= 15 * 60 * 1000);
-  }, [focusTs, series]);
+  const focused = useMemo(() => focusedSeries(series, focusTs), [focusTs, series]);
 
   return (
     <div data-testid="settings-performance-card" className="space-y-5">
@@ -293,35 +291,35 @@ export function MonitorDashboard() {
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <Kpi
+        <MonitorKpi
           label={t("kpiP95")}
           value={formatMs(latest?.latency_p95_ms)}
           hint={t("p95Peak")}
           tone={kpiTone(latest?.latency_p95_ms, 500, 1000)}
           spark={sparkValues(series, (point) => point.latency_p95_ms ?? null)}
         />
-        <Kpi
+        <MonitorKpi
           label={t("kpiError")}
           value={formatPercent(latest?.error_rate)}
           hint={t("errorHint", { count: latest?.status_5xx ?? 0 })}
           tone={(latest?.status_5xx ?? 0) > 0 ? "danger" : "ok"}
           spark={sparkValues(series, (point) => point.error_rate)}
         />
-        <Kpi
+        <MonitorKpi
           label={t("kpiFailed")}
           value={String(latest?.failed_tasks ?? 0)}
           hint={t("failedHint")}
           tone={(latest?.failed_tasks ?? 0) > 0 ? "danger" : "ok"}
           spark={sparkValues(series, (point) => point.failed_tasks)}
         />
-        <Kpi
+        <MonitorKpi
           label={t("kpiCpu")}
           value={formatCpu(latest?.cpu_percent)}
           hint={t("cpuHint")}
           tone="ok"
           spark={sparkValues(series, (point) => point.cpu_percent ?? null)}
         />
-        <Kpi
+        <MonitorKpi
           label={t("kpiRss")}
           value={formatBytes(latest?.rss_bytes)}
           hint={t("rssHint", { peak: formatBytes(latest?.rss_peak_bytes) })}
@@ -443,7 +441,7 @@ export function MonitorDashboard() {
         </div>
       ) : null}
 
-      {view?.snapshot ? <DetailPanels snapshot={view.snapshot} tab={tab} /> : null}
+      {view?.snapshot ? <MonitorDetailPanels snapshot={view.snapshot} tab={tab} /> : null}
 
       <section>
         <h3 className="mb-2 text-sm font-semibold text-fg">{t("errors")}</h3>
@@ -461,121 +459,27 @@ export function MonitorDashboard() {
   );
 }
 
-function Kpi({
-  label,
-  value,
-  hint,
-  tone,
-  spark,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  tone: "ok" | "warn" | "danger";
-  spark: Array<number | null>;
-}) {
-  return (
-    <div className="rounded-lg border border-line bg-surface p-4 shadow-panel">
-      <p className="text-xs uppercase tracking-wide text-fg-subtle">{label}</p>
-      <p className={cn("mt-1 text-3xl font-semibold tabular-nums", tone === "danger" && "text-danger", tone === "warn" && "text-warn")}>
-        {value}
-      </p>
-      <p className="mt-1 text-xs text-fg-muted">{hint}</p>
-      <Sparkline values={spark} tone={tone} className="mt-3" />
-    </div>
-  );
-}
-
-function DetailPanels({
-  snapshot,
-  tab,
-}: {
-  snapshot: NonNullable<PanelMonitorViewDto["snapshot"]>;
-  tab: MonitorView;
-}) {
-  const t = useTranslations("settings.monitor");
-  const routes = snapshot.requests.by_route ?? [];
-  const maxP95 = Math.max(...routes.map((row) => row.latency_ms.p95), 1);
-  if (tab === "requests") {
-    return (
-      <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Fact label={t("inFlight")} value={String(snapshot.requests.in_flight ?? 0)} />
-          <Fact label={t("statusMix")} value={`${snapshot.requests.status_2xx} / ${snapshot.requests.status_4xx} / ${snapshot.requests.status_5xx}`} />
-          <Fact label={t("unhandledCount")} value={String(snapshot.requests.unhandled_exceptions ?? 0)} />
-          <Fact label={t("cancellations")} value={String(snapshot.requests.cancellations ?? 0)} />
-        </div>
-        <section className="rounded-lg border border-line bg-surface p-5">
-          <h3 className="text-sm font-semibold text-fg">{t("slowRoutes")}</h3>
-          <ul className="mt-3 space-y-2">
-            {routes.map((row) => (
-              <li key={`${row.method}${row.route}`} className="text-sm">
-                <div className="flex justify-between gap-3">
-                  <span className="truncate font-mono text-xs">{row.method} {row.route}</span>
-                  <span className="tabular-nums text-fg-muted">{formatMs(row.latency_ms.p95)}</span>
-                </div>
-                <div className="mt-1 h-1.5 rounded-full bg-surface-overlay">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${(row.latency_ms.p95 / maxP95) * 100}%` }} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-    );
-  }
-  if (tab === "resources") {
-    return (
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Fact label={t("redis")} value={snapshot.redis.connected ? t("connected") : t("disconnected")} />
-        <Fact label={t("dbPool")} value={`${snapshot.database.checked_out ?? "—"} / ${snapshot.database.capacity ?? snapshot.database.pool_size + snapshot.database.max_overflow}`} />
-        <Fact label={t("ssh")} value={`${snapshot.ssh_pool.in_use}/${snapshot.ssh_pool.connections}`} />
-        <Fact label={t("outbound")} value={String((snapshot.outbound_http ?? []).reduce((sum, item) => sum + item.calls, 0))} />
-        <Fact label={t("fd")} value={`${snapshot.process.fd_open ?? "—"} / ${snapshot.process.fd_limit ?? "—"}`} />
-        <Fact label={t("borrowers")} value={String((snapshot.limiters?.[0]?.borrowers ?? 0))} />
-      </div>
-    );
-  }
-  if (tab === "tasks") {
-    return (
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Fact label={t("queued")} value={String(snapshot.operations.queued)} />
-        <Fact label={t("running")} value={String(snapshot.operations.running)} />
-        <Fact label={t("failed")} value={String(snapshot.operations.failed ?? 0)} />
-        <Fact label={t("oldest")} value={formatMs(snapshot.operations.oldest_queue_ms)} />
-      </div>
-    );
-  }
-  return null;
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-line bg-surface px-4 py-3">
-      <p className="text-xs text-fg-subtle">{label}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
-    </div>
-  );
-}
-
 function statusLabel(
   t: ReturnType<typeof useTranslations>,
   view: PanelMonitorViewDto | null,
   tone: "ok" | "warn" | "danger" | "neutral",
 ): string {
-  if (view == null) return t("loading");
-  if (!view.status.enabled) return t("disabled");
-  if (view.status.stale) return t("stale");
-  if (!view.status.history_available) return t("historyUnavailable");
-  if (tone === "danger") return t("critical");
-  if (tone === "warn") return t("watch");
-  if ((view.series?.length ?? 0) === 0) return t("collecting");
-  return t("healthy");
-}
-
-function kpiTone(value: number | null | undefined, watch: number, critical: number): "ok" | "warn" | "danger" {
-  if (value == null) return "ok";
-  if (value >= critical) return "danger";
-  if (value >= watch) return "warn";
-  return "ok";
+  switch (monitorStatusKey(view, tone)) {
+    case "loading":
+      return t("loading");
+    case "disabled":
+      return t("disabled");
+    case "stale":
+      return t("stale");
+    case "historyUnavailable":
+      return t("historyUnavailable");
+    case "critical":
+      return t("critical");
+    case "watch":
+      return t("watch");
+    case "collecting":
+      return t("collecting");
+    case "healthy":
+      return t("healthy");
+  }
 }

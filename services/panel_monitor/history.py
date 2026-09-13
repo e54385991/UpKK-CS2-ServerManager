@@ -70,16 +70,10 @@ class MonitorHistory:
         for event in events:
             if event.get("truncated"):
                 self.truncated_summaries += 1
-            memory_limit = self._memory_errors.maxlen
-            if (
-                not persisted
-                and memory_limit is not None
-                and len(self._memory_errors) >= memory_limit
-            ):
-                self.dropped_errors += 1
-            self._memory_errors.append(event)
             if not persisted:
+                self._count_memory_overflow()
                 self._pending_errors.append(event)
+            self._memory_errors.append(event)
         if persisted:
             await self._flush_pending()
 
@@ -169,6 +163,11 @@ class MonitorHistory:
         self._memory_errors.clear()
         self._pending_points.clear()
         self._pending_errors.clear()
+
+    def _count_memory_overflow(self) -> None:
+        limit = self._memory_errors.maxlen
+        if limit is not None and len(self._memory_errors) >= limit:
+            self.dropped_errors += 1
 
     async def _persist_point(self, point: dict[str, Any]) -> bool:
         encoded = json.dumps(point, separators=(",", ":"), default=str)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -15,9 +16,11 @@ from modules import (
     get_db,
 )
 from modules.observability import reset_for_tests, set_enabled
+from services.panel_metrics import PRIORITY_SECTIONS
 from services.panel_monitor.history import history
 from services.panel_monitor.types import (
     ErrorListResult,
+    ErrorQuery,
     MonitorAlert,
     MonitorInstance,
     MonitorResult,
@@ -105,6 +108,33 @@ def _result(*, enabled: bool = True) -> MonitorResult:
     )
 
 
+def _cached_snapshot() -> dict:
+    return {
+        "format": "upkk-panel-performance",
+        "version": 1,
+        "captured_at": datetime(2026, 9, 13, tzinfo=UTC),
+        "priority": list(PRIORITY_SECTIONS),
+        "requests": {
+            "window_seconds": 60,
+            "sample_count": 0,
+            "latency_ms": {"p50": 0, "p95": 0, "p99": 0, "max": 0},
+        },
+        "process": {"pid": 1, "uptime_seconds": 12},
+        "database": {"pool_size": 5, "max_overflow": 10, "capacity": 15},
+        "redis": {"connected": True},
+        "ssh_pool": {},
+        "operations": {"queued": 0, "running": 0},
+        "runtime": {
+            "version": "0",
+            "python": "3",
+            "fastapi": "0",
+            "git_sha": "unknown",
+            "build_time": "unknown",
+            "worker_pid": 1,
+        },
+    }
+
+
 def test_monitor_requires_admin():
     client = _client(admin=False)
     assert client.get("/api/v1/diagnostics/monitor").status_code == 403
@@ -182,3 +212,46 @@ def test_toggle_off_does_not_start_legacy_capture(monkeypatch):
     client = _client()
     response = client.get("/api/v1/diagnostics")
     assert response.status_code == 409
+
+
+def test_diagnostics_returns_cached_snapshot_when_disabled():
+    reset_for_tests()
+    set_enabled(False)
+    history.remember_snapshot(_cached_snapshot())
+    try:
+        client = _client()
+        response = client.get("/api/v1/diagnostics")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["format"] == "upkk-panel-performance"
+        assert body["requests"]["sample_count"] == 0
+        assert body["runtime"]["worker_pid"]
+    finally:
+        history._snapshot = None
+
+
+def test_errors_forwards_filters(monkeypatch):
+    captured: dict[str, object] = {}
+
+    async def fake(query):
+        captured["query"] = query
+        return ErrorListResult(items=[], next_cursor=None, dropped=0, truncated=True)
+
+    monkeypatch.setattr("api.routes.v1.diagnostics.get_errors", fake)
+    client = _client()
+    response = client.get(
+        "/api/v1/diagnostics/errors"
+        "?range=15m&source=request&severity=error&route=/api/v1/servers"
+        "&operation_id=op-1&cursor=12.5&limit=10"
+    )
+    assert response.status_code == 200
+    query = captured["query"]
+    assert isinstance(query, ErrorQuery)
+    assert query.range == "15m"
+    assert query.source == "request"
+    assert query.severity == "error"
+    assert query.route == "/api/v1/servers"
+    assert query.operation_id == "op-1"
+    assert query.cursor == "12.5"
+    assert query.limit == 10
+    assert response.json()["truncated"] is True
