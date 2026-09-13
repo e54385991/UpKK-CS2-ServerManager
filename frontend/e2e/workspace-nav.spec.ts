@@ -150,16 +150,18 @@ test("unprefetched tab click feedback stays under 100ms with 3s network and back
 
 test("consecutive tab clicks move pending to the last target", async ({ page, context, request }) => {
   await login(context);
-  await request.post(`${mock}/__test__/reset`);
+  await request.post(`${mock}/__test__/reset`, {
+    data: {
+      rules: {
+        "/api/v1/servers/1/files": { delay: 3000 },
+        "/api/v1/servers/1/console": { delay: 3000 },
+      },
+    },
+  });
   await page.goto("/servers/1/config");
   await expect(page.getByTestId("game-config-form")).toBeVisible();
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Network.emulateNetworkConditions", {
-    offline: false,
-    latency: 3000,
-    downloadThroughput: -1,
-    uploadThroughput: -1,
-  });
+  // Chrome may not throttle loopback via CDP; delay the actual RSC paths.
+  await delayPathnames(page, ["/servers/1/files", "/servers/1/console"]);
   await clickShowsPending(page, 'a[data-workspace-category="files"]');
   await clickShowsPending(page, 'a[data-workspace-category="console"]');
   await expect(categoryLink(page, "console").locator("[data-testid='link-pending-hint']")).toHaveAttribute(

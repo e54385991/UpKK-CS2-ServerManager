@@ -48,15 +48,15 @@ if (typeof document !== "undefined") {
 
 export function markLinkPending(href: string) {
   pendingHref = href;
-  writeDom(href);
   emit();
+  writeDom(href);
 }
 
 export function clearLinkPending(href?: string) {
   if (href != null && pendingHref !== href) return;
   pendingHref = null;
-  writeDom(null);
   emit();
+  writeDom(null);
 }
 
 export function subscribeLinkPending(listener: () => void) {
