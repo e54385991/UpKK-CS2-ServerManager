@@ -152,3 +152,8 @@ logs/
 # Runtime secrets and persistent application data
 data/
 *.rdb
+
+# Isolated performance raw dumps (keep reports/perf/raw/README.md)
+reports/perf/raw/*.json
+frontend/test-results/perf-baseline/
+frontend/test-results/perf-baseline-runs/

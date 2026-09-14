@@ -108,3 +108,5 @@ response model，敏感响应字段通过安全 allowlist。
 批量授权、MGET/pipeline、有界并发、短事务和 SSE 慢客户端隔离属于性能契约，重构时必须
 保留对应回归测试。数据库集成、Compose 健康和浏览器 smoke 按 `.github/workflows/quality.yml`
 中的独立 CI job 执行；本地基线通过不代表这些集成检查已在本地运行。
+全链路耗时比较使用隔离 PostgreSQL/Redis 与 `docs/PERFORMANCE.md` 中的测量工具，不进入
+默认 `check_baseline.py`。拟定验收数字在跑完隔离基线之前不能当成已经取得的收益。

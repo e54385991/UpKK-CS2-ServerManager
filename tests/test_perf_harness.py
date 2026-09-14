@@ -1,0 +1,204 @@
+"""Deterministic coverage for the isolated performance harness."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from scripts.perf.catalog_bytes import catalog_byte_report, compact_bytes, pick_namespaces
+from scripts.perf.download_bench import compare_chunks, copy_payload
+from scripts.perf.env import (
+    PERF_DATABASE,
+    PERF_REDIS_PREFIX,
+    apply_isolated_env,
+    assert_isolated_target,
+    isolated_environ,
+)
+from scripts.perf.profiles import (
+    CACHE_PRUNE_SCANS_TODAY,
+    CURRENT_DOWNLOAD_CHUNK,
+    DOWNLOAD_CHUNK_CANDIDATES,
+    FLEETS,
+    LOGIN_NAMESPACES,
+    OVERVIEW_NAMESPACES,
+    OVERVIEW_SERVER_LIMIT,
+    actor_cycle,
+    event_count,
+    history_kind_for_index,
+    overview_counted_servers,
+    retained_counts,
+    split_ownership,
+)
+from scripts.perf.report import (
+    compare_summaries,
+    empty_report,
+    improvement_ratio,
+    locale_bytes_pass,
+    median_of_rounds,
+    meets_improvement,
+    percentile_block,
+    regression_limit_ms,
+    within_regression,
+    within_resource_gate,
+    write_report,
+)
+from scripts.perf.stubs import StubServer, stub_payload
+
+
+def test_fleet_profiles_match_the_agreed_tiers():
+    assert FLEETS["fleet-10"].servers == 10
+    assert FLEETS["fleet-10"].online_users == 1
+    assert FLEETS["fleet-100"].servers == 100
+    assert FLEETS["fleet-100"].online_users == 10
+    assert FLEETS["fleet-500"].servers == 500
+    assert FLEETS["fleet-500"].online_users == 30
+    assert FLEETS["fleet-1000"].compatibility is True
+    assert FLEETS["fleet-1001"].servers == 1001
+
+
+def test_ownership_covers_admin_member_and_disjoint_tenants():
+    for total in (4, 10, 100, 500, 1000, 1001):
+        split = split_ownership(total)
+        assert split.total == total
+        assert split.admin >= 1
+        assert split.member >= 1
+        assert split.tenant_a == 1
+        assert split.tenant_b == 1
+
+
+def test_overview_keeps_the_existing_thousand_server_cap():
+    assert overview_counted_servers(1000) == OVERVIEW_SERVER_LIMIT
+    assert overview_counted_servers(1001) == OVERVIEW_SERVER_LIMIT
+    assert overview_counted_servers(10) == 10
+
+
+def test_actor_cycle_reuses_admin_for_extra_online_users():
+    assert actor_cycle(1) == ("admin",)
+    assert actor_cycle(4) == ("admin", "member", "tenant_a", "tenant_b")
+    assert actor_cycle(6).count("admin") == 3
+
+
+def test_history_mix_covers_empty_daily_and_retention_cap():
+    kinds = {history_kind_for_index(index, 20, "daily") for index in range(20)}
+    assert kinds == {"empty", "daily", "max"}
+    assert history_kind_for_index(0, 5, "empty") == "empty"
+    assert retained_counts("empty") == (0, 0, 0, 0)
+    assert retained_counts("max") == (1, 10, 100, 100)
+    assert event_count("max", "running") == 300
+    assert event_count("daily", "completed") == 1
+
+
+def test_gates_use_stated_thresholds_not_claimed_gains():
+    assert meets_improvement(100.0, 80.0) is True
+    assert meets_improvement(100.0, 85.0) is False
+    assert improvement_ratio(100.0, 80.0) == pytest.approx(0.20)
+    assert regression_limit_ms(100.0) == 120.0
+    assert regression_limit_ms(1000.0) == 1050.0
+    assert within_regression(100.0, 119.0) is True
+    assert within_regression(100.0, 121.0) is False
+    assert within_resource_gate(100.0, 105.0) is True
+    assert within_resource_gate(100.0, 106.0) is False
+    assert locale_bytes_pass(1000, 500) is True
+    assert locale_bytes_pass(1000, 501) is False
+
+
+def test_median_of_three_rounds_picks_the_middle_value():
+    assert median_of_rounds([30.0, 10.0, 20.0]) == 20.0
+    assert median_of_rounds([]) == 0.0
+
+
+def test_percentile_block_matches_in_process_observability():
+    from modules.observability.stats import percentile_block as shared
+
+    values = [float(item) for item in range(1, 101)]
+    assert percentile_block(values) == shared(values)
+
+
+def test_isolated_env_rejects_production_targets(tmp_path: Path):
+    values = apply_isolated_env(target={})
+    assert values["POSTGRES_DATABASE"] == PERF_DATABASE
+    assert values["REDIS_KEY_PREFIX"] == PERF_REDIS_PREFIX
+    assert_isolated_target(isolated_environ())
+    with pytest.raises(SystemExit):
+        assert_isolated_target({"POSTGRES_DATABASE": "cs2_manager", "REDIS_KEY_PREFIX": "perf:"})
+    with pytest.raises(SystemExit):
+        assert_isolated_target({"POSTGRES_DATABASE": PERF_DATABASE, "REDIS_KEY_PREFIX": ""})
+    report = empty_report(profile="fleet-10", mode="smoke", cwd=tmp_path)
+    assert report["claimed_gains"] is False
+    path = tmp_path / "report.json"
+    write_report(path, report)
+    assert json.loads(path.read_text())["format"] == "upkk-isolated-perf"
+
+
+def test_catalog_subsets_are_smaller_than_the_full_client_payload():
+    report = catalog_byte_report()
+    english = report["locales"]["en-US"]
+    chinese = report["locales"]["zh-CN"]
+    assert english["full"] > 100_000
+    assert chinese["full"] > 100_000
+    assert english["login_subset"] < english["full"] / 2
+    assert english["overview_subset"] < english["full"] / 2
+    assert report["client_estimate"]["login"] == english["full"]
+    picked = pick_namespaces(
+        {"site": {"a": "b"}, "login": {"c": "d"}, "other": 1}, LOGIN_NAMESPACES
+    )
+    assert set(picked) <= set(LOGIN_NAMESPACES)
+    assert compact_bytes({"a": 1}) == len(b'{"a":1}')
+
+
+def test_compare_summaries_leave_unverified_when_measurements_are_missing():
+    baseline = empty_report(profile="fleet-10", mode="smoke")
+    candidate = empty_report(profile="fleet-10", mode="smoke")
+    gates = compare_summaries(baseline, candidate)
+    assert gates["inbox_p95_improvement"]["verified"] is False
+    assert gates["locale_login_bytes"]["verified"] is False
+
+
+def test_download_chunk_write_counts_match_payload_size(tmp_path: Path):
+    from scripts.perf.download_bench import CountingWriter
+
+    payload = b"x" * 65536
+    writer = CountingWriter(tmp_path / "out.bin")
+    import asyncio
+
+    asyncio.run(copy_payload(payload, 8192, writer))
+    writer.close()
+    assert writer.writes == 8
+    assert CURRENT_DOWNLOAD_CHUNK == 8192
+    assert DOWNLOAD_CHUNK_CANDIDATES == (8192, 65536, 262144)
+    assert CACHE_PRUNE_SCANS_TODAY == 2
+
+
+@pytest.mark.asyncio
+async def test_download_bench_records_all_candidates_without_adopting_them():
+    rows = await compare_chunks(payload_bytes=64 * 1024)
+    assert [row["chunk_size"] for row in rows] == list(DOWNLOAD_CHUNK_CANDIDATES)
+    assert all(row["adopted"] is False for row in rows)
+    current = next(row for row in rows if row["is_current_default"])
+    assert current["writes"] == 8
+
+
+def test_stub_payloads_and_loopback_health():
+    assert stub_payload("github")["full_name"] == "perf-fixture/plugin"
+    server = StubServer(port=0)
+    server.start()
+    try:
+        import urllib.request
+
+        with urllib.request.urlopen(f"{server.origin}/health", timeout=2) as response:
+            body = json.loads(response.read().decode())
+        assert body == {"status": "ok"}
+        with urllib.request.urlopen(
+            f"{server.origin}/github?mode=delay&delay=0", timeout=2
+        ) as response:
+            github = json.loads(response.read().decode())
+        assert github["name"] == "fixture-plugin"
+    finally:
+        server.stop()
+
+
+def test_overview_namespaces_do_not_include_marketplace_copy():
+    assert "plugins" not in OVERVIEW_NAMESPACES
+    assert "login" in LOGIN_NAMESPACES

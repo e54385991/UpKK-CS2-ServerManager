@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "upkk-isolated-perf",
+  "title": "Isolated performance report",
+  "type": "object",
+  "required": ["format", "version", "claimed_gains", "profile", "mode"],
+  "properties": {
+    "format": { "const": "upkk-isolated-perf" },
+    "version": { "const": 1 },
+    "claimed_gains": { "type": "boolean" },
+    "captured_at": { "type": "string" },
+    "git_sha": { "type": "string" },
+    "profile": { "type": "string" },
+    "mode": { "type": "string" },
+    "environment": { "type": "object" },
+    "catalog_bytes": { "type": "object" },
+    "browser": { "type": "object" },
+    "api": { "type": "object" },
+    "backend": { "type": "object" },
+    "download": { "type": "object" },
+    "gates": { "type": "object" },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

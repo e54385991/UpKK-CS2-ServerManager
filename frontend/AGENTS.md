@@ -266,6 +266,8 @@ npm run test:unit  # TypeScript module tests (Node's built-in test runner)
 npm run gen:api    # regenerate OpenAPI types from ../tests/baselines/openapi.json
 npx playwright test --config=playwright.overview.config.ts # isolated streaming regression
 npx playwright test --config=playwright.monitor.config.ts    # isolated settings monitoring charts
+# Production measurement (requires npm run build; not part of default CI):
+# PERF_WARMUP=5 PERF_MEASURE=30 PERF_ROUNDS=3 npx playwright test --config=playwright.production-baseline.config.ts
 ```
 
 Completion scope is defined in the root `AGENTS.md` under **Task Completion
@@ -284,6 +286,8 @@ with `OVERVIEW_MOCK_PORT` / `OVERVIEW_TEST_PORT`); never point this fixture at a
 live backend or run a production build concurrently against the same `.next`.
 The same job also runs `playwright.monitor.config.ts` on 38141/31841
 (`MONITOR_MOCK_PORT` / `MONITOR_TEST_PORT`) for the settings monitoring dashboard.
+Comparable production timings use `playwright.production-baseline.config.ts` after
+`npm run build`; that job is not part of default CI. See `docs/PERFORMANCE.md`.
 
 ## DTO and boundary rules
 

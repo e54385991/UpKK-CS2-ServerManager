@@ -1,0 +1,41 @@
+# Isolated PostgreSQL 18 + Redis 8 for performance measurement.
+# Bind loopback only. Do not point this file at a live panel volume.
+# Usage: docker compose -f docker-compose.perf.yml up -d --wait
+name: upkk-perf
+
+services:
+  postgres:
+    image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+    container_name: upkk_perf_postgres
+    restart: "no"
+    environment:
+      POSTGRES_DB: cs2_perf
+      POSTGRES_USER: cs2_perf
+      POSTGRES_PASSWORD: cs2-perf-db-not-production
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - perf_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cs2_perf -d cs2_perf"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8.10.1-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576
+    container_name: upkk_perf_redis
+    restart: "no"
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - perf_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  perf_postgres_data:
+  perf_redis_data:
