@@ -16,14 +16,11 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { ExtractDialog } from "@/modules/files/lazy-dialogs";
-import { MoveDialog } from "@/modules/files/move-dialog";
-import { FileEditorDialog } from "@/modules/files/lazy-dialogs";
+import { ExtractDialog, FileEditorDialog, MoveDialog, RenameDialog } from "@/modules/files/lazy-dialogs";
 import { FilesListing } from "@/modules/files/files-listing";
 import { FilesPathBar } from "@/modules/files/path-bar";
 import { FilesShortcuts } from "@/modules/files/files-shortcuts";
 import { FilesUploadDock } from "@/modules/files/files-upload-dock";
-import { RenameDialog } from "@/modules/files/lazy-dialogs";
 import { isAtRoot, parentWithinRoot } from "@/modules/files/paths";
 import { FILE_KIND_FILTERS, isArchiveFile, isTextFile, type FilesWorkspace } from "@/modules/files/types";
 import { useFilesWorkspace } from "@/modules/files/use-files-workspace";

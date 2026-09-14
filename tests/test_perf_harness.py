@@ -140,11 +140,20 @@ def test_catalog_subsets_are_smaller_than_the_full_client_payload():
     assert chinese["full"] > 100_000
     assert english["login_subset"] < english["full"] / 2
     assert english["overview_subset"] < english["full"] / 2
-    assert report["client_estimate"]["login"] == english["full"]
+    assert report["client_estimate"]["login"] == english["login_subset"]
+    assert report["client_estimate"]["overview"] == english["overview_subset"]
     picked = pick_namespaces(
-        {"site": {"a": "b"}, "login": {"c": "d"}, "other": 1}, LOGIN_NAMESPACES
+        {"feedback": {"a": "b"}, "login": {"c": "d"}, "other": 1}, LOGIN_NAMESPACES
     )
-    assert set(picked) <= set(LOGIN_NAMESPACES)
+    assert picked == {"feedback": {"a": "b"}, "login": {"c": "d"}}
+    nested = pick_namespaces(
+        {
+            "plugins": {"aiImport": {"x": 1}, "other": 2},
+            "feedback": {"ok": "OK"},
+        },
+        ("feedback", "plugins.aiImport"),
+    )
+    assert nested == {"feedback": {"ok": "OK"}, "plugins": {"aiImport": {"x": 1}}}
     assert compact_bytes({"a": 1}) == len(b'{"a":1}')
 
 

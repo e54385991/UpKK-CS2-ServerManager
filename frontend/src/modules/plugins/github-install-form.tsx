@@ -24,6 +24,10 @@ import {
   operationEventsUrl,
   parseOperationEvent,
 } from "@/modules/servers/operation-events";
+import {
+  createRenderCoalescer,
+  isTerminalOperationEventType,
+} from "@/shared/lib/render-coalesce";
 import type {
   OperationStreamEvent,
   ServerOperation,
@@ -130,10 +134,15 @@ export function GitHubInstallForm({
     const source = new EventSource(
       operationEventsUrl(operation.serverId, operation.operationId),
     );
+    const coalescer = createRenderCoalescer<OperationStreamEvent>((batch) => {
+      setEvents((current) => mergeOperationEvents(current, batch));
+    });
     const ingest = (raw: string) => {
       const event = parseOperationEvent(raw);
       if (!event) return;
-      setEvents((current) => mergeOperationEvents(current, [event]));
+      coalescer.push(event, {
+        immediate: isTerminalOperationEventType(event.type),
+      });
     };
     source.onmessage = (message) => ingest(message.data);
     source.addEventListener("progress", (message: MessageEvent<string>) =>
@@ -147,7 +156,10 @@ export function GitHubInstallForm({
       "operation_failed",
       (message: MessageEvent<string>) => ingest(message.data),
     );
-    return () => source.close();
+    return () => {
+      coalescer.dispose();
+      source.close();
+    };
   }, [operation]);
 
   const mappingEnabled = useCustomMapping || Boolean(plan?.mappingRequired);

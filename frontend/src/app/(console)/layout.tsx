@@ -1,3 +1,5 @@
+import { ClientMessages } from "@/i18n/client-messages";
+import { CONSOLE_NAMESPACES } from "@/i18n/namespaces";
 import { requireSession } from "@/modules/auth/render-session";
 import { ConsoleShell } from "@/modules/shell/console-shell";
 
@@ -13,5 +15,9 @@ export default async function ConsoleLayout({
   children: React.ReactNode;
 }) {
   const user = await requireSession();
-  return <ConsoleShell user={user}>{children}</ConsoleShell>;
+  return (
+    <ClientMessages namespaces={CONSOLE_NAMESPACES}>
+      <ConsoleShell user={user}>{children}</ConsoleShell>
+    </ClientMessages>
+  );
 }

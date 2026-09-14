@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { ClientMessages } from "@/i18n/client-messages";
+import { REGISTER_CLIENT_NAMESPACES } from "@/i18n/namespaces";
 import type { Route } from "next";
 import { getRegistrationConfig } from "@/modules/auth/api";
 import { getSession } from "@/modules/auth/render-session";
@@ -23,26 +25,30 @@ export default async function RegisterPage() {
 
   if (registration.ok && !registration.data.registration_enabled) {
     return (
-      <PublicAuthFrame>
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-base font-semibold text-fg">{t("disabledTitle")}</h2>
-            <p className="mt-1 text-sm text-fg-muted">{t("disabledMessage")}</p>
+      <ClientMessages namespaces={REGISTER_CLIENT_NAMESPACES}>
+        <PublicAuthFrame>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-base font-semibold text-fg">{t("disabledTitle")}</h2>
+              <p className="mt-1 text-sm text-fg-muted">{t("disabledMessage")}</p>
+            </div>
+            <Link
+              href={"/login" as Route}
+              className="block text-center text-sm text-primary hover:underline"
+            >
+              {t("loginHere")}
+            </Link>
           </div>
-          <Link
-            href={"/login" as Route}
-            className="block text-center text-sm text-primary hover:underline"
-          >
-            {t("loginHere")}
-          </Link>
-        </div>
-      </PublicAuthFrame>
+        </PublicAuthFrame>
+      </ClientMessages>
     );
   }
 
   return (
-    <PublicAuthFrame>
-      <RegisterForm />
-    </PublicAuthFrame>
+    <ClientMessages namespaces={REGISTER_CLIENT_NAMESPACES}>
+      <PublicAuthFrame>
+        <RegisterForm />
+      </PublicAuthFrame>
+    </ClientMessages>
   );
 }

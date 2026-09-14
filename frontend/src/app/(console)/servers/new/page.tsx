@@ -10,6 +10,7 @@ import { getInitializedHostCredentials } from "@/modules/servers/setup-api";
 import { SetupWizard } from "@/modules/servers/setup-wizard";
 import { cn } from "@/shared/lib/cn";
 import { Card } from "@/shared/ui/card";
+import { ServersSectionMessages } from "@/i18n/page-messages";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("serverNew");
@@ -50,7 +51,7 @@ export default async function NewServerPage({
       : null;
   const initialCredentials = prefilled?.ok ? prefilled.data : undefined;
   return (
-    <>
+    <ServersSectionMessages>
       <PageHeader
         title={tab === "setup" ? tSetup("title") : t("title")}
         description={tab === "setup" ? tSetup("description") : t("description")}
@@ -100,6 +101,6 @@ export default async function NewServerPage({
           />
         )
       )}
-    </>
+    </ServersSectionMessages>
   );
 }

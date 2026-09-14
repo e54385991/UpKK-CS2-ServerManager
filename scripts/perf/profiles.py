@@ -81,8 +81,15 @@ MEASURES: dict[MeasureMode, MeasureSpec] = {
     "baseline": MeasureSpec("baseline", 5, 30, 3, 60, 300, 3, 3600),
 }
 
-LOGIN_NAMESPACES = ("site", "feedback", "login")
-OVERVIEW_NAMESPACES = ("site", "feedback", "nav", "shell", "overview")
+LOGIN_NAMESPACES = ("feedback", "login")
+OVERVIEW_NAMESPACES = (
+    "feedback",
+    "site",
+    "nav",
+    "shell",
+    "serverDetail",
+    "plugins.aiImport",
+)
 USERNAMES = ("admin", "member", "tenant_a", "tenant_b")
 
 

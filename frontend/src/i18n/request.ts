@@ -1,6 +1,7 @@
 import { getRequestConfig } from "next-intl/server";
 import { cookies, headers } from "next/headers";
 import { LOCALE_COOKIE, resolveLocale } from "@/i18n/config";
+import { withMonitorMessages } from "@/i18n/monitor-messages";
 
 /**
  * i18n without URL routing: the active locale comes from the `locale` cookie,
@@ -17,5 +18,8 @@ export default getRequestConfig(async () => {
   );
   const messages = (await import(`@/i18n/messages/${active}.json`)).default;
 
-  return { locale: active, messages };
+  return {
+    locale: active,
+    messages: await withMonitorMessages(active, messages),
+  };
 });

@@ -58,10 +58,26 @@ in `frontend/test-results/perf-baseline/`. Catalog compact JSON bytes are not
 HTML, RSC, or gzip transfer; the Playwright report records those separately.
 
 On this tree the merged catalogs (main JSON plus `settings.monitor`) compact to
-**142,964** bytes (en-US) and **139,750** bytes (zh-CN). Login/overview subsets
-are about 2 KiB / 5 KiB. Those subset sizes are the Stage 3 opportunity; the
-current client payload is still the full catalog because the root layout passes
-`getMessages()`.
+**142,964** bytes (en-US) and **139,750** bytes (zh-CN). After Stage 3, the
+login client subset is **1,653 / 1,582** bytes and the overview chrome subset
+is **18,521 / 18,291** bytes. HTML, RSC, and gzip transfer still belong in the
+production Playwright report.
+
+## Stage 3 (locale trim and render coalesce; HTML/RSC gzip not yet measured)
+
+Root `NextIntlClientProvider` now receives only `feedback`. Console chrome,
+auth pages, and domain layouts pass explicit namespaces through
+`ClientMessages` / `pickMessages` (nested paths such as `plugins.aiImport`).
+Server workspace pages share one workspace dictionary on the existing
+`servers/[id]` layout so extra layout client entries do not blow the files
+route gzip budget. Source JSON files stay intact; `getRequestConfig` still
+loads the full server dictionary including `settings.monitor`. The files
+move dialog is lazy-loaded with the other file dialogs. AI token deltas and
+operation-log SSE lines coalesce to at most one display update per 50 ms;
+complete, error, and approval events flush immediately. Existing event
+limits, order, and dedup are unchanged. Isolated production HTML/RSC/gzip
+sizes have **not** been re-measured in a browser; catalog compact JSON is
+not that transfer.
 
 ## Report format
 

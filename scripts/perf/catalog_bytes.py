@@ -27,7 +27,34 @@ def load_catalog(locale: str, root: Path | None = None) -> dict[str, Any]:
 
 
 def pick_namespaces(catalog: Mapping[str, Any], names: tuple[str, ...]) -> dict[str, Any]:
-    return {name: catalog[name] for name in names if name in catalog}
+    result: dict[str, Any] = {}
+    for name in names:
+        _assign_path(result, catalog, name.split("."), name)
+    return result
+
+
+def _assign_path(
+    target: dict[str, Any],
+    source: Mapping[str, Any],
+    parts: list[str],
+    namespace: str,
+) -> None:
+    if not parts:
+        raise KeyError(f"Missing message namespace: {namespace}")
+    head, *rest = parts
+    if head not in source:
+        raise KeyError(f"Missing message namespace: {namespace}")
+    if not rest:
+        target[head] = source[head]
+        return
+    value = source[head]
+    if not isinstance(value, Mapping):
+        raise TypeError(f"Message namespace is not nested: {namespace}")
+    child = target.get(head)
+    if not isinstance(child, dict):
+        child = {}
+        target[head] = child
+    _assign_path(child, value, rest, namespace)
 
 
 def catalog_byte_report(root: Path | None = None) -> dict[str, Any]:
@@ -52,10 +79,10 @@ def catalog_byte_report(root: Path | None = None) -> dict[str, Any]:
         ),
         "locales": locales,
         "client_estimate": {
-            "login": locales["en-US"]["full"],
-            "overview": locales["en-US"]["full"],
-            "login_zh": locales["zh-CN"]["full"],
-            "overview_zh": locales["zh-CN"]["full"],
+            "login": locales["en-US"]["login_subset"],
+            "overview": locales["en-US"]["overview_subset"],
+            "login_zh": locales["zh-CN"]["login_subset"],
+            "overview_zh": locales["zh-CN"]["overview_subset"],
         },
     }
 

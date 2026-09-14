@@ -5,6 +5,7 @@ import { InitializedHostsManager } from "@/modules/servers/initialized-hosts-man
 import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
 import { Card } from "@/shared/ui/card";
+import { ServersSectionMessages } from "@/i18n/page-messages";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("initializedHosts");
@@ -18,7 +19,7 @@ export default async function InitializedHostsPage() {
   ]);
 
   return (
-    <>
+    <ServersSectionMessages>
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -47,7 +48,7 @@ export default async function InitializedHostsPage() {
         </Card>
       ) : (
         <InitializedHostsManager hosts={result.data} />
-      )}
-    </>
+        )}
+    </ServersSectionMessages>
   );
 }

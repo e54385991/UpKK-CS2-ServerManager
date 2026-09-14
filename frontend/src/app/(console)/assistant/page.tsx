@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { AssistantPanel, AssistantPanelSkeleton } from "@/modules/assistant/assistant-panel";
 import { PageHeader } from "@/shared/ui/page-header";
+import { DomainMessages } from "@/i18n/page-messages";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("assistant");
@@ -22,7 +23,7 @@ export default async function AssistantPage({
     prompt === "crashIsolation" ? t("crashIsolationPrompt") : undefined;
 
   return (
-    <>
+    <DomainMessages extra={["assistant"]}>
       <PageHeader title={t("title")} description={t("description")} />
       <Suspense fallback={<AssistantPanelSkeleton />}>
         <AssistantPanel
@@ -30,6 +31,6 @@ export default async function AssistantPage({
           initialDraft={initialDraft}
         />
       </Suspense>
-    </>
+    </DomainMessages>
   );
 }

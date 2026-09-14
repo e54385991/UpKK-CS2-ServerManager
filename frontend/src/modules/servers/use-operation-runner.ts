@@ -22,6 +22,10 @@ import {
 import { subscribeVisibleEventSource } from "@/shared/lib/visible-event-source";
 import { subscribeVisiblePoll } from "@/shared/lib/visible-poll";
 import {
+  createRenderCoalescer,
+  isTerminalOperationEventType,
+} from "@/shared/lib/render-coalesce";
+import {
   requiresOperationConfirmation,
   type DeploymentLock,
   type DeploymentLogEntry,
@@ -137,6 +141,9 @@ export function useOperationRunner({
     let finished = !isActiveOperation(operationRef.current);
     const seen = new Set<string>();
     const after = { current: lastEventSequence(eventsRef.current) };
+    const coalescer = createRenderCoalescer<OperationStreamEvent>((batch) => {
+      setEvents((current) => mergeOperationEvents(current, batch));
+    });
 
     const ingest = (raw: string) => {
       const event = parseOperationEvent(raw);
@@ -146,7 +153,9 @@ export function useOperationRunner({
       if (event.sequence && event.sequence !== "seed") {
         after.current = event.sequence;
       }
-      setEvents((current) => mergeOperationEvents(current, [event]));
+      coalescer.push(event, {
+        immediate: isTerminalOperationEventType(event.type),
+      });
       return event;
     };
 
@@ -188,6 +197,7 @@ export function useOperationRunner({
 
     return () => {
       cancelled = true;
+      coalescer.dispose();
       stop();
     };
   }, [operationId, refreshAfterTerminal, serverId]);

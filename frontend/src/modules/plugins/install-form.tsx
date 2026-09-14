@@ -37,6 +37,10 @@ import {
   parseOperationEvent,
 } from "@/modules/servers/operation-events";
 import {
+  createRenderCoalescer,
+  isTerminalOperationEventType,
+} from "@/shared/lib/render-coalesce";
+import {
   isActiveOperation,
   serverProxyMode,
   type OperationStreamEvent,
@@ -197,10 +201,15 @@ export function InstallForm({
     const source = new EventSource(
       operationEventsUrl(operation.serverId, operation.operationId),
     );
+    const coalescer = createRenderCoalescer<OperationStreamEvent>((batch) => {
+      setEvents((current) => mergeOperationEvents(current, batch));
+    });
     const ingest = (raw: string) => {
       const event = parseOperationEvent(raw);
       if (!event) return null;
-      setEvents((current) => mergeOperationEvents(current, [event]));
+      coalescer.push(event, {
+        immediate: isTerminalOperationEventType(event.type),
+      });
       return event;
     };
     source.onmessage = (message) => {
@@ -242,7 +251,10 @@ export function InstallForm({
         );
       },
     );
-    return () => source.close();
+    return () => {
+      coalescer.dispose();
+      source.close();
+    };
   }, [operation, router]);
 
   async function checkPlan() {

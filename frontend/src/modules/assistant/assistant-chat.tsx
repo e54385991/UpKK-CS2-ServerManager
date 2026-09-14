@@ -39,6 +39,7 @@ import {
 import { Select } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
 import { cn } from "@/shared/lib/cn";
+import { createTextDisplayBuffer } from "@/shared/lib/render-coalesce";
 
 const TERMINAL_RUN = new Set(["completed", "failed", "interrupted", "expired", "cancelled"]);
 
@@ -124,6 +125,9 @@ export function AssistantChat({
     if (!runId) return;
     let closed = false;
     const source = new EventSource(`/ai-stream/runs/${runId}`);
+    const display = createTextDisplayBuffer((chunk) => {
+      setStreamText((current) => current + chunk);
+    });
 
     function onEvent(raw: MessageEvent<string>) {
       const event = parseAssistantSseData(raw.data);
@@ -150,9 +154,10 @@ export function AssistantChat({
       }
       if (event.type === "assistant_delta") {
         const delta = typeof event.payload.delta === "string" ? event.payload.delta : "";
-        if (delta) setStreamText((current) => current + delta);
+        if (delta) display.append(delta);
         return;
       }
+      display.flush();
       if (event.type === "assistant_message") {
         setStreamText("");
         void reloadConversation();
@@ -238,6 +243,7 @@ export function AssistantChat({
 
     return () => {
       closed = true;
+      display.dispose();
       source.close();
     };
   }, [reloadConversation, runId, t]);

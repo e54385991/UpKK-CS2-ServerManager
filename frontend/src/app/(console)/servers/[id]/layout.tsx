@@ -1,6 +1,8 @@
 import { Suspense, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { ClientMessages } from "@/i18n/client-messages";
+import { WORKSPACE_NAMESPACES } from "@/i18n/namespaces";
 import { getCurrentServerOperation, getDeploymentLock, getServer } from "@/modules/servers/render-queries";
 import { DeleteServerButton } from "@/modules/servers/delete-server-button";
 import { WorkspaceStatus, WorkspaceStatusSkeleton } from "@/modules/servers/workspace-status";
@@ -35,7 +37,7 @@ export default async function ServerWorkspaceLayout({
   const tone = server ? SERVER_STATUS_TONE[server.status] : null;
 
   return (
-    <>
+    <ClientMessages namespaces={WORKSPACE_NAMESPACES}>
       <PageHeader
         title={
           <span className="flex items-center gap-3">
@@ -71,6 +73,6 @@ export default async function ServerWorkspaceLayout({
       ) : null}
       <ServerWorkspaceNav serverId={serverId} />
       {children}
-    </>
+    </ClientMessages>
   );
 }

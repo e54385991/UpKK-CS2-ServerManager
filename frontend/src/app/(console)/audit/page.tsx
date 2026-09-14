@@ -6,6 +6,7 @@ import { PageHeader } from "@/shared/ui/page-header";
 import { Card } from "@/shared/ui/card";
 import { AuditFilters } from "@/modules/audit/audit-filters";
 import { AuditTable, AuditTableSkeleton } from "@/modules/audit/audit-table";
+import { DomainMessages } from "@/i18n/page-messages";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("audit");
@@ -35,12 +36,12 @@ export default async function AuditPage({
 
   if (!session.isAdmin) {
     return (
-      <>
+      <DomainMessages extra={["audit"]}>
         <PageHeader title={t("title")} description={t("description")} />
         <Card className="border-warn/30 bg-warn-muted/40 px-5 py-4 text-sm text-warn">
           {t("forbidden")}
         </Card>
-      </>
+      </DomainMessages>
     );
   }
 
@@ -58,7 +59,7 @@ export default async function AuditPage({
   const key = JSON.stringify(query);
 
   return (
-    <>
+    <DomainMessages extra={["audit"]}>
       <PageHeader title={t("title")} description={t("description")} />
       <div className="mb-4">
         <AuditFilters />
@@ -66,6 +67,6 @@ export default async function AuditPage({
       <Suspense key={key} fallback={<AuditTableSkeleton />}>
         <AuditTable query={query} />
       </Suspense>
-    </>
+    </DomainMessages>
   );
 }

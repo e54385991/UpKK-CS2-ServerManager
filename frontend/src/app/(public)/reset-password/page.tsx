@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { ClientMessages } from "@/i18n/client-messages";
+import { RESET_PASSWORD_CLIENT_NAMESPACES } from "@/i18n/namespaces";
 import { ResetPasswordForm } from "@/modules/auth/reset-form";
 import { PublicAuthFrame } from "@/modules/auth/public-frame";
 
@@ -18,8 +20,10 @@ export default async function ResetPasswordPage({
   const token = typeof raw === "string" ? raw : "";
 
   return (
-    <PublicAuthFrame>
-      <ResetPasswordForm token={token} />
-    </PublicAuthFrame>
+    <ClientMessages namespaces={RESET_PASSWORD_CLIENT_NAMESPACES}>
+      <PublicAuthFrame>
+        <ResetPasswordForm token={token} />
+      </PublicAuthFrame>
+    </ClientMessages>
   );
 }

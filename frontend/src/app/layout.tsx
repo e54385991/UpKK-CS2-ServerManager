@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages, getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { Suspense } from "react";
+import { ClientMessages } from "@/i18n/client-messages";
+import { ROOT_NAMESPACES } from "@/i18n/namespaces";
 import { publicAppUrlFromHeaders } from "@/shared/config/public-app-url";
 import { FeedbackHost } from "@/shared/feedback/feedback-host";
 import { RuntimeFooter, RuntimeFooterSkeleton } from "@/modules/shell/runtime-footer";
@@ -47,12 +48,12 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [locale, messages] = await Promise.all([getLocale(), getMessages()]);
+  const locale = await getLocale();
 
   return (
     <html lang={locale} suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <NextIntlClientProvider locale={locale} messages={messages}>
+        <ClientMessages namespaces={ROOT_NAMESPACES}>
           <FeedbackHost />
           <div className="flex h-dvh flex-col overflow-hidden">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -62,7 +63,7 @@ export default async function RootLayout({
               <RuntimeFooter />
             </Suspense>
           </div>
-        </NextIntlClientProvider>
+        </ClientMessages>
       </body>
     </html>
   );

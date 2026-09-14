@@ -8,6 +8,7 @@ import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
 import { PluginDetail } from "@/modules/plugins/plugin-detail";
 import { listServers } from "@/modules/servers/api";
+import { DomainMessages } from "@/i18n/page-messages";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("plugins");
@@ -46,7 +47,7 @@ export default async function PluginDetailPage({
     : [];
 
   return (
-    <>
+    <DomainMessages extra={["plugins"]}>
       <PageHeader
         title={t("detailTitle")}
         description={t("detailHelp")}
@@ -63,6 +64,6 @@ export default async function PluginDetailPage({
         servers={servers}
         canDelete={session.isAdmin}
       />
-    </>
+    </DomainMessages>
   );
 }

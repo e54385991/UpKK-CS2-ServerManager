@@ -202,8 +202,14 @@ Bilingual **zh-CN + en-US (default)** via `next-intl`, without URL routing:
   form (proxy, GitHub token, SMTP/Gmail). The `plugins` namespace covers the
   marketplace catalog, install preflight, and the per-server installed list.
 - Server Components: `const t = await getTranslations("ns")`. Client Components:
-  `const t = useTranslations("ns")`. The root layout provides messages via
-  `NextIntlClientProvider` and sets `<html lang>`.
+  `const t = useTranslations("ns")`. Root layout only provides `feedback` to
+  `FeedbackHost` and sets `<html lang>`. Console chrome, auth pages, and
+  domain layouts wrap `ClientMessages` with explicit namespaces from
+  `src/i18n/namespaces.ts` (`pickMessages` handles dotted paths such as
+  `plugins.aiImport`). Nested providers replace the client dictionary; they
+  do not merge. Keep the full server catalog in `src/i18n/request.ts`
+  (including `settings.monitor`). Do not fetch extra locale JSON from the
+  browser.
 - The topbar `LanguageSwitcher` writes the `locale` cookie and calls
   `router.refresh()`. Do not hardcode user-facing strings — add a key to both
   catalogs instead. Because the layout reads the cookie, routes render

@@ -50,6 +50,10 @@ import {
   subscribeVisibleEventSource,
 } from "@/shared/lib/visible-event-source";
 import { snapshotIsFresh, subscribeVisiblePoll } from "@/shared/lib/visible-poll";
+import {
+  createRenderCoalescer,
+  isTerminalOperationEventType,
+} from "@/shared/lib/render-coalesce";
 import { confirm, notify } from "@/shared/feedback";
 import { Badge, StatusDot } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -89,6 +93,9 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
     let cancelled = false;
     const after = { current: "0" };
     const journalAbort = new AbortController();
+    const coalescer = createRenderCoalescer<OperationStreamEvent>((batch) => {
+      setEvents((current) => mergeOperationEvents(current, batch));
+    });
     if (item.serverId > 0) {
       void loadOperationJournalFromBrowser(item.serverId, item.operationId, {
         signal: journalAbort.signal,
@@ -109,7 +116,9 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
       if (event.sequence && event.sequence !== "seed") {
         after.current = event.sequence;
       }
-      setEvents((current) => mergeOperationEvents(current, [event]));
+      coalescer.push(event, {
+        immediate: isTerminalOperationEventType(event.type),
+      });
       if (event.type === "operation_failed") {
         markActivityTerminal(item.operationId, "failed", event.message);
       } else if (event.type === "operation_completed") {
@@ -131,6 +140,7 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
     });
     return () => {
       cancelled = true;
+      coalescer.dispose();
       journalAbort.abort();
       stop();
     };

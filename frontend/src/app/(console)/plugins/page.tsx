@@ -17,6 +17,7 @@ import { SyncDescriptionsButton } from "@/modules/plugins/sync-descriptions-butt
 import { toMarketSort, toPluginFrameworkSection } from "@/modules/plugins/types";
 import { listServers } from "@/modules/servers/api";
 import { PageHeader } from "@/shared/ui/page-header";
+import { DomainMessages } from "@/i18n/page-messages";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("plugins");
@@ -65,7 +66,7 @@ export default async function PluginsPage({
   const key = JSON.stringify({ ...query, serverId: sp.serverId ?? null });
 
   return (
-    <>
+    <DomainMessages extra={["plugins"]}>
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -117,6 +118,6 @@ export default async function PluginsPage({
           }
         />
       </Suspense>
-    </>
+    </DomainMessages>
   );
 }

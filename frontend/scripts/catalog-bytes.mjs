@@ -2,8 +2,16 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const LOGIN_NAMESPACES = ["site", "feedback", "login"];
-export const OVERVIEW_NAMESPACES = ["site", "feedback", "nav", "shell", "overview"];
+/** Keep in sync with frontend/src/i18n/namespaces.ts client payloads. */
+export const LOGIN_NAMESPACES = ["feedback", "login"];
+export const OVERVIEW_NAMESPACES = [
+  "feedback",
+  "site",
+  "nav",
+  "shell",
+  "serverDetail",
+  "plugins.aiImport",
+];
 
 const here = dirname(fileURLToPath(import.meta.url));
 const messagesRoot = join(here, "../src/i18n/messages");
@@ -12,8 +20,34 @@ export function compactBytes(value) {
   return Buffer.byteLength(JSON.stringify(value), "utf8");
 }
 
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function assignPath(target, source, parts, namespace) {
+  const head = parts[0];
+  if (head == null || !(head in source)) {
+    throw new Error(`Missing message namespace: ${namespace}`);
+  }
+  if (parts.length === 1) {
+    target[head] = source[head];
+    return;
+  }
+  const value = source[head];
+  if (!isPlainObject(value)) {
+    throw new Error(`Message namespace is not nested: ${namespace}`);
+  }
+  const next = isPlainObject(target[head]) ? target[head] : {};
+  target[head] = next;
+  assignPath(next, value, parts.slice(1), namespace);
+}
+
 export function pickNamespaces(catalog, names) {
-  return Object.fromEntries(names.filter((name) => name in catalog).map((name) => [name, catalog[name]]));
+  const result = {};
+  for (const name of names) {
+    assignPath(result, catalog, name.split("."), name);
+  }
+  return result;
 }
 
 export function loadCatalog(locale) {
@@ -36,10 +70,10 @@ export function catalogByteReport() {
     note: "Compact UTF-8 JSON of the server catalog, not HTML/RSC/gzip transfer.",
     locales,
     client_estimate: {
-      login: locales["en-US"].full,
-      overview: locales["en-US"].full,
-      login_zh: locales["zh-CN"].full,
-      overview_zh: locales["zh-CN"].full,
+      login: locales["en-US"].login_subset,
+      overview: locales["en-US"].overview_subset,
+      login_zh: locales["zh-CN"].login_subset,
+      overview_zh: locales["zh-CN"].overview_subset,
     },
   };
 }

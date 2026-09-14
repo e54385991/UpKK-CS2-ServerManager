@@ -9,6 +9,7 @@ import { ServerList, ServerListSkeleton } from "@/modules/servers/server-list";
 import { ServerTransferHeader } from "@/modules/servers/transfer-header";
 import { SERVER_STATUS_GROUPS } from "@/modules/servers/workspace";
 import type { ServerListScope, ServerStatus } from "@/modules/servers/types";
+import { ServersSectionMessages } from "@/i18n/page-messages";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("servers");
@@ -39,7 +40,7 @@ export default async function ServersPage({
   const status = parseStatus(sp.status);
   const scope = session?.isAdmin ? parseScope(sp.scope) : "mine";
   return (
-    <>
+    <ServersSectionMessages>
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -72,6 +73,6 @@ export default async function ServersPage({
           isAdmin={Boolean(session?.isAdmin)}
         />
       </Suspense>
-    </>
+    </ServersSectionMessages>
   );
 }
