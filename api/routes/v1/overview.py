@@ -5,9 +5,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from api.dependencies import ActiveUser, DatabaseSession
-from modules import Server
-from modules.models.servers import ServerStatus
+from api.dependencies import ActiveUser, DatabaseSession, close_request_session
 from modules.utils import get_current_time
 from services.a2s_cache_service import a2s_cache_service
 from services.disk_space_service import disk_space_service
@@ -15,6 +13,7 @@ from services.host_system_info_service import (
     HostSystemInfoData,
     host_system_info_service,
 )
+from services.overview.summary import load_overview_server_stats
 from services.servers.telemetry import load_telemetry_servers
 
 from .schemas import (
@@ -30,8 +29,6 @@ from .schemas import (
 from .ssh_pool import read_ssh_pool_view
 
 router = APIRouter(prefix="/api/v1/overview", tags=["v1-overview"])
-
-_ATTENTION_STATUSES = frozenset({ServerStatus.ERROR, ServerStatus.UNKNOWN})
 
 
 def _a2s_view(server_id: int, cached: dict[str, Any] | None) -> A2SCacheView:
@@ -106,16 +103,14 @@ async def read_overview_summary(
     current_user: ActiveUser,
 ) -> OverviewSummary:
     """Aggregate operational counters across the current user's servers."""
-    servers = await Server.get_all_by_user(db, current_user.id, skip=0, limit=1000)
-    running = sum(1 for server in servers if server.status == ServerStatus.RUNNING)
-    attention = sum(1 for server in servers if server.status in _ATTENTION_STATUSES)
-    capacity = sum(server.max_players for server in servers)
+    stats = await load_overview_server_stats(db, current_user.id)
+    await close_request_session(db)
     pool = await read_ssh_pool_view()
     return OverviewSummary(
-        total=len(servers),
-        running=running,
-        attention=attention,
-        capacity=capacity,
+        total=stats.total,
+        running=stats.running,
+        attention=stats.attention,
+        capacity=stats.capacity,
         ssh_connections=pool.connections,
         ssh_in_use=pool.in_use,
         ssh_idle=pool.idle,

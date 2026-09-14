@@ -23,7 +23,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Isolated performance harness")
     parser.add_argument(
         "command",
-        choices=("catalog-bytes", "download-bench", "stub", "seed", "measure-api", "report"),
+        choices=(
+            "catalog-bytes",
+            "download-bench",
+            "stub",
+            "seed",
+            "measure-api",
+            "explain-indexes",
+            "report",
+        ),
     )
     parser.add_argument("--fleet", default="fleet-10", choices=sorted(FLEETS))
     parser.add_argument("--market", default="market-100", choices=sorted(MARKETS))
@@ -45,6 +53,8 @@ def dispatch(args: argparse.Namespace) -> int:
         return asyncio.run(_run_seed(args))
     if args.command == "measure-api":
         return asyncio.run(_run_measure(args))
+    if args.command == "explain-indexes":
+        return asyncio.run(_write_index_eval(args))
     return _write_shell_report(args)
 
 
@@ -103,6 +113,17 @@ async def _run_seed(args: argparse.Namespace) -> int:
     path = Path(args.manifest) if args.manifest else REPORTS / "raw" / "seed-manifest.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print(path)
+    return 0
+
+
+async def _write_index_eval(args: argparse.Namespace) -> int:
+    from scripts.perf.index_eval import evaluate_market_indexes
+
+    report = empty_report(profile="indexes", mode=args.mode, cwd=PROJECT_ROOT)
+    report["indexes"] = await evaluate_market_indexes()
+    path = _output_path(args, "explain-indexes.json")
+    write_report(path, report)
     print(path)
     return 0
 

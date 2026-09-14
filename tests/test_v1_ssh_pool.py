@@ -9,11 +9,16 @@ from fastapi.testclient import TestClient
 
 from api.application import create_app
 from modules import get_current_active_user, get_current_user, get_db
-from modules.models.servers import ServerStatus
 
 
 def _database_session():
-    return SimpleNamespace(add=lambda *_a, **_k: None, commit=AsyncMock(), refresh=AsyncMock())
+    return SimpleNamespace(
+        add=lambda *_a, **_k: None,
+        commit=AsyncMock(),
+        refresh=AsyncMock(),
+        is_active=True,
+        close=AsyncMock(),
+    )
 
 
 async def _fake_db():
@@ -68,15 +73,14 @@ def test_v1_ssh_pool_returns_live_counts(monkeypatch):
 
 
 def test_v1_overview_includes_ssh_pool_counts(monkeypatch):
-    async def fake_servers(_db, _user_id, skip=0, limit=1000):
-        return [
-            SimpleNamespace(status=ServerStatus.RUNNING, max_players=16),
-            SimpleNamespace(status=ServerStatus.ERROR, max_players=10),
-        ]
+    async def fake_stats(_db, _user_id):
+        from services.overview.summary import OverviewServerStats
+
+        return OverviewServerStats(total=2, running=1, attention=1, capacity=26)
 
     monkeypatch.setattr(
-        "api.routes.v1.overview.Server.get_all_by_user",
-        fake_servers,
+        "api.routes.v1.overview.load_overview_server_stats",
+        fake_stats,
     )
     monkeypatch.setattr(
         "api.routes.v1.ssh_pool.ssh_connection_pool.get_pool_stats",

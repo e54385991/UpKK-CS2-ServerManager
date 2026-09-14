@@ -72,7 +72,7 @@ def test_v1_disk_space_is_cache_only_by_default(monkeypatch):
     async def unexpected_probe(*_args, **_kwargs):
         raise AssertionError("default batch read must not connect to SSH")
 
-    monkeypatch.setattr("api.routes.v1.overview.Server.get_all_by_user", fake_servers)
+    monkeypatch.setattr("services.servers.telemetry.Server.get_all_by_user", fake_servers)
     monkeypatch.setattr(
         "services.disk_space_service.redis_manager.get_many",
         fake_cached,
@@ -101,8 +101,8 @@ def test_v1_disk_space_scope_all_uses_fleet_for_admin(monkeypatch):
     async def fake_mine(*_args, **_kwargs):
         raise AssertionError("admin fleet must not fall back to get_all_by_user")
 
-    monkeypatch.setattr("api.routes.v1.overview.Server.get_all", fake_all)
-    monkeypatch.setattr("api.routes.v1.overview.Server.get_all_by_user", fake_mine)
+    monkeypatch.setattr("services.servers.telemetry.Server.get_all", fake_all)
+    monkeypatch.setattr("services.servers.telemetry.Server.get_all_by_user", fake_mine)
     monkeypatch.setattr(
         "services.disk_space_service.redis_manager.get_many",
         AsyncMock(return_value=[None]),
@@ -164,7 +164,7 @@ def test_v1_a2s_cache_is_cache_only_by_default(monkeypatch):
     async def fake_refresh(_server):
         raise AssertionError("default A2S list must not query live servers")
 
-    monkeypatch.setattr("api.routes.v1.overview.Server.get_all_by_user", fake_servers)
+    monkeypatch.setattr("services.servers.telemetry.Server.get_all_by_user", fake_servers)
     monkeypatch.setattr(
         "services.disk_space_service.redis_manager.get_many",
         fake_cached,

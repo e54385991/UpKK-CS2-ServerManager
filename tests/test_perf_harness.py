@@ -211,3 +211,56 @@ def test_stub_payloads_and_loopback_health():
 def test_overview_namespaces_do_not_include_marketplace_copy():
     assert "plugins" not in OVERVIEW_NAMESPACES
     assert "login" in LOGIN_NAMESPACES
+
+
+def test_market_index_gates_fail_closed_without_measurements():
+    from scripts.perf.index_eval import IndexGateInput, index_inclusion_passes, skipped_evaluation
+
+    assert (
+        index_inclusion_passes(
+            IndexGateInput(
+                existing_index_covers=False,
+                p95_improvement=None,
+                write_within_tolerance=False,
+                build_seconds=None,
+            )
+        )
+        is False
+    )
+    assert (
+        index_inclusion_passes(
+            IndexGateInput(
+                existing_index_covers=False,
+                p95_improvement=0.20,
+                write_within_tolerance=True,
+                build_seconds=5.0,
+            )
+        )
+        is True
+    )
+    assert (
+        index_inclusion_passes(
+            IndexGateInput(
+                existing_index_covers=True,
+                p95_improvement=0.50,
+                write_within_tolerance=True,
+                build_seconds=1.0,
+            )
+        )
+        is False
+    )
+    assert (
+        index_inclusion_passes(
+            IndexGateInput(
+                existing_index_covers=False,
+                p95_improvement=0.19,
+                write_within_tolerance=True,
+                build_seconds=1.0,
+            )
+        )
+        is False
+    )
+    skipped = skipped_evaluation("docker unavailable")
+    assert skipped["indexes_submitted"] is False
+    assert skipped["skipped"] is True
+    assert all(item["included"] is False for item in skipped["candidates"])

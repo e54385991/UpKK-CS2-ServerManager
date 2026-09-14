@@ -59,7 +59,7 @@ def test_v1_host_system_info_returns_cached_server_snapshots(monkeypatch):
         return [server]
 
     service = AsyncMock(return_value=[_host_info()])
-    monkeypatch.setattr("api.routes.v1.overview.Server.get_all_by_user", fake_servers)
+    monkeypatch.setattr("services.servers.telemetry.Server.get_all_by_user", fake_servers)
     monkeypatch.setattr(
         "api.routes.v1.overview.host_system_info_service.get_many_host_system_info",
         service,

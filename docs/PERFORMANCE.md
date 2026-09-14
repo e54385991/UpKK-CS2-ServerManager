@@ -112,6 +112,31 @@ or the snapshot is stale. AI import list polling still discovers new jobs;
 selected-task detail uses the existing visible SSE helper instead of a second
 EventSource. Public HTTP/SSE contracts are unchanged.
 
+## Stage 4 (overview column projection; indexes not submitted)
+
+`GET /api/v1/overview/summary` now loads only `status` and `max_players` for
+the current user's servers, still capped at 1000 unordered rows, and counts
+running / attention / capacity in `services.overview.summary`. Administrators
+still only count their own servers. The request session is closed before the
+SSH pool Redis read. Marketplace list and audit list keep an exact `COUNT(*)`
+plus a page of ORM rows: empty pages must still return the true total, and
+list DTOs include `description_i18n` / `ai_metadata` (market) and `details`
+(audit). Inbox SQL remains the Stage 1 id/name snapshot.
+
+Two marketplace B-tree candidates are recorded in
+`scripts/perf/index_eval.py` and can be EXPLAINed with:
+
+```bash
+uv run python scripts/run_perf.py explain-indexes
+```
+
+They are **not** in Alembic. Inclusion still requires existing indexes not
+covering the query, a 20% three-round p95 median, write tolerance, and ≤ 5 s
+build on the largest isolated set. Startup migration stays transactional, so
+`CREATE INDEX CONCURRENTLY` cannot be used. Docker was unavailable in this
+environment, so EXPLAIN / p95 / build time were not measured; candidates stay
+out rather than being guessed in.
+
 ## Gates (not yet claimed)
 
 These are the agreed acceptance checks. Stage 0 only records the protocol and
