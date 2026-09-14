@@ -1,32 +1,11 @@
 {
   "main": [
-    "STATIC_ASSET_VERSION",
     "app",
-    "audit_logs_page",
-    "console_popup",
-    "deployment_tutorial_page",
-    "file_editor_popup",
-    "forgot_password_page",
-    "game_console",
-    "google_callback_page",
     "health_check",
     "lifespan",
-    "login_page",
     "operation_busy_handler",
-    "plugin_market_page",
-    "profile_page",
-    "register_page",
-    "reset_password_page",
-    "root",
-    "server_detail_ui",
-    "servers_ui",
-    "setup_wizard",
     "shutdown_event",
-    "ssh_console",
-    "startup_event",
-    "static_url",
-    "system_settings_page",
-    "templates"
+    "startup_event"
   ],
   "modules": [
     "settings",

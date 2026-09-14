@@ -56,7 +56,6 @@ def test_production_is_the_default_runtime_mode():
         ("REDIS_DB", -1),
         ("LOG_LEVEL", "verbose"),
         ("SSH_AUTH_MODE", "agent"),
-        ("LEGACY_HTML_CONSOLE", "render"),
         ("RUN_MODE", "staging"),
         ("BACKEND_URL", "localhost:8000"),
         ("SECRET_KEY", "short"),

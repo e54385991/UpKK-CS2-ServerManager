@@ -26,7 +26,6 @@ services:
       DEBUG: "False"
       RUN_MODE: production
       BACKEND_URL: ${BACKEND_URL}
-      CONSOLE_PUBLIC_URL: ${BACKEND_URL}
       LOG_LEVEL: INFO
       ASYNCSSH_LOG_LEVEL: WARNING
       SECRET_KEY: ${SECRET_KEY}

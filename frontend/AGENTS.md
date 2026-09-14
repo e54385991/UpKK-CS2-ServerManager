@@ -19,8 +19,8 @@ does not rewrite this file.
 
 # CS2 Server Manager — Frontend (Next.js console)
 
-A dedicated, modern console for the CS2 Server Manager. It replaces the legacy
-Jinja/Bootstrap UI and talks to the FastAPI backend through a same-origin proxy.
+A dedicated, modern console for the CS2 Server Manager. It talks to the FastAPI
+backend through a same-origin proxy.
 
 ## Tech stack (pinned)
 

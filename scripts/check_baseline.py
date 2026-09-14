@@ -116,11 +116,9 @@ def main() -> None:
             ],
         ),
         (
-            "Templates and vendored static files",
-            [sys.executable, "scripts/validate_console_templates.py"],
+            "Frontend source contracts",
+            [executable("node"), "--test", str(PROJECT_ROOT / "tests/frontend")],
         ),
-        ("Frontend module tests", [npm, "run", "test:frontend"]),
-        ("Frontend syntax", [npm, "run", "check:frontend"]),
         (
             "Next.js module tests",
             [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "run", "test:unit"],
@@ -142,7 +140,6 @@ def main() -> None:
             [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "run", "check:bundle"],
         ),
         ("Python dependency audit", [pip_audit, "-r", "requirements.txt"]),
-        ("Legacy frontend dependency audit", [npm, "audit", "--omit=dev"]),
         (
             "Next.js dependency audit",
             [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "audit", "--omit=dev"],

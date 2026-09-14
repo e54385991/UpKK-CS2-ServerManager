@@ -64,11 +64,6 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     RUN_MODE: str = "production"
     BACKEND_URL: str
-    # Public Next.js origin. FastAPI leftover HTML pages 307 here by default.
-    # In the Caddy three-service topology this is the public gateway origin.
-    CONSOLE_PUBLIC_URL: str = "http://127.0.0.1:31800"
-    # redirect | serve | gone — default sends the old Jinja console to Next.
-    LEGACY_HTML_CONSOLE: str = "redirect"
 
     # Logging Configuration
     # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
@@ -173,14 +168,6 @@ class Settings(BaseSettings):
             raise ValueError("SSH_AUTH_MODE must be password, key, or both")
         return normalized
 
-    @field_validator("LEGACY_HTML_CONSOLE")
-    @classmethod
-    def validate_legacy_console_mode(cls, value: str) -> str:
-        normalized = value.strip().lower()
-        if normalized not in {"redirect", "serve", "gone"}:
-            raise ValueError("LEGACY_HTML_CONSOLE must be redirect, serve, or gone")
-        return normalized
-
     @field_validator("RUN_MODE")
     @classmethod
     def validate_run_mode(cls, value: str) -> str:
@@ -189,7 +176,7 @@ class Settings(BaseSettings):
             raise ValueError("RUN_MODE must be development, production, or test")
         return normalized
 
-    @field_validator("BACKEND_URL", "CONSOLE_PUBLIC_URL")
+    @field_validator("BACKEND_URL")
     @classmethod
     def validate_http_url(cls, value: str) -> str:
         parsed = urlparse(value.strip())

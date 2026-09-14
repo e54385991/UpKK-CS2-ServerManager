@@ -7,7 +7,6 @@ from datetime import timedelta
 from fastapi import HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.legacy_html import console_public_url, legacy_html_mode
 from modules import (
     PasswordResetToken,
     User,
@@ -31,11 +30,8 @@ RESET_SUCCESS_MESSAGE = "Password reset successfully. You can now log in with yo
 
 
 def build_password_reset_link(token: str) -> str:
-    """Point reset emails at Next unless this listener still serves Jinja."""
-    query = f"token={token}"
-    if legacy_html_mode() == "serve":
-        return f"{settings.BACKEND_URL.rstrip('/')}/reset-password?{query}"
-    return console_public_url("/reset-password", query)
+    """Point reset emails at the public Next.js origin."""
+    return f"{settings.BACKEND_URL.rstrip('/')}/reset-password?token={token}"
 
 
 async def request_password_reset(

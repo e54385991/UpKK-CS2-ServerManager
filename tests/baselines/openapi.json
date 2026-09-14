@@ -29417,25 +29417,6 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/": {
-      "get": {
-        "description": "Root endpoint - serve home page",
-        "operationId": "root__get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Root"
-      }
-    },
     "/a2s-cache": {
       "get": {
         "description": "Get cached A2S information for current user's servers.\n\nRequires authentication to filter servers by user UID.\nReturns only the servers belonging to the authenticated user.",
@@ -46790,82 +46771,6 @@
         ]
       }
     },
-    "/audit-logs": {
-      "get": {
-        "description": "Administrator audit log viewer for the last 30 days.",
-        "operationId": "audit_logs_page_audit_logs_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Audit Logs Page"
-      }
-    },
-    "/deployment-tutorial": {
-      "get": {
-        "description": "Deployment tutorial page",
-        "operationId": "deployment_tutorial_page_deployment_tutorial_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Deployment Tutorial Page"
-      }
-    },
-    "/forgot-password": {
-      "get": {
-        "description": "Forgot password page",
-        "operationId": "forgot_password_page_forgot_password_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Forgot Password Page"
-      }
-    },
-    "/google-callback": {
-      "get": {
-        "description": "Google OAuth callback page",
-        "operationId": "google_callback_page_google_callback_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Google Callback Page"
-      }
-    },
     "/health": {
       "get": {
         "description": "Health check endpoint",
@@ -46883,25 +46788,6 @@
           }
         },
         "summary": "Health Check"
-      }
-    },
-    "/login": {
-      "get": {
-        "description": "Login page",
-        "operationId": "login_page_login_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Login Page"
       }
     },
     "/ping": {
@@ -46922,82 +46808,6 @@
         "tags": [
           "cache"
         ]
-      }
-    },
-    "/plugin-market": {
-      "get": {
-        "description": "Plugin market page",
-        "operationId": "plugin_market_page_plugin_market_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Plugin Market Page"
-      }
-    },
-    "/profile": {
-      "get": {
-        "description": "User profile page",
-        "operationId": "profile_page_profile_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Profile Page"
-      }
-    },
-    "/register": {
-      "get": {
-        "description": "Registration page",
-        "operationId": "register_page_register_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Register Page"
-      }
-    },
-    "/reset-password": {
-      "get": {
-        "description": "Reset password page",
-        "operationId": "reset_password_page_reset_password_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Reset Password Page"
       }
     },
     "/servers": {
@@ -47106,65 +46916,6 @@
         "tags": [
           "servers"
         ]
-      }
-    },
-    "/servers-ui": {
-      "get": {
-        "description": "Servers management UI",
-        "operationId": "servers_ui_servers_ui_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Servers Ui"
-      }
-    },
-    "/servers-ui/{server_id}": {
-      "get": {
-        "description": "Server detail UI with real-time monitoring",
-        "operationId": "server_detail_ui_servers_ui__server_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "server_id",
-            "required": true,
-            "schema": {
-              "title": "Server Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Server Detail Ui"
       }
     },
     "/servers/a2s-cache": {
@@ -48235,55 +47986,6 @@
         ]
       }
     },
-    "/servers/{server_id}/console-popup/{console_type}": {
-      "get": {
-        "description": "Console popup window",
-        "operationId": "console_popup_servers__server_id__console_popup__console_type__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "server_id",
-            "required": true,
-            "schema": {
-              "title": "Server Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "path",
-            "name": "console_type",
-            "required": true,
-            "schema": {
-              "title": "Console Type",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Console Popup"
-      }
-    },
     "/servers/{server_id}/cpu-count": {
       "get": {
         "description": "Get CPU core count from the remote server",
@@ -49191,64 +48893,6 @@
         "tags": [
           "servers"
         ]
-      }
-    },
-    "/servers/{server_id}/file-editor-popup": {
-      "get": {
-        "description": "File editor popup window",
-        "operationId": "file_editor_popup_servers__server_id__file_editor_popup_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "server_id",
-            "required": true,
-            "schema": {
-              "title": "Server Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "file_path",
-            "required": true,
-            "schema": {
-              "title": "File Path",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "file_name",
-            "required": true,
-            "schema": {
-              "title": "File Name",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "File Editor Popup"
       }
     },
     "/servers/{server_id}/files": {
@@ -50168,46 +49812,6 @@
         "tags": [
           "file-manager"
         ]
-      }
-    },
-    "/servers/{server_id}/game-console": {
-      "get": {
-        "description": "Independent game console page",
-        "operationId": "game_console_servers__server_id__game_console_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "server_id",
-            "required": true,
-            "schema": {
-              "title": "Server Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Game Console"
       }
     },
     "/servers/{server_id}/logs": {
@@ -51822,46 +51426,6 @@
         ]
       }
     },
-    "/servers/{server_id}/ssh-console": {
-      "get": {
-        "description": "Independent SSH console page",
-        "operationId": "ssh_console_servers__server_id__ssh_console_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "server_id",
-            "required": true,
-            "schema": {
-              "title": "Server Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ssh Console"
-      }
-    },
     "/servers/{server_id}/ssh-health": {
       "get": {
         "description": "Get SSH health status for a server",
@@ -51998,44 +51562,6 @@
         "tags": [
           "servers"
         ]
-      }
-    },
-    "/setup-wizard": {
-      "get": {
-        "description": "Server setup wizard UI - authentication checked client-side",
-        "operationId": "setup_wizard_setup_wizard_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Setup Wizard"
-      }
-    },
-    "/system-settings": {
-      "get": {
-        "description": "System settings page (admin only - auth checked client-side)",
-        "operationId": "system_settings_page_system_settings_get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "System Settings Page"
       }
     }
   }

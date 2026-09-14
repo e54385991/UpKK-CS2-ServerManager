@@ -58,5 +58,5 @@ def test_1panel_compose_publishes_caddy_as_public_root() -> None:
     assert "extra_hosts" not in PANEL_COMPOSE
     assert "postgres:\n        condition: service_healthy" not in PANEL_COMPOSE
     assert "redis:\n        condition: service_healthy" not in PANEL_COMPOSE
-    assert "CONSOLE_PUBLIC_URL: ${BACKEND_URL}" in PANEL_COMPOSE
+    assert 'API_PORT: "8000"' in PANEL_COMPOSE
     assert 'expose:\n      - "8000"' in PANEL_COMPOSE

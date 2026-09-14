@@ -107,8 +107,7 @@ def test_v1_forgot_password_hides_unknown_email(monkeypatch):
 
 def test_v1_forgot_password_sends_console_reset_link(monkeypatch):
     client = _public_client(monkeypatch)
-    monkeypatch.setattr(settings, "LEGACY_HTML_CONSOLE", "redirect")
-    monkeypatch.setattr(settings, "CONSOLE_PUBLIC_URL", "http://console.test")
+    monkeypatch.setattr(settings, "BACKEND_URL", "http://console.test")
     monkeypatch.setattr(
         "api.password_reset.captcha_service.validate_captcha",
         AsyncMock(return_value=True),

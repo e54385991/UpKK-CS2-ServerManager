@@ -4,26 +4,6 @@
  */
 
 export interface paths {
-    "/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Root
-         * @description Root endpoint - serve home page
-         */
-        get: operations["root__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/a2s-cache": {
         parameters: {
             query?: never;
@@ -5656,86 +5636,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/audit-logs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Audit Logs Page
-         * @description Administrator audit log viewer for the last 30 days.
-         */
-        get: operations["audit_logs_page_audit_logs_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/deployment-tutorial": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Deployment Tutorial Page
-         * @description Deployment tutorial page
-         */
-        get: operations["deployment_tutorial_page_deployment_tutorial_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/forgot-password": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Forgot Password Page
-         * @description Forgot password page
-         */
-        get: operations["forgot_password_page_forgot_password_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/google-callback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Google Callback Page
-         * @description Google OAuth callback page
-         */
-        get: operations["google_callback_page_google_callback_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/health": {
         parameters: {
             query?: never;
@@ -5748,26 +5648,6 @@ export interface paths {
          * @description Health check endpoint
          */
         get: operations["health_check_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Login Page
-         * @description Login page
-         */
-        get: operations["login_page_login_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5797,86 +5677,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plugin-market": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Plugin Market Page
-         * @description Plugin market page
-         */
-        get: operations["plugin_market_page_plugin_market_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/profile": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Profile Page
-         * @description User profile page
-         */
-        get: operations["profile_page_profile_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/register": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Register Page
-         * @description Registration page
-         */
-        get: operations["register_page_register_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/reset-password": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Reset Password Page
-         * @description Reset password page
-         */
-        get: operations["reset_password_page_reset_password_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/servers": {
         parameters: {
             query?: never;
@@ -5895,46 +5695,6 @@ export interface paths {
          * @description Create a new CS2 server
          */
         post: operations["create_server_servers_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/servers-ui": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Servers Ui
-         * @description Servers management UI
-         */
-        get: operations["servers_ui_servers_ui_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/servers-ui/{server_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Server Detail Ui
-         * @description Server detail UI with real-time monitoring
-         */
-        get: operations["server_detail_ui_servers_ui__server_id__get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6412,26 +6172,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/servers/{server_id}/console-popup/{console_type}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Console Popup
-         * @description Console popup window
-         */
-        get: operations["console_popup_servers__server_id__console_popup__console_type__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/servers/{server_id}/cpu-count": {
         parameters: {
             query?: never;
@@ -6707,26 +6447,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/servers/{server_id}/file-editor-popup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * File Editor Popup
-         * @description File editor popup window
-         */
-        get: operations["file_editor_popup_servers__server_id__file_editor_popup_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/servers/{server_id}/files": {
         parameters: {
             query?: never;
@@ -6994,26 +6714,6 @@ export interface paths {
          * @description Upload file to server
          */
         post: operations["upload_file_servers__server_id__files_upload_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/servers/{server_id}/game-console": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Game Console
-         * @description Independent game console page
-         */
-        get: operations["game_console_servers__server_id__game_console_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7418,26 +7118,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/servers/{server_id}/ssh-console": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Ssh Console
-         * @description Independent SSH console page
-         */
-        get: operations["ssh_console_servers__server_id__ssh_console_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/servers/{server_id}/ssh-health": {
         parameters: {
             query?: never;
@@ -7495,46 +7175,6 @@ export interface paths {
          *     Sensitive values (passwords, tokens) are masked.
          */
         get: operations["get_startup_command_servers__server_id__startup_command_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/setup-wizard": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Setup Wizard
-         * @description Server setup wizard UI - authentication checked client-side
-         */
-        get: operations["setup_wizard_setup_wizard_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/system-settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * System Settings Page
-         * @description System settings page (admin only - auth checked client-side)
-         */
-        get: operations["system_settings_page_system_settings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -18514,26 +18154,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    root__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
     get_user_servers_a2s_cache_a2s_cache_get: {
         parameters: {
             query?: never;
@@ -29247,86 +28867,6 @@ export interface operations {
             };
         };
     };
-    audit_logs_page_audit_logs_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    deployment_tutorial_page_deployment_tutorial_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    forgot_password_page_forgot_password_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    google_callback_page_google_callback_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
     health_check_health_get: {
         parameters: {
             query?: never;
@@ -29347,26 +28887,6 @@ export interface operations {
             };
         };
     };
-    login_page_login_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
     ping_ping_get: {
         parameters: {
             query?: never;
@@ -29383,86 +28903,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    plugin_market_page_plugin_market_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    profile_page_profile_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    register_page_register_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    reset_password_page_reset_password_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
                 };
             };
         };
@@ -29519,57 +28959,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    servers_ui_servers_ui_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    server_detail_ui_servers_ui__server_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                server_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
                 };
             };
             /** @description Validation Error */
@@ -30288,38 +29677,6 @@ export interface operations {
             };
         };
     };
-    console_popup_servers__server_id__console_popup__console_type__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                server_id: number;
-                console_type: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_server_cpu_count_servers__server_id__cpu_count_get: {
         parameters: {
             query?: never;
@@ -30878,40 +30235,6 @@ export interface operations {
             };
         };
     };
-    file_editor_popup_servers__server_id__file_editor_popup_get: {
-        parameters: {
-            query: {
-                file_path: string;
-                file_name: string;
-            };
-            header?: never;
-            path: {
-                server_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_directory_servers__server_id__files_get: {
         parameters: {
             query?: {
@@ -31422,37 +30745,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    game_console_servers__server_id__game_console_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                server_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
                 };
             };
             /** @description Validation Error */
@@ -32467,37 +31759,6 @@ export interface operations {
             };
         };
     };
-    ssh_console_servers__server_id__ssh_console_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                server_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_ssh_health_status_servers__server_id__ssh_health_get: {
         parameters: {
             query?: never;
@@ -32587,46 +31848,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    setup_wizard_setup_wizard_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    system_settings_page_system_settings_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
                 };
             };
         };

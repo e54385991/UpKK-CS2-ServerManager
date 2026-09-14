@@ -101,6 +101,16 @@ test("pause, range, and export stay on the dashboard", async ({ page, context, r
   expect(download.suggestedFilename()).toMatch(/cs2-panel-monitor-24h/);
 });
 
+test("hovering a latency chart shows the numeric value", async ({ page, context }) => {
+  await login(context);
+  await openSettings(page);
+  const chart = page.getByTestId("monitor-chart-latency");
+  await expect(chart).toBeVisible();
+  const plot = chart.locator("svg");
+  await plot.hover({ position: { x: 220, y: 70 } });
+  await expect(chart.getByTestId("monitor-chart-tooltip")).toContainText("42");
+});
+
 test("english copy and mobile layout stay single column", async ({ page, context }) => {
   await login(context, "en-US");
   await page.setViewportSize({ width: 390, height: 844 });

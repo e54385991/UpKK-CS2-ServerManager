@@ -45,7 +45,6 @@ def test_quickstart_installs_console_on_port_31800() -> None:
     assert "URL       ${url}" in QUICKSTART
     assert "Username  ${DEFAULT_USER}" in QUICKSTART
     assert "Password  ${DEFAULT_PASSWORD}" in QUICKSTART
-    assert "CONSOLE_PUBLIC_URL" in QUICKSTART
     assert "BACKEND_URL" in QUICKSTART
     assert "is_loopback_url" in QUICKSTART
 

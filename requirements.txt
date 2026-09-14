@@ -625,10 +625,6 @@ inflate64==1.0.4 \
     --hash=sha256:f8964ceaabea294bc20abc9ef408c6aae978a75c25c83168a76cd87a37c38938 \
     --hash=sha256:fb2fdd63ef3933b67af98b3f2ee2f57e7787278041d7ba4821382fedd729b68a
     # via py7zr
-jinja2==3.1.6 \
-    --hash=sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d \
-    --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
-    # via cs2-server-manager
 jmespath==1.1.0 \
     --hash=sha256:472c87d80f36026ae83c6ddd0f1d05d4e510134ed462851fd5f754c8c3cbb88d \
     --hash=sha256:a5663118de4908c91729bea0acadca56526eb2698e83de10cd116ae0f4e97c64
@@ -663,9 +659,7 @@ markupsafe==3.0.3 \
     --hash=sha256:f34c41761022dd093b4b6896d4810782ffbabe30f2d443ff5f083e0cbbb8c737 \
     --hash=sha256:f3e98bb3798ead92273dc0e5fd0f31ade220f59a266ffd8a4f6065e0a3ce0523 \
     --hash=sha256:fed51ac40f757d41b7c48425901843666a6677e3e8eb0abcff09e4ba6e664f50
-    # via
-    #   jinja2
-    #   mako
+    # via mako
 multidict==6.8.0 \
     --hash=sha256:00be37bde741bf60871082cd347a093218c44886e99231b7516671c70f2c280d \
     --hash=sha256:029897732a9c798737457e382bf84e8c64237eff224a90aea2639f4413c45e4e \

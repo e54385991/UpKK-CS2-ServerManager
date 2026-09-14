@@ -130,7 +130,7 @@ sync_public_urls() {
     port="${port:-31800}"
     ip="$(detect_host_ip)"
     public_url="http://${ip}:${port}"
-    for key in CONSOLE_PUBLIC_URL BACKEND_URL; do
+    for key in BACKEND_URL; do
         current="$(read_env_value "$key" "$env_file")"
         if [ -z "${current:-}" ] || is_loopback_url "$current"; then
             replace_or_add_env "$env_file" "$key" "$public_url"

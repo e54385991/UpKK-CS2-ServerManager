@@ -197,7 +197,9 @@ async def test_public_rate_limit_returns_retry_after(monkeypatch):
 
 
 def test_file_editor_uses_sftp_instead_of_shell_command():
-    source = inspect.getsource(main.file_editor_popup)
+    from api.routes.file_manager.files import get_file_content
+
+    source = inspect.getsource(get_file_content)
     assert "read_file" in source
     assert "execute_command" not in source
 

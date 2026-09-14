@@ -83,3 +83,30 @@ export function formatChartNumber(value: number): string {
   if (Math.abs(value) >= 100) return `${Math.round(value)}`;
   return value.toFixed(value >= 10 ? 1 : 2);
 }
+
+export function chartIndexFromLocalX(
+  localX: number,
+  count: number,
+  width: number,
+  padLeft: number,
+  padRight: number,
+): number {
+  if (count <= 0) return -1;
+  if (count === 1) return 0;
+  const innerW = Math.max(width - padLeft - padRight, 1);
+  const t = (localX - padLeft) / innerW;
+  return Math.round(Math.max(0, Math.min(1, t)) * (count - 1));
+}
+
+export function nearestNumericChartIndex(series: readonly ChartPoint[], index: number): number {
+  if (series.length === 0) return -1;
+  const clamped = Math.max(0, Math.min(series.length - 1, index));
+  if (series[clamped]?.value != null) return clamped;
+  for (let distance = 1; distance < series.length; distance += 1) {
+    const left = clamped - distance;
+    const right = clamped + distance;
+    if (left >= 0 && series[left]?.value != null) return left;
+    if (right < series.length && series[right]?.value != null) return right;
+  }
+  return -1;
+}

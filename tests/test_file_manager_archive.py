@@ -8,8 +8,6 @@ need a database, Redis, a live SSH server, or a browser runtime.
 import asyncio
 import shlex
 import unittest
-from html.parser import HTMLParser
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -17,8 +15,6 @@ from fastapi import HTTPException
 
 from api.routes import file_manager
 from services.ssh_manager import SSHManager
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class FileManagerValidationTests(unittest.TestCase):
@@ -1281,90 +1277,6 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
             "/srv/game/CS2Fixes Linux.zip",
         )
         self.assertEqual(file_manager.download_url_tasks[task_id]["status"], "completed")
-
-
-class _TemplateIdParser(HTMLParser):
-    VOID_ELEMENTS = {
-        "area",
-        "base",
-        "br",
-        "col",
-        "embed",
-        "hr",
-        "img",
-        "input",
-        "link",
-        "meta",
-        "param",
-        "source",
-        "track",
-        "wbr",
-    }
-
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.stack = []
-        self.ids = []
-
-    def handle_starttag(self, tag, attrs):
-        attributes = dict(attrs)
-        element = (tag, attributes)
-        element_id = attributes.get("id")
-        if element_id:
-            self.ids.append((element_id, tuple(self.stack), element))
-        if tag not in self.VOID_ELEMENTS:
-            self.stack.append(element)
-
-    def handle_startendtag(self, tag, attrs):
-        self.handle_starttag(tag, attrs)
-        if tag not in self.VOID_ELEMENTS:
-            self.handle_endtag(tag)
-
-    def handle_endtag(self, tag):
-        for index in range(len(self.stack) - 1, -1, -1):
-            if self.stack[index][0] == tag:
-                del self.stack[index:]
-                break
-
-
-class FileManagerDomRegressionTests(unittest.TestCase):
-    def test_create_folder_modal_is_unique_and_teleported_to_body(self):
-        matches = []
-        for template_path in (PROJECT_ROOT / "templates").rglob("*.html"):
-            parser = _TemplateIdParser()
-            parser.feed(template_path.read_text(encoding="utf-8"))
-            for element_id, ancestors, element in parser.ids:
-                if element_id == "createFolderModal":
-                    matches.append((template_path, ancestors, element))
-
-        self.assertEqual(
-            len(matches),
-            1,
-            "createFolderModal must have exactly one template definition",
-        )
-        template_path, ancestors, (_, modal_attributes) = matches[0]
-        self.assertEqual(template_path.name, "files_tab.html")
-        self.assertTrue(
-            any(
-                tag == "template" and attributes.get("x-teleport") == "body"
-                for tag, attributes in ancestors
-            ),
-            "createFolderModal must remain inside an Alpine x-teleport=body template",
-        )
-        self.assertNotIn(
-            "x-show",
-            modal_attributes,
-            "Bootstrap must be the sole visibility controller for the folder modal",
-        )
-
-        scripts = (PROJECT_ROOT / "templates/server_detail_includes/scripts.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            "bootstrap.Modal.getOrCreateInstance(modalElement)",
-            scripts,
-            "The folder modal must reuse one Bootstrap instance instead of flickering",
-        )
 
 
 if __name__ == "__main__":

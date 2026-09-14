@@ -158,7 +158,7 @@ export function HelpConsole({
             </p>
             <p className="text-xs text-fg-subtle">{t("aliyunExample")}</p>
             <Image
-              src="/static/images/aliyun-deploy/firewall/firewall-ali.webp"
+              src="/tutorial/firewall/firewall-ali.webp"
               alt={t("firewallAlt")}
               width={1280}
               height={720}

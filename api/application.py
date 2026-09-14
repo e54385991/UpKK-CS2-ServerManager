@@ -5,7 +5,6 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.types import Lifespan
 
-from api.legacy_html import LegacyHtmlRedirectMiddleware
 from api.lifecycle import application_lifespan
 from api.metadata import APP_DESCRIPTION, APP_TITLE, APP_VERSION
 from api.request_metrics import RequestMetricsMiddleware
@@ -20,7 +19,6 @@ from api.routes import (
     gmail_oauth,
     health,
     map_management,
-    pages,
     plugin_auto_update,
     plugin_configs,
     plugin_diagnostics,
@@ -33,7 +31,7 @@ from api.routes import (
     system_settings,
     v1,
 )
-from api.templating import STATIC_DIRECTORY, templates
+from api.templating import STATIC_DIRECTORY
 from services.container import ContainerFactory, build_service_container
 from services.maintenance_lock import OperationBusyError
 
@@ -77,10 +75,9 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 
 def register_routes(app: FastAPI) -> None:
-    """Register API and server-rendered page routers."""
+    """Register JSON API routers and health probes."""
     for router in API_ROUTERS:
         app.include_router(router)
-    app.include_router(pages.router)
     app.include_router(health.router)
 
 
@@ -96,12 +93,10 @@ def create_app(
         version=APP_VERSION,
         lifespan=lifespan,
     )
-    app.state.templates = templates
     app.state.container_factory = container_factory
     app.state.services = container_factory()
 
     register_exception_handlers(app)
-    app.add_middleware(LegacyHtmlRedirectMiddleware)
     app.add_middleware(RequestMetricsMiddleware)
     if STATIC_DIRECTORY.is_dir():
         app.mount(

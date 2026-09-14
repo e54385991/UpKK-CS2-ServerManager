@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  chartIndexFromLocalX,
   chartLinePaths,
   formatChartClock,
   formatChartNumber,
   nearestChartIndex,
+  nearestNumericChartIndex,
   sparkSegments,
 } from "./monitor-chart-geometry.ts";
 
@@ -52,4 +54,24 @@ test("chart labels stay compact", () => {
   assert.equal(formatChartNumber(100), "100");
   assert.equal(formatChartNumber(10.55), "10.6");
   assert.equal(formatChartNumber(1.234), "1.23");
+});
+
+test("chartIndexFromLocalX maps pointer X onto the plot", () => {
+  assert.equal(chartIndexFromLocalX(0, 0, 640, 44, 12), -1);
+  assert.equal(chartIndexFromLocalX(100, 1, 640, 44, 12), 0);
+  assert.equal(chartIndexFromLocalX(44, 11, 640, 44, 12), 0);
+  assert.equal(chartIndexFromLocalX(640 - 12, 11, 640, 44, 12), 10);
+  assert.equal(chartIndexFromLocalX(44 + (640 - 44 - 12) / 2, 11, 640, 44, 12), 5);
+});
+
+test("nearestNumericChartIndex skips null samples", () => {
+  const series = [
+    { ts: "a", value: 1 },
+    { ts: "b", value: null },
+    { ts: "c", value: 3 },
+  ];
+  assert.equal(nearestNumericChartIndex([], 0), -1);
+  assert.equal(nearestNumericChartIndex(series, 0), 0);
+  assert.equal(nearestNumericChartIndex(series, 1), 0);
+  assert.equal(nearestNumericChartIndex(series, 2), 2);
 });

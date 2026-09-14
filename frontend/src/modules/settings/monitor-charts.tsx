@@ -1,11 +1,14 @@
 "use client";
 
+import type { PointerEvent } from "react";
 import { useId, useMemo, useState } from "react";
 import {
+  chartIndexFromLocalX,
   chartLinePaths,
   formatChartClock,
   formatChartNumber,
   nearestChartIndex,
+  nearestNumericChartIndex,
   sparkSegments,
   type ChartPoint,
 } from "@/modules/settings/monitor-chart-geometry";
@@ -54,10 +57,29 @@ export function MonitorChart({
   const y = (value: number) => PAD.top + innerH - (value / maxValue) * innerH;
   const activePoint = active != null ? series[active] : null;
   const markerIndex = nearestChartIndex(series, markerTs);
+  const readout =
+    activePoint?.value != null
+      ? `${formatChartClock(activePoint.ts)} · ${formatChartNumber(activePoint.value)} ${unit}`
+      : null;
 
   function move(next: number) {
-    if (series.length === 0) return;
-    setActive(Math.max(0, Math.min(series.length - 1, next)));
+    const index = nearestNumericChartIndex(series, next);
+    if (index >= 0) setActive(index);
+  }
+
+  function activateFromClientX(svg: SVGSVGElement, clientX: number) {
+    const rect = svg.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const localX = ((clientX - rect.left) / rect.width) * WIDTH;
+    const index = nearestNumericChartIndex(
+      series,
+      chartIndexFromLocalX(localX, series.length, WIDTH, PAD.left, PAD.right),
+    );
+    if (index >= 0) setActive(index);
+  }
+
+  function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
+    activateFromClientX(event.currentTarget, event.clientX);
   }
 
   return (
@@ -69,80 +91,105 @@ export function MonitorChart({
         <h3 className="text-sm font-semibold text-fg">{title}</h3>
         <span className="text-xs text-fg-subtle">{unit}</span>
       </div>
-      <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        role="img"
-        aria-label={title}
-        tabIndex={0}
-        className="h-48 w-full outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-        onMouseLeave={() => setActive(null)}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowRight") move((active ?? -1) + 1);
-          if (event.key === "ArrowLeft") move((active ?? series.length) - 1);
-        }}
-      >
-        <defs>
-          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {thresholds.map((line) => (
-          <g key={line.label}>
+      <div className="relative">
+        <svg
+          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+          role="img"
+          aria-label={title}
+          tabIndex={0}
+          className="h-48 w-full outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          onPointerMove={handlePointerMove}
+          onPointerLeave={() => setActive(null)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowRight") move((active ?? -1) + 1);
+            if (event.key === "ArrowLeft") move((active ?? series.length) - 1);
+          }}
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={color} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width={WIDTH} height={HEIGHT} fill="transparent" />
+          {thresholds.map((line) => (
+            <g key={line.label}>
+              <line
+                x1={PAD.left}
+                x2={WIDTH - PAD.right}
+                y1={y(line.value)}
+                y2={y(line.value)}
+                stroke={line.tone === "danger" ? "var(--color-danger)" : "var(--color-warn)"}
+                strokeDasharray="4 4"
+                strokeWidth="1"
+              />
+              <text x={PAD.left + 4} y={y(line.value) - 4} className="fill-fg-subtle" fontSize="10">
+                {line.label}
+              </text>
+            </g>
+          ))}
+          {paths.map((path) => (
+            <g key={path.d}>
+              {path.area ? <path d={path.area} fill={`url(#${gradientId})`} /> : null}
+              <path d={path.d} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
+            </g>
+          ))}
+          {markerIndex >= 0 ? (
             <line
-              x1={PAD.left}
-              x2={WIDTH - PAD.right}
-              y1={y(line.value)}
-              y2={y(line.value)}
-              stroke={line.tone === "danger" ? "var(--color-danger)" : "var(--color-warn)"}
-              strokeDasharray="4 4"
+              x1={x(markerIndex)}
+              x2={x(markerIndex)}
+              y1={PAD.top}
+              y2={HEIGHT - PAD.bottom}
+              stroke="var(--color-warn)"
+              strokeDasharray="3 3"
+              strokeWidth="1.5"
+            />
+          ) : null}
+          {active != null && activePoint?.value != null ? (
+            <line
+              x1={x(active)}
+              x2={x(active)}
+              y1={PAD.top}
+              y2={HEIGHT - PAD.bottom}
+              stroke={color}
+              strokeOpacity="0.45"
               strokeWidth="1"
             />
-            <text x={PAD.left + 4} y={y(line.value) - 4} className="fill-fg-subtle" fontSize="10">
-              {line.label}
-            </text>
-          </g>
-        ))}
-        {paths.map((path) => (
-          <g key={path.d}>
-            {path.area ? <path d={path.area} fill={`url(#${gradientId})`} /> : null}
-            <path d={path.d} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
-          </g>
-        ))}
-        {markerIndex >= 0 ? (
-          <line
-            x1={x(markerIndex)}
-            x2={x(markerIndex)}
-            y1={PAD.top}
-            y2={HEIGHT - PAD.bottom}
-            stroke="var(--color-warn)"
-            strokeDasharray="3 3"
-            strokeWidth="1.5"
-          />
+          ) : null}
+          {series.map((point, index) =>
+            point.value == null ? null : (
+              <circle
+                key={point.ts + index}
+                cx={x(index)}
+                cy={y(point.value)}
+                r={active === index ? 5 : 2.5}
+                fill={color}
+                pointerEvents="none"
+              />
+            ),
+          )}
+          <text x={PAD.left} y={HEIGHT - 8} className="fill-fg-subtle" fontSize="10">
+            {series[0] ? formatChartClock(series[0].ts) : ""}
+          </text>
+          <text x={WIDTH - PAD.right} y={HEIGHT - 8} textAnchor="end" className="fill-fg-subtle" fontSize="10">
+            {series.at(-1) ? formatChartClock(series.at(-1)!.ts) : ""}
+          </text>
+        </svg>
+        {readout && active != null && activePoint?.value != null ? (
+          <p
+            data-testid="monitor-chart-tooltip"
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg shadow-panel"
+            style={{
+              left: `${(x(active) / WIDTH) * 100}%`,
+              top: `${(y(activePoint.value) / HEIGHT) * 100}%`,
+            }}
+          >
+            {readout}
+          </p>
         ) : null}
-        {series.map((point, index) =>
-          point.value == null ? null : (
-            <circle
-              key={point.ts + index}
-              cx={x(index)}
-              cy={y(point.value)}
-              r={active === index ? 5 : 0}
-              fill={color}
-              onMouseEnter={() => setActive(index)}
-            />
-          ),
-        )}
-        <text x={PAD.left} y={HEIGHT - 8} className="fill-fg-subtle" fontSize="10">
-          {series[0] ? formatChartClock(series[0].ts) : ""}
-        </text>
-        <text x={WIDTH - PAD.right} y={HEIGHT - 8} textAnchor="end" className="fill-fg-subtle" fontSize="10">
-          {series.at(-1) ? formatChartClock(series.at(-1)!.ts) : ""}
-        </text>
-      </svg>
+      </div>
       <p className="mt-1 min-h-5 text-xs text-fg-muted" role="status">
-        {activePoint?.value != null
-          ? `${formatChartClock(activePoint.ts)} · ${formatChartNumber(activePoint.value)} ${unit}`
-          : hint}
+        {readout ?? hint}
       </p>
     </section>
   );

@@ -742,37 +742,27 @@ def test_global_binding_contract_reuses_strict_single_server_rules():
         )
 
 
-def test_profile_guide_exposes_trigger_mode_and_bilingual_intent_warning():
-    profile = (PROJECT_ROOT / "templates/profile.html").read_text(encoding="utf-8")
-    profile += (PROJECT_ROOT / "static/js/profile.js").read_text(encoding="utf-8")
-    assert 'id="discord-bot-trigger-mode"' in profile
-    assert "message_trigger_mode" in profile
-    assert "discord-bot-message-content-warning" in profile
-    assert 'id="discord-menu-push-guild"' in profile
-    assert 'id="discord-menu-push-channel"' in profile
-    assert 'id="discord-global-binding-panel"' in profile
-    assert 'id="discord-global-sync"' in profile
-    assert 'id="discord-global-channel-managers"' in profile
-    assert "allow_channel_managers" in profile
-    assert "function discordBotText(" in profile
-    assert "discordGlobalSelectedCapabilities()" in profile
-    assert "refreshDiscordBotLocalizedText" in profile
-    assert "/api/auth/discord-bot/menu-options" in profile
-    assert "/api/auth/discord-bot/menu" in profile
-    assert "/api/auth/discord-bot/global-settings" in profile
-    assert "/api/auth/discord-bot/global-options" in profile
+def test_profile_guide_exposes_trigger_mode_and_channel_manager_controls():
+    form = (PROJECT_ROOT / "frontend/src/modules/discord/discord-form.tsx").read_text(
+        encoding="utf-8"
+    )
+    binding = (PROJECT_ROOT / "frontend/src/modules/discord/discord-binding-form.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "messageTriggerMode" in form
+    assert "mention_only" in form
+    assert "allowChannelManagers" in binding
+    assert "allowServerAdministrators" in binding
+    assert "syncExistingServers" in binding
     for locale in ("en-US", "zh-CN"):
         messages = json.loads(
-            (PROJECT_ROOT / f"static/locales/{locale}.json").read_text(encoding="utf-8")
-        )
-        assert messages["discordBot"]["triggerMentionOnly"]
-        assert "Message Content Intent" in messages["discordBot"]["messageContentWarning"]
-        assert messages["discordBot"]["pushMenuTitle"]
-        assert messages["discordBot"]["globalSyncWarning"]
-        assert messages["discordBot"]["allowChannelManagers"]
-        assert messages["discordBot"]["capStatus"]
-        assert messages["discordBot"]["capChangeMap"]
-        assert messages["discordBot"]["whitelistRule"]
+            (PROJECT_ROOT / f"frontend/src/i18n/messages/{locale}.json").read_text(encoding="utf-8")
+        )["discord"]
+        assert messages["mentionOnly"]
+        assert messages["allowManagers"]
+        assert messages["allowAdmins"]
+        assert messages["globalTitle"]
+        assert messages["syncExisting"]
 
 
 def test_friendly_menu_wake_words_are_exact_normalized_and_mention_safe():

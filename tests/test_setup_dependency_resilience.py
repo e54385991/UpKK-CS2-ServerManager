@@ -189,7 +189,13 @@ def test_manual_setup_script_contains_retry_architecture_and_runtime_guards():
     assert "amd64|x86_64) ;;" in script
     assert "libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1" in script
     assert "Required dependency verification failed" in script
-    template = (
-        Path(__file__).resolve().parents[1] / "templates" / "server_setup_wizard.html"
+    wizard = (
+        Path(__file__).resolve().parents[1]
+        / "frontend"
+        / "src"
+        / "modules"
+        / "servers"
+        / "setup-wizard.tsx"
     ).read_text()
-    assert "DPkg::Lock::Timeout=120" in template
+    assert "getManualSetupScriptAction" in wizard
+    assert "{manual.script}" in wizard

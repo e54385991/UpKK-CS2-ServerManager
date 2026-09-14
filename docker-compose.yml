@@ -47,8 +47,6 @@ services:
       DEBUG: ${DEBUG:-False}
       RUN_MODE: ${RUN_MODE:-production}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:31800}
-      CONSOLE_PUBLIC_URL: ${CONSOLE_PUBLIC_URL:-http://localhost:31800}
-      LEGACY_HTML_CONSOLE: ${LEGACY_HTML_CONSOLE:-redirect}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ASYNCSSH_LOG_LEVEL: ${ASYNCSSH_LOG_LEVEL:-WARNING}
       SECRET_KEY: ${SECRET_KEY:-}

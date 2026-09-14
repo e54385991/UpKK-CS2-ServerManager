@@ -280,8 +280,8 @@ def _validate_compose_environment(app: dict[str, Any], frontend: dict[str, Any])
             "some 1Panel Docker engines; Next talks to app:8000 on the private network"
         )
     app_env = app.get("environment")
-    if not isinstance(app_env, dict) or app_env.get("CONSOLE_PUBLIC_URL") != "${BACKEND_URL}":
-        fail("app must set CONSOLE_PUBLIC_URL from BACKEND_URL")
+    if not isinstance(app_env, dict):
+        fail("app environment is required")
     if str(app_env.get("API_PORT")) != "8000":
         fail("FastAPI must stay on container port 8000; 8001 is not a second-instance port")
     if app_env.get("REDIS_KEY_PREFIX") != "${CONTAINER_NAME}":

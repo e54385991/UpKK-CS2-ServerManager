@@ -12,8 +12,6 @@ from modules import (
     get_current_active_user,
     get_current_admin_user,
     get_current_user,
-    get_current_web_admin,
-    get_current_web_user,
     get_db,
 )
 from modules.auth import _get_active_user_for_token, optional_oauth2_scheme, web_session_cookie_name
@@ -27,8 +25,6 @@ DatabaseSession = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 ActiveUser = Annotated[User, Depends(get_current_active_user)]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
-WebUser = Annotated[User, Depends(get_current_web_user)]
-WebAdmin = Annotated[User, Depends(get_current_web_admin)]
 
 
 async def get_bearer_or_cookie_user(

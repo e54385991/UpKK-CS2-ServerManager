@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 PLUGIN_CENTER_NAME = "CS2-Upkk-PanelPLG-Mapchooser"
-PLUGIN_CENTER_URL = "/plugin-market?search=CS2-Upkk-PanelPLG-Mapchooser"
+PLUGIN_CENTER_URL = "/plugins?q=CS2-Upkk-PanelPLG-Mapchooser"
 MAP_PRESET_URLS = {
     "kz": (
         "https://raw.githubusercontent.com/UpKK-Xnet-YYDCS/GeneralMapcfg_Public/"

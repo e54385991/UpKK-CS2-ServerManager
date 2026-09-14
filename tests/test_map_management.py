@@ -430,7 +430,7 @@ class MapRouteTests(unittest.TestCase):
         self.assertEqual(result["plugin_center_name"], "CS2-Upkk-PanelPLG-Mapchooser")
         self.assertEqual(
             result["plugin_center_url"],
-            "/plugin-market?search=CS2-Upkk-PanelPLG-Mapchooser",
+            "/plugins?q=CS2-Upkk-PanelPLG-Mapchooser",
         )
         self.assertTrue(ssh.disconnected)
         self.assertIn("'", ssh.commands[0])
