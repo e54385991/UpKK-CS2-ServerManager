@@ -6,7 +6,7 @@ import asyncio
 import resource
 from collections import defaultdict
 from time import monotonic, perf_counter
-from typing import Any
+from typing import Any, Sequence
 
 import httpx
 
@@ -21,6 +21,19 @@ ROUTES = (
     ("market", "/api/v1/plugins/market?framework=counterstrikesharp&limit=20&offset=0"),
     ("servers", "/api/v1/servers"),
 )
+ROUTE_NAMES = tuple(name for name, _path in ROUTES)
+
+
+def selected_routes(names: Sequence[str] | None) -> tuple[tuple[str, str], ...]:
+    """Keep catalog order. An empty selection means the mixed-load set."""
+    if not names:
+        return ROUTES
+    wanted = list(dict.fromkeys(names))
+    unknown = [name for name in wanted if name not in ROUTE_NAMES]
+    if unknown:
+        raise ValueError(f"unknown measurement routes: {', '.join(unknown)}")
+    chosen = set(wanted)
+    return tuple(item for item in ROUTES if item[0] in chosen)
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -75,9 +88,10 @@ async def _worker(
     errors: dict[str, int],
     counts: dict[str, int],
     record: bool,
+    routes: tuple[tuple[str, str], ...],
 ) -> None:
     while monotonic() < stop_at:
-        for name, path in ROUTES:
+        for name, path in routes:
             await _one_request(client, token, path, samples, errors, counts, name, record)
             if monotonic() >= stop_at:
                 return
@@ -98,24 +112,32 @@ async def run_api_rounds(
     mode: MeasureMode,
     transport: httpx.AsyncBaseTransport | None,
     base_url: str,
+    routes: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     set_enabled(True)
     spec = MEASURES[mode]
     roles = actor_cycle(online_users)
+    catalog = selected_routes(routes)
     rounds: list[dict[str, Any]] = []
     async with httpx.AsyncClient(transport=transport, base_url=base_url, timeout=30.0) as client:
         probe = await probe_inbox(client, tokens["admin"])
         for index in range(spec.api_rounds):
             rounds.append(
                 await _one_round(
-                    client, tokens, roles, spec.api_warmup_seconds, spec.api_measure_seconds
+                    client,
+                    tokens,
+                    roles,
+                    spec.api_warmup_seconds,
+                    spec.api_measure_seconds,
+                    catalog,
                 )
             )
             rounds[-1]["round"] = index + 1
-    summary = _summarize_rounds(rounds)
+    summary = _summarize_rounds(rounds, catalog)
     backend = await capture_panel_performance()
     return {
         "probes": {"inbox": probe},
+        "isolation": [name for name, _path in catalog],
         "rounds": rounds,
         "summary": summary,
         "backend": {
@@ -131,21 +153,22 @@ async def _one_round(
     roles: tuple[str, ...],
     warmup_seconds: int,
     measure_seconds: int,
+    routes: tuple[tuple[str, str], ...],
 ) -> dict[str, Any]:
     samples: dict[str, list[float]] = defaultdict(list)
     errors: dict[str, int] = defaultdict(int)
     counts: dict[str, int] = defaultdict(int)
-    await _run_window(client, tokens, roles, warmup_seconds, samples, errors, counts, False)
+    await _run_window(client, tokens, roles, warmup_seconds, samples, errors, counts, False, routes)
     started = monotonic()
-    await _run_window(client, tokens, roles, measure_seconds, samples, errors, counts, True)
+    await _run_window(client, tokens, roles, measure_seconds, samples, errors, counts, True, routes)
     elapsed = max(0.001, monotonic() - started)
-    routes = {}
-    for name, _path in ROUTES:
+    recorded = {}
+    for name, _path in routes:
         payload = attach_route_summary(samples[name], errors=errors[name], count=counts[name])
         payload["throughput_rps"] = round(counts[name] / elapsed, 3)
         payload["latency_ms"] = percentile_block(samples[name])
-        routes[name] = payload
-    return {"elapsed_s": round(elapsed, 3), "routes": routes, "rss_bytes": _rss_bytes()}
+        recorded[name] = payload
+    return {"elapsed_s": round(elapsed, 3), "routes": recorded, "rss_bytes": _rss_bytes()}
 
 
 async def _run_window(
@@ -157,20 +180,26 @@ async def _run_window(
     errors: dict[str, int],
     counts: dict[str, int],
     record: bool,
+    routes: tuple[tuple[str, str], ...],
 ) -> None:
     if seconds <= 0:
         return
     stop_at = monotonic() + seconds
     tasks = [
-        asyncio.create_task(_worker(client, tokens[role], stop_at, samples, errors, counts, record))
+        asyncio.create_task(
+            _worker(client, tokens[role], stop_at, samples, errors, counts, record, routes)
+        )
         for role in roles
     ]
     await asyncio.gather(*tasks)
 
 
-def _summarize_rounds(rounds: list[dict[str, Any]]) -> dict[str, Any]:
+def _summarize_rounds(
+    rounds: list[dict[str, Any]],
+    routes: tuple[tuple[str, str], ...],
+) -> dict[str, Any]:
     summary: dict[str, Any] = {}
-    for name, _path in ROUTES:
+    for name, _path in routes:
         p95s = [
             float(round_row["routes"][name]["latency_ms"]["p95"])
             for round_row in rounds

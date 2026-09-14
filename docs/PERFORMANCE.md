@@ -19,6 +19,7 @@ uv run python scripts/run_perf.py catalog-bytes
 uv run python scripts/run_perf.py download-bench
 uv run python scripts/run_perf.py seed --fleet fleet-10 --market market-100 --history daily
 uv run python scripts/run_perf.py measure-api --fleet fleet-10 --mode smoke
+uv run python scripts/run_perf.py measure-api --fleet fleet-100 --mode smoke --route overview
 ```
 
 The harness refuses to seed or flush unless `POSTGRES_DATABASE=cs2_perf` and
@@ -159,11 +160,12 @@ shared httpx client is unchanged.
 ## Stage 7 (comparison and maintenance)
 
 `claimed_gains` remains **false**. Numbers below are one 5 s warmup + 10 s
-measure round (API) or `PERF_WARMUP=0 PERF_MEASURE=1 PERF_ROUNDS=1`
-(browser) on loopback against isolated PostgreSQL 18.6 / Redis 8.10.1
-(`docker-compose.perf.yml`) and a production Next standalone + mock API.
-They are not the agreed 1 min / 5 min × 3 API protocol, not a 60-minute
-soak, and not a production Playwright 5 / 30 × 3 browser loop.
+measure round (API smoke), isolated `--route` smokes, a HEAD fleet-100 API
+baseline (1 min warmup + 5 min × 3), or `PERF_WARMUP=5 PERF_MEASURE=30
+PERF_ROUNDS=1` (browser) on loopback against isolated PostgreSQL 18.6 /
+Redis 8.10.1 (`docker-compose.perf.yml`) and a production Next standalone +
+mock API. There is no matching 3-round before SHA, no 60-minute soak, and no
+browser 5 / 30 × 3 loop.
 
 ### Local commits
 
@@ -176,7 +178,8 @@ soak, and not a production Playwright 5 / 30 × 3 browser loop.
 | 4 | `507773400f6925339d953e29ba8f94fef9a4101e` | Overview column projection; no index revision |
 | 5 | `686f863ddf6e89f6f97408ec0d6a4216aac08035` | One-scan cache prune; 8 KiB chunks kept |
 | 7 | `79b349691cf28b600ba5ed232274bd5d37ec51ba` | Comparison notes and harness measurement fixes |
-| 7b | this commit | Before/after smoke evidence; Playwright SSE/evaluate fix |
+| 7b | `c1a64cd0e1172e529c708aa1dad25f4af0fc26d5` | Before/after smoke evidence; Playwright SSE/evaluate fix |
+| 7c | this commit | Isolated `--route` smokes; 5/30 Playwright; RSS |
 
 Before SHA is harness-only `e07dbd094786c4d2a0f4cef39c89bc4a69c5889e` (pre-inbox
 batch). After SHA is `79b349691cf28b600ba5ed232274bd5d37ec51ba`. Same seed
@@ -209,9 +212,35 @@ bytes). That is not a mixed-load p95.
 
 **Mixed-load coupling.** Before, a slow inbox (~1.3 s at 100) starved the other
 three routes so their p95 looked like 15–17 ms. After, inbox is fast and the
-same 10 workers hammer overview / market / servers (91 / 108 / 102 ms). That
-is not an overview-query regression by itself; sequential isolated overview
-timing was not run.
+same 10 workers hammer overview / market / servers (91 / 108 / 102 ms). Isolated
+`--route` smokes (same 10 sessions, one path only) remove that coupling:
+
+| Route | before p95 | after p95 | regression `max(5%, 20 ms)` |
+| --- | --- | --- | --- |
+| overview | 43.4 ms | 24.7 ms | **pass** (−43%) |
+| market | 42.2 ms | 37.2 ms | **pass** |
+| servers | 31.7 ms | 38.1 ms | **pass** (+6.3 ms, limit 51.7 ms) |
+
+RSS: mixed-load smoke 241.8 MiB → 236.4 MiB (−2.2%). Isolated overview 230.8 →
+225.2 MiB. CPU seconds on the mixed-load smoke 16.27 → 15.98. All inside +5%.
+`cpu_percent` is not sampled (null). No 60-minute soak.
+
+### Fleet-100 API baseline (HEAD only, 1 min / 5 min × 3)
+
+Median of three round p95 values, mixed four-route load, 0 errors, ~38k
+requests per route. Inbox probe: 146.7 ms, SQL 3, Redis 4. RSS 239.1 MiB
+(within +5% of the 241.8 MiB pre-batch smoke). There is **no** matching
+3-round series at `e07dbd0`.
+
+| Route | round p95 ms | median p95 |
+| --- | --- | --- |
+| inbox | 188.2 / 199.6 / 197.2 | **197.2** |
+| overview | 64.7 / 73.0 / 65.4 | **65.4** |
+| market | 77.3 / 89.1 / 70.8 | **77.3** |
+| servers | 86.1 / 89.7 / 74.8 | **86.1** |
+
+Versus the fleet-100 **smoke** before inbox p95 of 1300.4 ms, the baseline
+median is still an 84.8% drop. That is not a same-protocol before/after.
 
 ### Production Playwright HTML / RSC / gzip (HEAD smoke)
 
@@ -219,8 +248,9 @@ Standalone Next 16.3.5 (`npm run build`) against `e2e/performance.mock.mjs`.
 The server does **not** set `Content-Encoding`; `html_gzip_bytes` /
 `rsc_gzip_bytes` are `gzipSync` of the uncompressed body (or the encoded
 `Content-Length` when present). Full document navigations often embed RSC in
-HTML, so `rsc_bytes` may be 0. Protocol: 0 warmup, 1 measure, 1 round.
-`claimed_gains` stays false.
+HTML, so `rsc_bytes` may be 0. `claimed_gains` stays false.
+
+Uncached first-hit (0/1×1):
 
 | Locale | Route | HTML | gzip(HTML) | RSC | gzip(RSC) | JS transfer | critical ms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -228,6 +258,11 @@ HTML, so `rsc_bytes` may be 0. Protocol: 0 warmup, 1 measure, 1 round.
 | zh-CN | `/login` | 27,410 | 6,210 | 0 | — | 179,617 | 93 |
 | en-US | `/overview` | 84,861 | 17,399 | 508 | 363 | 193,848 | 397 |
 | zh-CN | `/overview` | 84,600 | 19,120 | 0 | — | 193,848 | 92 |
+
+`PERF_WARMUP=5 PERF_MEASURE=30 PERF_ROUNDS=1` (still not 5/30×3): HTML and gzip
+medians match the first-hit table. Critical-content p95: login 68 / 95 ms,
+overview 84 / 92 ms (en-US / zh-CN). JS transfer p50 is **0** on repeat visits
+because the browser cache reports `transferSize` 0. No 5/30×3 loop.
 
 There is no matching HTML capture at `e07dbd0`. The −50% locale gate remains
 the catalog JSON subsets above, not these documents.
@@ -280,6 +315,8 @@ Push, deploy, and live restart stay out of default scope.
 - `reports/perf/raw/*.json` stays uncommitted.
 - Production Playwright must skip `response.body()` on `text/event-stream`
   (activity-tray SSE) and `await` CDP evaluate before closing the page.
+- `measure-api --route overview` (repeatable) isolates one path; default is
+  the mixed inbox/overview/market/servers load.
 
 ## Gates (not yet claimed)
 
@@ -288,15 +325,17 @@ the current catalog/download facts:
 
 - Inbox: one in-memory scan per snapshot; Redis batched; 100 / 500 p95 ≥ 20%
   or report the actuals — **100 smoke pass (83.8%)**; **500 mixed-load before
-  collapsed**; after 2256 ms p95 with 0 errors. 1 min / 5 min × 3 not run.
+  collapsed**; after 2256 ms p95 with 0 errors. Fleet-100 HEAD baseline median
+  inbox p95 **197.2 ms** (0 errors); no matching 3-round before SHA.
 - In-flight ≤ 1; hidden pages pause; stale responses cannot win — **unit tests
   pass**; live browser not run
 - `/login` and `/overview` client message bytes −50%, plus real HTML/RSC size —
   **catalog JSON pass**; HTML/RSC smoke table above (no pre-trim HTML baseline)
 - Bundle budgets unchanged (252 KiB / 150 KiB gzip)
 - No p95 regression beyond `max(5%, 20 ms)`; CPU / RSS +5%; no monotonic leak —
-  **mixed-load overview/market/servers fail this gate** until sequential
-  isolation is measured; 60-minute soak not run
+  **isolated `--route` smokes pass**; mixed-load overview/market/servers still
+  look worse because a fast inbox no longer starves them. RSS/CPU smoke and
+  the HEAD baseline RSS stay inside +5%. 60-minute soak not run
 - Indexes only with EXPLAIN, 20% p95, write tolerance, and ≤ 5 s build
 
 Application changes revert by commit. Added Alembic revisions stay; dropping

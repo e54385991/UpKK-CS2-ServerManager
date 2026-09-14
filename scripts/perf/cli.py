@@ -37,6 +37,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--market", default="market-100", choices=sorted(MARKETS))
     parser.add_argument("--history", default="daily", choices=("empty", "daily", "max"))
     parser.add_argument("--mode", default="smoke", choices=sorted(MEASURES))
+    parser.add_argument(
+        "--route",
+        action="append",
+        dest="routes",
+        choices=("inbox", "overview", "market", "servers"),
+        help="Repeat to isolate one or more routes. Default is the mixed four-route load.",
+    )
     parser.add_argument("--out", default="")
     parser.add_argument("--manifest", default="")
     return parser.parse_args(argv)
@@ -158,12 +165,19 @@ async def _run_measure(args: argparse.Namespace) -> int:
         mode=args.mode,
         transport=ASGITransport(app=app),
         base_url="http://perf.local",
+        routes=args.routes,
     )
     report = empty_report(profile=args.fleet, mode=args.mode, cwd=PROJECT_ROOT)
     report["catalog_bytes"] = catalog_byte_report()
     report["api"] = measured
     report["backend"] = measured.get("backend", {})
-    path = _output_path(args, f"api-{args.fleet}-{args.mode}.json")
+    isolated = "-".join(args.routes) if args.routes else args.mode
+    default_name = (
+        f"api-{args.fleet}-{args.mode}.json"
+        if not args.routes
+        else f"api-{args.fleet}-{args.mode}-{isolated}.json"
+    )
+    path = _output_path(args, default_name)
     write_report(path, report)
     print(path)
     return 0

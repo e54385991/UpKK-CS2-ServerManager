@@ -307,3 +307,14 @@ def test_index_eval_sql_uses_stored_enum_names():
     from scripts.perf.index_eval import TARGET_QUERIES
 
     assert all("COUNTERSTRIKESHARP" in item["sql"] for item in TARGET_QUERIES)
+
+
+def test_selected_routes_keep_catalog_order_and_reject_unknown_names():
+    from scripts.perf.api_measure import ROUTES, selected_routes
+
+    assert selected_routes(None) == ROUTES
+    assert selected_routes([]) == ROUTES
+    isolated = selected_routes(["servers", "overview", "overview"])
+    assert [name for name, _path in isolated] == ["overview", "servers"]
+    with pytest.raises(ValueError, match="unknown measurement routes"):
+        selected_routes(["inbox", "not-a-route"])
