@@ -306,6 +306,7 @@ export function GoogleLoginCard({
           <p className="mt-1.5 text-xs text-fg-subtle">
             {t("googleLogin.clientIdHelp")}
           </p>
+          <p className="mt-1.5 text-xs text-fg-subtle">{t("googleLogin.secretNote")}</p>
         </div>
         <div className="rounded-md border border-line bg-surface-overlay/40 px-3 py-2 text-xs text-fg-muted">
           <p className="font-medium text-fg">{t("googleLogin.redirectTitle")}</p>
