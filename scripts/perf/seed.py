@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -123,7 +124,10 @@ async def run_seed(
     assert_isolated_target(settings)
     fleet = FLEETS[fleet_name if fleet_name in FLEETS else "fleet-10"]
     market = MARKETS[market_name if market_name in MARKETS else "market-100"]
-    await upgrade_database(engine)
+    await upgrade_database(
+        engine,
+        lock_timeout_seconds=int(getattr(settings, "DB_MIGRATION_LOCK_TIMEOUT_SECONDS", 300)),
+    )
     hashed = get_password_hash(PERF_PASSWORD)
     now = datetime.now(UTC)
     async with async_session_maker() as session:
@@ -138,7 +142,7 @@ async def run_seed(
     return {
         "fleet": fleet.name,
         "servers": fleet.servers,
-        "ownership": owners.__dict__,
+        "ownership": asdict(owners),
         "plugins": market.plugins,
         "history": history,
         "users": {name: {"id": user.id, "is_admin": user.is_admin} for name, user in users.items()},

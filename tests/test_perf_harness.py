@@ -128,8 +128,11 @@ def test_isolated_env_rejects_production_targets(tmp_path: Path):
     report = empty_report(profile="fleet-10", mode="smoke", cwd=tmp_path)
     assert report["claimed_gains"] is False
     path = tmp_path / "report.json"
-    write_report(path, report)
+    from datetime import UTC, datetime
+
+    write_report(path, {**report, "panel": {"captured_at": datetime(2026, 9, 14, tzinfo=UTC)}})
     assert json.loads(path.read_text())["format"] == "upkk-isolated-perf"
+    assert json.loads(path.read_text())["panel"]["captured_at"].endswith("Z")
 
 
 def test_catalog_subsets_are_smaller_than_the_full_client_payload():
@@ -298,3 +301,9 @@ def test_market_index_gates_fail_closed_without_measurements():
     assert skipped["indexes_submitted"] is False
     assert skipped["skipped"] is True
     assert all(item["included"] is False for item in skipped["candidates"])
+
+
+def test_index_eval_sql_uses_stored_enum_names():
+    from scripts.perf.index_eval import TARGET_QUERIES
+
+    assert all("COUNTERSTRIKESHARP" in item["sql"] for item in TARGET_QUERIES)

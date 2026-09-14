@@ -38,7 +38,7 @@ TARGET_QUERIES: tuple[dict[str, str], ...] = (
     {
         "name": "market_recommended",
         "sql": (
-            "SELECT id FROM market_plugins WHERE framework = 'counterstrikesharp' "
+            "SELECT id FROM market_plugins WHERE framework = 'COUNTERSTRIKESHARP' "
             "ORDER BY is_recommended DESC, install_count DESC, created_at DESC, id DESC "
             "LIMIT 20 OFFSET 0"
         ),
@@ -46,13 +46,13 @@ TARGET_QUERIES: tuple[dict[str, str], ...] = (
     {
         "name": "market_newest",
         "sql": (
-            "SELECT id FROM market_plugins WHERE framework = 'counterstrikesharp' "
+            "SELECT id FROM market_plugins WHERE framework = 'COUNTERSTRIKESHARP' "
             "ORDER BY created_at DESC, id DESC LIMIT 20 OFFSET 0"
         ),
     },
     {
         "name": "market_count",
-        "sql": "SELECT count(*) FROM market_plugins WHERE framework = 'counterstrikesharp'",
+        "sql": "SELECT count(*) FROM market_plugins WHERE framework = 'COUNTERSTRIKESHARP'",
     },
 )
 

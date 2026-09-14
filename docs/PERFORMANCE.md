@@ -133,9 +133,9 @@ uv run python scripts/run_perf.py explain-indexes
 They are **not** in Alembic. Inclusion still requires existing indexes not
 covering the query, a 20% three-round p95 median, write tolerance, and ≤ 5 s
 build on the largest isolated set. Startup migration stays transactional, so
-`CREATE INDEX CONCURRENTLY` cannot be used. Docker was unavailable in this
-environment, so EXPLAIN / p95 / build time were not measured; candidates stay
-out rather than being guessed in.
+`CREATE INDEX CONCURRENTLY` cannot be used. Isolated EXPLAIN on 1,000 and
+10,000 fixture rows is recorded in Stage 7; candidates still stay out
+because HTTP three-round p95 and write tolerance were not met.
 
 ## Stage 5 (cache prune one scan; 64 KiB chunk not adopted)
 
@@ -154,6 +154,81 @@ await-per-chunk copies (matching `aiter_bytes` + `anyio` writes) measured:
 `max(5%, 20 ms)`. Traced peak memory rose +127%, so the candidate **misses
 the memory gate** and production `DOWNLOAD_CHUNK_SIZE` stays **8192**. The
 shared httpx client is unchanged.
+
+## Stage 7 (comparison and maintenance)
+
+`claimed_gains` remains **false**. Smoke API numbers below are one 5 s warmup +
+10 s measure round on loopback ASGI against isolated PostgreSQL 18.6 /
+Redis 8.10.1 (`docker-compose.perf.yml`). They are not the agreed 1 min / 5
+min × 3 API protocol, not a 60-minute soak, and not a production Playwright
+5 / 30 × 3 browser loop. There is no pre-change SHA measurement, so the
+inbox 20% p95 gate is **unverified**.
+
+### Local commits
+
+| Stage | SHA | Change |
+| --- | --- | --- |
+| 0 | `e07dbd094786c4d2a0f4cef39c89bc4a69c5889e` | Isolated harness and report format |
+| 1 | `7dc61fade1860511322f31b2e386a27d8f105fde` | Inbox batch snapshot and short DB transactions |
+| 2 | `1b9c47f43634d6a6392d952f2be24716ed459f87` | Visible polling, cancel, shared pane fetches |
+| 3 | `0796ee66d5fd36dc821287db5b04fd08d0bfd334` | Locale pick-messages and 50 ms stream coalesce |
+| 4 | `507773400f6925339d953e29ba8f94fef9a4101e` | Overview column projection; no index revision |
+| 5 | `686f863ddf6e89f6f97408ec0d6a4216aac08035` | One-scan cache prune; 8 KiB chunks kept |
+| 7 | this commit | Comparison notes and harness measurement fixes |
+
+### Isolated API smoke (HEAD after Stage 5)
+
+Admin inbox GET (authorized fleet). SQL stays 3 (auth + snapshot). Redis
+round trips grow by batches, not by one-per-server:
+
+| Fleet | online users | inbox p95 ms | inbox redis ops (probe) | inbox SQL (probe) | errors |
+| --- | --- | --- | --- | --- | --- |
+| 10 | 1 | 10.2 | 2 | 3 | 0 |
+| 100 | 10 | 230.3 | 4 | 3 | 0 |
+| 500 | 30 | 2335.3 | 14 | 3 | 0 |
+
+Overview summary smoke p95: 3.7 / 105.5 / 730.9 ms. Market list (1,000
+rows at the 100- and 500-server seeds): 4.2 / 85.2 / 604.8 ms. Catalog
+client compact JSON remains 1,653 / 1,582 bytes for login and 18,521 /
+18,291 for overview chrome (en-US / zh-CN), more than 50% below the full
+catalog. HTML / RSC / gzip transfer is still unmeasured in a browser.
+
+### Rejected or unsubmitted candidates
+
+- **Marketplace B-trees.** Existing indexes (`pk`, `github_url`, `title`)
+  do not cover recommended/newest sorts. On 10,000 fixture rows a
+  transactional `CREATE INDEX` built in 9 ms and 8 ms and rolled back.
+  `EXPLAIN (ANALYZE)` list time dropped 1.107 ms → 0.027 ms and 1.769 ms
+  → 0.032 ms; count only 1.063 ms → 0.963 ms (~9%). No three-round HTTP
+  p95 series and no write-tolerance run, so **no Alembic revision**.
+- **64 KiB download chunks.** Throughput gate passed; traced peak memory
+  did not. Production chunk size stays 8 KiB.
+- **`cacheComponents` / `partialPrefetching`.** Remain off.
+
+### Rollback
+
+Revert application commits newest-first (`686f863`, `5077734`, `0796ee6`,
+`1b9c47f`, `7dc61fa`, then the harness if desired). This round added **no**
+Alembic revision. If a later index revision exists, keep it and add a
+forward migration to drop the index; do not run an old image that does not
+recognize that revision.
+
+Push, deploy, and live restart stay out of default scope.
+
+### Maintenance
+
+- Apply isolated env (`scripts/run_perf.py`) before importing
+  `modules.config` or `modules.database`.
+- `upgrade_database` requires `lock_timeout_seconds`; the seed harness
+  passes `DB_MIGRATION_LOCK_TIMEOUT_SECONDS`.
+- Portable plugin-framework strings in PostgreSQL are enum **names**
+  (`COUNTERSTRIKESHARP`), not values (`counterstrikesharp`).
+- Hub code must not module-import `services.operations.*`; snapshot
+  helpers must not module-import the hub.
+- Nested `NextIntlClientProvider` replaces messages; keep `feedback` at the
+  root and do not add extra `servers/[id]/*` layouts for i18n.
+- Cache prune is one `iterdir`; do not restore a second walk.
+- `reports/perf/raw/*.json` stays uncommitted.
 
 ## Gates (not yet claimed)
 

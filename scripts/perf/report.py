@@ -151,9 +151,18 @@ def compare_summaries(
     return gates
 
 
+def _json_ready(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat().replace("+00:00", "Z")
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def write_report(path: Path, report: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False, default=_json_ready) + "\n",
+        encoding="utf-8",
+    )
 
 
 def load_report(path: Path) -> dict[str, Any]:
