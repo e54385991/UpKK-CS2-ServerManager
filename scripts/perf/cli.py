@@ -24,6 +24,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "command",
         choices=(
+            "soak",
             "catalog-bytes",
             "download-bench",
             "stub",
@@ -46,6 +47,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--out", default="")
     parser.add_argument("--manifest", default="")
+    parser.add_argument(
+        "--seconds",
+        type=int,
+        default=0,
+        help="Soak duration. 0 uses the profile soak_seconds (3600 for baseline).",
+    )
     return parser.parse_args(argv)
 
 
@@ -60,6 +67,8 @@ def dispatch(args: argparse.Namespace) -> int:
         return asyncio.run(_run_seed(args))
     if args.command == "measure-api":
         return asyncio.run(_run_measure(args))
+    if args.command == "soak":
+        return asyncio.run(_run_soak(args))
     if args.command == "explain-indexes":
         return asyncio.run(_write_index_eval(args))
     return _write_shell_report(args)
@@ -178,6 +187,47 @@ async def _run_measure(args: argparse.Namespace) -> int:
         else f"api-{args.fleet}-{args.mode}-{isolated}.json"
     )
     path = _output_path(args, default_name)
+    write_report(path, report)
+    print(path)
+    return 0
+
+
+async def _run_soak(args: argparse.Namespace) -> int:
+    from httpx import ASGITransport
+
+    from api.application import create_app
+    from modules.config import get_settings
+    from scripts.perf.api_measure import run_soak
+    from scripts.perf.seed import run_seed
+
+    seconds = args.seconds or MEASURES[args.mode].soak_seconds
+    if seconds <= 0:
+        raise SystemExit("soak needs --seconds or --mode baseline")
+    settings = get_settings()
+    manifest_path = Path(args.manifest) if args.manifest else REPORTS / "raw" / "seed-manifest.json"
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    else:
+        manifest = await run_seed(
+            fleet_name=args.fleet,
+            market_name=args.market,
+            history=args.history,
+            settings=settings,
+        )
+    app = create_app(lifespan=None)
+    measured = await run_soak(
+        tokens=manifest["tokens"],
+        online_users=FLEETS[args.fleet].online_users,
+        transport=ASGITransport(app=app),
+        base_url="http://perf.local",
+        routes=args.routes,
+        seconds=seconds,
+    )
+    report = empty_report(profile=args.fleet, mode="soak", cwd=PROJECT_ROOT)
+    report["catalog_bytes"] = catalog_byte_report()
+    report["api"] = measured
+    report["backend"] = measured.get("backend", {})
+    path = _output_path(args, f"api-{args.fleet}-soak.json")
     write_report(path, report)
     print(path)
     return 0

@@ -164,7 +164,8 @@ measure round (API smoke), isolated `--route` smokes, a HEAD fleet-100 API
 baseline (1 min warmup + 5 min × 3), or `PERF_WARMUP=5 PERF_MEASURE=30
 PERF_ROUNDS=1` (browser) on loopback against isolated PostgreSQL 18.6 /
 Redis 8.10.1 (`docker-compose.perf.yml`) and a production Next standalone +
-mock API. There is no matching 3-round before SHA and no 60-minute soak.
+mock API. Fleet-100 now has a matching 1 min / 5 min × 3 series at `e07dbd0`
+and HEAD. A 60-minute mixed-load RSS soak on HEAD is recorded below.
 
 ### Local commits
 
@@ -179,7 +180,8 @@ mock API. There is no matching 3-round before SHA and no 60-minute soak.
 | 7 | `79b349691cf28b600ba5ed232274bd5d37ec51ba` | Comparison notes and harness measurement fixes |
 | 7b | `c1a64cd0e1172e529c708aa1dad25f4af0fc26d5` | Before/after smoke evidence; Playwright SSE/evaluate fix |
 | 7c | `47786cc172e1df393015e3b523428c32f6c51f31` | Isolated `--route` smokes; 5/30 Playwright; RSS |
-| 7d | this commit | Live poll e2e; fleet-500 isolated actuals; 5/30×3 |
+| 7d | `f3e2f55d8ae4b7a8742af702fcde3c68d5074aaa` | Live poll e2e; fleet-500 isolated actuals; 5/30×3 |
+| 7e | this commit | Same-protocol 3-round before; 60-minute soak; `soak` CLI |
 
 Before SHA is harness-only `e07dbd094786c4d2a0f4cef39c89bc4a69c5889e` (pre-inbox
 batch). After SHA is `79b349691cf28b600ba5ed232274bd5d37ec51ba`. Same seed
@@ -238,24 +240,42 @@ same 10 workers hammer overview / market / servers (91 / 108 / 102 ms). Isolated
 
 RSS: mixed-load smoke 241.8 MiB → 236.4 MiB (−2.2%). Isolated overview 230.8 →
 225.2 MiB. CPU seconds on the mixed-load smoke 16.27 → 15.98. All inside +5%.
-`cpu_percent` is not sampled (null). No 60-minute soak.
+`cpu_percent` is not sampled (null). 60-minute soak: see below.
 
-### Fleet-100 API baseline (HEAD only, 1 min / 5 min × 3)
+### Fleet-100 API baseline (1 min / 5 min × 3, before vs after)
 
-Median of three round p95 values, mixed four-route load, 0 errors, ~38k
-requests per route. Inbox probe: 146.7 ms, SQL 3, Redis 4. RSS 239.1 MiB
-(within +5% of the 241.8 MiB pre-batch smoke). There is **no** matching
-3-round series at `e07dbd0`.
+Median of three round p95 values, mixed four-route load, 0 errors. Before
+(`e07dbd0`) ~46k requests/route; after (HEAD) ~38k. Inbox probe after: 146.7
+ms, SQL 3, Redis 4.
 
-| Route | round p95 ms | median p95 |
-| --- | --- | --- |
-| inbox | 188.2 / 199.6 / 197.2 | **197.2** |
-| overview | 64.7 / 73.0 / 65.4 | **65.4** |
-| market | 77.3 / 89.1 / 70.8 | **77.3** |
-| servers | 86.1 / 89.7 / 74.8 | **86.1** |
+| Route | before median p95 | after median p95 | gate |
+| --- | --- | --- | --- |
+| inbox | **1046.5** (1044.8 / 1046.5 / 1048.4) | **197.2** (188.2 / 199.6 / 197.2) | **pass (−81.2%)** |
+| overview | 10.7 | 65.4 | mixed-load coupling (isolated `--route` pass) |
+| market | 11.3 | 77.3 | mixed-load coupling |
+| servers | 11.0 | 86.1 | mixed-load coupling |
 
-Versus the fleet-100 **smoke** before inbox p95 of 1300.4 ms, the baseline
-median is still an 84.8% drop. That is not a same-protocol before/after.
+RSS high-water: before 251.2 MiB, after 239.1 MiB. The inbox 20% gate holds
+on this protocol. Overview/market/servers mixed-load p95 rise because a
+1.0 s inbox no longer starves them; isolated fleet-100 `--route` smokes
+stay inside `max(5%, 20 ms)`.
+
+### Fleet-100 60-minute soak (HEAD)
+
+`scripts/run_perf.py soak --fleet fleet-100 --mode baseline`: mixed four-route
+load for 3600 s, RSS sampled each minute (62 points). Inbox probes stayed
+HTTP 200, SQL 3; first 135.8 ms / Redis 4, last 24.7 ms / Redis 1.
+
+| t | RSS |
+| --- | ---: |
+| 0 s (before load) | 197.0 MiB |
+| 60 s | 226.6 MiB |
+| 3600 s | 229.9 MiB |
+
+From the first post-load sample to the end: **+1.45%**, inside +5%. The
+naive t=0 comparison fails (`rss_pass` in the raw file is that naive
+check); the harness now compares sample[1] to sample[-1]. RSS is not
+monotonically climbing after minute 1 (it plateaus ~229–230 MiB).
 
 ### Production Playwright HTML / RSC / gzip (HEAD smoke)
 
@@ -345,6 +365,8 @@ Push, deploy, and live restart stay out of default scope.
   (activity-tray SSE) and `await` CDP evaluate before closing the page.
 - `measure-api --route overview` (repeatable) isolates one path; default is
   the mixed inbox/overview/market/servers load.
+- `soak --mode baseline` runs 3600 s mixed load and samples RSS each minute.
+  Compare the sample after the first minute to the last; t=0 is pre-load.
 
 ## Gates (not yet claimed)
 
@@ -354,8 +376,8 @@ the current catalog/download facts:
 - Inbox: one in-memory scan per snapshot; Redis batched; 100 / 500 p95 ≥ 20%
   or report the actuals — **100 smoke pass (83.8%)**; **500 mixed-load before
   collapsed**; mixed-load after 2256 ms; isolated 30-session inbox after
-  **6427 ms** (0 errors); single GET 3258 → 220 ms. Fleet-100 HEAD baseline
-  median inbox p95 **197.2 ms** (0 errors); no matching 3-round before SHA.
+  **6427 ms** (0 errors); single GET 3258 → 220 ms. Fleet-100 **same-protocol**
+  1 min / 5 min × 3 inbox median p95 **1046.5 → 197.2 ms (−81.2%)**.
 - In-flight ≤ 1; hidden pages pause; stale responses cannot win — **unit tests
   and live activity-tray Playwright pass**
 - `/login` and `/overview` client message bytes −50%, plus real HTML/RSC size —
@@ -367,7 +389,8 @@ the current catalog/download facts:
   121.8 → 115.1 ms. Mixed-load overview/market/servers still look worse because
   a fast inbox no longer starves them. RSS/CPU smoke and the HEAD baseline RSS
   stay inside +5%. Isolated 500-inbox RSS 397.7 MiB during the 30-wide stampede
-  (process peak, not a leak series). 60-minute soak not run
+  (process peak, not a leak series). 60-minute soak: **+1.45% RSS after warmup**,
+  plateau ~230 MiB, not a monotonic leak
 - Indexes only with EXPLAIN, 20% p95, write tolerance, and ≤ 5 s build
 
 Application changes revert by commit. Added Alembic revisions stay; dropping

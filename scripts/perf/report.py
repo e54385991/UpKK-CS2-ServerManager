@@ -7,7 +7,7 @@ import math
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from scripts.perf.profiles import (
     CPU_RSS_GATE,
@@ -85,6 +85,13 @@ def within_resource_gate(baseline: float, candidate: float, gate: float = CPU_RS
     if baseline <= 0:
         return candidate <= 0
     return candidate <= baseline * (1.0 + gate)
+
+
+def soak_holds_rss(samples: Sequence[int], gate: float = CPU_RSS_GATE) -> bool:
+    """Compare end RSS to the sample after the first load window, not t=0 warmup."""
+    if len(samples) < 3:
+        return False
+    return within_resource_gate(float(samples[1]), float(samples[-1]), gate)
 
 
 def locale_bytes_pass(before: int, after: int, gate: float = LOCALE_BYTE_GATE) -> bool:

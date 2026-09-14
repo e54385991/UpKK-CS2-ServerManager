@@ -40,6 +40,7 @@ from scripts.perf.report import (
     meets_improvement,
     percentile_block,
     regression_limit_ms,
+    soak_holds_rss,
     within_regression,
     within_resource_gate,
     write_report,
@@ -100,6 +101,11 @@ def test_gates_use_stated_thresholds_not_claimed_gains():
     assert within_regression(100.0, 121.0) is False
     assert within_resource_gate(100.0, 105.0) is True
     assert within_resource_gate(100.0, 106.0) is False
+    assert soak_holds_rss([100, 105, 104]) is True
+    assert soak_holds_rss([197, 227, 230]) is True
+    assert soak_holds_rss([100, 105, 112]) is False
+    assert soak_holds_rss([100, 110]) is False
+    assert soak_holds_rss([100]) is False
     assert locale_bytes_pass(1000, 500) is True
     assert locale_bytes_pass(1000, 501) is False
 

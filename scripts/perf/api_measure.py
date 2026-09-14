@@ -12,7 +12,12 @@ import httpx
 
 from modules.observability import set_enabled, snapshot_counts
 from scripts.perf.profiles import MEASURES, MeasureMode, actor_cycle
-from scripts.perf.report import attach_route_summary, median_of_rounds, percentile_block
+from scripts.perf.report import (
+    attach_route_summary,
+    median_of_rounds,
+    percentile_block,
+    soak_holds_rss,
+)
 from services.panel_metrics import capture_panel_performance
 
 ROUTES = (
@@ -103,6 +108,21 @@ def _rss_bytes() -> int:
     if rss > 10_000_000:
         return rss
     return rss * 1024
+
+
+def _current_rss_bytes() -> int:
+    """Live RSS. ru_maxrss is a high-water mark and cannot show a soak plateau."""
+    try:
+        import os
+        import subprocess
+
+        raw = subprocess.check_output(
+            ["ps", "-o", "rss=", "-p", str(os.getpid())],
+            text=True,
+        ).strip()
+        return int(raw.split()[0]) * 1024
+    except (OSError, ValueError, IndexError):
+        return _rss_bytes()
 
 
 async def run_api_rounds(
@@ -215,3 +235,61 @@ def _summarize_rounds(
             "round_p95_ms": p95s,
         }
     return summary
+
+
+async def run_soak(
+    *,
+    tokens: dict[str, str],
+    online_users: int,
+    transport: httpx.AsyncBaseTransport | None,
+    base_url: str,
+    routes: Sequence[str] | None = None,
+    seconds: int,
+    sample_every: int = 60,
+) -> dict[str, Any]:
+    set_enabled(True)
+    catalog = selected_routes(routes)
+    roles = actor_cycle(online_users)
+    series: list[dict[str, Any]] = []
+    probes: list[dict[str, Any]] = []
+    samples: dict[str, list[float]] = defaultdict(list)
+    errors: dict[str, int] = defaultdict(int)
+    counts: dict[str, int] = defaultdict(int)
+    chunk = max(1, sample_every)
+    async with httpx.AsyncClient(transport=transport, base_url=base_url, timeout=30.0) as client:
+        started = monotonic()
+        while True:
+            elapsed = monotonic() - started
+            series.append(
+                {
+                    "t_s": round(elapsed, 1),
+                    "rss_bytes": _current_rss_bytes(),
+                    "rss_max_bytes": _rss_bytes(),
+                }
+            )
+            probes.append(await probe_inbox(client, tokens["admin"]))
+            remaining = seconds - (monotonic() - started)
+            if remaining <= 0:
+                break
+            await _run_window(
+                client,
+                tokens,
+                roles,
+                min(chunk, max(1, int(remaining))),
+                samples,
+                errors,
+                counts,
+                False,
+                catalog,
+            )
+    rss_values = [int(row["rss_bytes"]) for row in series]
+    backend = await capture_panel_performance()
+    return {
+        "isolation": [name for name, _path in catalog],
+        "seconds": seconds,
+        "sample_every": chunk,
+        "rss": series,
+        "probes": {"inbox_first": probes[0] if probes else None, "inbox_last": probes[-1] if probes else None},
+        "rss_pass": soak_holds_rss(rss_values),
+        "backend": {"rss_bytes": _rss_bytes(), "rss_current_bytes": _current_rss_bytes(), "panel": backend},
+    }
