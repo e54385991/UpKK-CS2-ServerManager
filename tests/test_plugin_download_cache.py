@@ -77,6 +77,30 @@ def test_prune_drops_expired_entries_and_leaves_fresh_ones(tmp_path):
     assert not old.exists() and fresh.exists()
 
 
+def test_prune_enumerates_the_directory_once(tmp_path, monkeypatch):
+    root = str(tmp_path / "cache")
+    cache.put(root, write(tmp_path / "a.zip"), "https://example.test/a.zip", scope="a")
+    scans = {"n": 0}
+    original = cache._scan_directory
+
+    def counting(path):
+        scans["n"] += 1
+        return original(path)
+
+    monkeypatch.setattr(cache, "_scan_directory", counting)
+    cache.prune(cache.CachePolicy(path=root, max_age_days=30, max_megabytes=0))
+    assert scans["n"] == 1
+
+
+def test_prune_drops_stale_partials_from_the_same_scan(tmp_path):
+    root = cache.cache_root(str(tmp_path / "cache"))
+    stale = root / f"leftover{cache.TEMP_SUFFIX}"
+    write(stale)
+    os.utime(stale, (time.time() - cache.STALE_TEMP_SECONDS - 10,) * 2)
+    cache.prune(cache.CachePolicy(path=str(root), max_age_days=0, max_megabytes=0))
+    assert not stale.exists()
+
+
 def test_prune_enforces_the_size_ceiling_oldest_first(tmp_path):
     root = str(tmp_path / "cache")
     entries = []

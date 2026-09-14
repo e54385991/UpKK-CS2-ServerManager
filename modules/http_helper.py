@@ -342,6 +342,7 @@ class HTTPHelper:
         timeout: int = 300,
         progress_callback=None,
         progress_event_callback=None,
+        chunk_size: int = DOWNLOAD_CHUNK_SIZE,
     ) -> Tuple[bool, Optional[str]]:
         """
         Download a file with progress tracking and retry logic
@@ -355,6 +356,7 @@ class HTTPHelper:
                              Called with (bytes_downloaded, total_bytes)
             progress_event_callback: Optional callback receiving structured
                                      download progress metadata
+            chunk_size: Streaming write size. Defaults to DOWNLOAD_CHUNK_SIZE.
 
         Returns:
             Tuple[bool, Optional[str]]: (success, error_message)
@@ -426,9 +428,7 @@ class HTTPHelper:
                                     os.makedirs, parent_directory, exist_ok=True
                                 )
                             async with await anyio.open_file(local_path, "wb") as f:
-                                async for chunk in response.aiter_bytes(
-                                    chunk_size=DOWNLOAD_CHUNK_SIZE
-                                ):
+                                async for chunk in response.aiter_bytes(chunk_size=chunk_size):
                                     await f.write(chunk)
                                     bytes_downloaded += len(chunk)
                                     if progress_callback:

@@ -11,7 +11,7 @@ from typing import Any, Sequence
 from scripts.perf.catalog_bytes import catalog_byte_report
 from scripts.perf.download_bench import compare_chunks
 from scripts.perf.env import IsolatedPorts, apply_isolated_env, isolated_environ
-from scripts.perf.profiles import FLEETS, MARKETS, MEASURES
+from scripts.perf.profiles import CACHE_PRUNE_SCANS_TODAY, FLEETS, MARKETS, MEASURES
 from scripts.perf.report import empty_report, write_report
 from scripts.perf.stubs import StubServer
 
@@ -75,7 +75,10 @@ def _write_catalog(args: argparse.Namespace) -> int:
 
 async def _write_download(args: argparse.Namespace) -> int:
     report = empty_report(profile="download", mode=args.mode, cwd=PROJECT_ROOT)
-    report["download"] = {"chunks": await compare_chunks(), "prune_scans": 2}
+    report["download"] = {
+        "chunks": await compare_chunks(),
+        "prune_scans": CACHE_PRUNE_SCANS_TODAY,
+    }
     path = _output_path(args, "download-bench.json")
     write_report(path, report)
     print(path)

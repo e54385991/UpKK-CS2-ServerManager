@@ -23,6 +23,7 @@ import hashlib
 import os
 import re
 import shutil
+import stat
 import time
 from contextlib import suppress
 from dataclasses import dataclass
@@ -155,17 +156,43 @@ def discard(
         cached_path(configured, url, version, scope=scope).unlink(missing_ok=True)
 
 
-def _entries(root: Path) -> list[tuple[float, int, Path]]:
-    found: list[tuple[float, int, Path]] = []
-    for path in root.iterdir():
-        if not path.is_file() or path.name.endswith(TEMP_SUFFIX):
-            continue
+@dataclass(frozen=True, slots=True)
+class _CacheFile:
+    mtime: float
+    size: int
+    path: Path
+    is_temp: bool
+
+
+def _scan_directory(root: Path) -> list[_CacheFile]:
+    """One directory listing plus one stat per name. Used by prune, stats, and tests."""
+    found: list[_CacheFile] = []
+    try:
+        listing = root.iterdir()
+    except OSError:
+        return found
+    for path in listing:
         try:
             info = path.stat()
         except OSError:
             continue
-        found.append((info.st_mtime, info.st_size, path))
+        if not stat.S_ISREG(info.st_mode):
+            continue
+        found.append(
+            _CacheFile(
+                mtime=info.st_mtime,
+                size=info.st_size,
+                path=path,
+                is_temp=path.name.endswith(TEMP_SUFFIX),
+            )
+        )
     return found
+
+
+def _entries(root: Path) -> list[tuple[float, int, Path]]:
+    return [
+        (item.mtime, item.size, item.path) for item in _scan_directory(root) if not item.is_temp
+    ]
 
 
 def _remove(path: Path) -> bool:
@@ -190,31 +217,29 @@ def prune(policy: CachePolicy) -> tuple[int, int]:
     """Apply the retention policy. Returns ``(removed_files, freed_bytes)``."""
     root = cache_root(policy.path)
     now = time.time()
-    for path in root.iterdir():
-        if path.is_file() and path.name.endswith(TEMP_SUFFIX):
-            with suppress(OSError):
-                if now - path.stat().st_mtime > STALE_TEMP_SECONDS:
-                    path.unlink(missing_ok=True)
-
+    cutoff = now - policy.max_age_days * 86400 if policy.max_age_days else None
     removed = 0
     freed = 0
-    keep: list[tuple[float, int, Path]] = []
-    cutoff = now - policy.max_age_days * 86400 if policy.max_age_days else None
-    for mtime, size, path in _entries(root):
-        if cutoff is not None and mtime < cutoff:
-            if _remove(path):
-                removed, freed = removed + 1, freed + size
+    keep: list[_CacheFile] = []
+    for item in _scan_directory(root):
+        if item.is_temp:
+            if now - item.mtime > STALE_TEMP_SECONDS:
+                _remove(item.path)
             continue
-        keep.append((mtime, size, path))
+        if cutoff is not None and item.mtime < cutoff:
+            if _remove(item.path):
+                removed, freed = removed + 1, freed + item.size
+            continue
+        keep.append(item)
 
     limit = policy.max_megabytes * 1024 * 1024
     if limit:
-        total = sum(size for _, size, _ in keep)
-        for _mtime, size, path in sorted(keep, key=lambda entry: entry[0]):
+        total = sum(item.size for item in keep)
+        for item in sorted(keep, key=lambda entry: entry.mtime):
             if total <= limit:
                 break
-            if _remove(path):
-                removed, freed, total = removed + 1, freed + size, total - size
+            if _remove(item.path):
+                removed, freed, total = removed + 1, freed + item.size, total - item.size
     return removed, freed
 
 

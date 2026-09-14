@@ -170,23 +170,34 @@ def test_download_chunk_write_counts_match_payload_size(tmp_path: Path):
 
     payload = b"x" * 65536
     writer = CountingWriter(tmp_path / "out.bin")
+
+    async def _run() -> None:
+        await writer.open()
+        await copy_payload(payload, 8192, writer)
+        await writer.aclose()
+
     import asyncio
 
-    asyncio.run(copy_payload(payload, 8192, writer))
-    writer.close()
+    asyncio.run(_run())
     assert writer.writes == 8
     assert CURRENT_DOWNLOAD_CHUNK == 8192
+    from modules.http_helper import DOWNLOAD_CHUNK_SIZE
+
+    assert DOWNLOAD_CHUNK_SIZE == CURRENT_DOWNLOAD_CHUNK
     assert DOWNLOAD_CHUNK_CANDIDATES == (8192, 65536, 262144)
-    assert CACHE_PRUNE_SCANS_TODAY == 2
+    assert CACHE_PRUNE_SCANS_TODAY == 1
 
 
 @pytest.mark.asyncio
 async def test_download_bench_records_all_candidates_without_adopting_them():
+    from scripts.perf.download_bench import adopted_chunk_size
+
     rows = await compare_chunks(payload_bytes=64 * 1024)
     assert [row["chunk_size"] for row in rows] == list(DOWNLOAD_CHUNK_CANDIDATES)
-    assert all(row["adopted"] is False for row in rows)
-    current = next(row for row in rows if row["is_current_default"])
-    assert current["writes"] == 8
+    eight_k = next(row for row in rows if row["chunk_size"] == 8192)
+    assert eight_k["writes"] == 8
+    chosen = adopted_chunk_size(rows)
+    assert all((row["adopted"] is (row["chunk_size"] == chosen and chosen != 8192)) for row in rows)
 
 
 def test_stub_payloads_and_loopback_health():
@@ -211,6 +222,29 @@ def test_stub_payloads_and_loopback_health():
 def test_overview_namespaces_do_not_include_marketplace_copy():
     assert "plugins" not in OVERVIEW_NAMESPACES
     assert "login" in LOGIN_NAMESPACES
+
+
+def test_chunk_adoption_fails_closed_and_requires_every_gate():
+    from scripts.perf.download_bench import adopted_chunk_size
+
+    baseline = {
+        "chunk_size": 8192,
+        "throughput_bps": 100.0,
+        "cancel_ms": 10.0,
+        "peak_bytes": 1000.0,
+        "loop_p95_ms": 1.0,
+    }
+    assert adopted_chunk_size([baseline]) == 8192
+    winner = {
+        "chunk_size": 65536,
+        "throughput_bps": 120.0,
+        "cancel_ms": 11.0,
+        "peak_bytes": 1040.0,
+        "loop_p95_ms": 1.0,
+    }
+    assert adopted_chunk_size([baseline, winner]) == 65536
+    assert adopted_chunk_size([baseline, {**winner, "throughput_bps": 109.0}]) == 8192
+    assert adopted_chunk_size([baseline, {**winner, "peak_bytes": 1100.0}]) == 8192
 
 
 def test_market_index_gates_fail_closed_without_measurements():

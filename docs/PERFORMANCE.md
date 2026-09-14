@@ -137,6 +137,24 @@ build on the largest isolated set. Startup migration stays transactional, so
 environment, so EXPLAIN / p95 / build time were not measured; candidates stay
 out rather than being guessed in.
 
+## Stage 5 (cache prune one scan; 64 KiB chunk not adopted)
+
+`plugin_download_cache.prune` now lists the cache directory once, stats each
+name, and reuses that list for stale `.part` cleanup, age expiry, and LRU
+capacity. Store-then-prune timing is unchanged. Isolated 4 MiB
+await-per-chunk copies (matching `aiter_bytes` + `anyio` writes) measured:
+
+| chunk | writes | throughput_bps | cancel_ms | tracemalloc peak |
+| --- | --- | --- | --- | --- |
+| 8 KiB | 512 | 83,933,922 | 0.138 | 32,049 |
+| 64 KiB | 64 | 670,882,974 | 0.116 | 72,809 |
+| 256 KiB | 16 | 2,310,169,272 | 0.158 | 269,033 |
+
+64 KiB throughput is well above +10% and cancel / loop p95 stay inside
+`max(5%, 20 ms)`. Traced peak memory rose +127%, so the candidate **misses
+the memory gate** and production `DOWNLOAD_CHUNK_SIZE` stays **8192**. The
+shared httpx client is unchanged.
+
 ## Gates (not yet claimed)
 
 These are the agreed acceptance checks. Stage 0 only records the protocol and
