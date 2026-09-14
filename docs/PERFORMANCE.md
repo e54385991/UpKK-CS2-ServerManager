@@ -88,7 +88,7 @@ See `reports/perf/schema.json`. Raw dumps go to `reports/perf/raw/` and are
 not committed. Later comparison reports keep git SHAs, environment, data size,
 raw summaries, and candidates that missed a gate.
 
-## Stage 1 (algorithmic, p95 not yet measured)
+## Stage 1 (inbox batch snapshot)
 
 Inbox GET/SSE/DELETE now load the authorized server id/name snapshot, close the
 database session, then take one hub snapshot for the whole set. That snapshot
@@ -99,9 +99,9 @@ stale index re-reads Redis and drops only IDs already known expired so a job
 enqueued during the read is not overwritten. Sort, queue positions, seven-day
 retention, SSE `inbox` events / 1s wait / keep-alive, and “clear failed”
 including administrator AI import failures are unchanged. Isolated 100 / 500
-server p95 has **not** been run; do not treat this as a claimed latency gain.
+p95 is in Stage 7; `claimed_gains` stays false.
 
-## Stage 2 (request lifecycle, production timings not yet measured)
+## Stage 2 (polling dedupe, cancel, visibility)
 
 Activity tray, AI import list, console panes, deploy SteamCMD tails, operation
 journal/current fallbacks, and incomplete batch journals now share
@@ -181,11 +181,13 @@ and HEAD. A 60-minute mixed-load RSS soak on HEAD is recorded below.
 | 7b | `c1a64cd0e1172e529c708aa1dad25f4af0fc26d5` | Before/after smoke evidence; Playwright SSE/evaluate fix |
 | 7c | `47786cc172e1df393015e3b523428c32f6c51f31` | Isolated `--route` smokes; 5/30 Playwright; RSS |
 | 7d | `f3e2f55d8ae4b7a8742af702fcde3c68d5074aaa` | Live poll e2e; fleet-500 isolated actuals; 5/30×3 |
-| 7e | this commit | Same-protocol 3-round before; 60-minute soak; `soak` CLI |
+| 7e | `5db5e8df44db0889f75a72af08fd3a5fead2e746` | Same-protocol 3-round before; 60-minute soak; `soak` CLI |
 
 Before SHA is harness-only `e07dbd094786c4d2a0f4cef39c89bc4a69c5889e` (pre-inbox
-batch). After SHA is `79b349691cf28b600ba5ed232274bd5d37ec51ba`. Same seed
-manifest, isolated DB/Redis, loopback ASGI.
+batch). After SHA for inbox/overview/locale/prune behavior is through
+`686f863ddf6e89f6f97408ec0d6a4216aac08035`; later 7b–7e commits are
+measurement and harness only. Same seed manifest, isolated DB/Redis,
+loopback ASGI. `claimed_gains` stays **false**.
 
 ### Isolated API smoke (before vs after)
 
