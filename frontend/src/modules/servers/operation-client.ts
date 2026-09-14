@@ -61,16 +61,19 @@ export async function restoreS3BackupFromBrowser(
 
 export async function loadCurrentOperationFromBrowser(
   serverId: number,
+  init?: Pick<RequestInit, "signal">,
 ): Promise<ClientResult<ServerOperation | null>> {
-  return requestJson(opsUrl(serverId, "view=current"));
+  return requestJson(opsUrl(serverId, "view=current"), init);
 }
 
 export async function loadOperationJournalFromBrowser(
   serverId: number,
   operationId: string,
+  init?: Pick<RequestInit, "signal">,
 ): Promise<ClientResult<OperationJournal>> {
   return requestJson(
     opsUrl(serverId, `view=journal&operationId=${encodeURIComponent(operationId)}`),
+    init,
   );
 }
 
@@ -93,10 +96,10 @@ export async function clearDeploymentLockFromBrowser(
   );
 }
 
-export async function loadOperationInboxFromBrowser(): Promise<
-  ClientResult<OperationInbox>
-> {
-  return requestJson("/server-ops/inbox");
+export async function loadOperationInboxFromBrowser(
+  init?: Pick<RequestInit, "signal">,
+): Promise<ClientResult<OperationInbox>> {
+  return requestJson("/server-ops/inbox", init);
 }
 
 export async function clearFailedOperationsFromBrowser(): Promise<
@@ -154,6 +157,9 @@ async function requestJson<T>(
   init?: RequestInit,
   timeoutMs = 20_000,
 ): Promise<ClientResult<T>> {
+  const { signal: userSignal, ...rest } = init ?? {};
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const signal = userSignal ? AbortSignal.any([timeout, userSignal]) : timeout;
   try {
     const response = await fetch(path, {
       credentials: "same-origin",
@@ -162,8 +168,8 @@ async function requestJson<T>(
         accept: "application/json",
         ...(init?.body ? { "content-type": "application/json" } : {}),
       },
-      signal: AbortSignal.timeout(timeoutMs),
-      ...init,
+      ...rest,
+      signal,
     });
     const parsed = (await response.json()) as ClientResult<T> | { detail?: unknown; error?: unknown };
     if (parsed && typeof parsed === "object" && "ok" in parsed) {

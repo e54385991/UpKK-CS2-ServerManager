@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type RefObject } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { LoaderCircle, SquareTerminal } from "lucide-react";
 import { isDeployProgressVisible } from "@/modules/console/live-console";
-import { fetchConsolePane } from "@/modules/console/pane-client";
+import { subscribeConsolePanePoll } from "@/modules/console/pane-poll";
 import { OpenLiveTerminalButton } from "@/modules/console/open-live-terminal";
 import { ForceStopButton } from "@/modules/servers/force-stop-button";
 import { OPERATION_EVENT_LIMIT } from "@/modules/servers/operation-events";
@@ -81,20 +81,16 @@ export function OperationLiveLog({
 
   useEffect(() => {
     if (!watchDeploy) return;
-    let cancelled = false;
-    async function pull() {
-      const pane = await fetchConsolePane(serverId, "steamcmd");
-      if (cancelled || !pane) return;
-      const latest =
-        latestSteamcmdProgress(pane.text) || pane.heartbeat?.trim() || null;
-      if (latest) setPaneLatest(latest);
-    }
-    void pull();
-    const timer = window.setInterval(() => void pull(), 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
+    return subscribeConsolePanePoll({
+      serverId,
+      kind: "steamcmd",
+      onPane: (pane) => {
+        if (!pane) return;
+        const latest =
+          latestSteamcmdProgress(pane.text) || pane.heartbeat?.trim() || null;
+        if (latest) setPaneLatest(latest);
+      },
+    });
   }, [serverId, watchDeploy]);
 
   const eventLatest = useMemo(

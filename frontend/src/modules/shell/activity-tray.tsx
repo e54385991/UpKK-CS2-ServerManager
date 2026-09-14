@@ -49,6 +49,7 @@ import {
   OPERATION_INBOX_LOCK,
   subscribeVisibleEventSource,
 } from "@/shared/lib/visible-event-source";
+import { snapshotIsFresh, subscribeVisiblePoll } from "@/shared/lib/visible-poll";
 import { confirm, notify } from "@/shared/feedback";
 import { Badge, StatusDot } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -87,8 +88,11 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
   useEffect(() => {
     let cancelled = false;
     const after = { current: "0" };
+    const journalAbort = new AbortController();
     if (item.serverId > 0) {
-      void loadOperationJournalFromBrowser(item.serverId, item.operationId).then(
+      void loadOperationJournalFromBrowser(item.serverId, item.operationId, {
+        signal: journalAbort.signal,
+      }).then(
         (result) => {
           if (!cancelled && result.ok) {
             setEvents((current) => mergeOperationEvents(current, result.data.events));
@@ -127,6 +131,7 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
     });
     return () => {
       cancelled = true;
+      journalAbort.abort();
       stop();
     };
   }, [item.operationId, item.serverId]);
@@ -261,49 +266,46 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
   const selected =
     visible.find((item) => item.operationId === selectedId) ?? visible[0] ?? null;
 
+  const remainingRef = useRef(remaining);
+  useEffect(() => {
+    remainingRef.current = remaining;
+  }, [remaining]);
+
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      if (document.hidden) return;
-      const result = await loadOperationInboxFromBrowser();
-      if (!cancelled && result.ok) setInbox(result.data);
-    }
-    const onImport = () => { void load(); };
+    const lastSseAt = { current: 0 };
+    const intervalMs = () => (remainingRef.current > 0 ? 8_000 : 20_000);
+    const poll = subscribeVisiblePoll({
+      intervalMs,
+      shouldPull: () => !snapshotIsFresh(lastSseAt.current, Date.now(), intervalMs()),
+      pull: (signal) => loadOperationInboxFromBrowser({ signal }),
+      onResult: (result) => {
+        if (!cancelled && result.ok) setInbox(result.data);
+      },
+    });
+    const onImport = () => {
+      poll.refresh();
+    };
     window.addEventListener("plugin-ai-import-submitted", onImport);
-    void load();
     const stop = subscribeVisibleEventSource({
       url: OPERATION_INBOX_EVENTS_URL,
       eventTypes: ["inbox"],
       lockName: OPERATION_INBOX_LOCK,
       onData: (raw) => {
         const next = parseOperationInboxPayload(raw);
-        if (!cancelled && next) setInbox(next);
+        if (!cancelled && next) {
+          lastSseAt.current = Date.now();
+          setInbox(next);
+        }
       },
     });
     return () => {
       cancelled = true;
       window.removeEventListener("plugin-ai-import-submitted", onImport);
+      poll.stop();
       stop();
     };
   }, []);
-
-  useEffect(() => {
-    const tick = () => {
-      if (document.hidden) return;
-      void loadOperationInboxFromBrowser().then((result) => {
-        if (result.ok) setInbox(result.data);
-      });
-    };
-    const timer = window.setInterval(tick, remaining > 0 ? 8000 : 20000);
-    const onVisibility = () => {
-      if (!document.hidden) tick();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [remaining]);
 
   const actionLabel = (action: string) => {
     return isServerOperationAction(action) ? tActions(action) : action;

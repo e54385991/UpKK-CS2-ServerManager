@@ -38,10 +38,11 @@ export function paneDisplayText(pane: ConsolePane | null): string {
 export async function fetchConsolePane(
   serverId: number,
   kind: ConsolePaneKind,
+  signal?: AbortSignal,
 ): Promise<ConsolePane | null> {
   const response = await fetch(
     `/api/v1/servers/${serverId}/console/pane?kind=${kind}`,
-    { cache: "no-store", credentials: "same-origin" },
+    { cache: "no-store", credentials: "same-origin", signal },
   );
   if (!response.ok) return null;
   const raw = (await response.json()) as ConsolePaneViewDto;

@@ -83,6 +83,19 @@ retention, SSE `inbox` events / 1s wait / keep-alive, and “clear failed”
 including administrator AI import failures are unchanged. Isolated 100 / 500
 server p95 has **not** been run; do not treat this as a claimed latency gain.
 
+## Stage 2 (request lifecycle, production timings not yet measured)
+
+Activity tray, AI import list, console panes, deploy SteamCMD tails, operation
+journal/current fallbacks, and incomplete batch journals now share
+`subscribeVisiblePoll`: one in-flight pull, skip overlapping ticks, abort when
+the page is hidden or the subscriber leaves, and pull immediately when it
+becomes visible. Console `serverId + pane kind` subscribers share one fetch.
+The tray skips GET while an SSE snapshot is still inside the existing 8 / 20 s
+window and keeps that polling fallback when the cross-tab SSE lock is elsewhere
+or the snapshot is stale. AI import list polling still discovers new jobs;
+selected-task detail uses the existing visible SSE helper instead of a second
+EventSource. Public HTTP/SSE contracts are unchanged.
+
 ## Gates (not yet claimed)
 
 These are the agreed acceptance checks. Stage 0 only records the protocol and

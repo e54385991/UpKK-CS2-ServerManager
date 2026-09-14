@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchConsolePane } from "@/modules/console/pane-client";
+import { subscribeConsolePanePoll } from "@/modules/console/pane-poll";
 import type { ConsolePane, ConsolePaneKind } from "@/modules/console/types";
 
 export function useConsolePane({
@@ -25,17 +25,13 @@ export function useConsolePane({
 
   useEffect(() => {
     if (!enabled) return;
-    let cancelled = false;
-    const pull = async () => {
-      const next = await fetchConsolePane(serverId, kind);
-      if (!cancelled && next) setPane(next);
-    };
-    void pull();
-    const id = window.setInterval(() => void pull(), 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
+    return subscribeConsolePanePoll({
+      serverId,
+      kind,
+      onPane: (next) => {
+        if (next) setPane(next);
+      },
+    });
   }, [enabled, kind, serverId]);
 
   return pane;

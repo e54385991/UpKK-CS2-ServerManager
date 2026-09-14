@@ -38,6 +38,7 @@ import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
+import { subscribeVisiblePoll } from "@/shared/lib/visible-poll";
 
 function formatGb(value: number | null): string {
   if (value == null || Number.isNaN(value)) return "—";
@@ -90,15 +91,22 @@ export function ServerFleet({
   const allSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selected.includes(id));
 
+  const batchId = journal?.batchId;
+  const batchComplete = journal?.summary.isComplete ?? true;
+
   useEffect(() => {
-    if (!journal || journal.summary.isComplete) return;
-    const id = window.setInterval(() => {
-      void getBatchJournalAction(journal.batchId).then((result) => {
+    if (!batchId || batchComplete) return;
+    const poll = subscribeVisiblePoll({
+      intervalMs: 2_000,
+      pull: () => getBatchJournalAction(batchId),
+      onResult: (result) => {
         if (result.ok) setJournal(result.data);
-      });
-    }, 2000);
-    return () => window.clearInterval(id);
-  }, [journal]);
+      },
+    });
+    return () => {
+      poll.stop();
+    };
+  }, [batchComplete, batchId]);
 
   function toggle(serverId: number) {
     setSelected((current) =>

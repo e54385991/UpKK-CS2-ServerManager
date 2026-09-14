@@ -20,6 +20,7 @@ import {
   parseOperationEvent,
 } from "@/modules/servers/operation-events";
 import { subscribeVisibleEventSource } from "@/shared/lib/visible-event-source";
+import { subscribeVisiblePoll } from "@/shared/lib/visible-poll";
 import {
   requiresOperationConfirmation,
   type DeploymentLock,
@@ -112,28 +113,20 @@ export function useOperationRunner({
 
   useEffect(() => {
     if (!operationId) return;
-    let cancelled = false;
-    const pull = async () => {
-      const result = await loadOperationJournalFromBrowser(serverId, operationId);
-      if (cancelled || !result.ok) return;
-      if (result.data.operation.operationId !== operationId) return;
-      setOperation(result.data.operation);
-      setEvents((current) => mergeOperationEvents(current, result.data.events));
-      if (result.data.events.length > 0) setStreamFailed(false);
-    };
-    void pull();
-    if (!isActiveOperation(operationRef.current)) {
-      return () => {
-        cancelled = true;
-      };
-    }
-    const id = window.setInterval(() => {
-      if (!isActiveOperation(operationRef.current)) return;
-      void pull();
-    }, 5000);
+    const poll = subscribeVisiblePoll({
+      intervalMs: 5_000,
+      shouldPull: () => isActiveOperation(operationRef.current),
+      pull: (signal) => loadOperationJournalFromBrowser(serverId, operationId, { signal }),
+      onResult: (result) => {
+        if (!result.ok) return;
+        if (result.data.operation.operationId !== operationId) return;
+        setOperation(result.data.operation);
+        setEvents((current) => mergeOperationEvents(current, result.data.events));
+        if (result.data.events.length > 0) setStreamFailed(false);
+      },
+    });
     return () => {
-      cancelled = true;
-      window.clearInterval(id);
+      poll.stop();
     };
   }, [operationId, serverId]);
 
@@ -202,17 +195,16 @@ export function useOperationRunner({
   useEffect(() => {
     if (operationId) return;
     if (status !== "deploying" && !lock.lockActive) return;
-    let cancelled = false;
-    const tick = async () => {
-      const result = await loadCurrentOperationFromBrowser(serverId);
-      if (cancelled || !result.ok || !result.data) return;
-      setOperation(result.data);
-    };
-    void tick();
-    const id = window.setInterval(() => void tick(), 2000);
+    const poll = subscribeVisiblePoll({
+      intervalMs: 2_000,
+      pull: (signal) => loadCurrentOperationFromBrowser(serverId, { signal }),
+      onResult: (result) => {
+        if (!result.ok || !result.data) return;
+        setOperation(result.data);
+      },
+    });
     return () => {
-      cancelled = true;
-      window.clearInterval(id);
+      poll.stop();
     };
   }, [lock.lockActive, operationId, serverId, status]);
 

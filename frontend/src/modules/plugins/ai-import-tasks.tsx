@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { components } from "@/shared/api/schema";
 import {
@@ -14,6 +14,8 @@ import { AIImportUsage } from "@/modules/plugins/ai-import-usage";
 import { latestSubmittedAIImport } from "@/modules/plugins/ai-import-activity";
 import { Button } from "@/shared/ui/button";
 import { confirm, notify } from "@/shared/feedback";
+import { subscribeVisibleEventSource } from "@/shared/lib/visible-event-source";
+import { subscribeVisiblePoll } from "@/shared/lib/visible-poll";
 import { Eraser, LoaderCircle } from "lucide-react";
 
 type Task = components["schemas"]["PluginAIImportView"];
@@ -38,21 +40,37 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
   );
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const selectedActiveRef = useRef(false);
   useEffect(() => {
-    let mounted = true;
-    const refresh = () => { void listAIImports().then(result => { if (mounted && result.ok) { setTasks(result.data); setSelected(current => result.data.find(task => task.operation_id === current?.operation_id) ?? result.data[0] ?? null); } }); };
+    const poll = subscribeVisiblePoll({
+      intervalMs: 5_000,
+      pull: () => listAIImports(),
+      onResult: (result) => {
+        if (!result.ok) return;
+        setTasks(result.data);
+        setSelected((current) => {
+          const next = result.data.find((task) => task.operation_id === current?.operation_id);
+          if (current && active(current) && selectedActiveRef.current && next) return current;
+          return next ?? result.data[0] ?? null;
+        });
+      },
+    });
     const onSubmit = (event: Event) => {
       const task = (event as CustomEvent<Task>).detail;
-      setTasks(current => [task, ...current.filter(item => item.operation_id !== task.operation_id)]);
-      setSelected(task); refresh();
+      setTasks((current) => [task, ...current.filter((item) => item.operation_id !== task.operation_id)]);
+      setSelected(task);
+      poll.refresh();
     };
-    refresh();
+    const onRefresh = () => {
+      poll.refresh();
+    };
     window.addEventListener("plugin-ai-import-submitted", onSubmit);
-    // The tray's one-click "clear failed" deletes failed import jobs too;
-    // re-read immediately instead of leaving them on screen for a poll cycle.
-    window.addEventListener("plugin-ai-import-refresh", refresh);
-    const timer = window.setInterval(refresh, 5000);
-    return () => { mounted = false; clearInterval(timer); window.removeEventListener("plugin-ai-import-submitted", onSubmit); window.removeEventListener("plugin-ai-import-refresh", refresh); };
+    window.addEventListener("plugin-ai-import-refresh", onRefresh);
+    return () => {
+      poll.stop();
+      window.removeEventListener("plugin-ai-import-submitted", onSubmit);
+      window.removeEventListener("plugin-ai-import-refresh", onRefresh);
+    };
   }, [initialTasks.length]);
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, []);
@@ -60,18 +78,27 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
   const selectedId = selected?.operation_id;
   const selectedActive = selected ? active(selected) : false;
   useEffect(() => {
+    selectedActiveRef.current = selectedActive;
+  }, [selectedActive]);
+  useEffect(() => {
     if (!selectedId || !selectedActive) return;
-    const stream = new EventSource(`/ops-stream/plugin-imports/${encodeURIComponent(selectedId)}`);
-    const receive = (event: MessageEvent<string>) => {
-      try {
-        const task = JSON.parse(event.data) as Task;
-        setSelected(task);
-        setTasks(current => current.map(item => item.operation_id === task.operation_id ? task : item));
-        if (!active(task)) stream.close();
-      } catch { setError(t("requestFailed")); }
-    };
-    stream.addEventListener("snapshot", receive);
-    return () => stream.close();
+    return subscribeVisibleEventSource({
+      url: `/ops-stream/plugin-imports/${encodeURIComponent(selectedId)}`,
+      eventTypes: ["snapshot"],
+      shouldReconnect: () => selectedActiveRef.current,
+      onData: (raw) => {
+        try {
+          const task = JSON.parse(raw) as Task;
+          selectedActiveRef.current = active(task);
+          setSelected(task);
+          setTasks((current) =>
+            current.map((item) => (item.operation_id === task.operation_id ? task : item)),
+          );
+        } catch {
+          setError(t("requestFailed"));
+        }
+      },
+    });
   }, [selectedId, selectedActive, t]);
   const activeTasks = tasks.filter(queueVisible);
   const completedTasks = tasks.filter(completed);
@@ -110,7 +137,7 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
       })}
     </div>
     {visibleTasks.length === 0 ? <p className="py-3 text-xs text-fg-muted">{tab === "queue" ? t("queueEmpty") : t("completedEmpty")}</p> : null}
-    <div className="space-y-2">{visibleTasks.slice(0, 20).map(task => <button key={task.operation_id} className="block w-full rounded border border-line p-2 text-left hover:bg-surface-raised" onClick={() => { setSelected(task); void getAIImport(task.operation_id).then(r => { if (r.ok) setSelected(r.data); }); }}>
+    <div className="space-y-2">{visibleTasks.slice(0, 20).map(task => <button key={task.operation_id} className="block w-full rounded border border-line p-2 text-left hover:bg-surface-raised" onClick={() => { const id = task.operation_id; setSelected(task); void getAIImport(id).then(r => { if (r.ok) setSelected(current => current?.operation_id === id ? r.data : current); }); }}>
       <span className="font-medium">{task.options.framework === "all" ? t("allFrameworks") : task.options.framework}</span><span className="ml-2 text-fg-muted">{statusLabel(task.status)}</span>
       <p className="truncate text-xs text-fg-muted">{task.message}</p>
     </button>)}</div>
