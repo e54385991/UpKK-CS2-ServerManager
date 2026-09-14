@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  refreshSharedVisiblePoll,
   resetSharedVisiblePollsForTests,
   snapshotIsFresh,
   subscribeSharedVisiblePoll,
@@ -184,6 +185,7 @@ test("subscribeSharedVisiblePoll shares one pull until the last listener leaves"
   assert.deepEqual(seen, [1, 1]);
   stopA();
   stopB();
+  await Promise.resolve();
   const stopC = subscribeSharedVisiblePoll({
     key: "9:steamcmd",
     intervalMs: 5_000,
@@ -197,5 +199,41 @@ test("subscribeSharedVisiblePoll shares one pull until the last listener leaves"
   await Promise.resolve();
   assert.equal(pulls, 2);
   stopC();
+  resetSharedVisiblePollsForTests();
+});
+
+test("subscribeSharedVisiblePoll keeps one in-flight pull across a same-turn remount", async () => {
+  resetSharedVisiblePollsForTests();
+  const harness = hostHarness();
+  let pulls = 0;
+  let release: (() => void) | null = null;
+  const pull = () => {
+    pulls += 1;
+    return new Promise<number>((resolve) => {
+      release = () => resolve(pulls);
+    });
+  };
+  const stopA = subscribeSharedVisiblePoll({
+    key: "activity-tray:inbox",
+    intervalMs: 8_000,
+    host: harness.host,
+    pull,
+    onResult: () => {},
+  });
+  await Promise.resolve();
+  assert.equal(pulls, 1);
+  stopA();
+  const stopB = subscribeSharedVisiblePoll({
+    key: "activity-tray:inbox",
+    intervalMs: 8_000,
+    host: harness.host,
+    pull,
+    onResult: () => {},
+  });
+  refreshSharedVisiblePoll("activity-tray:inbox");
+  await Promise.resolve();
+  assert.equal(pulls, 1);
+  release?.();
+  stopB();
   resetSharedVisiblePollsForTests();
 });

@@ -112,6 +112,7 @@ export function subscribeVisiblePoll<T>(input: {
 type SharedPollEntry = {
   listeners: Set<(value: never) => void>;
   stop: () => void;
+  refresh: () => void;
 };
 
 const sharedPolls = new Map<string, SharedPollEntry>();
@@ -119,6 +120,10 @@ const sharedPolls = new Map<string, SharedPollEntry>();
 export function resetSharedVisiblePollsForTests(): void {
   for (const entry of sharedPolls.values()) entry.stop();
   sharedPolls.clear();
+}
+
+export function refreshSharedVisiblePoll(key: string): void {
+  sharedPolls.get(key)?.refresh();
 }
 
 export function subscribeSharedVisiblePoll<T>(input: {
@@ -147,7 +152,7 @@ export function subscribeSharedVisiblePoll<T>(input: {
     },
   });
   listeners.add(input.onResult as (value: never) => void);
-  sharedPolls.set(input.key, { listeners, stop: poll.stop });
+  sharedPolls.set(input.key, { listeners, stop: poll.stop, refresh: poll.refresh });
   return () => detachSharedListener(input.key, input.onResult);
 }
 
@@ -155,8 +160,11 @@ function detachSharedListener<T>(key: string, listener: (value: T) => void): voi
   const entry = sharedPolls.get(key);
   if (!entry) return;
   entry.listeners.delete(listener as (value: never) => void);
-  if (entry.listeners.size === 0) {
-    entry.stop();
+  if (entry.listeners.size > 0) return;
+  queueMicrotask(() => {
+    const current = sharedPolls.get(key);
+    if (current !== entry || current.listeners.size > 0) return;
+    current.stop();
     sharedPolls.delete(key);
-  }
+  });
 }

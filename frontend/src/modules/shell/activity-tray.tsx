@@ -49,7 +49,11 @@ import {
   OPERATION_INBOX_LOCK,
   subscribeVisibleEventSource,
 } from "@/shared/lib/visible-event-source";
-import { snapshotIsFresh, subscribeVisiblePoll } from "@/shared/lib/visible-poll";
+import {
+  refreshSharedVisiblePoll,
+  snapshotIsFresh,
+  subscribeSharedVisiblePoll,
+} from "@/shared/lib/visible-poll";
 import {
   createRenderCoalescer,
   isTerminalOperationEventType,
@@ -65,6 +69,8 @@ const AIImportTasks = dynamic(
 );
 
 const GAME_ACTIONS = new Set(["start", "restart"]);
+const INBOX_POLL_KEY = "activity-tray:inbox";
+const inboxPollState = { remaining: 0, lastSseAt: 0 };
 
 type TrayTab = "queue" | "completed" | "failed";
 
@@ -276,25 +282,24 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
   const selected =
     visible.find((item) => item.operationId === selectedId) ?? visible[0] ?? null;
 
-  const remainingRef = useRef(remaining);
   useEffect(() => {
-    remainingRef.current = remaining;
+    inboxPollState.remaining = remaining;
   }, [remaining]);
 
   useEffect(() => {
     let cancelled = false;
-    const lastSseAt = { current: 0 };
-    const intervalMs = () => (remainingRef.current > 0 ? 8_000 : 20_000);
-    const poll = subscribeVisiblePoll({
+    const intervalMs = () => (inboxPollState.remaining > 0 ? 8_000 : 20_000);
+    const stopPoll = subscribeSharedVisiblePoll({
+      key: INBOX_POLL_KEY,
       intervalMs,
-      shouldPull: () => !snapshotIsFresh(lastSseAt.current, Date.now(), intervalMs()),
+      shouldPull: () => !snapshotIsFresh(inboxPollState.lastSseAt, Date.now(), intervalMs()),
       pull: (signal) => loadOperationInboxFromBrowser({ signal }),
       onResult: (result) => {
         if (!cancelled && result.ok) setInbox(result.data);
       },
     });
     const onImport = () => {
-      poll.refresh();
+      refreshSharedVisiblePoll(INBOX_POLL_KEY);
     };
     window.addEventListener("plugin-ai-import-submitted", onImport);
     const stop = subscribeVisibleEventSource({
@@ -304,7 +309,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
       onData: (raw) => {
         const next = parseOperationInboxPayload(raw);
         if (!cancelled && next) {
-          lastSseAt.current = Date.now();
+          inboxPollState.lastSseAt = Date.now();
           setInbox(next);
         }
       },
@@ -312,7 +317,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
     return () => {
       cancelled = true;
       window.removeEventListener("plugin-ai-import-submitted", onImport);
-      poll.stop();
+      stopPoll();
       stop();
     };
   }, []);
