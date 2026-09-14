@@ -164,8 +164,7 @@ measure round (API smoke), isolated `--route` smokes, a HEAD fleet-100 API
 baseline (1 min warmup + 5 min × 3), or `PERF_WARMUP=5 PERF_MEASURE=30
 PERF_ROUNDS=1` (browser) on loopback against isolated PostgreSQL 18.6 /
 Redis 8.10.1 (`docker-compose.perf.yml`) and a production Next standalone +
-mock API. There is no matching 3-round before SHA, no 60-minute soak, and no
-browser 5 / 30 × 3 loop.
+mock API. There is no matching 3-round before SHA and no 60-minute soak.
 
 ### Local commits
 
@@ -179,7 +178,8 @@ browser 5 / 30 × 3 loop.
 | 5 | `686f863ddf6e89f6f97408ec0d6a4216aac08035` | One-scan cache prune; 8 KiB chunks kept |
 | 7 | `79b349691cf28b600ba5ed232274bd5d37ec51ba` | Comparison notes and harness measurement fixes |
 | 7b | `c1a64cd0e1172e529c708aa1dad25f4af0fc26d5` | Before/after smoke evidence; Playwright SSE/evaluate fix |
-| 7c | this commit | Isolated `--route` smokes; 5/30 Playwright; RSS |
+| 7c | `47786cc172e1df393015e3b523428c32f6c51f31` | Isolated `--route` smokes; 5/30 Playwright; RSS |
+| 7d | this commit | Live poll e2e; fleet-500 isolated actuals; 5/30×3 |
 
 Before SHA is harness-only `e07dbd094786c4d2a0f4cef39c89bc4a69c5889e` (pre-inbox
 batch). After SHA is `79b349691cf28b600ba5ed232274bd5d37ec51ba`. Same seed
@@ -208,7 +208,22 @@ The pre-batch inbox at 500 servers / 30 sessions exhausted the isolated Redis
 client pool (`Too many connections` on per-event loads) and exited 1 with no
 `api-fleet-500-before.json`. A single admin GET against the same 500-server
 seed: **3258.5 ms** before vs **219.6 ms** after (measure-api probe; 2,324,627
-bytes). That is not a mixed-load p95.
+bytes). Isolated `--route inbox` at 500 / 30 sessions (HEAD): **6426.7 ms**
+p95, 0 HTTP errors, 108 samples. Redis logged `batch cache read failed
+(keys=50)` under that stampede (telemetry MGET, not the inbox snapshot
+pipeline). Mixed-load after was **2256 ms** because workers also spent time
+on other routes. There is still no mixed-load or isolated 30-session p95 at
+`e07dbd0` (Redis pool exhaustion).
+
+**Fleet-500 isolated overview** (30 sessions, overview only), rerun after
+Redis recovered from the inbox stampede:
+
+| | before p95 | after p95 | regression |
+| --- | --- | --- | --- |
+| overview | 121.8 ms | 115.1 ms | **pass** (−5.5%) |
+
+The first HEAD overview sample after the inbox isolate was 222.6 ms and is
+discarded as contaminated.
 
 **Mixed-load coupling.** Before, a slow inbox (~1.3 s at 100) starved the other
 three routes so their p95 looked like 15–17 ms. After, inbox is fast and the
@@ -259,10 +274,18 @@ Uncached first-hit (0/1×1):
 | en-US | `/overview` | 84,861 | 17,399 | 508 | 363 | 193,848 | 397 |
 | zh-CN | `/overview` | 84,600 | 19,120 | 0 | — | 193,848 | 92 |
 
-`PERF_WARMUP=5 PERF_MEASURE=30 PERF_ROUNDS=1` (still not 5/30×3): HTML and gzip
-medians match the first-hit table. Critical-content p95: login 68 / 95 ms,
-overview 84 / 92 ms (en-US / zh-CN). JS transfer p50 is **0** on repeat visits
-because the browser cache reports `transferSize` 0. No 5/30×3 loop.
+`PERF_WARMUP=5 PERF_MEASURE=30 PERF_ROUNDS=3`: HTML and gzip medians match the
+first-hit table on every round. Critical-content p95 across the three rounds:
+
+| Locale | Route | r1 / r2 / r3 p95 ms |
+| --- | --- | --- |
+| en-US | `/login` | 65 / 65 / 60 |
+| zh-CN | `/login` | 79 / 83 / 78 |
+| en-US | `/overview` | 86 / 90 / 125 |
+| zh-CN | `/overview` | 97 / 110 / 111 |
+
+JS transfer p50 is **0** on repeat visits because the browser cache reports
+`transferSize` 0. Uncached first-hit JS remains 179,617 / 193,848 bytes.
 
 There is no matching HTML capture at `e07dbd0`. The −50% locale gate remains
 the catalog JSON subsets above, not these documents.
@@ -271,11 +294,16 @@ The production baseline runner must not call `response.body()` on the
 activity-tray EventSource (`text/event-stream` never ends) and must `await`
 `page.evaluate` before closing the page.
 
-### Polling (unit, not live browser)
+### Polling (unit + live browser)
 
 `frontend/src/shared/lib/visible-poll.test.ts`: in-flight ≤ 1, hidden pause,
-ignore-after-stop, shared poll until the last listener leaves. Live console
-was not exercised in a browser this round.
+ignore-after-stop, shared poll until the last listener leaves.
+
+`e2e/performance.spec.ts` “activity-tray inbox poll stays single-flight and
+pauses while hidden”: on `/overview`, a gated `/api/v1/operations/inbox` GET
+stays at one in-flight request through a second `plugin-ai-import-submitted`
+refresh; `document.hidden` stops a third; becoming visible starts exactly one
+more. Passed under `playwright.performance.config.ts`.
 
 ### Rejected or unsubmitted candidates
 
@@ -325,17 +353,21 @@ the current catalog/download facts:
 
 - Inbox: one in-memory scan per snapshot; Redis batched; 100 / 500 p95 ≥ 20%
   or report the actuals — **100 smoke pass (83.8%)**; **500 mixed-load before
-  collapsed**; after 2256 ms p95 with 0 errors. Fleet-100 HEAD baseline median
-  inbox p95 **197.2 ms** (0 errors); no matching 3-round before SHA.
+  collapsed**; mixed-load after 2256 ms; isolated 30-session inbox after
+  **6427 ms** (0 errors); single GET 3258 → 220 ms. Fleet-100 HEAD baseline
+  median inbox p95 **197.2 ms** (0 errors); no matching 3-round before SHA.
 - In-flight ≤ 1; hidden pages pause; stale responses cannot win — **unit tests
-  pass**; live browser not run
+  and live activity-tray Playwright pass**
 - `/login` and `/overview` client message bytes −50%, plus real HTML/RSC size —
-  **catalog JSON pass**; HTML/RSC smoke table above (no pre-trim HTML baseline)
-- Bundle budgets unchanged (252 KiB / 150 KiB gzip)
+  **catalog JSON pass**; HTML/RSC 5/30×3 table above (no pre-trim HTML baseline)
+- Bundle budgets unchanged (253 KiB route / 150 KiB chunk gzip) — **`npm run
+  check:bundle` passed for 40 pages**
 - No p95 regression beyond `max(5%, 20 ms)`; CPU / RSS +5%; no monotonic leak —
-  **isolated `--route` smokes pass**; mixed-load overview/market/servers still
-  look worse because a fast inbox no longer starves them. RSS/CPU smoke and
-  the HEAD baseline RSS stay inside +5%. 60-minute soak not run
+  **fleet-100 isolated `--route` smokes pass**; fleet-500 isolated overview
+  121.8 → 115.1 ms. Mixed-load overview/market/servers still look worse because
+  a fast inbox no longer starves them. RSS/CPU smoke and the HEAD baseline RSS
+  stay inside +5%. Isolated 500-inbox RSS 397.7 MiB during the 30-wide stampede
+  (process peak, not a leak series). 60-minute soak not run
 - Indexes only with EXPLAIN, 20% p95, write tolerance, and ≤ 5 s build
 
 Application changes revert by commit. Added Alembic revisions stay; dropping

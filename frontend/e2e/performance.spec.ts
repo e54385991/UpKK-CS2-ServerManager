@@ -244,3 +244,42 @@ test('editing a listing sees fresh session and updated data after mutation', asy
   expect(requests.filter((r: { path: string, method: string }) => r.path === '/api/v1/plugins/market/1' && r.method === 'PATCH')).toHaveLength(1);
   expect(requests.filter((r: { path: string }) => r.path === '/api/v1/auth/me').length).toBeGreaterThan(1);
 });
+
+test('activity-tray inbox poll stays single-flight and pauses while hidden', async ({ page, context, request }) => {
+  const inboxGets = async () =>
+    ((await state(request)).requests as { path: string; ended: number | null }[]).filter(
+      (row) => row.path === '/api/v1/operations/inbox',
+    );
+  await request.post(`${mock}/__test__/reset`);
+  await login(context);
+  await page.goto('/overview');
+  await expect(page.getByTestId('overview-stats')).toBeVisible();
+  await expect(page.getByTestId('activity-tray-toggle')).toBeVisible();
+  await request.post(`${mock}/__test__/reset`, {
+    data: { rules: { '/api/v1/operations/inbox': { gate: true } } },
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('plugin-ai-import-submitted')));
+  await expect.poll(async () => (await inboxGets()).length).toBe(1);
+  expect((await inboxGets())[0]?.ended).toBeNull();
+  await page.evaluate(() => window.dispatchEvent(new Event('plugin-ai-import-submitted')));
+  await page.waitForTimeout(250);
+  expect(await inboxGets()).toHaveLength(1);
+  await page.evaluate(() => {
+    const state = window as Window & { __pollHidden?: boolean };
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => state.__pollHidden === true,
+    });
+    state.__pollHidden = true;
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('plugin-ai-import-submitted')));
+  await page.waitForTimeout(250);
+  expect(await inboxGets()).toHaveLength(1);
+  await page.evaluate(() => {
+    (window as Window & { __pollHidden?: boolean }).__pollHidden = false;
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(async () => (await inboxGets()).length).toBe(2);
+  await request.post(`${mock}/__test__/release`, { data: { path: '/api/v1/operations/inbox' } });
+});
