@@ -8,6 +8,7 @@ import logging
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Sequence
 from typing import Any
 
 from modules.observability import bind_operation, record_error, record_task, reset_operation
@@ -285,17 +286,26 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             seen.add(operation_id)
         return items
 
+    async def snapshot_for_servers(self, server_ids: Sequence[int]):
+        """Batch inbox read: one memory scan, chunked Redis, event tails only."""
+        from services.operations.inbox_snapshot import collect_hub_snapshot
+
+        return await collect_hub_snapshot(self, server_ids)
+
     async def latest_message(self, operation_id: str) -> str | None:
-        events = list(self._events.get(operation_id) or [])
-        if not events:
-            events = await self._load_events(operation_id)
-        if events:
-            message = str(events[-1].get("message") or "").strip()
-            if message:
-                return message
+        from services.operations.inbox_messages import last_event_text, read_latest_messages
+
+        message = last_event_text(self._events.get(operation_id))
+        if message:
+            return message
+        stored = await read_latest_messages(
+            redis_manager, {operation_id: self._events_key(operation_id)}
+        )
+        if stored.get(operation_id):
+            return stored[operation_id]
         record = await self.get(operation_id)
         if record and record.get("message"):
-            return str(record["message"])
+            return str(record["message"]).strip() or None
         return None
 
     async def abort(self, server_id: int, *, message: str) -> dict[str, Any] | None:

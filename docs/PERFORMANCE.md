@@ -70,6 +70,19 @@ See `reports/perf/schema.json`. Raw dumps go to `reports/perf/raw/` and are
 not committed. Later comparison reports keep git SHAs, environment, data size,
 raw summaries, and candidates that missed a gate.
 
+## Stage 1 (algorithmic, p95 not yet measured)
+
+Inbox GET/SSE/DELETE now load the authorized server id/name snapshot, close the
+database session, then take one hub snapshot for the whole set. That snapshot
+scans in-memory records once, fills missing indexes and records with chunked
+`get_many()` (≤ 500 keys), and reads Redis event **tails** (`LRANGE -1 -1`,
+bounded reverse window on corrupt tails) instead of full histories. Pruning a
+stale index re-reads Redis and drops only IDs already known expired so a job
+enqueued during the read is not overwritten. Sort, queue positions, seven-day
+retention, SSE `inbox` events / 1s wait / keep-alive, and “clear failed”
+including administrator AI import failures are unchanged. Isolated 100 / 500
+server p95 has **not** been run; do not treat this as a claimed latency gain.
+
 ## Gates (not yet claimed)
 
 These are the agreed acceptance checks. Stage 0 only records the protocol and

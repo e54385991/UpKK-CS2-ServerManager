@@ -19,6 +19,57 @@ RetainedIdLoader = Callable[[int], Awaitable[list[str]]]
 RetainedPersister = Callable[[int], Awaitable[None]]
 
 
+def ids_from_stored(stored: object) -> list[str]:
+    """Decode a retained or pending index from Redis JSON or a native list."""
+    if isinstance(stored, list):
+        return [str(item) for item in stored if item]
+    if isinstance(stored, str) and stored:
+        try:
+            parsed = json.loads(stored)
+        except json.JSONDecodeError:
+            return []
+        if isinstance(parsed, list):
+            return [str(item) for item in parsed if item]
+    return []
+
+
+def current_id_from_stored(stored: object) -> str | None:
+    """Decode the current-operation pointer stored as a raw string."""
+    if isinstance(stored, str) and stored:
+        return stored
+    return None
+
+
+async def reconcile_retained_index(
+    *,
+    redis: Any,
+    lock: Any,
+    server_id: int,
+    cache: dict[int, list[str]],
+    redis_key: str,
+    persister: RetainedPersister,
+    expired: set[str],
+    fallback: list[str],
+) -> None:
+    """Drop known-expired IDs without wiping IDs added during the read."""
+    if not expired:
+        return
+    persist = False
+    async with lock:
+        cache.pop(server_id, None)
+        try:
+            stored = await redis.get(redis_key)
+        except Exception:
+            stored = None
+        if stored is None:
+            cache[server_id] = [item for item in fallback if item not in expired]
+        else:
+            cache[server_id] = [item for item in ids_from_stored(stored) if item not in expired]
+            persist = True
+    if persist:
+        await persister(server_id)
+
+
 def _as_datetime(value: object) -> datetime | None:
     if isinstance(value, datetime):
         stamp = value
@@ -154,16 +205,7 @@ class ServerOperationHistoryMixin:
         if cached is not None:
             return list(cached)
         stored = await self._history_redis.get(key)
-        ids: list[str] = []
-        if isinstance(stored, list):
-            ids = [str(item) for item in stored if item]
-        elif isinstance(stored, str) and stored:
-            try:
-                parsed = json.loads(stored)
-            except json.JSONDecodeError:
-                parsed = []
-            if isinstance(parsed, list):
-                ids = [str(item) for item in parsed if item]
+        ids = ids_from_stored(stored)
         cache[server_id] = ids
         return list(ids)
 
@@ -235,8 +277,21 @@ class ServerOperationHistoryMixin:
             kept.append(operation_id)
             items.append(record)
         if kept != operation_ids:
-            ids_cache[server_id] = kept
-            await ids_persister(server_id)
+            redis_key = (
+                self._failed_key(server_id)
+                if status == "failed"
+                else self._completed_key(server_id)
+            )
+            await reconcile_retained_index(
+                redis=self._history_redis,
+                lock=self._lock,
+                server_id=server_id,
+                cache=ids_cache,
+                redis_key=redis_key,
+                persister=ids_persister,
+                expired=set(operation_ids) - set(kept),
+                fallback=operation_ids,
+            )
         items.sort(
             key=lambda item: str(item.get("completed_at") or item.get("started_at") or ""),
             reverse=True,

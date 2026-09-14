@@ -18,6 +18,9 @@ class _Pipeline:
         self.error = error
         self.calls = []
 
+    def lrange(self, *args):
+        self.calls.append(("lrange", args))
+
     def rpush(self, *args):
         self.calls.append(("rpush", args))
 
@@ -171,6 +174,23 @@ async def test_listing_failed_dismiss_clear_and_latest_message(hub, monkeypatch)
         module.redis_manager, "delete", AsyncMock(side_effect=RuntimeError("redis"))
     )
     await hub.dismiss_failed("nonexistent")
+
+
+@pytest.mark.asyncio
+async def test_list_failed_keeps_ids_added_during_prune(hub):
+    old = _record(
+        "old",
+        status="failed",
+        server_id=1,
+        completed_at=(datetime.now(timezone.utc) - timedelta(days=8)).isoformat(),
+    )
+    hub._records["old"] = old
+    hub._failed[1] = ["old"]
+    hub._history_redis.get = AsyncMock(return_value=["old", "new"])
+    failed = await hub.list_failed_for_server(1)
+    assert failed == []
+    assert hub._failed[1] == ["new"]
+    hub._persist_failed.assert_awaited()
 
 
 @pytest.mark.asyncio

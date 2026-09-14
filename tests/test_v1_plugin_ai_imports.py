@@ -123,7 +123,7 @@ async def test_activity_inbox_removes_catalog_tasks_after_admin_revocation(monke
 
     user = SimpleNamespace(id=1, is_admin=True)
     request = SimpleNamespace(is_disconnected=AsyncMock(side_effect=[False, True]))
-    monkeypatch.setattr(operation_inbox, "_list_inbox_servers", AsyncMock(return_value=[]))
+    monkeypatch.setattr(operation_inbox, "list_accessible_servers", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         operation_inbox, "check_administrator", AsyncMock(side_effect=PermissionError())
     )

@@ -8,18 +8,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlmodel import select
 
-from api.dependencies import ActiveUser, DatabaseSession, StreamUser
-from modules import Server
-from modules.database import async_session_maker
-from services.plugins.ai_import_store import check_administrator, clear_failed_jobs, list_jobs
-from services.server_operation_hub import (
-    ACTIVE_STATUSES,
-    COMPLETED_RETENTION_SECONDS,
-    FAILED_RETENTION_SECONDS,
-    server_operation_hub,
+from api.dependencies import ActiveUser, DatabaseSession, StreamUser, close_request_session
+from services.operations.inbox import (
+    build_operation_inbox,
+    list_accessible_servers,
+    load_accessible_servers,
 )
+from services.operations.inbox_types import InboxItemData, InboxPayload
+from services.plugins.ai_import_store import check_administrator, clear_failed_jobs
+from services.server_operation_hub import server_operation_hub
 
 from .operations import to_view
 from .plugin_ai_imports import to_view as import_view
@@ -28,76 +26,23 @@ from .schemas import ActionResult, OperationInboxItem, OperationInboxView
 router = APIRouter(prefix="/api/v1/operations", tags=["v1-operations"])
 
 
-async def _list_inbox_servers(current_user) -> list[tuple[int, str]]:
-    """Resolve visible servers, then release the session before SSE starts."""
-    async with async_session_maker() as db:
-        return await _accessible_servers(db, current_user)
-
-
-async def _accessible_servers(db, current_user) -> list[tuple[int, str]]:
-    if current_user.is_admin:
-        result = await db.execute(select(Server.id, Server.name))
-    else:
-        result = await db.execute(
-            select(Server.id, Server.name).where(Server.user_id == current_user.id)
-        )
-    return [(int(row[0]), str(row[1])) for row in result.all()]
-
-
-async def _to_inbox_item(
-    record: dict,
-    *,
-    server_name: str,
-    queue_position: int,
-) -> OperationInboxItem:
-    view = to_view(record)
+def _to_inbox_item(item: InboxItemData) -> OperationInboxItem:
+    view = to_view(item.record)
     return OperationInboxItem(
         **view.model_dump(),
-        server_name=server_name,
-        latest_message=await server_operation_hub.latest_message(str(record["operation_id"])),
-        queue_position=queue_position,
+        server_name=item.server_name,
+        latest_message=item.latest_message,
+        queue_position=item.queue_position,
     )
 
 
-async def _build_inbox(
-    servers: list[tuple[int, str]], include_imports: bool = False
-) -> OperationInboxView:
-    names = {server_id: name for server_id, name in servers}
-    items: list[OperationInboxItem] = []
-    completed_items: list[OperationInboxItem] = []
-    failed_items: list[OperationInboxItem] = []
-    for server_id, server_name in servers:
-        label = server_name or names.get(server_id) or f"#{server_id}"
-        records = await server_operation_hub.list_for_server(server_id)
-        for position, record in enumerate(records):
-            if record.get("status") not in ACTIVE_STATUSES:
-                continue
-            items.append(
-                await _to_inbox_item(
-                    record,
-                    server_name=label,
-                    queue_position=position if record.get("status") == "queued" else 0,
-                )
-            )
-        for record in await server_operation_hub.list_failed_for_server(server_id):
-            failed_items.append(await _to_inbox_item(record, server_name=label, queue_position=0))
-        for record in await server_operation_hub.list_completed_for_server(server_id):
-            completed_items.append(
-                await _to_inbox_item(record, server_name=label, queue_position=0)
-            )
-    items.sort(
-        key=lambda item: (
-            0 if item.status == "running" else 1,
-            item.started_at,
-        )
-    )
-    completed_items.sort(key=lambda item: item.completed_at or item.started_at, reverse=True)
-    failed_items.sort(key=lambda item: item.completed_at or item.started_at, reverse=True)
+def to_inbox_view(payload: InboxPayload) -> OperationInboxView:
+    items = [_to_inbox_item(item) for item in payload.items]
+    completed_items = [_to_inbox_item(item) for item in payload.completed_items]
+    failed_items = [_to_inbox_item(item) for item in payload.failed_items]
     running = [item for item in items if item.status == "running"]
     return OperationInboxView(
-        market_import_items=[import_view(job) for job in await list_jobs(active_only=True)]
-        if include_imports
-        else [],
+        market_import_items=[import_view(job) for job in payload.import_jobs],
         items=items,
         completed_items=completed_items,
         failed_items=failed_items,
@@ -105,9 +50,15 @@ async def _build_inbox(
         running_count=len(running),
         completed_count=len(completed_items),
         failed_count=len(failed_items),
-        completed_retention_days=COMPLETED_RETENTION_SECONDS // 86400,
-        failed_retention_days=FAILED_RETENTION_SECONDS // 86400,
+        completed_retention_days=payload.completed_retention_days,
+        failed_retention_days=payload.failed_retention_days,
     )
+
+
+async def _build_inbox(
+    servers: list[tuple[int, str]], include_imports: bool = False
+) -> OperationInboxView:
+    return to_inbox_view(await build_operation_inbox(servers, include_imports=include_imports))
 
 
 @router.get("/inbox", response_model=OperationInboxView)
@@ -116,7 +67,9 @@ async def list_operation_inbox(
     current_user: ActiveUser,
 ) -> OperationInboxView:
     """Active jobs plus completed and failed history retained for seven days."""
-    return await _build_inbox(await _accessible_servers(db, current_user), current_user.is_admin)
+    servers = await load_accessible_servers(db, current_user)
+    await close_request_session(db)
+    return await _build_inbox(servers, current_user.is_admin)
 
 
 @router.get("/inbox/events", response_model=None)
@@ -125,7 +78,7 @@ async def stream_operation_inbox(
     current_user: StreamUser,
 ) -> StreamingResponse:
     """Live inbox snapshots for the top-right tray. SSE, not a second WebSocket."""
-    servers = await _list_inbox_servers(current_user)
+    servers = await list_accessible_servers(current_user)
 
     async def event_source():
         yield ": connected\n\n"
@@ -178,7 +131,8 @@ async def clear_failed_operations(
     the one-click clear covers those too — they were otherwise undismissable
     and kept the tray badge red for their full seven-day retention.
     """
-    servers = await _accessible_servers(db, current_user)
+    servers = await load_accessible_servers(db, current_user)
+    await close_request_session(db)
     cleared = await server_operation_hub.clear_failed([server_id for server_id, _name in servers])
     if current_user.is_admin:
         try:
@@ -198,7 +152,8 @@ async def dismiss_failed_operation(
     current_user: ActiveUser,
 ) -> ActionResult:
     """Remove one failed job from the retained failure tab."""
-    allowed = {server_id for server_id, _name in await _accessible_servers(db, current_user)}
+    allowed = {server_id for server_id, _name in await load_accessible_servers(db, current_user)}
+    await close_request_session(db)
     record = await server_operation_hub.get(str(operation_id))
     if record is None or record.get("status") != "failed":
         raise HTTPException(
@@ -222,7 +177,8 @@ async def clear_completed_operations(
     current_user: ActiveUser,
 ) -> ActionResult:
     """Remove every retained successful job the caller can see."""
-    servers = await _accessible_servers(db, current_user)
+    servers = await load_accessible_servers(db, current_user)
+    await close_request_session(db)
     cleared = await server_operation_hub.clear_completed(
         [server_id for server_id, _name in servers]
     )
@@ -239,7 +195,8 @@ async def dismiss_completed_operation(
     current_user: ActiveUser,
 ) -> ActionResult:
     """Remove one completed job from the retained history."""
-    allowed = {server_id for server_id, _name in await _accessible_servers(db, current_user)}
+    allowed = {server_id for server_id, _name in await load_accessible_servers(db, current_user)}
+    await close_request_session(db)
     record = await server_operation_hub.get(str(operation_id))
     if record is None or record.get("status") != "completed":
         raise HTTPException(

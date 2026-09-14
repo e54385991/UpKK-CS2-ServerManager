@@ -13,6 +13,8 @@ from api.application import create_app
 from api.dependencies import get_bearer_or_cookie_user
 from api.routes.v1.operation_inbox import _build_inbox
 from modules import get_current_active_user, get_current_user, get_db
+from services.operations.inbox_types import HubInboxSnapshot, InboxRecordRow, ServerInboxSlice
+from services.server_operation_hub import server_operation_hub
 
 
 def _client(monkeypatch, *, admin: bool = False):
@@ -23,7 +25,12 @@ def _client(monkeypatch, *, admin: bool = False):
         def all(self):
             return [(1, "alpha")]
 
-    session = SimpleNamespace(execute=AsyncMock(return_value=_Result()))
+    session = SimpleNamespace(
+        execute=AsyncMock(return_value=_Result()),
+        is_active=False,
+        commit=AsyncMock(),
+        close=AsyncMock(),
+    )
 
     async def override_db():
         yield session
@@ -33,6 +40,36 @@ def _client(monkeypatch, *, admin: bool = False):
     app.dependency_overrides[get_bearer_or_cookie_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
     return TestClient(app)
+
+
+def _rows(records, *, latest_message: str | None, queued: bool = False):
+    items: list[InboxRecordRow] = []
+    for position, record in enumerate(records):
+        items.append(
+            InboxRecordRow(
+                record=record,
+                latest_message=latest_message,
+                queue_position=position if queued and record.get("status") == "queued" else 0,
+            )
+        )
+    return items
+
+
+def _patch_snapshot(monkeypatch, *, active=(), failed=(), completed=(), latest_message=None):
+    snapshot = HubInboxSnapshot(
+        slices={
+            1: ServerInboxSlice(
+                active=_rows(list(active), latest_message=latest_message, queued=True),
+                failed=_rows(list(failed), latest_message=latest_message),
+                completed=_rows(list(completed), latest_message=latest_message),
+            )
+        }
+    )
+    monkeypatch.setattr(
+        server_operation_hub,
+        "snapshot_for_servers",
+        AsyncMock(return_value=snapshot),
+    )
 
 
 def test_operation_inbox_lists_queued_job(monkeypatch):
@@ -51,21 +88,10 @@ def test_operation_inbox_lists_queued_job(monkeypatch):
         "started_at": "2026-08-29T00:00:00+00:00",
         "completed_at": None,
     }
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_for_server",
-        AsyncMock(return_value=[record]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.latest_message",
-        AsyncMock(return_value="Queued behind start (position 1)"),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_failed_for_server",
-        AsyncMock(return_value=[]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_completed_for_server",
-        AsyncMock(return_value=[]),
+    _patch_snapshot(
+        monkeypatch,
+        active=[record],
+        latest_message="Queued behind start (position 1)",
     )
     response = client.get("/api/v1/operations/inbox")
     assert response.status_code == 200
@@ -96,22 +122,7 @@ def test_operation_inbox_lists_and_clears_failures(monkeypatch):
         "started_at": "2026-08-29T00:00:00+00:00",
         "completed_at": "2026-08-29T00:01:00+00:00",
     }
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_for_server",
-        AsyncMock(return_value=[]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_failed_for_server",
-        AsyncMock(return_value=[failed]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_completed_for_server",
-        AsyncMock(return_value=[]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.latest_message",
-        AsyncMock(return_value="extract failed"),
-    )
+    _patch_snapshot(monkeypatch, failed=[failed], latest_message="extract failed")
     response = client.get("/api/v1/operations/inbox")
     assert response.status_code == 200
     body = response.json()
@@ -163,22 +174,7 @@ def test_operation_inbox_lists_and_clears_completed_history(monkeypatch):
         "started_at": "2026-08-29T00:00:00+00:00",
         "completed_at": "2026-08-29T00:01:00+00:00",
     }
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_for_server",
-        AsyncMock(return_value=[]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_failed_for_server",
-        AsyncMock(return_value=[]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_completed_for_server",
-        AsyncMock(return_value=[completed]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.latest_message",
-        AsyncMock(return_value="Plugin installed"),
-    )
+    _patch_snapshot(monkeypatch, completed=[completed], latest_message="Plugin installed")
 
     response = client.get("/api/v1/operations/inbox")
     assert response.status_code == 200
@@ -261,22 +257,7 @@ async def test_build_inbox_includes_command_and_status(monkeypatch):
         "started_at": "2026-08-29T00:00:00+00:00",
         "completed_at": None,
     }
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_for_server",
-        AsyncMock(return_value=[record]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.latest_message",
-        AsyncMock(return_value="Extracting archive"),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_failed_for_server",
-        AsyncMock(return_value=[]),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.operation_inbox.server_operation_hub.list_completed_for_server",
-        AsyncMock(return_value=[]),
-    )
+    _patch_snapshot(monkeypatch, active=[record], latest_message="Extracting archive")
     view = await _build_inbox([(1, "alpha")])
     assert view.active_count == 1
     assert view.running_count == 1
