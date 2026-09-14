@@ -121,7 +121,7 @@ def _current_rss_bytes() -> int:
             text=True,
         ).strip()
         return int(raw.split()[0]) * 1024
-    except (OSError, ValueError, IndexError):
+    except OSError, ValueError, IndexError:
         return _rss_bytes()
 
 
@@ -289,7 +289,14 @@ async def run_soak(
         "seconds": seconds,
         "sample_every": chunk,
         "rss": series,
-        "probes": {"inbox_first": probes[0] if probes else None, "inbox_last": probes[-1] if probes else None},
+        "probes": {
+            "inbox_first": probes[0] if probes else None,
+            "inbox_last": probes[-1] if probes else None,
+        },
         "rss_pass": soak_holds_rss(rss_values),
-        "backend": {"rss_bytes": _rss_bytes(), "rss_current_bytes": _current_rss_bytes(), "panel": backend},
+        "backend": {
+            "rss_bytes": _rss_bytes(),
+            "rss_current_bytes": _current_rss_bytes(),
+            "panel": backend,
+        },
     }
