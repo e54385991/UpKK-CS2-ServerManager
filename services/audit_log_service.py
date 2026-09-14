@@ -7,11 +7,12 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import func
+from sqlalchemy import String, cast, func, or_
+from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import col, select
 
 from modules.database import async_session_maker
-from modules.models import AuditLog, DiscordOperationRun, User
+from modules.models import AuditLog, DiscordOperationRun, SystemSettings, User
 from modules.schemas import AuditLogListResponse, AuditLogResponse
 from modules.utils import get_current_time
 from services.ai_security import redact_sensitive_text, sanitize_tool_result
@@ -24,6 +25,9 @@ from services.client_ip import (
 logger = logging.getLogger(__name__)
 
 AUDIT_LOG_RETENTION_DAYS = 30
+MIN_AUDIT_LOG_RETENTION_DAYS = 1
+MAX_AUDIT_LOG_RETENTION_DAYS = 365
+AUDIT_SEARCH_MAX_LENGTH = 100
 INVALID_CREDENTIALS_DETAILS = {"reason": "invalid_credentials"}
 _USER_AGENT_LIMIT = 500
 
@@ -49,9 +53,77 @@ def _naive_datetime(value: datetime) -> datetime:
     return value.replace(tzinfo=None)
 
 
-def retention_cutoff(*, now: datetime | None = None) -> datetime:
+def clamp_audit_log_retention_days(value: int | None) -> int:
+    if value is None:
+        return AUDIT_LOG_RETENTION_DAYS
+    return max(MIN_AUDIT_LOG_RETENTION_DAYS, min(MAX_AUDIT_LOG_RETENTION_DAYS, int(value)))
+
+
+def retention_cutoff(*, now: datetime | None = None, days: int | None = None) -> datetime:
     moment = now or get_current_time()
-    return _naive_datetime(moment - timedelta(days=AUDIT_LOG_RETENTION_DAYS))
+    retained_days = clamp_audit_log_retention_days(days)
+    return _naive_datetime(moment - timedelta(days=retained_days))
+
+
+def _escape_like(term: str) -> str:
+    return term.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+
+
+def audit_search_clause(term: str) -> ColumnElement[bool]:
+    pattern = f"%{_escape_like(term)}%"
+    matchers: list[ColumnElement[bool]] = [
+        col(AuditLog.actor_username).ilike(pattern, escape="\\"),
+        col(AuditLog.action).ilike(pattern, escape="\\"),
+        col(AuditLog.ip_address).ilike(pattern, escape="\\"),
+        col(AuditLog.source).ilike(pattern, escape="\\"),
+        col(AuditLog.actor_external_id).ilike(pattern, escape="\\"),
+        col(AuditLog.user_agent).ilike(pattern, escape="\\"),
+        col(AuditLog.category).ilike(pattern, escape="\\"),
+        col(AuditLog.status).ilike(pattern, escape="\\"),
+        cast(col(AuditLog.details), String).ilike(pattern, escape="\\"),
+    ]
+    if term.isdigit() and 1 <= len(term) <= 10:
+        matchers.append(col(AuditLog.server_id) == int(term))
+    return or_(*matchers)
+
+
+async def configured_retention_days(db) -> int:
+    value = await db.scalar(select(SystemSettings.audit_log_retention_days).limit(1))
+    return clamp_audit_log_retention_days(value)
+
+
+def _audit_list_filters(
+    *,
+    cutoff: datetime,
+    category: str | None,
+    status: str | None,
+    username: str | None,
+    ip_address: str | None,
+    server_id: int | None,
+    action: str | None,
+    q: str | None,
+) -> list[Any]:
+    filters = [col(AuditLog.created_at) >= cutoff]
+    if category:
+        filters.append(col(AuditLog.category) == category)
+    if status:
+        filters.append(col(AuditLog.status) == status)
+    if username:
+        name = username.strip()
+        if name:
+            pattern = f"%{_escape_like(name)}%"
+            filters.append(col(AuditLog.actor_username).ilike(pattern, escape="\\"))
+    if ip_address:
+        filters.append(col(AuditLog.ip_address) == ip_address.strip())
+    if server_id is not None:
+        filters.append(col(AuditLog.server_id) == server_id)
+    if action:
+        filters.append(col(AuditLog.action) == action)
+    if q:
+        term = q.strip()[:AUDIT_SEARCH_MAX_LENGTH]
+        if term:
+            filters.append(audit_search_clause(term))
+    return filters
 
 
 def _sanitize_details(details: dict[str, Any] | None) -> dict[str, Any]:
@@ -164,23 +236,22 @@ async def list_audit_logs(
     ip_address: str | None = None,
     server_id: int | None = None,
     action: str | None = None,
+    q: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> AuditLogListResponse:
-    cutoff = retention_cutoff()
-    filters = [col(AuditLog.created_at) >= cutoff]
-    if category:
-        filters.append(col(AuditLog.category) == category)
-    if status:
-        filters.append(col(AuditLog.status) == status)
-    if username:
-        filters.append(col(AuditLog.actor_username).ilike(f"%{username.strip()}%"))
-    if ip_address:
-        filters.append(col(AuditLog.ip_address) == ip_address.strip())
-    if server_id is not None:
-        filters.append(col(AuditLog.server_id) == server_id)
-    if action:
-        filters.append(col(AuditLog.action) == action)
+    days = await configured_retention_days(db)
+    cutoff = retention_cutoff(days=days)
+    filters = _audit_list_filters(
+        cutoff=cutoff,
+        category=category,
+        status=status,
+        username=username,
+        ip_address=ip_address,
+        server_id=server_id,
+        action=action,
+        q=q,
+    )
 
     total = await db.scalar(select(func.count()).select_from(AuditLog).where(*filters))
     result = await db.execute(
@@ -213,5 +284,5 @@ async def list_audit_logs(
         total=int(total or 0),
         limit=limit,
         offset=offset,
-        retention_days=AUDIT_LOG_RETENTION_DAYS,
+        retention_days=days,
     )

@@ -76,6 +76,27 @@ def normalize_log_level(value: Optional[str]) -> Optional[str]:
     return name
 
 
+GOOGLE_CLIENT_ID_MAX_LENGTH = 255
+
+
+def normalize_google_client_id(value: Optional[str]) -> Optional[str]:
+    """Validate a Google OAuth Web client ID used for console sign-in.
+
+    Blank clears the stored value so the panel can fall back to GOOGLE_CLIENT_ID
+    in the environment, or disable Google sign-in when that is also empty.
+    """
+    if value is None:
+        return None
+    client_id = value.strip()
+    if not client_id:
+        return None
+    if len(client_id) > GOOGLE_CLIENT_ID_MAX_LENGTH:
+        raise ValueError("Google client ID is too long")
+    if ".apps.googleusercontent.com" not in client_id.casefold():
+        raise ValueError("Google client ID must be a Web client (…apps.googleusercontent.com)")
+    return client_id
+
+
 def generate_api_key(length: int = 64) -> str:
     """
     Generate a secure random API key for server-to-backend communication.

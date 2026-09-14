@@ -2001,7 +2001,7 @@ export interface paths {
         };
         /**
          * Get Audit Logs
-         * @description List the last 30 days of administrator audit events.
+         * @description List administrator audit events within the configured retention window.
          */
         get: operations["get_audit_logs_api_system_audit_logs_get"];
         put?: never;
@@ -2205,7 +2205,7 @@ export interface paths {
         };
         /**
          * List Audit
-         * @description List the last 30 days of audit events (admin only), paginated.
+         * @description List administrator audit events (admin only), paginated and searchable.
          */
         get: operations["list_audit_api_v1_audit_get"];
         put?: never;
@@ -8262,6 +8262,22 @@ export interface components {
             status: string;
         };
         /**
+         * AuditListView
+         * @description Paginated administrator audit log listing, including active retention.
+         */
+        AuditListView: {
+            /** Items */
+            items: components["schemas"]["AuditEntry"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Retention Days */
+            retention_days: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * AuditLogListResponse
          * @description Paginated administrator audit log listing.
          */
@@ -13077,17 +13093,6 @@ export interface components {
             /** Total */
             total: number;
         };
-        /** Page[AuditEntry] */
-        Page_AuditEntry_: {
-            /** Items */
-            items: components["schemas"]["AuditEntry"][];
-            /** Limit */
-            limit: number;
-            /** Offset */
-            offset: number;
-            /** Total */
-            total: number;
-        };
         /** Page[MarketPluginView] */
         Page_MarketPluginView_: {
             /** Items */
@@ -17360,6 +17365,8 @@ export interface components {
          * @description Partial admin update. Secret fields are write-only and never echoed.
          */
         SystemSettingsPatch: {
+            /** Audit Log Retention Days */
+            audit_log_retention_days?: number | null;
             /** Captcha Enabled */
             captcha_enabled?: boolean | null;
             /**
@@ -17383,6 +17390,8 @@ export interface components {
             github_proxy_url?: string | null;
             /** Global Github Token */
             global_github_token?: string | null;
+            /** Google Client Id */
+            google_client_id?: string | null;
             /** Log Level */
             log_level?: string | null;
             /** Panel Monitoring Enabled */
@@ -17475,6 +17484,11 @@ export interface components {
          */
         SystemSettingsTransfer: {
             /**
+             * Audit Log Retention Days
+             * @default 30
+             */
+            audit_log_retention_days: number;
+            /**
              * Captcha Enabled
              * @default true
              */
@@ -17504,6 +17518,8 @@ export interface components {
             email_provider: "gmail" | "smtp";
             /** Github Proxy Url */
             github_proxy_url?: string | null;
+            /** Google Client Id */
+            google_client_id?: string | null;
             /** Log Level */
             log_level?: ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL") | null;
             /** Panel Monitoring Enabled */
@@ -17594,6 +17610,11 @@ export interface components {
          */
         SystemSettingsView: {
             /**
+             * Audit Log Retention Days
+             * @default 30
+             */
+            audit_log_retention_days: number;
+            /**
              * Captcha Enabled
              * @default true
              */
@@ -17605,6 +17626,11 @@ export interface components {
              * @enum {string}
              */
             default_proxy_mode: "direct" | "panel" | "github_url";
+            /**
+             * Effective Google Client Id
+             * @default
+             */
+            effective_google_client_id: string;
             /**
              * Effective Log Level
              * @enum {string}
@@ -17628,6 +17654,18 @@ export interface components {
             global_github_token_prefix?: string | null;
             /** Gmail Ready */
             gmail_ready: boolean;
+            /** Google Client Id */
+            google_client_id?: string | null;
+            /**
+             * Google Login Enabled
+             * @default false
+             */
+            google_login_enabled: boolean;
+            /**
+             * Google Login From Environment
+             * @default false
+             */
+            google_login_from_environment: boolean;
             /** Has Global Github Token */
             has_global_github_token: boolean;
             /** Has Gmail Credentials */
@@ -21483,6 +21521,7 @@ export interface operations {
                 category?: string | null;
                 status?: string | null;
                 username?: string | null;
+                q?: string | null;
                 ip_address?: string | null;
                 server_id?: number | null;
                 action?: string | null;
@@ -21888,6 +21927,7 @@ export interface operations {
                 category?: string | null;
                 status?: string | null;
                 username?: string | null;
+                q?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -21903,7 +21943,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_AuditEntry_"];
+                    "application/json": components["schemas"]["AuditListView"];
                 };
             };
             /** @description Validation Error */

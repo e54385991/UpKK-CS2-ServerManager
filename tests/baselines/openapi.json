@@ -3782,6 +3782,44 @@
         "title": "AuditEntry",
         "type": "object"
       },
+      "AuditListView": {
+        "additionalProperties": false,
+        "description": "Paginated administrator audit log listing, including active retention.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "retention_days": {
+            "title": "Retention Days",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "retention_days"
+        ],
+        "title": "AuditListView",
+        "type": "object"
+      },
       "AuditLogListResponse": {
         "description": "Paginated administrator audit log listing.",
         "properties": {
@@ -16357,38 +16395,6 @@
         "title": "OverviewSummary",
         "type": "object"
       },
-      "Page_AuditEntry_": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/AuditEntry"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "limit",
-          "offset"
-        ],
-        "title": "Page[AuditEntry]",
-        "type": "object"
-      },
       "Page_MarketPluginView_": {
         "additionalProperties": false,
         "properties": {
@@ -27055,6 +27061,19 @@
         "additionalProperties": false,
         "description": "Partial admin update. Secret fields are write-only and never echoed.",
         "properties": {
+          "audit_log_retention_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Log Retention Days"
+          },
           "captcha_enabled": {
             "anyOf": [
               {
@@ -27169,6 +27188,18 @@
               }
             ],
             "title": "Global Github Token"
+          },
+          "google_client_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Client Id"
           },
           "log_level": {
             "anyOf": [
@@ -27563,6 +27594,13 @@
         "additionalProperties": false,
         "description": "Portable non-secret global settings; Discord data is intentionally absent.",
         "properties": {
+          "audit_log_retention_days": {
+            "default": 30,
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Audit Log Retention Days",
+            "type": "integer"
+          },
           "captcha_enabled": {
             "default": true,
             "title": "Captcha Enabled",
@@ -27639,6 +27677,18 @@
               }
             ],
             "title": "Github Proxy Url"
+          },
+          "google_client_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Client Id"
           },
           "log_level": {
             "anyOf": [
@@ -27947,6 +27997,11 @@
         "additionalProperties": false,
         "description": "Admin system settings with secrets replaced by presence flags.",
         "properties": {
+          "audit_log_retention_days": {
+            "default": 30,
+            "title": "Audit Log Retention Days",
+            "type": "integer"
+          },
           "captcha_enabled": {
             "default": true,
             "title": "Captcha Enabled",
@@ -27970,6 +28025,11 @@
               "github_url"
             ],
             "title": "Default Proxy Mode",
+            "type": "string"
+          },
+          "effective_google_client_id": {
+            "default": "",
+            "title": "Effective Google Client Id",
             "type": "string"
           },
           "effective_log_level": {
@@ -28051,6 +28111,27 @@
           },
           "gmail_ready": {
             "title": "Gmail Ready",
+            "type": "boolean"
+          },
+          "google_client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Client Id"
+          },
+          "google_login_enabled": {
+            "default": false,
+            "title": "Google Login Enabled",
+            "type": "boolean"
+          },
+          "google_login_from_environment": {
+            "default": false,
+            "title": "Google Login From Environment",
             "type": "boolean"
           },
           "has_global_github_token": {
@@ -34664,7 +34745,7 @@
     },
     "/api/system/audit-logs": {
       "get": {
-        "description": "List the last 30 days of administrator audit events.",
+        "description": "List administrator audit events within the configured retention window.",
         "operationId": "get_audit_logs_api_system_audit_logs_get",
         "parameters": [
           {
@@ -34713,6 +34794,23 @@
                 }
               ],
               "title": "Username"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
             }
           },
           {
@@ -35377,7 +35475,7 @@
     },
     "/api/v1/audit": {
       "get": {
-        "description": "List the last 30 days of audit events (admin only), paginated.",
+        "description": "List administrator audit events (admin only), paginated and searchable.",
         "operationId": "list_audit_api_v1_audit_get",
         "parameters": [
           {
@@ -35430,6 +35528,23 @@
           },
           {
             "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -35457,7 +35572,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_AuditEntry_"
+                  "$ref": "#/components/schemas/AuditListView"
                 }
               }
             },

@@ -26,7 +26,7 @@ from modules import (
 
 class _DB:
     def __init__(self, result=None):
-        self.result = result
+        self.result = _Scalar(None) if result is None else result
         self.commits = 0
         self.refreshed = []
 
@@ -131,8 +131,8 @@ async def test_public_register_login_and_session_branches(monkeypatch):
         UserLogin(username="alice", password="pw"), request, Response(), _DB()
     )
     assert result == {"access_token": "access", "token_type": "bearer"}
-    assert await auth.get_google_config() == {
-        "client_id": auth.settings.GOOGLE_CLIENT_ID,
+    assert await auth.get_google_config(_DB()) == {
+        "client_id": auth.settings.GOOGLE_CLIENT_ID or "",
         "enabled": bool(auth.settings.GOOGLE_CLIENT_ID),
     }
     assert await auth.get_current_user_info(user) is user
@@ -292,8 +292,7 @@ async def test_google_oauth_configuration_invalid_existing_and_registration(monk
     monkeypatch.setattr(auth, "ensure_registration_enabled", AsyncMock())
     monkeypatch.setattr(auth, "record_audit_event", AsyncMock())
     monkeypatch.setattr(auth, "set_web_session_cookie", lambda *_args: None)
-    settings = SimpleNamespace(GOOGLE_CLIENT_ID="client", JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30)
-    monkeypatch.setattr(auth, "settings", settings)
+    monkeypatch.setattr(auth, "resolve_google_client_id", AsyncMock(return_value="client"))
     oauth = GoogleOAuthRequest(id_token="id", username="new", password="secret1")
     monkeypatch.setattr(auth.to_thread, "run_sync", AsyncMock(side_effect=ValueError("invalid")))
     with pytest.raises(HTTPException) as exc:

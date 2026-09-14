@@ -180,6 +180,16 @@ class AuditEntry(V1Model):
     details: dict = {}
 
 
+class AuditListView(V1Model):
+    """Paginated administrator audit log listing, including active retention."""
+
+    items: list[AuditEntry]
+    total: int
+    limit: int
+    offset: int
+    retention_days: int
+
+
 __all__ = [
     "OverviewSummary",
     "SteamLatestVersionView",
@@ -196,4 +206,5 @@ __all__ = [
     "MonitoringLogListView",
     "SshPoolView",
     "AuditEntry",
+    "AuditListView",
 ]

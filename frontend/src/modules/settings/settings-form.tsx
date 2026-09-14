@@ -24,6 +24,7 @@ import {
 } from "@/modules/settings/actions";
 import {
   isClientIpHeader,
+  isGoogleClientId,
   type EmailProvider,
   type ProxyMode,
   type SystemSettings,
@@ -32,6 +33,10 @@ import {
   ClientIpCard,
   ENVIRONMENT_LOG_LEVEL,
   LoggingCard,
+  AuditRetentionCard,
+  GoogleLoginCard,
+  AUDIT_LOG_RETENTION_DAYS_MAX,
+  AUDIT_LOG_RETENTION_DAYS_MIN,
   clientIpChoiceOf,
   clientIpHeaderOf,
   customClientIpOf,
@@ -85,6 +90,9 @@ export function SettingsForm({
   const [registrationEnabled, setRegistrationEnabled] = useState(
     initial.registrationEnabled,
   );
+  const [googleClientId, setGoogleClientId] = useState(
+    initial.googleClientId ?? "",
+  );
   const [clientIpChoice, setClientIpChoice] = useState(
     clientIpChoiceOf(initial.clientIpHeader),
   );
@@ -93,6 +101,9 @@ export function SettingsForm({
   );
   const [logLevel, setLogLevel] = useState<string>(
     initial.logLevel ?? ENVIRONMENT_LOG_LEVEL,
+  );
+  const [auditRetentionDays, setAuditRetentionDays] = useState(
+    String(initial.auditLogRetentionDays),
   );
   const [githubToken, setGithubToken] = useState("");
   const [clearGithubToken, setClearGithubToken] = useState(false);
@@ -127,6 +138,20 @@ export function SettingsForm({
       setBanner({ tone: "warn", text: t("clientIp.invalid") });
       return;
     }
+    if (activeSection === "security" && !isGoogleClientId(googleClientId)) {
+      setBanner({ tone: "warn", text: t("googleLogin.invalid") });
+      return;
+    }
+    const parsedRetention = Number(auditRetentionDays);
+    if (
+      activeSection === "logging" &&
+      (!Number.isInteger(parsedRetention) ||
+        parsedRetention < AUDIT_LOG_RETENTION_DAYS_MIN ||
+        parsedRetention > AUDIT_LOG_RETENTION_DAYS_MAX)
+    ) {
+      setBanner({ tone: "warn", text: t("auditRetention.invalid") });
+      return;
+    }
     setSaving(true);
     setBanner(null);
     const parsedPort = Number(smtpPort);
@@ -154,10 +179,18 @@ export function SettingsForm({
               smtpUseTls,
             }
           : activeSection === "security"
-            ? { captchaEnabled, registrationEnabled, clientIpHeader }
+            ? {
+                captchaEnabled,
+                registrationEnabled,
+                clientIpHeader,
+                googleClientId: googleClientId.trim() || null,
+              }
             : activeSection === "logging"
-              ? { logLevel: logLevelOf(logLevel) }
-              : {};
+            ? {
+                logLevel: logLevelOf(logLevel),
+                auditLogRetentionDays: parsedRetention,
+              }
+            : {};
     const result = await saveSettingsAction(patch);
     setSaving(false);
     if (!result.ok) {
@@ -170,8 +203,12 @@ export function SettingsForm({
       setRegistrationEnabled(result.data.registrationEnabled);
       setClientIpChoice(clientIpChoiceOf(result.data.clientIpHeader));
       setClientIpCustom(customClientIpOf(result.data.clientIpHeader));
+      setGoogleClientId(result.data.googleClientId ?? "");
     }
-    if (activeSection === "logging") setLogLevel(result.data.logLevel ?? ENVIRONMENT_LOG_LEVEL);
+    if (activeSection === "logging") {
+      setLogLevel(result.data.logLevel ?? ENVIRONMENT_LOG_LEVEL);
+      setAuditRetentionDays(String(result.data.auditLogRetentionDays));
+    }
     if (activeSection === "downloads") { setGithubToken(""); setClearGithubToken(false); }
     if (activeSection === "notifications") setSmtpPassword("");
     onSaved?.();
@@ -711,6 +748,17 @@ export function SettingsForm({
             </p>
           </CardContent>
         </Card>
+
+        <GoogleLoginCard
+          clientId={googleClientId}
+          onClientIdChange={(value) => {
+            setGoogleClientId(value);
+            onDirty?.();
+          }}
+          fromEnvironment={settings.googleLoginFromEnvironment}
+          enabled={Boolean(googleClientId.trim()) || settings.googleLoginEnabled}
+          effectiveClientId={settings.effectiveGoogleClientId}
+        />
       </SettingsSection>
 
       <SettingsSection
@@ -724,6 +772,10 @@ export function SettingsForm({
           settings={settings}
           level={logLevel}
           onLevelChange={setLogLevel}
+        />
+        <AuditRetentionCard
+          days={auditRetentionDays}
+          onDaysChange={setAuditRetentionDays}
         />
       </SettingsSection>
 

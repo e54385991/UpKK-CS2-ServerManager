@@ -47,6 +47,13 @@ export function isAuditStatus(value: string): value is AuditStatus {
 
 /** Action paths present under the audit.actions message namespace. */
 export const AUDIT_ACTION_VALUES = [
+  "login",
+  "logout",
+  "google_oauth",
+  "register",
+  "password_change",
+  "password_reset.request",
+  "password_reset.complete",
   "files.edit",
   "files.upload",
   "files.delete",

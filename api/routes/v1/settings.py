@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Literal, cast
@@ -28,6 +29,10 @@ from services.ai_security import AIConfigurationError, decrypt_credential
 from services.audit_log_service import record_audit_event
 from services.client_ip import set_client_ip_header
 from services.email_service import email_service
+from services.google_oauth import (
+    effective_google_client_id,
+    stored_google_client_id,
+)
 from services.log_output import apply_console_log_level, effective_console_log_level
 from services.plugin_download_cache import (
     CachePolicy,
@@ -66,6 +71,7 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api/v1/settings", tags=["v1-settings"])
+logger = logging.getLogger(__name__)
 
 
 ContextWindowToken = Literal[
@@ -136,6 +142,15 @@ def _github_verification_view(settings: SystemSettings) -> GitHubTokenVerificati
     return GitHubTokenVerificationView(**verification_for(settings).model_dump())
 
 
+async def _apply_audit_retention_now() -> None:
+    from services.audit_retention_service import audit_retention_service
+
+    try:
+        await audit_retention_service.cleanup_once()
+    except Exception:
+        logger.exception("Immediate audit retention cleanup failed")
+
+
 def to_view(settings: SystemSettings) -> SystemSettingsView:
     """Project the ORM row to the browser-facing, non-secret view."""
     has_gmail_credentials = bool((settings.gmail_credentials_json or "").strip())
@@ -148,6 +163,8 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
         proxy_mode = "github_url"
     else:
         proxy_mode = "panel"
+    stored_google = stored_google_client_id(settings)
+    effective_google = effective_google_client_id(settings)
     return SystemSettingsView(
         default_proxy_mode=proxy_mode,
         github_proxy_url=settings.github_proxy_url,
@@ -159,9 +176,14 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
         plugin_download_cache_max_megabytes=settings.plugin_download_cache_max_megabytes,
         captcha_enabled=bool(settings.captcha_enabled),
         registration_enabled=bool(settings.registration_enabled),
+        google_client_id=stored_google or None,
+        effective_google_client_id=effective_google,
+        google_login_enabled=bool(effective_google),
+        google_login_from_environment=not stored_google and bool(effective_google),
         client_ip_header=settings.client_ip_header,
         log_level=_log_level(settings.log_level),
         effective_log_level=_log_level(effective_console_log_level(settings.log_level)) or "INFO",
+        audit_log_retention_days=int(getattr(settings, "audit_log_retention_days", 30) or 30),
         panel_monitoring_enabled=bool(getattr(settings, "panel_monitoring_enabled", True)),
         github_token_verification=_github_verification_view(settings),
         has_global_github_token=settings.has_global_github_token,
@@ -192,8 +214,10 @@ def _system_transfer(settings: SystemSettings) -> SystemSettingsTransfer:
         plugin_download_cache_max_megabytes=settings.plugin_download_cache_max_megabytes,
         captcha_enabled=settings.captcha_enabled,
         registration_enabled=settings.registration_enabled,
+        google_client_id=stored_google_client_id(settings) or None,
         client_ip_header=settings.client_ip_header,
         log_level=_log_level(settings.log_level),
+        audit_log_retention_days=int(getattr(settings, "audit_log_retention_days", 30) or 30),
         panel_monitoring_enabled=bool(getattr(settings, "panel_monitoring_enabled", True)),
         email_enabled=settings.email_enabled,
         email_provider="gmail" if settings.email_provider == "gmail" else "smtp",
@@ -395,6 +419,8 @@ async def import_system_settings(
     if new_cache_policy != old_cache_policy:
         with suppress(OSError):
             prune_download_cache(CachePolicy.from_settings(settings))
+    if "audit_log_retention_days" in system_data:
+        await _apply_audit_retention_now()
     updated_fields = list(system_data) + list(body.ai.model_dump())
     await record_audit_event(
         category="settings",
@@ -472,6 +498,8 @@ async def update_system_settings(
     } & set(update_data):
         with suppress(OSError):
             prune_download_cache(CachePolicy.from_settings(settings))
+    if "audit_log_retention_days" in update_data:
+        await _apply_audit_retention_now()
     await record_audit_event(
         category="settings",
         action="system.update",

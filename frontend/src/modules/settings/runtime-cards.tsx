@@ -1,7 +1,8 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
-import { Network, ScrollText, TriangleAlert } from "lucide-react";
+import { Clock, LogIn, Network, ScrollText, TriangleAlert } from "lucide-react";
 import {
   CLIENT_IP_HEADER_PRESETS,
   LOG_LEVELS,
@@ -25,6 +26,18 @@ export const CUSTOM_CLIENT_IP = "__custom__";
 
 // Empty value = follow the backend's LOG_LEVEL environment variable.
 export const ENVIRONMENT_LOG_LEVEL = "";
+
+function subscribeBrowserOrigin() {
+  return () => {};
+}
+
+function readBrowserOrigin(): string {
+  return window.location.origin;
+}
+
+function readServerOrigin(): string {
+  return "";
+}
 
 export function clientIpChoiceOf(header: string | null): string {
   if (!header) return DIRECT_CLIENT_IP;
@@ -184,6 +197,127 @@ export function LoggingCard({
               })}
         </p>
         <p className="text-xs text-fg-subtle">{t("logging.fileNote")}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+export const AUDIT_LOG_RETENTION_DAYS_MIN = 1;
+export const AUDIT_LOG_RETENTION_DAYS_MAX = 365;
+
+/** How long administrator audit events stay in the console before cleanup. */
+export function AuditRetentionCard({
+  days,
+  onDaysChange,
+}: {
+  days: string;
+  onDaysChange: (value: string) => void;
+}) {
+  const t = useTranslations("settings");
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 items-center justify-center rounded-md bg-info-muted text-info ring-1 ring-info/30">
+            <Clock className="size-4" />
+          </span>
+          <div>
+            <CardTitle>{t("auditRetention.title")}</CardTitle>
+            <CardDescription>{t("auditRetention.description")}</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="audit-log-retention-days">
+              {t("auditRetention.days")}
+            </Label>
+            <Input
+              id="audit-log-retention-days"
+              data-testid="audit-retention-days"
+              type="number"
+              min={AUDIT_LOG_RETENTION_DAYS_MIN}
+              max={AUDIT_LOG_RETENTION_DAYS_MAX}
+              step={1}
+              value={days}
+              onChange={(event) => onDaysChange(event.target.value)}
+            />
+            <p className="mt-1.5 text-xs text-fg-subtle">
+              {t("auditRetention.daysHelp")}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Web OAuth client used by the login page Google button. */
+export function GoogleLoginCard({
+  clientId,
+  onClientIdChange,
+  fromEnvironment,
+  enabled,
+  effectiveClientId,
+}: {
+  clientId: string;
+  onClientIdChange: (value: string) => void;
+  fromEnvironment: boolean;
+  enabled: boolean;
+  effectiveClientId: string;
+}) {
+  const t = useTranslations("settings");
+  const origin = useSyncExternalStore(
+    subscribeBrowserOrigin,
+    readBrowserOrigin,
+    readServerOrigin,
+  );
+  const callbackUrl = origin ? `${origin}/google-callback` : "/google-callback";
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">
+            <LogIn className="size-4" />
+          </span>
+          <div>
+            <CardTitle>{t("googleLogin.title")}</CardTitle>
+            <CardDescription>{t("googleLogin.description")}</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label htmlFor="google-client-id">{t("googleLogin.clientId")}</Label>
+          <Input
+            id="google-client-id"
+            data-testid="google-client-id"
+            value={clientId}
+            onChange={(event) => onClientIdChange(event.target.value)}
+            placeholder={
+              fromEnvironment && effectiveClientId
+                ? effectiveClientId
+                : "1234567890-xxxx.apps.googleusercontent.com"
+            }
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <p className="mt-1.5 text-xs text-fg-subtle">
+            {t("googleLogin.clientIdHelp")}
+          </p>
+        </div>
+        <div className="rounded-md border border-line bg-surface-overlay/40 px-3 py-2 text-xs text-fg-muted">
+          <p className="font-medium text-fg">{t("googleLogin.redirectTitle")}</p>
+          <code className="mt-1 block break-all text-fg">{callbackUrl}</code>
+          <p className="mt-1.5 text-fg-subtle">{t("googleLogin.redirectHelp")}</p>
+        </div>
+        <p className="text-sm text-fg-muted">
+          {enabled ? t("googleLogin.enabledHelp") : t("googleLogin.disabledHelp")}
+        </p>
+        {fromEnvironment ? (
+          <p className="text-xs text-fg-subtle">{t("googleLogin.environmentHint")}</p>
+        ) : null}
       </CardContent>
     </Card>
   );

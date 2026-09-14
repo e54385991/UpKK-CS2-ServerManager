@@ -41,9 +41,14 @@ function toSettings(raw: SystemSettingsViewDto): SystemSettings {
     panelMonitoringEnabled: raw.panel_monitoring_enabled ?? true,
     captchaEnabled: raw.captcha_enabled ?? true,
     registrationEnabled: raw.registration_enabled ?? true,
+    googleClientId: raw.google_client_id ?? null,
+    effectiveGoogleClientId: raw.effective_google_client_id ?? "",
+    googleLoginEnabled: raw.google_login_enabled ?? false,
+    googleLoginFromEnvironment: raw.google_login_from_environment ?? false,
     clientIpHeader: raw.client_ip_header ?? null,
     logLevel: toLogLevel(raw.log_level),
     effectiveLogLevel: toLogLevel(raw.effective_log_level) ?? "INFO",
+    auditLogRetentionDays: raw.audit_log_retention_days ?? 30,
     hasGlobalGithubToken: raw.has_global_github_token,
     githubTokenVerification: raw.github_token_verification ?? null,
     globalGithubTokenPrefix: raw.global_github_token_prefix ?? null,
@@ -96,11 +101,17 @@ export function toWirePatch(patch: SettingsPatch): Record<string, unknown> {
     ...(patch.registrationEnabled !== undefined
       ? { registration_enabled: patch.registrationEnabled }
       : {}),
+    ...(patch.googleClientId !== undefined
+      ? { google_client_id: patch.googleClientId ?? "" }
+      : {}),
     ...(patch.clientIpHeader !== undefined
       ? { client_ip_header: patch.clientIpHeader ?? "" }
       : {}),
     ...(patch.logLevel !== undefined
       ? { log_level: patch.logLevel ?? "" }
+      : {}),
+    ...(patch.auditLogRetentionDays !== undefined
+      ? { audit_log_retention_days: patch.auditLogRetentionDays }
       : {}),
     ...(patch.globalGithubToken !== undefined
       ? { global_github_token: patch.globalGithubToken }

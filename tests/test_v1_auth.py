@@ -12,14 +12,14 @@ from api.password_reset import GENERIC_FORGOT_MESSAGE, RESET_SUCCESS_MESSAGE
 from modules import get_current_active_user, get_current_user, get_db, settings
 
 
-def _database_session(*, user=None):
+def _database_session(*, user=None, settings_row=None):
     return SimpleNamespace(
         add=lambda *_a, **_k: None,
         commit=AsyncMock(),
         refresh=AsyncMock(),
         get=AsyncMock(return_value=user),
         execute=AsyncMock(
-            return_value=SimpleNamespace(scalar_one_or_none=lambda: None),
+            return_value=SimpleNamespace(scalar_one_or_none=lambda: settings_row),
         ),
     )
 
@@ -307,7 +307,7 @@ def test_v1_register_creates_member(monkeypatch):
 
 def test_v1_google_config_is_public_and_disabled_by_default(monkeypatch):
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", None)
-    client = TestClient(create_app(lifespan=None))
+    client = _public_client(monkeypatch)
     response = client.get("/api/v1/auth/google-config")
     assert response.status_code == 200
     assert response.json() == {"client_id": "", "enabled": False}
@@ -315,7 +315,7 @@ def test_v1_google_config_is_public_and_disabled_by_default(monkeypatch):
 
 def test_v1_google_config_exposes_configured_client(monkeypatch):
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "test-client.apps.googleusercontent.com")
-    client = TestClient(create_app(lifespan=None))
+    client = _public_client(monkeypatch)
     response = client.get("/api/v1/auth/google-config")
     assert response.status_code == 200
     assert response.json() == {
@@ -324,11 +324,30 @@ def test_v1_google_config_exposes_configured_client(monkeypatch):
     }
 
 
+def test_v1_google_config_prefers_stored_client_over_environment(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "env-client.apps.googleusercontent.com")
+    app = create_app(lifespan=None)
+
+    async def override_db():
+        yield _database_session(
+            settings_row=SimpleNamespace(google_client_id="db-client.apps.googleusercontent.com"),
+        )
+
+    app.dependency_overrides[get_db] = override_db
+    client = TestClient(app)
+    response = client.get("/api/v1/auth/google-config")
+    assert response.status_code == 200
+    assert response.json() == {
+        "client_id": "db-client.apps.googleusercontent.com",
+        "enabled": True,
+    }
+
+
 def test_v1_google_oauth_requires_configuration(monkeypatch):
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
     monkeypatch.setattr("api.routes.auth.enforce_rate_limit", AsyncMock())
     monkeypatch.setattr("api.routes.auth.record_audit_event", AsyncMock())
-    client = TestClient(create_app(lifespan=None))
+    client = _public_client(monkeypatch)
     response = client.post("/api/v1/auth/google-oauth", json={"id_token": "not-a-token"})
     assert response.status_code == 500
     assert "not configured" in response.json()["detail"]

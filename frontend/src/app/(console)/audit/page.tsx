@@ -18,6 +18,7 @@ type SearchParams = {
   category?: string;
   status?: string;
   username?: string;
+  q?: string;
   offset?: string;
 };
 
@@ -48,6 +49,7 @@ export default async function AuditPage({
     category: sp.category,
     status: sp.status,
     username: sp.username,
+    q: sp.q,
     limit: PAGE_SIZE,
     offset,
   };
@@ -57,11 +59,10 @@ export default async function AuditPage({
 
   return (
     <>
-      <PageHeader
-        title={t("title")}
-        description={t("description")}
-        actions={<AuditFilters />}
-      />
+      <PageHeader title={t("title")} description={t("description")} />
+      <div className="mb-4">
+        <AuditFilters />
+      </div>
       <Suspense key={key} fallback={<AuditTableSkeleton />}>
         <AuditTable query={query} />
       </Suspense>

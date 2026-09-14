@@ -12,7 +12,7 @@ from modules.database import async_session_maker
 from modules.models import AuditLog, DiscordOperationRun
 from modules.utils import get_current_time
 from services.audit_log_service import (
-    AUDIT_LOG_RETENTION_DAYS,
+    configured_retention_days,
     record_discord_operation_event,
     retention_cutoff,
 )
@@ -72,9 +72,10 @@ class AuditRetentionService:
             await record_discord_operation_event(item, "expired")
         return len(expired)
 
-    async def delete_expired_rows(self) -> tuple[int, int]:
-        cutoff = retention_cutoff()
+    async def delete_expired_rows(self) -> tuple[int, int, int]:
         async with async_session_maker() as db:
+            days = await configured_retention_days(db)
+            cutoff = retention_cutoff(days=days)
             audit_result = await db.execute(
                 delete(AuditLog).where(col(AuditLog.created_at) < cutoff)
             )
@@ -82,25 +83,28 @@ class AuditRetentionService:
                 delete(DiscordOperationRun).where(col(DiscordOperationRun.created_at) < cutoff)
             )
             await db.commit()
-        return int(getattr(audit_result, "rowcount", 0) or 0), int(
-            getattr(operation_result, "rowcount", 0) or 0
+        return (
+            int(getattr(audit_result, "rowcount", 0) or 0),
+            int(getattr(operation_result, "rowcount", 0) or 0),
+            days,
         )
 
     async def cleanup_once(self) -> dict[str, int]:
         expired = await self.expire_pending_discord_operations()
-        deleted_audit, deleted_operations = await self.delete_expired_rows()
+        deleted_audit, deleted_operations, days = await self.delete_expired_rows()
         if expired or deleted_audit or deleted_operations:
             logger.info(
                 "Audit retention: expired=%s deleted_audit=%s deleted_discord_ops=%s days=%s",
                 expired,
                 deleted_audit,
                 deleted_operations,
-                AUDIT_LOG_RETENTION_DAYS,
+                days,
             )
         return {
             "expired_operations": expired,
             "deleted_audit_logs": deleted_audit,
             "deleted_discord_operations": deleted_operations,
+            "retention_days": days,
         }
 
 

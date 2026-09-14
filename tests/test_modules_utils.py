@@ -5,9 +5,12 @@ from __future__ import annotations
 import string
 from datetime import timezone
 
+import pytest
+
 from modules.utils import (
     generate_api_key,
     get_current_time,
+    normalize_google_client_id,
     verify_api_key_format,
 )
 
@@ -41,3 +44,16 @@ def test_current_time_falls_back_when_tz_is_unusable(monkeypatch):
     moment = get_current_time()
     # An invalid TZ must not raise; the system timezone is used instead.
     assert moment.tzinfo is not None
+
+
+def test_normalize_google_client_id_accepts_web_clients_and_clears_blanks():
+    assert (
+        normalize_google_client_id("  1234567890-abc.apps.googleusercontent.com  ")
+        == "1234567890-abc.apps.googleusercontent.com"
+    )
+    assert normalize_google_client_id("  ") is None
+    assert normalize_google_client_id(None) is None
+    with pytest.raises(ValueError, match="Web client"):
+        normalize_google_client_id("not-a-google-client")
+    with pytest.raises(ValueError, match="too long"):
+        normalize_google_client_id("x" * 256)

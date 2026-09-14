@@ -10,7 +10,11 @@ from pydantic import EmailStr, Field, field_validator, model_validator
 
 from api.contracts.base import ApiRequest
 from api.contracts.v1.identity import V1Model
-from modules.utils import normalize_client_ip_header, normalize_log_level
+from modules.utils import (
+    normalize_client_ip_header,
+    normalize_google_client_id,
+    normalize_log_level,
+)
 
 ProxyMode = Literal["direct", "panel", "github_url"]
 EmailProvider = Literal["gmail", "smtp"]
@@ -54,10 +58,15 @@ class SystemSettingsView(V1Model):
     plugin_download_cache_max_megabytes: int = 4096
     captcha_enabled: bool = True
     registration_enabled: bool = True
+    google_client_id: str | None = None
+    effective_google_client_id: str = ""
+    google_login_enabled: bool = False
+    google_login_from_environment: bool = False
     client_ip_header: str | None = None
     # None means the console follows the LOG_LEVEL environment variable.
     log_level: LogLevel | None = None
     effective_log_level: LogLevel
+    audit_log_retention_days: int = 30
     panel_monitoring_enabled: bool = True
     github_token_verification: GitHubTokenVerificationView | None = None
     has_global_github_token: bool
@@ -88,8 +97,10 @@ class SystemSettingsPatch(ApiRequest):
     github_proxy_url: str | None = None
     captcha_enabled: bool | None = None
     registration_enabled: bool | None = None
+    google_client_id: str | None = Field(default=None, max_length=255)
     client_ip_header: str | None = Field(default=None, max_length=64)
     log_level: str | None = Field(default=None, max_length=16)
+    audit_log_retention_days: int | None = Field(default=None, ge=1, le=365)
     panel_monitoring_enabled: bool | None = None
     global_github_token: str | None = Field(default=None, max_length=255)
     clear_global_github_token: bool = False
@@ -108,6 +119,11 @@ class SystemSettingsPatch(ApiRequest):
     def validate_client_ip_header(cls, value: str | None) -> str | None:
         """Blank clears the policy, so the panel trusts only the socket peer."""
         return normalize_client_ip_header(value)
+
+    @field_validator("google_client_id")
+    @classmethod
+    def validate_google_client_id(cls, value: str | None) -> str | None:
+        return normalize_google_client_id(value)
 
     @field_validator("log_level")
     @classmethod
@@ -147,8 +163,10 @@ class SystemSettingsTransfer(V1Model):
     plugin_download_cache_max_megabytes: int = Field(default=4096, ge=0, le=1_048_576)
     captcha_enabled: bool = True
     registration_enabled: bool = True
+    google_client_id: str | None = Field(default=None, max_length=255)
     client_ip_header: str | None = Field(default=None, max_length=64)
     log_level: LogLevel | None = None
+    audit_log_retention_days: int = Field(default=30, ge=1, le=365)
     panel_monitoring_enabled: bool | None = None
     email_enabled: bool = False
     email_provider: EmailProvider = "gmail"
@@ -163,6 +181,11 @@ class SystemSettingsTransfer(V1Model):
     @classmethod
     def validate_client_ip_header(cls, value: str | None) -> str | None:
         return normalize_client_ip_header(value)
+
+    @field_validator("google_client_id")
+    @classmethod
+    def validate_google_client_id(cls, value: str | None) -> str | None:
+        return normalize_google_client_id(value)
 
     @field_validator("log_level")
     @classmethod
@@ -179,6 +202,7 @@ class SystemSettingsTransfer(V1Model):
         "email_from_name",
         "smtp_host",
         "smtp_username",
+        "google_client_id",
     )
     @classmethod
     def empty_string_to_none(cls, value: str | None) -> str | None:

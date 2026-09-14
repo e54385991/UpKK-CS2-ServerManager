@@ -20,6 +20,11 @@ export function isClientIpHeader(value: string): boolean {
   return CLIENT_IP_HEADER_PATTERN.test(value);
 }
 
+export function isGoogleClientId(value: string): boolean {
+  const trimmed = value.trim();
+  return !trimmed || trimmed.toLowerCase().includes(".apps.googleusercontent.com");
+}
+
 // Console verbosity. "" (null over the wire) follows the backend's LOG_LEVEL
 // environment variable.
 export const LOG_LEVELS = [
@@ -54,9 +59,14 @@ export type SystemSettings = {
   readonly panelMonitoringEnabled: boolean;
   readonly captchaEnabled: boolean;
   readonly registrationEnabled: boolean;
+  readonly googleClientId: string | null;
+  readonly effectiveGoogleClientId: string;
+  readonly googleLoginEnabled: boolean;
+  readonly googleLoginFromEnvironment: boolean;
   readonly clientIpHeader: string | null;
   readonly logLevel: LogLevel | null;
   readonly effectiveLogLevel: LogLevel;
+  readonly auditLogRetentionDays: number;
   readonly hasGlobalGithubToken: boolean;
   readonly githubTokenVerification?: components["schemas"]["GitHubTokenVerificationView"] | null;
   readonly globalGithubTokenPrefix: string | null;
@@ -85,8 +95,10 @@ export type SettingsPatch = {
   readonly panelMonitoringEnabled?: boolean;
   readonly captchaEnabled?: boolean;
   readonly registrationEnabled?: boolean;
+  readonly googleClientId?: string | null;
   readonly clientIpHeader?: string | null;
   readonly logLevel?: LogLevel | null;
+  readonly auditLogRetentionDays?: number;
   readonly globalGithubToken?: string;
   readonly clearGlobalGithubToken?: boolean;
   readonly emailEnabled?: boolean;

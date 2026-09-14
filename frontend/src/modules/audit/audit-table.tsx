@@ -47,7 +47,7 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
     );
   }
 
-  const { items, total, limit, offset } = result.data;
+  const { items, total, limit, offset, retentionDays } = result.data;
 
   if (total === 0) {
     return (
@@ -71,6 +71,7 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
     ...(query.category ? { category: query.category } : {}),
     ...(query.status ? { status: query.status } : {}),
     ...(query.username ? { username: query.username } : {}),
+    ...(query.q ? { q: query.q } : {}),
     offset: String(nextOffsetValue),
   });
 
@@ -179,6 +180,9 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
       <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3 text-xs text-fg-muted">
         <span className="tabular-nums">
           {t("pageInfo", { from, to, total })}
+          <span className="ml-2 text-fg-subtle">
+            {t("retentionNote", { days: retentionDays })}
+          </span>
         </span>
         <div className="flex items-center gap-2">
           <PagerLink

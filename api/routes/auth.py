@@ -42,6 +42,7 @@ from modules import (
 )
 from services.audit_log_service import INVALID_CREDENTIALS_DETAILS, record_audit_event
 from services.captcha_policy import require_captcha
+from services.google_oauth import resolve_google_client_id
 from services.rate_limit import enforce_rate_limit
 from services.s3_backup_service import s3_backup_service
 from services.steam_api_service import steam_api_service
@@ -65,9 +66,10 @@ def _build_s3_settings_response(user: User) -> S3SettingsResponse:
 
 
 @router.get("/google-config")
-async def get_google_config():
+async def get_google_config(db: DatabaseSession):
     """Get Google OAuth configuration (public endpoint)"""
-    return {"client_id": settings.GOOGLE_CLIENT_ID, "enabled": bool(settings.GOOGLE_CLIENT_ID)}
+    client_id = await resolve_google_client_id(db)
+    return {"client_id": client_id, "enabled": bool(client_id)}
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -560,11 +562,11 @@ async def google_oauth_login(
         # Verify the Google ID token
         try:
             # Verify with Google Client ID if configured
-            client_id = settings.GOOGLE_CLIENT_ID
+            client_id = await resolve_google_client_id(db)
             if not client_id:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Google OAuth is not configured. Please set GOOGLE_CLIENT_ID in environment variables.",
+                    detail="Google OAuth is not configured. Set the client ID in Settings or GOOGLE_CLIENT_ID.",
                 )
 
             idinfo = await to_thread.run_sync(

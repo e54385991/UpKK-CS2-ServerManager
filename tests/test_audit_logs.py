@@ -17,7 +17,10 @@ from services.audit_log_service import (
     AUDIT_LOG_RETENTION_DAYS,
     AUDIT_STATUSES,
     INVALID_CREDENTIALS_DETAILS,
+    audit_search_clause,
+    clamp_audit_log_retention_days,
     discord_operation_details,
+    list_audit_logs,
     record_audit_event,
     retention_cutoff,
 )
@@ -25,18 +28,23 @@ from services.audit_retention_service import AuditRetentionService
 
 
 class _RecordingSession:
-    def __init__(self, items=None, rowcounts=None):
+    def __init__(self, items=None, rowcounts=None, retention_days=30):
         self.added = []
         self.items = list(items or [])
         self.rowcounts = list(rowcounts or [])
         self.committed = False
         self.statements = []
+        self.retention_days = retention_days
 
     def add(self, item):
         self.added.append(item)
 
     async def commit(self):
         self.committed = True
+
+    async def scalar(self, statement):
+        self.statements.append(statement)
+        return self.retention_days
 
     async def execute(self, statement):
         self.statements.append(statement)
@@ -170,9 +178,10 @@ async def test_retention_expires_pending_operations_and_records_audit(monkeypatc
 async def test_retention_deletes_rows_older_than_30_days(monkeypatch):
     session = _RecordingSession(rowcounts=[4, 2])
     monkeypatch.setattr("services.audit_retention_service.async_session_maker", lambda: session)
-    deleted_audit, deleted_ops = await AuditRetentionService().delete_expired_rows()
+    deleted_audit, deleted_ops, days = await AuditRetentionService().delete_expired_rows()
     assert deleted_audit == 4
     assert deleted_ops == 2
+    assert days == 30
     assert session.committed is True
     assert AUDIT_LOG_RETENTION_DAYS == 30
     assert retention_cutoff() < datetime.now() + timedelta(days=1)
@@ -182,6 +191,56 @@ async def test_retention_deletes_rows_older_than_30_days(monkeypatch):
 async def test_retention_keeps_recent_cutoff_inside_30_days():
     cutoff = retention_cutoff(now=datetime(2026, 8, 26, 12, 0, 0))
     assert cutoff == datetime(2026, 7, 27, 12, 0, 0)
+
+
+def test_retention_cutoff_uses_configured_days():
+    cutoff = retention_cutoff(now=datetime(2026, 8, 26, 12, 0, 0), days=7)
+    assert cutoff == datetime(2026, 8, 19, 12, 0, 0)
+
+
+def test_clamp_audit_log_retention_days_bounds():
+    assert clamp_audit_log_retention_days(None) == 30
+    assert clamp_audit_log_retention_days(0) == 1
+    assert clamp_audit_log_retention_days(400) == 365
+
+
+def test_audit_search_clause_matches_user_action_and_details():
+    sql = str(audit_search_clause("alice").compile(compile_kwargs={"literal_binds": True}))
+    assert "alice" in sql
+    assert "actor_username" in sql
+    assert "action" in sql
+    escaped = str(audit_search_clause("100%").compile(compile_kwargs={"literal_binds": True}))
+    assert r"100\%" in escaped
+
+
+@pytest.mark.asyncio
+async def test_list_audit_logs_applies_search_and_configured_retention():
+    session = _RecordingSession(retention_days=14)
+    calls = {"count": 0}
+
+    async def scalar(statement):
+        session.statements.append(statement)
+        calls["count"] += 1
+        return 14 if calls["count"] == 1 else 0
+
+    session.scalar = scalar
+    result = await list_audit_logs(session, q="alice", limit=25, offset=0)
+    assert result.retention_days == 14
+    assert result.total == 0
+    compiled = " ".join(
+        str(item.compile(compile_kwargs={"literal_binds": True})) for item in session.statements
+    )
+    assert "alice" in compiled
+
+
+@pytest.mark.asyncio
+async def test_retention_deletes_using_configured_days(monkeypatch):
+    session = _RecordingSession(rowcounts=[1, 0], retention_days=7)
+    monkeypatch.setattr("services.audit_retention_service.async_session_maker", lambda: session)
+    deleted_audit, deleted_ops, days = await AuditRetentionService().delete_expired_rows()
+    assert deleted_audit == 1
+    assert deleted_ops == 0
+    assert days == 7
 
 
 def test_audit_logs_api_requires_authentication():
@@ -257,7 +316,9 @@ def test_audit_categories_include_files_config_plugin():
 def test_v1_audit_filters_new_category_and_partial_status(monkeypatch):
     from modules import get_current_active_user, get_current_admin_user, get_current_user, get_db
 
-    listed = AsyncMock(return_value=SimpleNamespace(items=[], total=0, limit=50, offset=0))
+    listed = AsyncMock(
+        return_value=SimpleNamespace(items=[], total=0, limit=50, offset=0, retention_days=30)
+    )
     monkeypatch.setattr("api.routes.v1.audit.list_audit_logs", listed)
     app = create_app(lifespan=None)
     admin = SimpleNamespace(id=1, username="admin", is_admin=True, is_active=True)
@@ -276,3 +337,27 @@ def test_v1_audit_filters_new_category_and_partial_status(monkeypatch):
     assert response.status_code == 200
     assert listed.await_args.kwargs["category"] == "files"
     assert listed.await_args.kwargs["status"] == "partial"
+
+
+def test_v1_audit_passes_search_query(monkeypatch):
+    from modules import get_current_active_user, get_current_admin_user, get_current_user, get_db
+
+    listed = AsyncMock(
+        return_value=SimpleNamespace(items=[], total=0, limit=50, offset=0, retention_days=30)
+    )
+    monkeypatch.setattr("api.routes.v1.audit.list_audit_logs", listed)
+    app = create_app(lifespan=None)
+    admin = SimpleNamespace(id=1, username="admin", is_admin=True, is_active=True)
+    app.dependency_overrides[get_current_user] = lambda: admin
+    app.dependency_overrides[get_current_active_user] = lambda: admin
+    app.dependency_overrides[get_current_admin_user] = lambda: admin
+
+    async def fake_db():
+        yield SimpleNamespace()
+
+    app.dependency_overrides[get_db] = fake_db
+    client = TestClient(app)
+    response = client.get("/api/v1/audit", params={"q": "alice"})
+    assert response.status_code == 200
+    assert listed.await_args.kwargs["q"] == "alice"
+    assert response.json()["retention_days"] == 30

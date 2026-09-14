@@ -128,6 +128,15 @@ class SystemSettings(SQLModel, table=True):
         sa_column_kwargs={"server_default": text("'ERROR'")},
     )
 
+    # How long administrator audit events are kept before automatic cleanup.
+    audit_log_retention_days: int = Field(
+        default=30, sa_column_kwargs={"server_default": text("30")}
+    )
+
+    # Web OAuth client for console Google sign-in. NULL falls back to the
+    # GOOGLE_CLIENT_ID environment variable; both empty disables the button.
+    google_client_id: Optional[str] = Field(default=None, max_length=255)
+
     # Panel self-monitoring (request/error/resource charts). Administrators
     # can disable it to stop sampling, error collection, and history writes.
     panel_monitoring_enabled: bool = Field(

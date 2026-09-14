@@ -12,7 +12,7 @@ def _uuid() -> str:
 
 
 class AuditLog(SQLModel, table=True):
-    """Metadata-only audit event retained for the last 30 days."""
+    """Metadata-only audit event retained for the configured number of days."""
 
     __tablename__: ClassVar[str] = "audit_logs"
     __table_args__ = (

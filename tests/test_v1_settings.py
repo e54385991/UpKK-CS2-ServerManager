@@ -58,7 +58,13 @@ def _sample_settings(**overrides) -> SystemSettings:
     return SystemSettings(**values)
 
 
-def _client(*, admin: bool = True, settings: SystemSettings | None = None, monkeypatch=None):
+def _client(
+    *,
+    admin: bool = True,
+    settings: SystemSettings | None = None,
+    monkeypatch=None,
+    env_google_client_id: str = "",
+):
     app = create_app(lifespan=None)
     user = SimpleNamespace(
         id=1,
@@ -80,6 +86,10 @@ def _client(*, admin: bool = True, settings: SystemSettings | None = None, monke
             AsyncMock(return_value=row),
         )
         monkeypatch.setattr("api.routes.v1.settings.record_audit_event", AsyncMock())
+        monkeypatch.setattr(
+            "services.google_oauth.environment_google_client_id",
+            lambda: env_google_client_id,
+        )
     return TestClient(app), row, user
 
 
@@ -114,11 +124,16 @@ def test_v1_settings_get_exposes_presence_flags_not_secrets(monkeypatch):
     assert body["captcha_enabled"] is True
     assert body["registration_enabled"] is True
     assert body["panel_monitoring_enabled"] is True
+    assert body["audit_log_retention_days"] == 30
+    assert body["google_client_id"] is None
+    assert body["effective_google_client_id"] == ""
+    assert body["google_login_enabled"] is False
+    assert body["google_login_from_environment"] is False
     dumped = response.text
     assert "github_pat_secret123456" not in dumped
     assert "smtp-secret" not in dumped
     assert "hidden" not in dumped
-    assert "client_id" not in dumped
+    assert '{"web"' not in dumped
     for secret_key in (
         "global_github_token",
         "smtp_password",
@@ -357,6 +372,78 @@ def test_v1_settings_put_toggles_panel_monitoring(monkeypatch):
     assert omitted.status_code == 200
     assert settings.panel_monitoring_enabled is False
     assert applied == [False]
+
+
+def test_v1_settings_put_updates_audit_log_retention_days(monkeypatch):
+    cleaned = []
+
+    async def _cleanup():
+        cleaned.append(True)
+        return {"deleted_audit_logs": 2, "retention_days": 7}
+
+    monkeypatch.setattr(
+        "api.routes.v1.settings._apply_audit_retention_now",
+        _cleanup,
+    )
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    response = client.put("/api/v1/settings", json={"audit_log_retention_days": 7})
+    assert response.status_code == 200
+    assert settings.audit_log_retention_days == 7
+    assert response.json()["audit_log_retention_days"] == 7
+    assert cleaned == [True]
+    omitted = client.put("/api/v1/settings", json={"captcha_enabled": True})
+    assert omitted.status_code == 200
+    assert settings.audit_log_retention_days == 7
+    assert cleaned == [True]
+
+
+def test_v1_settings_put_rejects_audit_log_retention_out_of_range(monkeypatch):
+    client, _settings, _user = _client(monkeypatch=monkeypatch)
+    assert client.put("/api/v1/settings", json={"audit_log_retention_days": 0}).status_code == 422
+    assert client.put("/api/v1/settings", json={"audit_log_retention_days": 366}).status_code == 422
+
+
+GOOGLE_WEB_CLIENT_ID = "1234567890-abc.apps.googleusercontent.com"
+
+
+def test_v1_settings_get_falls_back_to_environment_google_client_id(monkeypatch):
+    client, _settings, _user = _client(
+        monkeypatch=monkeypatch,
+        env_google_client_id=GOOGLE_WEB_CLIENT_ID,
+    )
+    body = client.get("/api/v1/settings").json()
+    assert body["google_client_id"] is None
+    assert body["effective_google_client_id"] == GOOGLE_WEB_CLIENT_ID
+    assert body["google_login_enabled"] is True
+    assert body["google_login_from_environment"] is True
+
+
+def test_v1_settings_put_updates_google_client_id(monkeypatch):
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    response = client.put(
+        "/api/v1/settings",
+        json={"google_client_id": f"  {GOOGLE_WEB_CLIENT_ID}  "},
+    )
+    assert response.status_code == 200
+    assert settings.google_client_id == GOOGLE_WEB_CLIENT_ID
+    body = response.json()
+    assert body["google_client_id"] == GOOGLE_WEB_CLIENT_ID
+    assert body["effective_google_client_id"] == GOOGLE_WEB_CLIENT_ID
+    assert body["google_login_enabled"] is True
+    assert body["google_login_from_environment"] is False
+
+    cleared = client.put("/api/v1/settings", json={"google_client_id": ""})
+    assert cleared.status_code == 200
+    assert settings.google_client_id is None
+    assert cleared.json()["google_client_id"] is None
+    assert cleared.json()["google_login_enabled"] is False
+
+
+def test_v1_settings_put_rejects_invalid_google_client_id(monkeypatch):
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    response = client.put("/api/v1/settings", json={"google_client_id": "not-a-google-client"})
+    assert response.status_code == 422
+    assert settings.google_client_id is None
 
 
 def test_v1_settings_put_updates_registration_policy(monkeypatch):

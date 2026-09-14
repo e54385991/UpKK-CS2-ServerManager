@@ -1220,11 +1220,11 @@
     },
     "security": {
       "title": "Security & access",
-      "description": "Control visitor identification and protection for sensitive actions."
+      "description": "Control visitor identification, public registration, Google sign-in, and CAPTCHA."
     },
     "logging": {
       "title": "Logging",
-      "description": "Control how much detail the panel prints to its console."
+      "description": "Control console verbosity and how long audit events are kept."
     },
     "performance": {
       "title": "System monitoring",
@@ -1264,6 +1264,18 @@
       "enabledHelp": "Enabled. Visitors can create regular accounts from the registration page or Google OAuth.",
       "disabledHelp": "Disabled. The registration page and public registration APIs reject new accounts; existing accounts are unaffected."
     },
+    "googleLogin": {
+      "title": "Google sign-in",
+      "description": "OAuth Web client used by the login page Google button. Empty falls back to GOOGLE_CLIENT_ID in the environment.",
+      "clientId": "Google Web client ID",
+      "clientIdHelp": "Create an OAuth 2.0 Web application in Google Cloud Console. This value is public in the login popup, not a secret.",
+      "redirectTitle": "Authorized JavaScript origin / redirect URI",
+      "redirectHelp": "Add this exact path as an authorized redirect URI, and this origin as an authorized JavaScript origin. The login popup uses the implicit id_token flow.",
+      "enabledHelp": "Enabled. The login page shows Continue with Google.",
+      "disabledHelp": "Disabled. Leave the field empty and unset GOOGLE_CLIENT_ID to hide the Google button.",
+      "environmentHint": "Nothing is stored in settings yet. The login button currently uses GOOGLE_CLIENT_ID from the environment. Saving a value here overrides it; clearing the field keeps the environment fallback.",
+      "invalid": "Enter a Google Web client ID ending with .apps.googleusercontent.com, or leave the field empty."
+    },
     "clientIp": {
       "title": "Source IP",
       "description": "Where the panel reads the visitor address it records and rate-limits by.",
@@ -1294,6 +1306,13 @@
         "INFO": "Info and above (verbose)",
         "DEBUG": "Debug (very verbose)"
       }
+    },
+    "auditRetention": {
+      "title": "Audit log retention",
+      "description": "Events older than this many days are deleted automatically. Default is 30 days.",
+      "days": "Retention (days)",
+      "daysHelp": "Applies immediately after save, then once a day. Range: 1–365.",
+      "invalid": "Enter a whole number from 1 to 365."
     },
     "proxy": {
       "title": "Download proxy",
@@ -1823,15 +1842,18 @@
   },
   "audit": {
     "title": "Audit Log",
-    "description": "Records key actions and security events; filter by category and status (last 30 days).",
+    "description": "Records key actions and security events. Search by user, action, IP, or details. Older entries are deleted automatically; retention is configured in Settings.",
     "forbidden": "Only administrators can view the audit log.",
     "fetchError": "Unable to load the audit log ({status}).",
     "empty": "No matching audit events.",
+    "search": "Search",
+    "searchPlaceholder": "User, action, IP, or details",
     "allCategories": "All categories",
     "allStatuses": "All statuses",
     "filterCategory": "Filter by category",
     "filterStatus": "Filter by status",
     "pageInfo": "{from}–{to} of {total}",
+    "retentionNote": "Kept for {days} days",
     "prev": "Previous",
     "next": "Next",
     "columns": {
@@ -1863,6 +1885,15 @@
       "partial": "Partial"
     },
     "actions": {
+      "login": "Sign in",
+      "logout": "Sign out",
+      "google_oauth": "Google sign-in",
+      "register": "Register",
+      "password_change": "Change password",
+      "password_reset": {
+        "request": "Request password reset",
+        "complete": "Complete password reset"
+      },
       "files": {
         "edit": "Edit file",
         "upload": "Upload file",

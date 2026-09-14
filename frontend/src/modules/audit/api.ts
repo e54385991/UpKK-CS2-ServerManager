@@ -7,6 +7,7 @@ export type AuditQuery = {
   readonly category?: string;
   readonly status?: string;
   readonly username?: string;
+  readonly q?: string;
   readonly limit?: number;
   readonly offset?: number;
 };
@@ -16,6 +17,7 @@ export type AuditPage = {
   readonly total: number;
   readonly limit: number;
   readonly offset: number;
+  readonly retentionDays: number;
 };
 
 function toEntry(raw: AuditEntryDto): AuditEntry {
@@ -43,6 +45,7 @@ export async function listAudit(
   if (query.category) params.set("category", query.category);
   if (query.status) params.set("status", query.status);
   if (query.username) params.set("username", query.username);
+  if (query.q) params.set("q", query.q);
   params.set("limit", String(query.limit ?? 25));
   params.set("offset", String(query.offset ?? 0));
 
@@ -55,6 +58,7 @@ export async function listAudit(
       total: result.data.total,
       limit: result.data.limit,
       offset: result.data.offset,
+      retentionDays: result.data.retention_days ?? 30,
     },
   };
 }
