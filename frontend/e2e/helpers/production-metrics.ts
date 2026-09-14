@@ -9,7 +9,9 @@ export type ProductionRouteMetrics = {
   readonly long_task_count: number;
   readonly long_task_total_ms: number;
   readonly html_bytes: number | null;
+  readonly html_gzip_bytes: number | null;
   readonly rsc_bytes: number;
+  readonly rsc_gzip_bytes: number | null;
   readonly js_transfer_bytes: number;
   readonly critical_content_ms: number | null;
 };
@@ -40,7 +42,9 @@ export function summarize(samples: ProductionRouteMetrics[]) {
     critical_content_ms: { p50: pick(critical, 50), p95: pick(critical, 95) },
     cls: { p50: pick(cls, 50), p95: pick(cls, 95) },
     html_bytes: pick(numbers((row) => row.html_bytes), 50),
+    html_gzip_bytes: pick(numbers((row) => row.html_gzip_bytes), 50),
     rsc_bytes: pick(numbers((row) => row.rsc_bytes), 50),
+    rsc_gzip_bytes: pick(numbers((row) => row.rsc_gzip_bytes), 50),
     js_transfer_bytes: pick(numbers((row) => row.js_transfer_bytes), 50),
   };
 }

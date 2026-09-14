@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { gzipSync } from "node:zlib";
 import { test, expect, type BrowserContext, type Page, type Response } from "@playwright/test";
 import en from "../src/i18n/messages/en-US.json" with { type: "json" };
 import zh from "../src/i18n/messages/zh-CN.json" with { type: "json" };
@@ -44,20 +45,40 @@ function attachObservers(page: Page) {
   });
 }
 
+function encodedBytes(response: Response): number | null {
+  const encoding = response.headers()["content-encoding"] ?? "";
+  const length = Number(response.headers()["content-length"]);
+  if (!encoding.includes("gzip") && !encoding.includes("br") && !encoding.includes("deflate")) {
+    return null;
+  }
+  return Number.isFinite(length) && length > 0 ? length : null;
+}
+
 function trackPayloads(page: Page) {
   let htmlBytes = 0;
+  let htmlGzipBytes: number | null = null;
   let rscBytes = 0;
+  let rscGzipBytes = 0;
   const pending: Promise<void>[] = [];
   page.on("response", (response: Response) => {
+    const type = response.headers()["content-type"] ?? "";
+    const url = response.url();
+    const isHtml = type.includes("text/html");
+    const isRsc = type.includes("text/x-component") || url.includes("_rsc");
+    if (!isHtml && !isRsc) return;
+    if (type.includes("text/event-stream")) return;
     pending.push(
       response
         .body()
         .then((body) => {
-          const type = response.headers()["content-type"] ?? "";
-          const url = response.url();
-          if (type.includes("text/html")) htmlBytes = body.byteLength;
-          if (type.includes("text/x-component") || url.includes("_rsc")) {
+          const compressed = encodedBytes(response) ?? gzipSync(body).byteLength;
+          if (isHtml) {
+            htmlBytes = body.byteLength;
+            htmlGzipBytes = compressed;
+          }
+          if (isRsc) {
             rscBytes += body.byteLength;
+            rscGzipBytes += compressed;
           }
         })
         .catch(() => undefined),
@@ -65,7 +86,7 @@ function trackPayloads(page: Page) {
   });
   return async () => {
     await Promise.all(pending);
-    return { htmlBytes, rscBytes };
+    return { htmlBytes, htmlGzipBytes, rscBytes, rscGzipBytes: rscGzipBytes || null };
   };
 }
 
@@ -89,10 +110,13 @@ async function oneVisit(
       await expect(page.getByTestId("overview-stats")).toBeVisible();
     }
     const critical = Date.now() - started;
-    await page.waitForLoadState("load");
+    // Do not wait for `load`: the activity-tray EventSource stays open and
+    // can keep the load watcher or a naive `response.body()` hang.
     const sizes = await payloads();
-    return page.evaluate(
-      ({ routeName, localeName, htmlBytes, rscBytes, criticalMs }) => {
+    // Await before `finally` closes the page. A bare `return page.evaluate(...)`
+    // schedules the close while the CDP call is still in flight.
+    const metrics = await page.evaluate(
+      ({ routeName, localeName, htmlBytes, htmlGzipBytes, rscBytes, rscGzipBytes, criticalMs }) => {
         const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
         const paints = performance.getEntriesByType("paint");
         const fcp = paints.find((entry) => entry.name === "first-contentful-paint");
@@ -118,7 +142,9 @@ async function oneVisit(
           long_task_count: observed?.longTasks ?? 0,
           long_task_total_ms: Math.round((observed?.longTaskMs ?? 0) * 10) / 10,
           html_bytes: htmlBytes || null,
+          html_gzip_bytes: htmlGzipBytes,
           rsc_bytes: rscBytes,
+          rsc_gzip_bytes: rscGzipBytes,
           js_transfer_bytes: js.reduce((total, entry) => total + (entry.transferSize || 0), 0),
           critical_content_ms: criticalMs,
         };
@@ -127,10 +153,13 @@ async function oneVisit(
         routeName: route,
         localeName: locale,
         htmlBytes: sizes.htmlBytes,
+        htmlGzipBytes: sizes.htmlGzipBytes,
         rscBytes: sizes.rscBytes,
+        rscGzipBytes: sizes.rscGzipBytes,
         criticalMs: critical,
       },
     );
+    return metrics;
   } finally {
     await page.close();
   }

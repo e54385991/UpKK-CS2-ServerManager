@@ -14,7 +14,9 @@ function sample(overrides: Partial<ProductionRouteMetrics> = {}): ProductionRout
     long_task_count: 0,
     long_task_total_ms: 0,
     html_bytes: 1000,
+    html_gzip_bytes: 400,
     rsc_bytes: 2000,
+    rsc_gzip_bytes: 800,
     js_transfer_bytes: 3000,
     critical_content_ms: 40,
     ...overrides,
@@ -35,4 +37,5 @@ test("summary uses nearest-rank percentiles", () => {
   assert.equal(summary.critical_content_ms.p50, 20);
   assert.equal(summary.critical_content_ms.p95, 30);
   assert.equal(summary.html_bytes, 200);
+  assert.equal(summary.html_gzip_bytes, 400);
 });

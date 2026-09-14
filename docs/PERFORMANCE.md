@@ -60,10 +60,10 @@ HTML, RSC, or gzip transfer; the Playwright report records those separately.
 On this tree the merged catalogs (main JSON plus `settings.monitor`) compact to
 **142,964** bytes (en-US) and **139,750** bytes (zh-CN). After Stage 3, the
 login client subset is **1,653 / 1,582** bytes and the overview chrome subset
-is **18,521 / 18,291** bytes. HTML, RSC, and gzip transfer still belong in the
-production Playwright report.
+is **18,521 / 18,291** bytes. Production Playwright records HTML / RSC / gzip
+separately (see Stage 7).
 
-## Stage 3 (locale trim and render coalesce; HTML/RSC gzip not yet measured)
+## Stage 3 (locale trim and render coalesce)
 
 Root `NextIntlClientProvider` now receives only `feedback`. Console chrome,
 auth pages, and domain layouts pass explicit namespaces through
@@ -75,9 +75,10 @@ loads the full server dictionary including `settings.monitor`. The files
 move dialog is lazy-loaded with the other file dialogs. AI token deltas and
 operation-log SSE lines coalesce to at most one display update per 50 ms;
 complete, error, and approval events flush immediately. Existing event
-limits, order, and dedup are unchanged. Isolated production HTML/RSC/gzip
-sizes have **not** been re-measured in a browser; catalog compact JSON is
-not that transfer.
+limits, order, and dedup are unchanged. Catalog compact JSON is not HTML,
+RSC, or on-the-wire gzip; Stage 7 records a production Playwright smoke of
+those sizes. There is no pre-Stage-3 HTML capture at `e07dbd0`, so the −50%
+gate is verified for **client catalog JSON**, not for document transfer.
 
 ## Report format
 
@@ -157,12 +158,12 @@ shared httpx client is unchanged.
 
 ## Stage 7 (comparison and maintenance)
 
-`claimed_gains` remains **false**. Smoke API numbers below are one 5 s warmup +
-10 s measure round on loopback ASGI against isolated PostgreSQL 18.6 /
-Redis 8.10.1 (`docker-compose.perf.yml`). They are not the agreed 1 min / 5
-min × 3 API protocol, not a 60-minute soak, and not a production Playwright
-5 / 30 × 3 browser loop. There is no pre-change SHA measurement, so the
-inbox 20% p95 gate is **unverified**.
+`claimed_gains` remains **false**. Numbers below are one 5 s warmup + 10 s
+measure round (API) or `PERF_WARMUP=0 PERF_MEASURE=1 PERF_ROUNDS=1`
+(browser) on loopback against isolated PostgreSQL 18.6 / Redis 8.10.1
+(`docker-compose.perf.yml`) and a production Next standalone + mock API.
+They are not the agreed 1 min / 5 min × 3 API protocol, not a 60-minute
+soak, and not a production Playwright 5 / 30 × 3 browser loop.
 
 ### Local commits
 
@@ -174,24 +175,72 @@ inbox 20% p95 gate is **unverified**.
 | 3 | `0796ee66d5fd36dc821287db5b04fd08d0bfd334` | Locale pick-messages and 50 ms stream coalesce |
 | 4 | `507773400f6925339d953e29ba8f94fef9a4101e` | Overview column projection; no index revision |
 | 5 | `686f863ddf6e89f6f97408ec0d6a4216aac08035` | One-scan cache prune; 8 KiB chunks kept |
-| 7 | this commit | Comparison notes and harness measurement fixes |
+| 7 | `79b349691cf28b600ba5ed232274bd5d37ec51ba` | Comparison notes and harness measurement fixes |
+| 7b | this commit | Before/after smoke evidence; Playwright SSE/evaluate fix |
 
-### Isolated API smoke (HEAD after Stage 5)
+Before SHA is harness-only `e07dbd094786c4d2a0f4cef39c89bc4a69c5889e` (pre-inbox
+batch). After SHA is `79b349691cf28b600ba5ed232274bd5d37ec51ba`. Same seed
+manifest, isolated DB/Redis, loopback ASGI.
 
-Admin inbox GET (authorized fleet). SQL stays 3 (auth + snapshot). Redis
-round trips grow by batches, not by one-per-server:
+### Isolated API smoke (before vs after)
 
-| Fleet | online users | inbox p95 ms | inbox redis ops (probe) | inbox SQL (probe) | errors |
-| --- | --- | --- | --- | --- | --- |
-| 10 | 1 | 10.2 | 2 | 3 | 0 |
-| 100 | 10 | 230.3 | 4 | 3 | 0 |
-| 500 | 30 | 2335.3 | 14 | 3 | 0 |
+`scripts.perf.report.compare_summaries` on fleet-100 smoke:
 
-Overview summary smoke p95: 3.7 / 105.5 / 730.9 ms. Market list (1,000
-rows at the 100- and 500-server seeds): 4.2 / 85.2 / 604.8 ms. Catalog
-client compact JSON remains 1,653 / 1,582 bytes for login and 18,521 /
-18,291 for overview chrome (en-US / zh-CN), more than 50% below the full
-catalog. HTML / RSC / gzip transfer is still unmeasured in a browser.
+| Gate | Result |
+| --- | --- |
+| Inbox p95 ≥ 20% | **pass** (1300.4 ms → 211.0 ms, **83.8%**) |
+| Login catalog bytes −50% | **pass** (142,964 → 1,653) |
+| Overview catalog bytes −50% | **pass** (142,964 → 18,521) |
+| Mixed-load p95 regression `max(5%, 20 ms)` | **fail** for overview / market / servers (see coupling note) |
+
+Admin inbox GET (authorized fleet). After: SQL stays 3 (auth + snapshot);
+Redis round trips grow by batches, not by one-per-server.
+
+| Fleet | users | before inbox p95 | after inbox p95 | before redis (probe) | after redis (probe) | after errors |
+| --- | --- | --- | --- | --- | --- | --- |
+| 100 | 10 | 1300.4 ms | 211.0 ms | 1501 | 4 | 0 |
+| 500 | 30 | *mixed-load smoke did not finish* | 2256.3 ms | n/a | 14 | 0 |
+
+The pre-batch inbox at 500 servers / 30 sessions exhausted the isolated Redis
+client pool (`Too many connections` on per-event loads) and exited 1 with no
+`api-fleet-500-before.json`. A single admin GET against the same 500-server
+seed: **3258.5 ms** before vs **219.6 ms** after (measure-api probe; 2,324,627
+bytes). That is not a mixed-load p95.
+
+**Mixed-load coupling.** Before, a slow inbox (~1.3 s at 100) starved the other
+three routes so their p95 looked like 15–17 ms. After, inbox is fast and the
+same 10 workers hammer overview / market / servers (91 / 108 / 102 ms). That
+is not an overview-query regression by itself; sequential isolated overview
+timing was not run.
+
+### Production Playwright HTML / RSC / gzip (HEAD smoke)
+
+Standalone Next 16.3.5 (`npm run build`) against `e2e/performance.mock.mjs`.
+The server does **not** set `Content-Encoding`; `html_gzip_bytes` /
+`rsc_gzip_bytes` are `gzipSync` of the uncompressed body (or the encoded
+`Content-Length` when present). Full document navigations often embed RSC in
+HTML, so `rsc_bytes` may be 0. Protocol: 0 warmup, 1 measure, 1 round.
+`claimed_gains` stays false.
+
+| Locale | Route | HTML | gzip(HTML) | RSC | gzip(RSC) | JS transfer | critical ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| en-US | `/login` | 27,518 | 5,961 | 0 | — | 179,617 | 158 |
+| zh-CN | `/login` | 27,410 | 6,210 | 0 | — | 179,617 | 93 |
+| en-US | `/overview` | 84,861 | 17,399 | 508 | 363 | 193,848 | 397 |
+| zh-CN | `/overview` | 84,600 | 19,120 | 0 | — | 193,848 | 92 |
+
+There is no matching HTML capture at `e07dbd0`. The −50% locale gate remains
+the catalog JSON subsets above, not these documents.
+
+The production baseline runner must not call `response.body()` on the
+activity-tray EventSource (`text/event-stream` never ends) and must `await`
+`page.evaluate` before closing the page.
+
+### Polling (unit, not live browser)
+
+`frontend/src/shared/lib/visible-poll.test.ts`: in-flight ≤ 1, hidden pause,
+ignore-after-stop, shared poll until the last listener leaves. Live console
+was not exercised in a browser this round.
 
 ### Rejected or unsubmitted candidates
 
@@ -229,6 +278,8 @@ Push, deploy, and live restart stay out of default scope.
   root and do not add extra `servers/[id]/*` layouts for i18n.
 - Cache prune is one `iterdir`; do not restore a second walk.
 - `reports/perf/raw/*.json` stays uncommitted.
+- Production Playwright must skip `response.body()` on `text/event-stream`
+  (activity-tray SSE) and `await` CDP evaluate before closing the page.
 
 ## Gates (not yet claimed)
 
@@ -236,11 +287,16 @@ These are the agreed acceptance checks. Stage 0 only records the protocol and
 the current catalog/download facts:
 
 - Inbox: one in-memory scan per snapshot; Redis batched; 100 / 500 p95 ≥ 20%
-  or report the actuals
-- In-flight ≤ 1; hidden pages pause; stale responses cannot win
-- `/login` and `/overview` client message bytes −50%, plus real HTML/RSC size
+  or report the actuals — **100 smoke pass (83.8%)**; **500 mixed-load before
+  collapsed**; after 2256 ms p95 with 0 errors. 1 min / 5 min × 3 not run.
+- In-flight ≤ 1; hidden pages pause; stale responses cannot win — **unit tests
+  pass**; live browser not run
+- `/login` and `/overview` client message bytes −50%, plus real HTML/RSC size —
+  **catalog JSON pass**; HTML/RSC smoke table above (no pre-trim HTML baseline)
 - Bundle budgets unchanged (252 KiB / 150 KiB gzip)
-- No p95 regression beyond `max(5%, 20 ms)`; CPU / RSS +5%; no monotonic leak
+- No p95 regression beyond `max(5%, 20 ms)`; CPU / RSS +5%; no monotonic leak —
+  **mixed-load overview/market/servers fail this gate** until sequential
+  isolation is measured; 60-minute soak not run
 - Indexes only with EXPLAIN, 20% p95, write tolerance, and ≤ 5 s build
 
 Application changes revert by commit. Added Alembic revisions stay; dropping
