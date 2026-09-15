@@ -193,6 +193,8 @@ Inclusion fails closed without HTTP p95. See
 - Three-round HTTP market p95 with vs without the candidate indexes
   (EXPLAIN / write / build already captured; candidates still out)
 - Full `uv run python scripts/check_baseline.py` after `f533781` / `ebdfcaa`
+  (the 03:46 contract/bundle failures now pass in isolation: token_usage,
+  session cookie suffix, tray failed-import/history, files gzip)
 - Interactive browser pass of tray, install, assistant, and files
   (production runner now covers those surfaces at 390 / 1440; numbers
   not captured yet)
