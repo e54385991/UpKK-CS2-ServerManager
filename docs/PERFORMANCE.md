@@ -199,8 +199,9 @@ servers slots.
 SSE sessions on both trees. Neither delivered events (`events: {}`,
 first-inbox p95 0). Production `REDIS_POOL_SIZE=10` is exhausted by 30
 concurrent inbox snapshots; the pool size was **not** raised. The
-harness now ends the window instead of hanging (`d4bb00a`). 60 s
-baseline is the next same-protocol run.
+harness now ends the window instead of hanging (`d4bb00a`). Same-protocol
+**60 s baseline** on both trees is the same: 30 sessions, 0 HTTP errors,
+0 events. `claimed_gains` stays **false**.
 
 | Batch | SHA | Change |
 | --- | --- | --- |
@@ -263,7 +264,7 @@ is back to pk / github_url / title. See
 - Fleet-500 single-route and mixed 60 s / 300 s × 3 pairs are
   recorded above (all missed 20%; mixed market/servers/inbox also
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
-  events at pool size 10); next is 60 s baseline, soak, 10 / 100,
+  events at pool size 10). Next: 60-minute soak, then 10 / 100 and
   browser
 - Same-protocol series on fleets 10 / 100 after the 500-server work
 - Production browser 5 / 30 × 3 and a 60-minute soak
