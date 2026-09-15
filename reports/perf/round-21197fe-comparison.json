@@ -12,7 +12,43 @@
     "redis_isolated": true,
     "database": "cs2_perf",
     "redis_key_prefix": "perf:",
-    "seed": "fleet-500 / market-10000 / history max"
+    "seed": "fleet-500 / market-10000 / history max; reseeded fleet-100 / market-1000 / history max after soak"
+  },
+  "fleet_100_smoke": {
+    "protocol": "10s × 1, paced from 21197fe discovery, 0 HTTP errors",
+    "seed": "fleet-100 / market-1000 / history max",
+    "head_sha": "1fb6942f2d909184c33dcb59aca453f6f5b1a6a8",
+    "targets_rps": {
+      "inbox": 8.9368,
+      "overview": 593.244,
+      "market": 388.5728,
+      "servers": 318.4136
+    },
+    "starting_p95_ms": {
+      "inbox": 405.279,
+      "overview": 2.844,
+      "market": 4.852,
+      "servers": 5.431
+    },
+    "starting_samples": {
+      "inbox": 38,
+      "overview": 3947,
+      "market": 2447,
+      "servers": 2311
+    },
+    "head_p95_ms": {
+      "inbox": 407.053,
+      "overview": 3.382,
+      "market": 4.961,
+      "servers": 5.658
+    },
+    "head_samples": {
+      "inbox": 38,
+      "overview": 3629,
+      "market": 2421,
+      "servers": 2312
+    },
+    "note": "n=1; not a 20% gate. Open-loop targets exceed single-emit throughput on inbox and servers."
   },
   "inbox_baseline": {
     "protocol": "60s warmup + 300s × 3, paced 0.506 rps",
@@ -234,7 +270,7 @@
     }
   },
   "still_open": [
-    "fleet-100 then fleet-10 same-protocol 60s/300s×3",
+    "fleet-100 then fleet-10 same-protocol 60s/300s×3 (smoke pair recorded; baselines next)",
     "production browser 5/30×3 at 390 and 1440",
     "fleet-1000/1001 overview cap after the 500-server series",
     "uv run python scripts/check_baseline.py",

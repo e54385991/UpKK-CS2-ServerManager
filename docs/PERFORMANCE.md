@@ -259,14 +259,30 @@ is back to pk / github_url / title. See
 - Frontend splits keep confirm dialogs, 8 / 20 s tray polls, assistant 2 s
   poll (no hide-to-pause), lazy file editor / terminal, and upload cancel.
 
+Fleet-100 was reseeded after soak (`market-1000` / `history max`,
+manifest `reports/perf/raw/seed-manifest-fleet-100.json`). Isolated
+single-route **smoke** (10 s × 1, 0 errors, arrival from `21197fe`)
+is **not** a 20% gate:
+
+| Route | target rps | starting p95 | HEAD p95 | samples |
+| --- | ---: | ---: | ---: | ---: |
+| inbox | 8.937 | 405 ms | 407 ms | 38 / 38 |
+| overview | 593.244 | 2.84 ms | 3.38 ms | 3947 / 3629 |
+| market | 388.573 | 4.85 ms | 4.96 ms | 2447 / 2421 |
+| servers | 318.414 | 5.43 ms | 5.66 ms | 2311 / 2312 |
+
+HEAD SHA at those smokes: `1fb6942`. Inbox and servers miss open-loop
+slots. Same-protocol 60 s / 300 s × 3 on this seed is next.
+`claimed_gains` stays **false**.
+
 ### Still open on this host
 
 - Fleet-500 single-route and mixed 60 s / 300 s × 3 pairs are
   recorded above (all missed 20%; mixed market/servers/inbox also
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
-  events at pool size 10). Fleet-500 soak RSS missed +5%. Next: 10 /
-  100, browser, `check_baseline`
-- Same-protocol series on fleets 10 / 100 after the 500-server work
+  events at pool size 10). Fleet-500 soak RSS missed +5%.
+- Fleet-100 smoke pair is recorded; fleet-100 then fleet-10
+  60 s / 300 s × 3, mixed, realtime, browser, `check_baseline`
 - Production browser 5 / 30 × 3
 - `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
   the 1000-row cap; seed after 10 / 100)
@@ -688,8 +704,10 @@ Fleet-500 same-protocol 60 s / 300 s × 3 on isolated `55442` / `56389`
 - Bundle budgets and `cacheComponents` / `partialPrefetching` unchanged
 - 60-minute fleet-500 soak on HEAD: **RSS fail** (934 MiB after first
   load window → 1731 MiB at 60 min, +85%, gate +5%). HTTP 0 errors.
-  Next: fleet-10 / 100, production browser 5 / 30 × 3, `check_baseline`,
-  and the interactive tray / install / assistant / files pass
+  Fleet-100 smoke pair (10 s, 0 errors) is recorded; same-protocol
+  60 s / 300 s × 3 is next. Then fleet-10, production browser 5 / 30 × 3,
+  `check_baseline`, and the interactive tray / install / assistant /
+  files pass.
 
 Application changes revert by commit. This round added **no** Alembic
 revision. Push, deploy, and live restart are out of scope.
