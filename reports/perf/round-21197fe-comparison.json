@@ -98,6 +98,54 @@
     "passed": false,
     "within_regression_envelope": true
   },
+  "mixed_smoke": {
+    "protocol": "10s × 1, paced reused single-route targets",
+    "errors": 0,
+    "targets_rps": {
+      "inbox": 0.506,
+      "overview": 409.125,
+      "market": 418.238,
+      "servers": 231.419
+    },
+    "starting_p95_ms": {
+      "inbox": 2604.333,
+      "overview": 17.790,
+      "market": 141.610,
+      "servers": 83.477
+    },
+    "head_p95_ms": {
+      "inbox": 2809.361,
+      "overview": 22.447,
+      "market": 148.409,
+      "servers": 152.163
+    },
+    "head_sha": "6988f5bea8fcddfb19cfb4d29f8f2d8b1bf84892",
+    "note": "n=1; not a 20% gate. Concurrent open-loop at isolated single-route rates."
+  },
+  "mixed_baseline": {
+    "protocol": "60s warmup + 300s × 3, paced reused single-route targets",
+    "errors": 0,
+    "starting_median_p95_ms": {
+      "inbox": 2602.707,
+      "overview": 20.849,
+      "market": 86.208,
+      "servers": 106.681
+    },
+    "starting_round_p95_ms": {
+      "inbox": [2602.339, 2612.225, 2602.707],
+      "overview": [20.735, 22.214, 20.849],
+      "market": [84.695, 134.943, 86.208],
+      "servers": [99.646, 106.681, 140.872]
+    },
+    "starting_samples": {
+      "inbox": 403,
+      "overview": 29678,
+      "market": 22587,
+      "servers": 22567
+    },
+    "head_median_p95_ms": null,
+    "note": "HEAD 60s/300s×3 still running; smoke is not the gate."
+  },
   "indexes": {
     "submitted": false,
     "alembic_revision": null,
@@ -113,7 +161,7 @@
     }
   },
   "still_open": [
-    "mixed --paced four-route series on fleet-500",
+    "fleet-500 HEAD mixed 60s/300s×3 (21197fe done: inbox 2603 / overview 20.8 / market 86.2 / servers 106.7 ms)",
     "fleet-10 and fleet-100 same-protocol series",
     "measure-realtime --sessions 30",
     "production browser 5/30×3 at 390 and 1440",

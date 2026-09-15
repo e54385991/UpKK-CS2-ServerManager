@@ -169,6 +169,28 @@ reused):
 Servers 20% gate: **fail** (+0.2%). Still inside `max(5%, 20 ms)`.
 Smoke is not a 20% gate.
 
+Mixed `--paced` reuses the four single-route arrival targets so a slow
+inbox cannot reduce the others' scheduled volume. Smoke (10 s, 0
+errors) is **not** a 20% gate:
+
+| Tree | inbox | overview | market | servers |
+| --- | ---: | ---: | ---: | ---: |
+| starting | 2604 ms | 17.8 ms | 141.6 ms | 83.5 ms |
+| HEAD | 2809 ms | 22.4 ms | 148.4 ms | 152.2 ms |
+
+Same-protocol mixed **baseline** on the starting tree (60 s + 300 s ×
+3, 0 errors):
+
+| Route | median p95 | round p95 | samples |
+| --- | ---: | --- | ---: |
+| inbox | **2603 ms** | 2602 / 2612 / 2603 | 403 |
+| overview | **20.8 ms** | 20.7 / 22.2 / 20.8 | 29678 |
+| market | **86.2 ms** | 84.7 / 134.9 / 86.2 | 22587 |
+| servers | **107 ms** | 99.6 / 106.7 / 140.9 | 22567 |
+
+HEAD mixed baseline is the next comparable run. Concurrent open-loop at
+isolated rates misses most overview / market / servers slots.
+
 | Batch | SHA | Change |
 | --- | --- | --- |
 | 0 | `025bd71` | Starting protocol, arrival pacing, segments, realtime CLI, fingerprint |
@@ -227,8 +249,8 @@ is back to pk / github_url / title. See
 
 ### Still open on this host
 
-- Fleet-500 inbox / market / overview / servers 60 s / 300 s × 3
-  pairs are recorded above (all missed 20%). Next: mixed `--paced`,
+- Fleet-500 single-route 60 s / 300 s × 3 pairs are recorded above
+  (all missed 20%). Mixed starting baseline is in; next is HEAD mixed,
   then realtime / 10 / 100 / browser / soak
 - Same-protocol series on fleets 10 / 100 after the 500-server work
 - 30-session realtime, production browser 5 / 30 × 3, and a 60-minute soak
