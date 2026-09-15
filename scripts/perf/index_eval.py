@@ -377,6 +377,44 @@ async def _evaluate_connected(connection: Any) -> dict[str, Any]:
         await connection.rollback()
 
 
+def drop_index_sql(name: str) -> str:
+    """Forward drop only. Names come from the checked-in candidate list."""
+    if name not in {item["name"] for item in CANDIDATE_INDEXES}:
+        raise ValueError(f"refusing to drop unknown index {name}")
+    return f"DROP INDEX IF EXISTS {name}"
+
+
+async def _run_isolated_ddl(statements: list[str]) -> None:
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from modules.config import get_settings
+    from scripts.perf.env import assert_isolated_target
+
+    settings = get_settings()
+    assert_isolated_target(settings)
+    engine = create_async_engine(settings.database_url, pool_size=1)
+    try:
+        async with engine.begin() as connection:
+            for statement in statements:
+                await connection.execute(text(statement))
+    finally:
+        await engine.dispose()
+
+
+async def commit_candidate_indexes() -> list[str]:
+    """Make candidates visible to HTTP measure connections. Always pair with drop."""
+    await _run_isolated_ddl([item["ddl"] for item in CANDIDATE_INDEXES])
+    return [item["name"] for item in CANDIDATE_INDEXES]
+
+
+async def drop_candidate_indexes() -> list[str]:
+    """Remove measurement-only indexes. Never used as an Alembic downgrade."""
+    names = [item["name"] for item in CANDIDATE_INDEXES]
+    await _run_isolated_ddl([drop_index_sql(name) for name in names])
+    return names
+
+
 async def evaluate_market_indexes() -> dict[str, Any]:
     """EXPLAIN, time writes, and build candidates inside one rolled-back transaction.
 

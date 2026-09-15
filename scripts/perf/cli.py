@@ -36,6 +36,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "report",
         ),
     )
+    parser.add_argument(
+        "--with-index-candidates",
+        action="store_true",
+        help=(
+            "measure-api only: CREATE the marketplace btree candidates, "
+            "measure, then DROP them. Isolated target required."
+        ),
+    )
     parser.add_argument("--fleet", default="fleet-10", choices=sorted(FLEETS))
     parser.add_argument("--market", default="market-100", choices=sorted(MARKETS))
     parser.add_argument("--history", default="daily", choices=("empty", "daily", "max"))
@@ -84,7 +92,7 @@ def dispatch(args: argparse.Namespace) -> int:
     if args.command == "seed":
         return asyncio.run(_run_seed(args))
     if args.command == "measure-api":
-        return asyncio.run(_run_measure(args))
+        return asyncio.run(_run_measure_guarded(args))
     if args.command == "soak":
         return asyncio.run(_run_soak(args))
     if args.command == "explain-indexes":
@@ -169,6 +177,18 @@ async def _write_index_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _run_measure_guarded(args: argparse.Namespace) -> int:
+    if not args.with_index_candidates:
+        return await _run_measure(args)
+    from scripts.perf.index_eval import commit_candidate_indexes, drop_candidate_indexes
+
+    await commit_candidate_indexes()
+    try:
+        return await _run_measure(args)
+    finally:
+        await drop_candidate_indexes()
+
+
 async def _run_measure(args: argparse.Namespace) -> int:
     from httpx import ASGITransport
 
@@ -220,6 +240,11 @@ async def _run_measure(args: argparse.Namespace) -> int:
         if not args.routes
         else f"api-{args.fleet}-{args.mode}-{isolated}.json"
     )
+    if args.with_index_candidates:
+        report["indexes"] = {
+            "candidates_present_during_measure": True,
+            "indexes_submitted": False,
+        }
     path = _output_path(args, default_name)
     write_report(path, report)
     print(path)

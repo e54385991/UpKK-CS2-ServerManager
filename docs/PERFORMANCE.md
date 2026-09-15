@@ -32,6 +32,7 @@ Commands added for this round:
 uv run python scripts/run_perf.py fingerprint
 uv run python scripts/run_perf.py measure-api --fleet fleet-100 --mode smoke --paced
 uv run python scripts/run_perf.py measure-api --fleet fleet-100 --mode baseline --paced --arrival-from reports/perf/raw/api-fleet-100-baseline.json
+uv run python scripts/run_perf.py measure-api --fleet fleet-500 --mode baseline --paced --route market --with-index-candidates --arrival-from reports/perf/raw/api-fleet-500-smoke-market-21197fe.json
 uv run python scripts/run_perf.py measure-realtime --fleet fleet-500 --mode smoke --sessions 30
 ```
 
@@ -75,7 +76,19 @@ Seeded set: `fleet-500` / `market-10000` / `history max`
 
 Paced inbox **smoke** (10 s, 1 round, 5 samples, 0 errors) is **not** a
 20% gate. Arrival discovered 0.633 rps on `21197fe`; target 0.506 rps is
-reused by HEAD:
+reused by HEAD.
+
+Paced market **smoke** (10 s, 0 errors) discovered 523 rps and targets
+418 rps. Actual emit is lower because each GET is ~6 ms, so the open-loop
+schedule misses slots. That cadence is reused:
+
+| Tree | market p95 | samples |
+| --- | ---: | ---: |
+| starting | 6.14 ms | 1788 |
+| HEAD | 8.45 ms | 1478 |
+
+`measure-api --with-index-candidates` creates the two btree candidates,
+measures, then `DROP INDEX` in `finally`. It is not an Alembic revision.
 
 | Tree | git SHA | inbox p95 | late slots |
 | --- | --- | ---: | ---: |

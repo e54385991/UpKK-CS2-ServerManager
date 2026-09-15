@@ -390,6 +390,15 @@ def test_index_coverage_uses_column_prefix_not_names():
     )
 
 
+def test_drop_index_sql_only_allows_checked_in_candidates():
+    from scripts.perf.index_eval import CANDIDATE_INDEXES, drop_index_sql
+
+    name = CANDIDATE_INDEXES[0]["name"]
+    assert drop_index_sql(name) == f"DROP INDEX IF EXISTS {name}"
+    with pytest.raises(ValueError, match="unknown index"):
+        drop_index_sql("ix_not_a_candidate")
+
+
 def test_write_probe_sql_fills_not_null_market_columns():
     from scripts.perf.index_eval import WRITE_INSERT_SQL
 

@@ -44,6 +44,9 @@ def test_cli_accepts_fingerprint_realtime_and_paced_flags():
     assert paced.command == "measure-api"
     assert paced.paced is True
     assert paced.arrival_from.endswith("prior.json")
+    indexed = parse_args(["measure-api", "--with-index-candidates", "--route", "market"])
+    assert indexed.with_index_candidates is True
+    assert indexed.routes == ["market"]
     realtime = parse_args(["measure-realtime", "--sessions", "30", "--seconds", "15"])
     assert realtime.command == "measure-realtime"
     assert realtime.sessions == 30
