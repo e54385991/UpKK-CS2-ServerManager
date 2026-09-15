@@ -15,6 +15,7 @@ from services.operations.inbox import (
     list_accessible_servers,
     load_accessible_servers,
 )
+from services.operations.inbox_sse import InboxSseState, inbox_sse_headers, next_inbox_sse_frame
 from services.operations.inbox_types import InboxItemData, InboxPayload
 from services.plugins.ai_import_store import check_administrator, clear_failed_jobs
 from services.server_operation_hub import server_operation_hub
@@ -55,6 +56,20 @@ def to_inbox_view(payload: InboxPayload) -> OperationInboxView:
     )
 
 
+def encode_inbox_view(view: OperationInboxView) -> str:
+    OperationInboxView.model_validate(view.model_dump())
+    return json.dumps(
+        view.model_dump(mode="json"),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _encode_inbox_payload(payload: InboxPayload) -> str:
+    return encode_inbox_view(to_inbox_view(payload))
+
+
 async def _build_inbox(
     servers: list[tuple[int, str]], include_imports: bool = False
 ) -> OperationInboxView:
@@ -82,8 +97,7 @@ async def stream_operation_inbox(
 
     async def event_source():
         yield ": connected\n\n"
-        last = ""
-        idle_ticks = 0
+        state = InboxSseState()
         while not await request.is_disconnected():
             include_imports = current_user.is_admin
             if include_imports:
@@ -91,32 +105,16 @@ async def stream_operation_inbox(
                     await check_administrator(current_user.id)
                 except PermissionError:
                     include_imports = False
-            view = await _build_inbox(servers, include_imports)
-            encoded = json.dumps(
-                view.model_dump(mode="json"),
-                ensure_ascii=False,
-                separators=(",", ":"),
-                default=str,
-            )
-            if encoded != last:
-                last = encoded
-                idle_ticks = 0
-                yield f"event: inbox\ndata: {encoded}\n\n"
-            else:
-                idle_ticks += 1
-                if idle_ticks >= 15:
-                    idle_ticks = 0
-                    yield ": keep-alive\n\n"
+            payload = await build_operation_inbox(servers, include_imports=include_imports)
+            frame = next_inbox_sse_frame(state, payload, _encode_inbox_payload)
+            if frame is not None:
+                yield frame.text
             await asyncio.sleep(1)
 
     return StreamingResponse(
         event_source(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=inbox_sse_headers(),
     )
 
 

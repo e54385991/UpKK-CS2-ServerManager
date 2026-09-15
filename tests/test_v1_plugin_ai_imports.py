@@ -118,8 +118,8 @@ def test_sse_reconnect_replays_complete_terminal_snapshot_and_checks_revocation(
 
 @pytest.mark.asyncio
 async def test_activity_inbox_removes_catalog_tasks_after_admin_revocation(monkeypatch):
-    from api.contracts.v1.operations import OperationInboxView
     from api.routes.v1 import operation_inbox
+    from services.operations.inbox_types import InboxPayload
 
     user = SimpleNamespace(id=1, is_admin=True)
     request = SimpleNamespace(is_disconnected=AsyncMock(side_effect=[False, True]))
@@ -127,16 +127,12 @@ async def test_activity_inbox_removes_catalog_tasks_after_admin_revocation(monke
     monkeypatch.setattr(
         operation_inbox, "check_administrator", AsyncMock(side_effect=PermissionError())
     )
-    build = AsyncMock(
-        return_value=OperationInboxView(
-            items=[], failed_items=[], active_count=0, running_count=0, failed_count=0
-        )
-    )
-    monkeypatch.setattr(operation_inbox, "_build_inbox", build)
+    build = AsyncMock(return_value=InboxPayload(items=[], completed_items=[], failed_items=[]))
+    monkeypatch.setattr(operation_inbox, "build_operation_inbox", build)
     response = await operation_inbox.stream_operation_inbox(request, user)
     chunks = [chunk async for chunk in response.body_iterator]
     assert len(chunks) == 2
-    build.assert_awaited_once_with([], False)
+    build.assert_awaited_once_with([], include_imports=False)
 
 
 def test_delete_terminal_import_api(client):
