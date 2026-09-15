@@ -53,6 +53,73 @@ Do not seed unless that flag is true and `REDIS_KEY_PREFIX=perf:`.
 `cacheComponents` and `partialPrefetching` remain off. This harness does not
 change that gate.
 
+## Round `21197fe` delivery
+
+Implementation batches on this tree, newest last. None of them change HTTP,
+SSE, or WebSocket contracts. `claimed_gains` stays **false**: this host's
+`127.0.0.1:55432` is listening but `postgres_isolated` is false (password
+auth for `cs2_perf` fails), so the 60 s / 300 s × 3 API series, 30-session
+realtime run, and production browser 5 / 30 × 3 series were not recaptured
+against `21197fe`. Historical Stage 7 timings stay in the archive and are
+not this round's before/after.
+
+| Batch | SHA | Change |
+| --- | --- | --- |
+| 0 | `025bd71` | Starting protocol, arrival pacing, segments, realtime CLI, fingerprint |
+| 1a | `216dcb7` | Visible-poll request identity; stale `finally` cannot clear a newer pull |
+| 1b | `84cd598` | Session cookie helpers in shared; ESLint blocks shared → modules/app |
+| 2a | `24c478c` | Inbox snapshot from the visible set; history prune Redis I/O off the hub lock |
+| 2b | `3fe3878` | Inbox SSE reuses JSON only after a full domain snapshot compare |
+| 3 | `bac25c5` | Plugin preflight short transaction; batch dependency reads; install routes split |
+| 4a | `87e3b43` | Activity tray subscription / list reuse / commands / log pane |
+| 4b | `d92a269` | Market install form, preflight, confirms, and live log split |
+| 4c | `bf44716` | Assistant SSE + 2 s poll request identity; memoized completed messages |
+| 4d | `e33a602` | Files directory / selection / editor / upload store / queue split |
+| 5 | `66397d8` | Index coverage by column prefix; HTTP-shaped EXPLAIN SQL; no Alembic revision |
+| 6 | this document | Comparison, remaining limits, and rollback for this round |
+
+### Index decision
+
+The two marketplace btree candidates remain **out**. Alembic `0001` already
+has `pk_market_plugins (id)`, `ix_market_plugins_github_url (github_url)`,
+and `ix_market_plugins_title (title)`. Those prefixes do not cover
+`(framework, is_recommended, install_count, created_at, id)` or
+`(framework, created_at, id)`. `scripts/perf/index_eval.py` now judges
+coverage from `pg_indexes.indexdef` column lists and EXPLAINs the HTTP list
+shape (selected list columns, exact `COUNT(*)`, first page and offset 40,
+plus a category filter). A live `explain-indexes` on this host skipped:
+connection to `127.0.0.1:55432` failed password auth for `cs2_perf`. Without
+three-round HTTP p95, write tolerance, and a ≤ 5 s transactional build on
+the largest isolated set, inclusion fails closed. See
+`reports/perf/round-21197fe-indexes.json`.
+
+### Correctness that landed without a speed claim
+
+- Hidden → visible polling: only the current request id may clear inflight,
+  publish, or re-arm; hide / resume / stop invalidate older pulls.
+- Shared HTTP clients read cookie names from `shared/auth`, not `modules/auth`.
+- Inbox assemble: one authorized-server scan, messages only for the visible
+  set, event tails only for those operation ids, prune merge after Redis.
+- Inbox SSE: equality includes messages, commands, queue position, results,
+  administrator AI import rows, and history expiry; encode still runs the
+  presenter and `OperationInboxView` when the snapshot changes.
+- Plugin preflight: owned short read → close → SSH → short rule read. The
+  compatibility `build_plugin_install_plan(db, ...)` still uses the caller
+  session and does not commit it. Submit still re-preflights before 202.
+- Frontend splits keep confirm dialogs, 8 / 20 s tray polls, assistant 2 s
+  poll (no hide-to-pause), lazy file editor / terminal, and upload cancel.
+
+### Still open on this host
+
+- Same-protocol API / realtime / browser / soak numbers at `21197fe` vs HEAD
+- Isolated EXPLAIN + write + build series for the two index candidates
+- Full `uv run python scripts/check_baseline.py` after the later frontend
+  batches (local eslint / tsc / unit tests were run per batch)
+- Interactive browser pass of tray, install, assistant, and files
+
+Do not seed or measure until `postgres_isolated` is true. Do not treat a
+listening port as the isolated database.
+
 ## Isolated stack
 
 PostgreSQL 18.6 and Redis 8.10.1 use dedicated volumes and loopback ports.
@@ -386,8 +453,11 @@ more. Passed under `playwright.performance.config.ts`.
 
 ### Rollback
 
-Revert application commits newest-first (`686f863`, `5077734`, `0796ee6`,
-`1b9c47f`, `7dc61fa`, then the harness if desired). This round added **no**
+Round `21197fe` application commits revert newest-first (`e33a602`,
+`bf44716`, `d92a269`, `87e3b43`, `bac25c5`, `3fe3878`, `24c478c`,
+`84cd598`, `216dcb7`, then harness `025bd71` if desired). Earlier Stage 1–5
+commits revert newest-first (`686f863`, `5077734`, `0796ee6`, `1b9c47f`,
+`7dc61fa`, then the original harness if desired). This round added **no**
 Alembic revision. If a later index revision exists, keep it and add a
 forward migration to drop the index; do not run an old image that does not
 recognize that revision.
