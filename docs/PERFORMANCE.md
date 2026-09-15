@@ -430,9 +430,9 @@ trees: 0 HTTP errors, 0 events, first-inbox p95 0. The pool size was
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
 - Production browser 5 / 30 × 3 at 390 / 1440 passed (29 tests,
-  6.3 min). Critical-content median p95 is 58–128 ms. HEAD-only;
-  not a 20% vs-`21197fe` gate. `check_baseline` and the interactive
-  tray / install / assistant / files pass remain.
+  6.3 min). Interactive pass opened the tray, install form,
+  assistant conversation, and files workspace on the mock
+  production stack. `check_baseline` remains.
 - Production browser 5 / 30 × 3
 - Isolated `fleet-1000` / `fleet-1001` seed is recorded (1000 / 1001
   rows). Admin ownership is 898 / 899, so overview summary returns
@@ -905,8 +905,7 @@ Fleet-10 same-protocol 60 s / 300 s × 3 (`market-100` / `history max`),
   Fleet-10 / 100 / 500 API series are recorded (all missed 20%).
   Realtime 0 events at 1 / 10 / 30 sessions. Production browser
   5 / 30 × 3 passed. Isolated 1000 / 1001 seed is recorded. Next:
-  `check_baseline` and the interactive tray / install / assistant /
-  files pass.
+  `check_baseline`.
 
 Application changes revert by commit. This round added **no** Alembic
 revision. Push, deploy, and live restart are out of scope.

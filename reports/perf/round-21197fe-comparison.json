@@ -691,8 +691,19 @@
       }
     }
   },
+  "interactive_browser_pass": {
+    "stack": "production Next :31861 + mock API :38161",
+    "head_sha": "fcd76494a0fc586fcb984e68c6c53d6c1572df3f",
+    "passed": true,
+    "surfaces": [
+      "overview tray open + Failed tab",
+      "plugins/1 install form",
+      "assistant Fixture conversation",
+      "servers/1/files dropzone listing"
+    ],
+    "note": "Confirm dialogs and 2s assistant poll were visible; no layout contract change."
+  },
   "still_open": [
-    "uv run python scripts/check_baseline.py",
-    "interactive browser pass of tray, install, assistant, files"
+    "uv run python scripts/check_baseline.py"
   ]
 }
