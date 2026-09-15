@@ -273,7 +273,10 @@ npm run gen:api    # regenerate OpenAPI types from ../tests/baselines/openapi.js
 npx playwright test --config=playwright.overview.config.ts # isolated streaming regression
 npx playwright test --config=playwright.monitor.config.ts    # isolated settings monitoring charts
 # Production measurement (requires npm run build; not part of default CI):
-# PERF_WARMUP=5 PERF_MEASURE=30 PERF_ROUNDS=3 npx playwright test --config=playwright.production-baseline.config.ts
+# PERF_WARMUP=5 PERF_MEASURE=30 PERF_ROUNDS=3 \
+#   PERF_BROWSER_ROUTES=login,overview,servers,activity-tray,plugins-install,assistant,files \
+#   PERF_WIDTHS=390,1440 \
+#   npx playwright test --config=playwright.production-baseline.config.ts
 ```
 
 Completion scope is defined in the root `AGENTS.md` under **Task Completion

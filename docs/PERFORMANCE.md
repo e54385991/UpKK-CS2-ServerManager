@@ -156,6 +156,8 @@ three-round market p95 is still missing, so inclusion fails closed. See
   candidates
 - Full `uv run python scripts/check_baseline.py` after `f533781` / `ebdfcaa`
 - Interactive browser pass of tray, install, assistant, and files
+  (production runner now covers those surfaces at 390 / 1440; numbers
+  not captured yet)
 
 Always export `UPKK_PERF_POSTGRES_PORT=55442 UPKK_PERF_REDIS_PORT=56389`
 before `scripts/run_perf.py` on this machine. Do not seed unless
@@ -208,8 +210,12 @@ PERF_PRODUCTION=1 PERF_WARMUP=5 PERF_MEASURE=30 PERF_ROUNDS=3 \
   npx playwright test --config=playwright.production-baseline.config.ts
 ```
 
-Smoke defaults are `PERF_WARMUP=1 PERF_MEASURE=2 PERF_ROUNDS=1`. Reports land
-in `frontend/test-results/perf-baseline/`. Catalog compact JSON bytes are not
+The production runner covers this round's browser matrix: login, overview,
+servers, activity-tray (open the panel), plugins-install, assistant, and
+files, in en-US / zh-CN at 390 and 1440. Subset with
+`PERF_BROWSER_ROUTES=login,overview` and `PERF_WIDTHS=1440`. Smoke defaults
+are `PERF_WARMUP=1 PERF_MEASURE=2 PERF_ROUNDS=1`. Reports land in
+`frontend/test-results/perf-baseline/`. Catalog compact JSON bytes are not
 HTML, RSC, or gzip transfer; the Playwright report records those separately.
 
 On this tree the merged catalogs (main JSON plus `settings.monitor`) compact to

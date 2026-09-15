@@ -4,6 +4,12 @@ import { test, expect, type BrowserContext, type Page, type Response } from "@pl
 import en from "../src/i18n/messages/en-US.json" with { type: "json" };
 import zh from "../src/i18n/messages/zh-CN.json" with { type: "json" };
 import { protocolFromEnv, summarize, type ProductionRouteMetrics } from "./helpers/production-metrics";
+import {
+  PRODUCTION_HEIGHT,
+  surfacesFromEnv,
+  widthsFromEnv,
+  type ProductionSurface,
+} from "./helpers/production-surfaces";
 
 const mock = `http://127.0.0.1:${process.env.PERF_MOCK_PORT ?? "38151"}`;
 
@@ -90,25 +96,57 @@ function trackPayloads(page: Page) {
   };
 }
 
+async function waitForCritical(
+  page: Page,
+  surface: ProductionSurface,
+  locale: "en-US" | "zh-CN",
+) {
+  if (surface.name === "login") {
+    const submit = locale === "en-US" ? en.login.submit : zh.login.submit;
+    await expect(page.getByRole("button", { name: submit, exact: true })).toBeVisible();
+    return;
+  }
+  if (surface.name === "overview") {
+    await expect(page.getByTestId("overview-stats")).toBeVisible();
+    return;
+  }
+  if (surface.name === "servers") {
+    await expect(page.getByText("fixture-server-1", { exact: true }).first()).toBeVisible();
+    return;
+  }
+  if (surface.name === "activity-tray") {
+    await expect(page.getByTestId("activity-tray-toggle")).toBeVisible();
+    await page.getByTestId("activity-tray-toggle").click();
+    await expect(page.getByTestId("activity-tray-panel")).toBeVisible();
+    return;
+  }
+  if (surface.name === "plugins-install") {
+    await expect(page.getByText("Fixture Plugin", { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId("market-install-form")).toBeVisible();
+    return;
+  }
+  if (surface.name === "assistant") {
+    await expect(page.getByText("Fixture conversation", { exact: true }).first()).toBeVisible();
+    return;
+  }
+  await expect(page.getByTestId("files-dropzone")).toBeVisible();
+}
+
 async function oneVisit(
   context: BrowserContext,
-  route: "/login" | "/overview",
+  surface: ProductionSurface,
   locale: "en-US" | "zh-CN",
-  actor: string | null,
+  width: number,
 ): Promise<ProductionRouteMetrics> {
-  await login(context, actor, locale);
+  await login(context, surface.actor, locale);
   const page = await context.newPage();
   try {
+    await page.setViewportSize({ width, height: PRODUCTION_HEIGHT });
     await attachObservers(page);
     const payloads = trackPayloads(page);
     const started = Date.now();
-    await page.goto(route, { waitUntil: "domcontentloaded" });
-    if (route === "/login") {
-      const submit = locale === "en-US" ? en.login.submit : zh.login.submit;
-      await expect(page.getByRole("button", { name: submit, exact: true })).toBeVisible();
-    } else {
-      await expect(page.getByTestId("overview-stats")).toBeVisible();
-    }
+    await page.goto(surface.path, { waitUntil: "domcontentloaded" });
+    await waitForCritical(page, surface, locale);
     const critical = Date.now() - started;
     // Do not wait for `load`: the activity-tray EventSource stays open and
     // can keep the load watcher or a naive `response.body()` hang.
@@ -150,7 +188,7 @@ async function oneVisit(
         };
       },
       {
-        routeName: route,
+        routeName: surface.name,
         localeName: locale,
         htmlBytes: sizes.htmlBytes,
         htmlGzipBytes: sizes.htmlGzipBytes,
@@ -166,33 +204,36 @@ async function oneVisit(
 }
 
 for (const locale of ["en-US", "zh-CN"] as const) {
-  for (const route of ["/login", "/overview"] as const) {
-    test(`production baseline ${locale} ${route}`, async ({ context }) => {
-      const protocol = protocolFromEnv();
-      const actor = route === "/login" ? null : "admin";
-      for (let round = 0; round < protocol.rounds; round += 1) {
-        for (let index = 0; index < protocol.warmup; index += 1) {
-          await oneVisit(context, route, locale, actor);
+  for (const surface of surfacesFromEnv()) {
+    for (const width of widthsFromEnv()) {
+      test(`production baseline ${locale} ${surface.name} ${width}`, async ({ context }) => {
+        const protocol = protocolFromEnv();
+        for (let round = 0; round < protocol.rounds; round += 1) {
+          for (let index = 0; index < protocol.warmup; index += 1) {
+            await oneVisit(context, surface, locale, width);
+          }
+          const samples: ProductionRouteMetrics[] = [];
+          for (let index = 0; index < protocol.measure; index += 1) {
+            samples.push(await oneVisit(context, surface, locale, width));
+          }
+          const result = {
+            claimed_gains: false,
+            locale,
+            route: surface.name,
+            path: surface.path,
+            width,
+            round: round + 1,
+            protocol,
+            summary: summarize(samples),
+            samples,
+          };
+          await mkdir("test-results/perf-baseline", { recursive: true });
+          const file = `test-results/perf-baseline/${locale}_${surface.name}_${width}-r${round + 1}.json`;
+          await writeFile(file, JSON.stringify(result, null, 2));
+          expect(samples.length).toBe(protocol.measure);
         }
-        const samples: ProductionRouteMetrics[] = [];
-        for (let index = 0; index < protocol.measure; index += 1) {
-          samples.push(await oneVisit(context, route, locale, actor));
-        }
-        const result = {
-          claimed_gains: false,
-          locale,
-          route,
-          round: round + 1,
-          protocol,
-          summary: summarize(samples),
-          samples,
-        };
-        await mkdir("test-results/perf-baseline", { recursive: true });
-        const file = `test-results/perf-baseline/${locale}${route.replaceAll("/", "_")}-r${round + 1}.json`;
-        await writeFile(file, JSON.stringify(result, null, 2));
-        expect(samples.length).toBe(protocol.measure);
-      }
-    });
+      });
+    }
   }
 }
 
