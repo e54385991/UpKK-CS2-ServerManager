@@ -89,8 +89,14 @@
     "starting_median_p95_ms": 5.808,
     "starting_round_p95_ms": [5.891, 5.808, 5.748],
     "starting_samples": 184160,
-    "head_median_p95_ms": null,
-    "note": "HEAD 60s/300s×3 still running; smoke is not the gate."
+    "head_median_p95_ms": 5.794,
+    "head_round_p95_ms": [5.794, 5.794, 5.795],
+    "head_samples": 184362,
+    "head_sha": "194ce4fcabc95b6856c195293d2f3d9befc2bc81",
+    "improvement": 0.0024,
+    "gate": 0.2,
+    "passed": false,
+    "within_regression_envelope": true
   },
   "indexes": {
     "submitted": false,
@@ -107,7 +113,6 @@
     }
   },
   "still_open": [
-    "fleet-500 HEAD servers 60s/300s×3 (21197fe done: 5.808 ms median p95)",
     "mixed --paced four-route series on fleet-500",
     "fleet-10 and fleet-100 same-protocol series",
     "measure-realtime --sessions 30",
