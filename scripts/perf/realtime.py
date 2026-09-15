@@ -113,6 +113,27 @@ async def drain_sse(
                 first = False
 
 
+async def play_lifecycle(injector: InboxLifecycle, stop_at: float) -> list[str]:
+    """Drive the script without blocking past the measure window."""
+    played: list[str] = []
+    step = 0
+    while monotonic() < stop_at:
+        name = next_cycle_step(step)
+        remaining = stop_at - monotonic()
+        if remaining <= 0:
+            break
+        try:
+            played.append(await asyncio.wait_for(injector.play(name), timeout=min(1.0, remaining)))
+        except TimeoutError:
+            played.append(f"{name}:timeout")
+        step += 1
+        remaining = stop_at - monotonic()
+        if remaining <= 0:
+            break
+        await asyncio.sleep(min(0.25, remaining))
+    return played
+
+
 async def open_inbox_sessions(
     *,
     client: httpx.AsyncClient,
@@ -141,17 +162,7 @@ async def open_inbox_sessions(
             errors += 1
 
     readers = [asyncio.create_task(one_session()) for _ in range(sessions)]
-    played: list[str] = []
-    if injector is not None:
-        step = 0
-        while monotonic() < stop_at:
-            name = next_cycle_step(step)
-            played.append(await injector.play(name))
-            step += 1
-            remaining = stop_at - monotonic()
-            if remaining <= 0:
-                break
-            await asyncio.sleep(min(0.25, remaining))
+    played = await play_lifecycle(injector, stop_at) if injector is not None else []
     await asyncio.gather(*readers)
     return {
         "sessions": sessions,
