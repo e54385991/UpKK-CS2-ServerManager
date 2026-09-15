@@ -703,7 +703,12 @@
     ],
     "note": "Confirm dialogs and 2s assistant poll were visible; no layout contract change."
   },
-  "still_open": [
-    "uv run python scripts/check_baseline.py"
-  ]
+  "check_baseline": {
+    "command": "uv run python scripts/check_baseline.py",
+    "passed": true,
+    "elapsed_s": 228,
+    "head_sha": "da637ec7cb38c1626ec7b1725db2c95ac19490cd",
+    "note": "First attempt failed ruff I001 on scripts/perf/realtime.py; da637ec fixed imports and format. Second run passed."
+  },
+  "still_open": []
 }

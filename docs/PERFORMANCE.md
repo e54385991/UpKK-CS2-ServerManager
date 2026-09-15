@@ -423,28 +423,20 @@ HEAD `d04a5c9` rounds: inbox 55.1 / 55.8 / 56.0; overview 21.8 / 21.8 /
 trees: 0 HTTP errors, 0 events, first-inbox p95 0. The pool size was
 **not** raised. `claimed_gains` stays **false**.
 
-### Still open on this host
+### This-round close-out
 
-- Fleet-500 single-route and mixed 60 s / 300 s × 3 pairs are
-  recorded above (all missed 20%; mixed market/servers/inbox also
-  outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
-  events at pool size 10). Fleet-500 soak RSS missed +5%.
-- Production browser 5 / 30 × 3 at 390 / 1440 passed (29 tests,
-  6.3 min). Interactive pass opened the tray, install form,
-  assistant conversation, and files workspace on the mock
-  production stack. `check_baseline` remains.
-- Production browser 5 / 30 × 3
-- Isolated `fleet-1000` / `fleet-1001` seed is recorded (1000 / 1001
-  rows). Admin ownership is 898 / 899, so overview summary returns
-  898 / 899 and does not hit the SQL LIMIT 1000. Unit tests remain
-  the cap proof.
-- Marketplace indexes remain out (HTTP +15.4%, below 20%)
-- Full `uv run python scripts/check_baseline.py` after `f533781` / `ebdfcaa`
-  (the 03:46 contract/bundle failures now pass in isolation: token_usage,
-  session cookie suffix, tray failed-import/history, files gzip)
-- Interactive browser pass of tray, install, assistant, and files
-  (production runner now covers those surfaces at 390 / 1440; numbers
-  not captured yet)
+Every protocol surface now has current-state evidence. Remaining
+product limits, not missing measurements:
+
+- No same-protocol 60 s / 300 s × 3 pair beat `21197fe` by 20%.
+  `claimed_gains` stays **false**.
+- Marketplace indexes stay out (HTTP +15.4%).
+- Realtime 1 / 10 / 30 sessions deliver **0** events.
+  `REDIS_POOL_SIZE` stays 10.
+- Fleet-500 soak RSS +85% (gate +5%).
+- Isolated `fleet-1000` / `1001` admin ownership is 898 / 899, so
+  overview summary does not hit `LIMIT 1000`.
+- `check_baseline` passed in 228 s at `da637ec`.
 
 Always export `UPKK_PERF_POSTGRES_PORT=55442 UPKK_PERF_REDIS_PORT=56389`
 before `scripts/run_perf.py` on this machine. Do not seed unless
@@ -904,8 +896,8 @@ Fleet-10 same-protocol 60 s / 300 s × 3 (`market-100` / `history max`),
   load window → 1731 MiB at 60 min, +85%, gate +5%). HTTP 0 errors.
   Fleet-10 / 100 / 500 API series are recorded (all missed 20%).
   Realtime 0 events at 1 / 10 / 30 sessions. Production browser
-  5 / 30 × 3 passed. Isolated 1000 / 1001 seed is recorded. Next:
-  `check_baseline`.
+  5 / 30 × 3 passed. Isolated 1000 / 1001 seed is recorded.
+  `check_baseline` passed (228 s). `claimed_gains` stays **false**.
 
 Application changes revert by commit. This round added **no** Alembic
 revision. Push, deploy, and live restart are out of scope.
