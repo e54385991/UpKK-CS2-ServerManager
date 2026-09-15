@@ -68,9 +68,14 @@ def test_cli_accepts_fingerprint_realtime_and_paced_flags():
 
 
 def test_realtime_inject_picks_the_lowest_admin_server_id():
-    from scripts.perf.hub_inject import pick_injectable_server_id
+    from scripts.perf.hub_inject import pick_injectable_server_id, server_has_inject_room
 
     assert pick_injectable_server_id([12, 3, None, 8]) == 3
+    assert not server_has_inject_room(busy=True, pending=10)
+    assert pick_injectable_server_id(
+        [3, 8, 12],
+        occupancy={3: (True, 10), 8: (True, 2), 12: (False, 0)},
+    ) == 8
     with pytest.raises(SystemExit):
         pick_injectable_server_id([None])
 

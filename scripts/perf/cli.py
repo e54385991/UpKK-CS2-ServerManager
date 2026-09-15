@@ -356,7 +356,9 @@ async def _run_realtime(args: argparse.Namespace) -> int:
             settings=settings,
         )
     actor_id = int(manifest["users"]["admin"]["id"])
-    server_id = pick_injectable_server_id(await _admin_server_ids(actor_id))
+    admin_ids = await _admin_server_ids(actor_id)
+    occupancy = await _server_occupancy(admin_ids[:32])
+    server_id = pick_injectable_server_id(admin_ids, occupancy)
     sessions = args.sessions or FLEETS[args.fleet].online_users
     seconds = args.seconds or (15 if args.mode == "smoke" else 60)
     app = create_app(lifespan=None)
@@ -385,6 +387,20 @@ async def _admin_server_ids(actor_id: int) -> list[int]:
     async with async_session_maker() as session:
         result = await session.execute(select(Server.id).where(Server.user_id == actor_id))
         return [int(row) for row in result.scalars().all() if row is not None]
+
+
+async def _server_occupancy(server_ids: Sequence[int]) -> dict[int, tuple[bool, int]]:
+    from services.redis_manager import redis_manager
+
+    occupancy: dict[int, tuple[bool, int]] = {}
+    for server_id in server_ids:
+        current = await redis_manager.get(f"server_op_current:{server_id}")
+        pending = await redis_manager.get(f"server_op_pending:{server_id}")
+        occupancy[server_id] = (
+            bool(current),
+            len(pending) if isinstance(pending, list) else 0,
+        )
+    return occupancy
 
 
 def _write_shell_report(args: argparse.Namespace) -> int:

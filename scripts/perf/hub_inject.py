@@ -2,15 +2,33 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
+
+PENDING_CAP = 10
 
 
-def pick_injectable_server_id(ids: Sequence[int | None]) -> int:
-    """Prefer the lowest id so history-max seeds keep a daily admin host."""
+def server_has_inject_room(*, busy: bool, pending: int, cap: int = PENDING_CAP) -> bool:
+    """Mirror hub.create: a busy host with a full queue rejects new jobs."""
+    return not (busy and pending >= cap)
+
+
+def pick_injectable_server_id(
+    ids: Sequence[int | None],
+    occupancy: Mapping[int, tuple[bool, int]] | None = None,
+    cap: int = PENDING_CAP,
+) -> int:
+    """Prefer the lowest id that still has hub queue room."""
     chosen = [int(item) for item in ids if item is not None]
     if not chosen:
         raise SystemExit("seed has no administrator server")
-    return min(chosen)
+    ranked = sorted(chosen)
+    if occupancy is None:
+        return ranked[0]
+    for server_id in ranked:
+        busy, pending = occupancy.get(server_id, (False, 0))
+        if server_has_inject_room(busy=busy, pending=pending, cap=cap):
+            return server_id
+    return ranked[0]
 
 
 class HubInboxLifecycle:
@@ -22,16 +40,19 @@ class HubInboxLifecycle:
         self.running_id: str | None = None
 
     async def play(self, step: str) -> str:
-        from services.server_operation_hub import server_operation_hub
+        from services.server_operation_hub import ServerOperationConflict, server_operation_hub
 
-        if step == "progress":
-            await self._progress(server_operation_hub)
-        elif step == "complete":
-            await self._complete(server_operation_hub)
-        elif step == "fail":
-            await self._fail(server_operation_hub)
-        elif step == "clear":
-            await server_operation_hub.clear_failed([self.server_id])
+        try:
+            if step == "progress":
+                await self._progress(server_operation_hub)
+            elif step == "complete":
+                await self._complete(server_operation_hub)
+            elif step == "fail":
+                await self._fail(server_operation_hub)
+            elif step == "clear":
+                await server_operation_hub.clear_failed([self.server_id])
+        except ServerOperationConflict:
+            return f"{step}:conflict"
         return step
 
     async def _create(self, hub: Any, command: str) -> dict[str, Any]:
