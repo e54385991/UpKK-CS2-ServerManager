@@ -177,6 +177,16 @@
       "servers": false
     }
   },
+  "realtime_smoke": {
+    "protocol": "15s, 30 inbox SSE sessions, progress/complete/fail/clear",
+    "http_errors": 0,
+    "starting_events": 0,
+    "head_events": 0,
+    "starting_first_inbox_p95_ms": 0.0,
+    "head_first_inbox_p95_ms": 0.0,
+    "head_sha": "d4bb00ad79553748adde79ee10661f7cb0386ff7",
+    "note": "REDIS_POOL_SIZE stays 10 (production default). 30 concurrent inbox snapshots exhaust the pool; sessions stay open but deliver no events. Pool size was not raised."
+  },
   "indexes": {
     "submitted": false,
     "alembic_revision": null,
@@ -192,9 +202,8 @@
     }
   },
   "still_open": [
-    "measure-realtime --sessions 30",
+    "measure-realtime --mode baseline --sessions 30 --seconds 60 both trees",
     "fleet-10 and fleet-100 same-protocol series",
-    "measure-realtime --sessions 30",
     "production browser 5/30×3 at 390 and 1440",
     "60-minute soak",
     "fleet-1000/1001 overview cap after the 500-server series",
