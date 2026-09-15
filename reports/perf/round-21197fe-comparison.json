@@ -110,6 +110,42 @@
     "passed": false,
     "within_regression_envelope": true
   },
+  "fleet_100_mixed_smoke": {
+    "protocol": "10s × 1, paced reused single-route targets",
+    "errors": 0,
+    "targets_rps": {
+      "inbox": 8.937,
+      "overview": 593.244,
+      "market": 388.573,
+      "servers": 318.414
+    },
+    "starting_p95_ms": {
+      "inbox": 533.797,
+      "overview": 136.357,
+      "market": 156.175,
+      "servers": 139.182
+    },
+    "starting_samples": {
+      "inbox": 23,
+      "overview": 379,
+      "market": 311,
+      "servers": 322
+    },
+    "head_p95_ms": {
+      "inbox": 539.378,
+      "overview": 136.684,
+      "market": 139.895,
+      "servers": 139.479
+    },
+    "head_samples": {
+      "inbox": 27,
+      "overview": 385,
+      "market": 321,
+      "servers": 327
+    },
+    "head_sha": "dca867e8668ff16c4783aa0d5453e466a262843d",
+    "note": "n=1; not a 20% gate. Concurrent open-loop at isolated single-route rates."
+  },
   "inbox_baseline": {
     "protocol": "60s warmup + 300s × 3, paced 0.506 rps",
     "errors": 0,
@@ -330,7 +366,7 @@
     }
   },
   "still_open": [
-    "fleet-100 mixed then fleet-10 same-protocol 60s/300s×3",
+    "fleet-100 mixed 60s/300s×3 then fleet-10 same-protocol series",
     "production browser 5/30×3 at 390 and 1440",
     "fleet-1000/1001 overview cap after the 500-server series",
     "uv run python scripts/check_baseline.py",

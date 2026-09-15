@@ -313,7 +313,17 @@ Same-protocol servers **baseline** (60 s + 300 s × 3, 0 errors,
 | HEAD `0f906f2` | **5.52 ms** | 5.53 / 5.52 / 5.41 | 208152 |
 
 Servers 20% gate: **fail** (−1.1%). Still inside `max(5%, 20 ms)`.
-`claimed_gains` stays **false**. Mixed `--paced` on this seed is next.
+
+Mixed `--paced` reuses the four single-route arrival targets. Smoke
+(10 s, 0 errors) is **not** a 20% gate:
+
+| Tree | inbox | overview | market | servers |
+| --- | ---: | ---: | ---: | ---: |
+| starting | 534 ms | 136 ms | 156 ms | 139 ms |
+| HEAD `dca867e` | 539 ms | 137 ms | 140 ms | 139 ms |
+
+Same-protocol mixed **baseline** (60 s + 300 s × 3) is running.
+`claimed_gains` stays **false**.
 
 ### Still open on this host
 
@@ -321,8 +331,9 @@ Servers 20% gate: **fail** (−1.1%). Still inside `max(5%, 20 ms)`.
   recorded above (all missed 20%; mixed market/servers/inbox also
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
-- Fleet-100 single-route 60 s / 300 s × 3 is recorded (all missed
-  20%). Mixed, then fleet-10, realtime, browser, `check_baseline`
+- Fleet-100 single-route 60 s / 300 s × 3 and mixed smoke are
+  recorded (all missed 20%). Mixed baseline, then fleet-10, realtime,
+  browser, `check_baseline`
 - Production browser 5 / 30 × 3
 - `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
   the 1000-row cap; seed after 10 / 100)
