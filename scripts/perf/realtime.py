@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from time import monotonic, perf_counter
-from collections.abc import Callable
 from typing import Any, Protocol
 
 import httpx

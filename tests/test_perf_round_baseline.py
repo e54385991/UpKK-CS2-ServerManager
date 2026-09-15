@@ -73,10 +73,13 @@ def test_realtime_inject_picks_the_lowest_admin_server_id():
 
     assert pick_injectable_server_id([12, 3, None, 8]) == 3
     assert not server_has_inject_room(busy=True, pending=10)
-    assert pick_injectable_server_id(
-        [3, 8, 12],
-        occupancy={3: (True, 10), 8: (True, 2), 12: (False, 0)},
-    ) == 8
+    assert (
+        pick_injectable_server_id(
+            [3, 8, 12],
+            occupancy={3: (True, 10), 8: (True, 2), 12: (False, 0)},
+        )
+        == 8
+    )
     with pytest.raises(SystemExit):
         pick_injectable_server_id([None])
 
@@ -253,10 +256,7 @@ async def test_next_sse_chunk_ends_when_the_stream_or_window_does():
         clock["t"] += float(timeout)
         raise TimeoutError
 
-    assert (
-        await next_sse_chunk(Silent(), 0.5, now=lambda: clock["t"], waiter=waiter)
-        is None
-    )
+    assert await next_sse_chunk(Silent(), 0.5, now=lambda: clock["t"], waiter=waiter) is None
 
 
 @pytest.mark.asyncio
