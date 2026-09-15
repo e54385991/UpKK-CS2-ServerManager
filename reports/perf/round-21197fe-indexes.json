@@ -1,0 +1,58 @@
+{
+  "format": "upkk-isolated-perf",
+  "version": 1,
+  "claimed_gains": false,
+  "round": "21197fe",
+  "indexes_submitted": false,
+  "alembic_revision": null,
+  "decision": "keep current schema; no marketplace index migration",
+  "existing_from_alembic_0001": [
+    {
+      "name": "pk_market_plugins",
+      "columns": ["id"],
+      "covers_recommended": false,
+      "covers_created": false
+    },
+    {
+      "name": "ix_market_plugins_github_url",
+      "columns": ["github_url"],
+      "covers_recommended": false,
+      "covers_created": false
+    },
+    {
+      "name": "ix_market_plugins_title",
+      "columns": ["title"],
+      "covers_recommended": false,
+      "covers_created": false
+    }
+  ],
+  "candidates": [
+    {
+      "name": "ix_market_plugins_framework_recommended_installs_created",
+      "columns": ["framework", "is_recommended", "install_count", "created_at", "id"],
+      "existing_index_covers": false,
+      "included": false
+    },
+    {
+      "name": "ix_market_plugins_framework_created_id",
+      "columns": ["framework", "created_at", "id"],
+      "existing_index_covers": false,
+      "included": false
+    }
+  ],
+  "gates": {
+    "definition_coverage": "existing btree prefixes do not match either candidate",
+    "explain_analyze_buffers": "not captured; 127.0.0.1:55432 is listening but postgres_isolated is false",
+    "http_p95_three_round_median": null,
+    "write_p95_tolerance": null,
+    "build_seconds": null,
+    "other_query_regression": null
+  },
+  "reason": [
+    "Coverage is decided from column lists in Alembic 0001, not from index names.",
+    "EXPLAIN and HTTP three-round p95 require the isolated cs2_perf role on 55432.",
+    "This host's 55432 accepts connections but rejects cs2_perf password auth (another compose project).",
+    "Id-only microbenchmarks are not accepted as HTTP evidence.",
+    "Missing measurements fail closed; no CREATE INDEX and no Alembic revision."
+  ]
+}

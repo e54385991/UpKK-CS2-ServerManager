@@ -315,6 +315,58 @@ def test_index_eval_sql_uses_stored_enum_names():
     assert all("COUNTERSTRIKESHARP" in item["sql"] for item in TARGET_QUERIES)
 
 
+def test_index_eval_queries_match_http_list_shape():
+    from scripts.perf.index_eval import TARGET_QUERIES
+
+    by_name = {item["name"]: item["sql"] for item in TARGET_QUERIES}
+    assert "description_i18n" in by_name["market_recommended"]
+    assert "LIMIT 20 OFFSET 0" in by_name["market_recommended"]
+    assert "LIMIT 20 OFFSET 40" in by_name["market_oldest_page"]
+    assert "count(*)" in by_name["market_count"]
+    assert "SELECT id FROM" not in by_name["market_recommended"]
+    assert "category = 'UTILITY'" in by_name["market_recommended_utility"]
+
+
+def test_index_coverage_uses_column_prefix_not_names():
+    from scripts.perf.index_eval import (
+        btree_covers,
+        existing_covers_candidate,
+        parse_index_columns,
+    )
+
+    primary = parse_index_columns(
+        "CREATE UNIQUE INDEX pk_market_plugins ON public.market_plugins USING btree (id)"
+    )
+    title = parse_index_columns(
+        "CREATE INDEX ix_market_plugins_title ON public.market_plugins USING btree (title)"
+    )
+    recommended = parse_index_columns(
+        "CREATE INDEX ix_market_plugins_framework_recommended_installs_created "
+        "ON public.market_plugins USING btree "
+        "(framework, is_recommended, install_count, created_at DESC, id DESC)"
+    )
+    assert primary == ("id",)
+    assert title == ("title",)
+    assert recommended == (
+        "framework",
+        "is_recommended",
+        "install_count",
+        "created_at",
+        "id",
+    )
+    assert btree_covers(recommended, ("framework", "is_recommended", "install_count", "created_at", "id"))
+    assert not btree_covers(primary, ("framework", "created_at", "id"))
+    existing = [
+        {"name": "pk_market_plugins", "columns": primary},
+        {"name": "ix_market_plugins_title", "columns": title},
+    ]
+    assert existing_covers_candidate(existing, ("framework", "created_at", "id")) is False
+    assert existing_covers_candidate(
+        [{"name": "dup", "columns": recommended}],
+        ("framework", "is_recommended", "install_count", "created_at", "id"),
+    )
+
+
 def test_selected_routes_keep_catalog_order_and_reject_unknown_names():
     from scripts.perf.api_measure import ROUTES, selected_routes
 
