@@ -31,9 +31,7 @@ class ArrivalStats:
         }
 
 
-def scale_rates(
-    rates: Mapping[str, float], ratio: float = ARRIVAL_RATIO
-) -> dict[str, float]:
+def scale_rates(rates: Mapping[str, float], ratio: float = ARRIVAL_RATIO) -> dict[str, float]:
     """Keep the discovered mix; candidates reuse these scaled targets."""
     return {name: max(0.0, float(rate) * ratio) for name, rate in rates.items()}
 
@@ -159,5 +157,3 @@ def arrival_report(
         "routes": {name: row.as_dict() for name, row in typed.items()},
         "total": merge_arrival_stats(tuple(typed.values())).as_dict(),
     }
-
-

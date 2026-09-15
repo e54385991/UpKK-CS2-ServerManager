@@ -192,7 +192,9 @@ def _unmeasured_connected_report(
         "indexes_submitted": False,
         "existing_indexes": [item["name"] for item in existing],
         "existing_index_defs": existing,
-        "existing_covers_candidates": all(item["gate"]["existing_index_covers"] for item in candidates),
+        "existing_covers_candidates": all(
+            item["gate"]["existing_index_covers"] for item in candidates
+        ),
         "explains": explains,
         "candidates": candidates,
         "reason": (

@@ -87,7 +87,7 @@ async def _dependency_refs(
             continue
         try:
             dep_ids = parse_dependency_ids(plugin.dependencies)
-        except (ValueError, PluginPlanError):
+        except ValueError, PluginPlanError:
             parsed.append(None)
             continue
         parsed.append(dep_ids)

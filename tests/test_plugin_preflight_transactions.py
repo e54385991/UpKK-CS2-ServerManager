@@ -185,9 +185,7 @@ async def test_owned_and_compat_plans_share_hash(monkeypatch):
     monkeypatch.setattr(module, "verified_market_plugin_ids", lambda *_args: set())
     monkeypatch.setattr(module, "installation_evidence", lambda *_args: [])
 
-    compat = await module.build_plugin_install_plan(
-        _Db(rules=[warning]), 7, 1, server=_server()
-    )
+    compat = await module.build_plugin_install_plan(_Db(rules=[warning]), 7, 1, server=_server())
     owned = await module.plan_plugin_install(
         7,
         1,

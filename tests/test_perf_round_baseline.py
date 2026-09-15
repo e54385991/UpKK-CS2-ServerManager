@@ -40,9 +40,7 @@ from scripts.perf.segments import (
 def test_cli_accepts_fingerprint_realtime_and_paced_flags():
     from scripts.perf.cli import parse_args
 
-    paced = parse_args(
-        ["measure-api", "--paced", "--arrival-from", "reports/perf/raw/prior.json"]
-    )
+    paced = parse_args(["measure-api", "--paced", "--arrival-from", "reports/perf/raw/prior.json"])
     assert paced.command == "measure-api"
     assert paced.paced is True
     assert paced.arrival_from.endswith("prior.json")
@@ -197,7 +195,7 @@ def test_fingerprint_omits_secrets_and_reads_compose_pins():
 
 
 def test_sse_parser_keeps_inbox_events_and_keep_alives():
-    events = parse_sse_chunk("event: inbox\ndata: {\"a\":1}\n\n: keep-alive\n\n")
+    events = parse_sse_chunk('event: inbox\ndata: {"a":1}\n\n: keep-alive\n\n')
     assert events[0] == ParsedEvent("inbox", len(b'{"a":1}'))
     assert events[1].name == "keep-alive"
     assert [next_cycle_step(index) for index in range(4)] == list(EVENT_CYCLE)

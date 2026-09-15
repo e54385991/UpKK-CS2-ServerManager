@@ -40,9 +40,7 @@ def current_id_from_stored(stored: object) -> str | None:
     return None
 
 
-def merge_retained_ids(
-    persisted: list[str], live: list[str], fallback: list[str]
-) -> list[str]:
+def merge_retained_ids(persisted: list[str], live: list[str], fallback: list[str]) -> list[str]:
     """Prefer persisted order, then live adds; fallback only when both are empty."""
     if not persisted and not live:
         return list(dict.fromkeys(item for item in fallback if item))

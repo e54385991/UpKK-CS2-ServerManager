@@ -62,7 +62,7 @@ def memory_bytes() -> int | None:
     try:
         page_size = os.sysconf("SC_PAGE_SIZE")
         pages = os.sysconf("SC_PHYS_PAGES")
-    except (OSError, ValueError, AttributeError):
+    except OSError, ValueError, AttributeError:
         return None
     if page_size <= 0 or pages <= 0:
         return None

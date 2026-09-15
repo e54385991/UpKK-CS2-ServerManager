@@ -375,7 +375,9 @@ def test_index_coverage_uses_column_prefix_not_names():
         "created_at",
         "id",
     )
-    assert btree_covers(recommended, ("framework", "is_recommended", "install_count", "created_at", "id"))
+    assert btree_covers(
+        recommended, ("framework", "is_recommended", "install_count", "created_at", "id")
+    )
     assert not btree_covers(primary, ("framework", "created_at", "id"))
     existing = [
         {"name": "pk_market_plugins", "columns": primary},

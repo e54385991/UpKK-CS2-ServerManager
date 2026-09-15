@@ -16,9 +16,7 @@ def inbox_items_equal(left: InboxItemData, right: InboxItemData) -> bool:
     )
 
 
-def inbox_item_lists_equal(
-    left: Sequence[InboxItemData], right: Sequence[InboxItemData]
-) -> bool:
+def inbox_item_lists_equal(left: Sequence[InboxItemData], right: Sequence[InboxItemData]) -> bool:
     if len(left) != len(right):
         return False
     return all(inbox_items_equal(first, second) for first, second in zip(left, right, strict=True))

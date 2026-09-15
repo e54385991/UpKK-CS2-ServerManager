@@ -149,9 +149,7 @@ async def run_realtime_rounds(
     base_url: str,
     injector: InboxLifecycle | None = None,
 ) -> dict[str, Any]:
-    async with httpx.AsyncClient(
-        transport=transport, base_url=base_url, timeout=30.0
-    ) as client:
+    async with httpx.AsyncClient(transport=transport, base_url=base_url, timeout=30.0) as client:
         measured = await open_inbox_sessions(
             client=client,
             token=token,
