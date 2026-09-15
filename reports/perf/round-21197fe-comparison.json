@@ -65,6 +65,21 @@
     "passed": false,
     "within_regression_envelope": true
   },
+  "fleet_100_overview_baseline": {
+    "protocol": "60s warmup + 300s × 3, paced 593.244 rps",
+    "errors": 0,
+    "starting_median_p95_ms": 3.347,
+    "starting_round_p95_ms": [3.344, 3.347, 3.351],
+    "starting_samples": 330547,
+    "head_median_p95_ms": 3.367,
+    "head_round_p95_ms": [3.356, 3.367, 3.373],
+    "head_samples": 328808,
+    "head_sha": "3750245d3015f1897eab37632290fd3d2d809765",
+    "improvement": -0.0062,
+    "gate": 0.2,
+    "passed": false,
+    "within_regression_envelope": true
+  },
   "inbox_baseline": {
     "protocol": "60s warmup + 300s × 3, paced 0.506 rps",
     "errors": 0,
@@ -285,7 +300,7 @@
     }
   },
   "still_open": [
-    "fleet-100 then fleet-10 same-protocol 60s/300s×3 (inbox pair recorded; overview/market/servers next)",
+    "fleet-100 then fleet-10 same-protocol 60s/300s×3 (inbox/overview recorded; market/servers next)",
     "production browser 5/30×3 at 390 and 1440",
     "fleet-1000/1001 overview cap after the 500-server series",
     "uv run python scripts/check_baseline.py",
