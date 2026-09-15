@@ -659,29 +659,36 @@ Push, deploy, and live restart stay out of default scope.
 
 ## Gates (not yet claimed)
 
-These are the agreed acceptance checks. Stage 0 only records the protocol and
-the current catalog/download facts:
+`claimed_gains` stays **false**. Historical Stage 7 numbers (including
+inbox p95 ≈ 6427 ms and fleet-100 −81.2%) stay in the archive above.
+They are **not** this round's starting measurement. Machine-readable
+copy: `reports/perf/round-21197fe-comparison.json`.
 
-- Inbox: one in-memory scan per snapshot; Redis batched; 100 / 500 p95 ≥ 20%
-  or report the actuals — **100 smoke pass (83.8%)**; **500 mixed-load before
-  collapsed**; mixed-load after 2256 ms; isolated 30-session inbox after
-  **6427 ms** (0 errors); single GET 3258 → 220 ms. Fleet-100 **same-protocol**
-  1 min / 5 min × 3 inbox median p95 **1046.5 → 197.2 ms (−81.2%)**.
-- In-flight ≤ 1; hidden pages pause; stale responses cannot win — **unit tests
-  and live activity-tray Playwright pass**
-- `/login` and `/overview` client message bytes −50%, plus real HTML/RSC size —
-  **catalog JSON pass**; HTML/RSC 5/30×3 table above (no pre-trim HTML baseline)
-- Bundle budgets unchanged (253 KiB route / 150 KiB chunk gzip) — **`npm run
-  check:bundle` passed for 40 pages**
-- No p95 regression beyond `max(5%, 20 ms)`; CPU / RSS +5%; no monotonic leak —
-  **fleet-100 isolated `--route` smokes pass**; fleet-500 isolated overview
-  121.8 → 115.1 ms. Mixed-load overview/market/servers still look worse because
-  a fast inbox no longer starves them. RSS/CPU smoke and the HEAD baseline RSS
-  stay inside +5%. Isolated 500-inbox RSS 397.7 MiB during the 30-wide stampede
-  (process peak, not a leak series). 60-minute soak: **+1.45% RSS after warmup**,
-  plateau ~230 MiB, not a monotonic leak
-- Indexes only with EXPLAIN, 20% p95, write tolerance, and ≤ 5 s build
+Fleet-500 same-protocol 60 s / 300 s × 3 on isolated `55442` / `56389`
+(`cs2_perf` / `perf:`), 0 HTTP errors:
 
-Application changes revert by commit. Added Alembic revisions stay; dropping
-an index needs a forward revision. Push, deploy, and live restart are out of
-scope for this harness.
+| Route | starting median p95 | HEAD median p95 | Δ | 20% | envelope |
+| --- | ---: | ---: | ---: | --- | --- |
+| inbox | 2156 ms | 2210 ms | −2.5% | fail | inside |
+| market | 7.54 ms | 7.10 ms | +5.8% | fail | inside |
+| overview | 3.55 ms | 3.72 ms | −4.6% | fail | inside |
+| servers | 5.81 ms | 5.79 ms | +0.2% | fail | inside |
+| mixed inbox | 2603 ms | 2750 ms | −5.7% | fail | outside |
+| mixed overview | 20.8 ms | 25.5 ms | −22.3% | fail | inside 20 ms floor |
+| mixed market | 86.2 ms | 153 ms | −77.4% | fail | outside |
+| mixed servers | 107 ms | 154 ms | −44.2% | fail | outside |
+
+- Marketplace indexes: HTTP +15.4% (gate 20%), **no Alembic revision**
+- Realtime 30 sessions: both trees open the sockets and deliver **0**
+  events at `REDIS_POOL_SIZE=10`
+- Visible-poll request identity and shared cookie helpers: unit tests
+  on this tree
+- Catalog compact JSON 142,964 / 139,750 bytes (en-US / zh-CN); login
+  subset 1,653 / 1,582; overview chrome 18,521 / 18,291
+- Bundle budgets and `cacheComponents` / `partialPrefetching` unchanged
+- 60-minute soak, fleet-10 / 100 series, production browser 5 / 30 × 3,
+  full `check_baseline`, and the interactive tray / install / assistant
+  / files pass are still open
+
+Application changes revert by commit. This round added **no** Alembic
+revision. Push, deploy, and live restart are out of scope.
