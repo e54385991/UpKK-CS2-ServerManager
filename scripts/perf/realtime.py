@@ -163,7 +163,12 @@ async def open_inbox_sessions(
 
     readers = [asyncio.create_task(one_session()) for _ in range(sessions)]
     played = await play_lifecycle(injector, stop_at) if injector is not None else []
-    await asyncio.gather(*readers)
+    try:
+        await asyncio.wait_for(asyncio.gather(*readers), timeout=2.0)
+    except TimeoutError:
+        for task in readers:
+            task.cancel()
+        await asyncio.gather(*readers, return_exceptions=True)
     return {
         "sessions": sessions,
         "seconds": seconds,
