@@ -1,0 +1,56 @@
+{
+  "format": "upkk-isolated-perf",
+  "version": 1,
+  "claimed_gains": false,
+  "round": "21197fe",
+  "starting_sha": "21197fec25b785db2200e9feb6fdb245559da773",
+  "head_sha_inbox": "d16e555bd9cc8530f82b24476de15d8dc0fa7f3e",
+  "isolated": {
+    "postgres_port": 55442,
+    "redis_port": 56389,
+    "postgres_isolated": true,
+    "redis_isolated": true,
+    "database": "cs2_perf",
+    "redis_key_prefix": "perf:",
+    "seed": "fleet-500 / market-10000 / history max"
+  },
+  "inbox_baseline": {
+    "protocol": "60s warmup + 300s × 3, paced 0.506 rps",
+    "errors": 0,
+    "starting_median_p95_ms": 2156.435,
+    "starting_round_p95_ms": [2747.985, 2156.064, 2156.435],
+    "head_median_p95_ms": 2209.884,
+    "head_round_p95_ms": [2299.162, 2208.709, 2209.884],
+    "improvement": -0.0248,
+    "gate": 0.2,
+    "passed": false,
+    "within_regression_envelope": true
+  },
+  "market_smoke": {
+    "protocol": "10s × 1, paced target 418.238 rps",
+    "errors": 0,
+    "starting_p95_ms": 6.144,
+    "head_p95_ms": 8.451,
+    "note": "n=1; not a 20% gate. Open-loop target exceeds single-emit throughput."
+  },
+  "indexes": {
+    "submitted": false,
+    "alembic_revision": null,
+    "explain_recommended_ms": [1.808, 0.043],
+    "build_seconds": [0.0134, 0.0062],
+    "write_p95_ms": [0.719, 0.458],
+    "write_within_tolerance": true,
+    "http_p95_three_round_median": null
+  },
+  "still_open": [
+    "fleet-500 market/overview/servers 60s/300s×3 at 21197fe and HEAD",
+    "measure-api --with-index-candidates three-round market HTTP p95",
+    "fleet-10 and fleet-100 same-protocol series",
+    "measure-realtime --sessions 30",
+    "production browser 5/30×3 at 390 and 1440",
+    "60-minute soak",
+    "fleet-1000/1001 overview cap after the 500-server series",
+    "uv run python scripts/check_baseline.py",
+    "interactive browser pass of tray, install, assistant, files"
+  ]
+}

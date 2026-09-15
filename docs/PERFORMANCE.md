@@ -105,8 +105,9 @@ Same-protocol paced inbox **baseline** (60 s warmup + 300 s × 3, arrival
 
 Inbox 20% gate: **fail** (−2.5%). The change is inside `max(5%, 20 ms)`
 (limit 2264 ms), so it is not a mixed-load-style regression either.
-`claimed_gains` stays **false**. Historical Stage 7 timings stay in the
-archive and are not this round's before/after.
+`claimed_gains` stays **false**. Machine-readable copy:
+`reports/perf/round-21197fe-comparison.json`. Historical Stage 7 timings
+stay in the archive and are not this round's before/after.
 
 | Batch | SHA | Change |
 | --- | --- | --- |
