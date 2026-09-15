@@ -1,6 +1,6 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
-import { sessionTokenFrom } from "@/modules/auth/session";
+import { sessionTokenFrom } from "@/shared/auth/session-cookie";
 import { internalApiUrl } from "@/shared/config/internal-api";
 
 export type ApiResult<T> =

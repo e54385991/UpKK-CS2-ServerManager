@@ -2,30 +2,15 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { SessionUserDto } from "@/shared/api/types";
+import {
+  SESSION_COOKIE,
+  hasSessionCookie,
+  sessionCookieName,
+  sessionTokenFrom,
+} from "@/shared/auth/session-cookie";
 import { internalApiUrl } from "@/shared/config/internal-api";
 
-/** Default backend HttpOnly session cookie. A port suffix isolates two consoles on one host. */
-export const SESSION_COOKIE = "upkk_access_token";
-
-/**
- * Cookie name for this panel instance. Read at call time so Docker
- * `SESSION_COOKIE_SUFFIX` (public console port) is not inlined at build.
- */
-export function sessionCookieName(): string {
-  const suffix = process.env["SESSION_COOKIE_SUFFIX"]?.trim();
-  return suffix ? `${SESSION_COOKIE}_${suffix}` : SESSION_COOKIE;
-}
-
-export function sessionTokenFrom(store: {
-  get(name: string): { value: string } | undefined;
-}): string | undefined {
-  return store.get(sessionCookieName())?.value;
-}
-
-/** Cheap presence check for this instance only; layouts still validate the JWT. */
-export function hasSessionCookie(store: { has(name: string): boolean }): boolean {
-  return store.has(sessionCookieName());
-}
+export { SESSION_COOKIE, hasSessionCookie, sessionCookieName, sessionTokenFrom };
 
 export type SessionUser = {
   readonly id: number;

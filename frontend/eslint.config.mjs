@@ -26,9 +26,37 @@ const eslintConfig = [
         {
           patterns: [
             {
-              group: ["@/app/*", "**/app/*"],
+              group: ["@/app", "@/app/*", "**/src/app", "**/src/app/*", "**/app/*"],
               message:
                 "Domain modules and shared code must not import from the app router layer.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/shared/**/*.{js,jsx,ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/app",
+                "@/app/*",
+                "@/modules",
+                "@/modules/*",
+                "**/src/app",
+                "**/src/app/*",
+                "**/src/modules",
+                "**/src/modules/*",
+                "**/app/*",
+                "**/modules/*",
+              ],
+              message:
+                "shared must not import app or domain modules; keep cookie and HTTP helpers local.",
             },
           ],
         },
