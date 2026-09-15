@@ -288,6 +288,21 @@
     "passed": false,
     "within_regression_envelope": true
   },
+  "fleet_10_market_baseline": {
+    "protocol": "60s warmup + 300s × 3, paced 207.342 rps",
+    "errors": 0,
+    "starting_median_p95_ms": 4.588,
+    "starting_round_p95_ms": [4.585, 4.591, 4.588],
+    "starting_samples": 186606,
+    "head_median_p95_ms": 4.610,
+    "head_round_p95_ms": [4.618, 4.610, 4.602],
+    "head_samples": 186606,
+    "head_sha": "202d0be63cd0dadec6b49d5c35ee84b43692f71e",
+    "improvement": -0.0048,
+    "gate": 0.2,
+    "passed": false,
+    "within_regression_envelope": true
+  },
   "inbox_baseline": {
     "protocol": "60s warmup + 300s × 3, paced 0.506 rps",
     "errors": 0,
@@ -508,7 +523,7 @@
     }
   },
   "still_open": [
-    "fleet-10 60s/300s×3 (inbox/overview recorded; market/servers next)",
+    "fleet-10 60s/300s×3 (inbox/overview/market recorded; servers next)",
     "production browser 5/30×3 at 390 and 1440",
     "fleet-1000/1001 overview cap after the 500-server series",
     "uv run python scripts/check_baseline.py",
