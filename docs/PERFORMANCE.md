@@ -45,10 +45,13 @@ Compatibility cases (`fleet-1000` / `fleet-1001`) only check the existing
 overview 1000-row cap. Primary inbox work stays on 10 / 100 / 500.
 
 This machine's loopback `55432` / `56379` may already be bound by another
-compose project. Fingerprint records `postgres_listening` / `postgres_isolated`
-and `redis_listening` / `redis_isolated`. A listening port is not enough:
-`postgres_isolated` is true only when the isolated user can open `cs2_perf`.
-Do not seed unless that flag is true and `REDIS_KEY_PREFIX=perf:`.
+compose project. Set `UPKK_PERF_POSTGRES_PORT` / `UPKK_PERF_REDIS_PORT`
+(this host: `55442` / `56389`) so fingerprint and seed talk to
+`docker-compose.perf.yml`. Fingerprint records `postgres_listening` /
+`postgres_isolated` and `redis_listening` / `redis_isolated`. A listening
+port is not enough: `postgres_isolated` is true only when the isolated user
+can open `cs2_perf`. Do not seed unless that flag is true and
+`REDIS_KEY_PREFIX=perf:`.
 
 `cacheComponents` and `partialPrefetching` remain off. This harness does not
 change that gate.
@@ -56,12 +59,32 @@ change that gate.
 ## Round `21197fe` delivery
 
 Implementation batches on this tree, newest last. None of them change HTTP,
-SSE, or WebSocket contracts. `claimed_gains` stays **false**: this host's
-`127.0.0.1:55432` is listening but `postgres_isolated` is false (password
-auth for `cs2_perf` fails), so the 60 s / 300 s × 3 API series, 30-session
-realtime run, and production browser 5 / 30 × 3 series were not recaptured
-against `21197fe`. Historical Stage 7 timings stay in the archive and are
-not this round's before/after.
+SSE, or WebSocket contracts. `claimed_gains` stays **false** until a
+same-protocol 60 s / 300 s × 3 series at `21197fe` beats HEAD.
+
+This host's default loopback `55432` / `56379` stay with another compose
+project (`xproj-public-perf`). The isolated stack for this round is
+`docker-compose.perf.yml` on **`55442` / `56389`**
+(`UPKK_PERF_POSTGRES_PORT` / `UPKK_PERF_REDIS_PORT`). Fingerprint
+`postgres_isolated` and `redis_isolated` are **true**. Images are
+PostgreSQL 18.6 and Redis 8.10.1. Database `cs2_perf`, prefix `perf:`.
+Do not stop the other project.
+
+Seeded set: `fleet-500` / `market-10000` / `history max`
+(`reports/perf/raw/seed-manifest-fleet-500.json`).
+
+Paced inbox **smoke** (10 s, 1 round, 5 samples, 0 errors) is **not** a
+20% gate. Arrival discovered 0.633 rps on `21197fe`; target 0.506 rps is
+reused by HEAD:
+
+| Tree | git SHA | inbox p95 | late slots |
+| --- | --- | ---: | ---: |
+| starting | `21197fe` | 2174 ms | 1 |
+| HEAD at measure | `1156678` | 2140 ms | 2 |
+
+The matching 60 s / 300 s × 3 inbox series is in progress on `21197fe`.
+Historical Stage 7 timings stay in the archive and are not this round's
+before/after.
 
 | Batch | SHA | Change |
 | --- | --- | --- |
@@ -76,6 +99,10 @@ not this round's before/after.
 | 4c | `bf44716` | Assistant SSE + 2 s poll request identity; memoized completed messages |
 | 4d | `e33a602` | Files directory / selection / editor / upload store / queue split |
 | 5 | `66397d8` | Index coverage by column prefix; HTTP-shaped EXPLAIN SQL; no Alembic revision |
+| ports | `1156678` | Isolated stack can move off 55432 / 56379 |
+| contracts | `f533781` | Source contracts follow the splits; files route stays under gzip budget |
+| format | `ebdfcaa` | Ruff format so pre-commit stops rewriting the tree |
+| index probe | `17c0706` | Transactional write + CREATE INDEX (rollback) before inclusion |
 | 6 | this document | Comparison, remaining limits, and rollback for this round |
 
 ### Index decision
@@ -84,13 +111,14 @@ The two marketplace btree candidates remain **out**. Alembic `0001` already
 has `pk_market_plugins (id)`, `ix_market_plugins_github_url (github_url)`,
 and `ix_market_plugins_title (title)`. Those prefixes do not cover
 `(framework, is_recommended, install_count, created_at, id)` or
-`(framework, created_at, id)`. `scripts/perf/index_eval.py` now judges
-coverage from `pg_indexes.indexdef` column lists and EXPLAINs the HTTP list
-shape (selected list columns, exact `COUNT(*)`, first page and offset 40,
-plus a category filter). A live `explain-indexes` on this host skipped:
-connection to `127.0.0.1:55432` failed password auth for `cs2_perf`. Without
-three-round HTTP p95, write tolerance, and a ≤ 5 s transactional build on
-the largest isolated set, inclusion fails closed. See
+`(framework, created_at, id)`. `scripts/perf/index_eval.py` judges coverage
+from `pg_indexes.indexdef` column lists and EXPLAINs the HTTP list shape
+(selected list columns, exact `COUNT(*)`, first page and offset 40, plus a
+category filter). A live EXPLAIN on the 10,000-row isolated set used Seq
+Scan + top-N heapsort (~1–3 ms). Write-probe and transactional
+`CREATE INDEX` (always rolled back, never `CONCURRENTLY`) are now in the
+harness (`17c0706`) but have not yet been captured on this seed. HTTP
+three-round market p95 is still missing, so inclusion fails closed. See
 `reports/perf/round-21197fe-indexes.json`.
 
 ### Correctness that landed without a speed claim
@@ -111,14 +139,19 @@ the largest isolated set, inclusion fails closed. See
 
 ### Still open on this host
 
-- Same-protocol API / realtime / browser / soak numbers at `21197fe` vs HEAD
-- Isolated EXPLAIN + write + build series for the two index candidates
-- Full `uv run python scripts/check_baseline.py` after the later frontend
-  batches (local eslint / tsc / unit tests were run per batch)
+- Same-protocol 60 s / 300 s × 3 API series at `21197fe` vs HEAD for
+  inbox / overview / market / servers, plus mixed `--paced`, on fleets
+  10 / 100 / 500
+- 30-session realtime, production browser 5 / 30 × 3, and a 60-minute soak
+- `fleet-1000` / `fleet-1001` overview cap only (after the 500-server series)
+- Isolated write + build + HTTP three-round market p95 for the two index
+  candidates
+- Full `uv run python scripts/check_baseline.py` after `f533781` / `ebdfcaa`
 - Interactive browser pass of tray, install, assistant, and files
 
-Do not seed or measure until `postgres_isolated` is true. Do not treat a
-listening port as the isolated database.
+Always export `UPKK_PERF_POSTGRES_PORT=55442 UPKK_PERF_REDIS_PORT=56389`
+before `scripts/run_perf.py` on this machine. Do not seed unless
+`postgres_isolated` is true and `REDIS_KEY_PREFIX=perf:`.
 
 ## Isolated stack
 
@@ -126,6 +159,7 @@ PostgreSQL 18.6 and Redis 8.10.1 use dedicated volumes and loopback ports.
 They never reuse the live panel volumes.
 
 ```bash
+export UPKK_PERF_POSTGRES_PORT=55442 UPKK_PERF_REDIS_PORT=56389
 docker compose -f docker-compose.perf.yml up -d --wait
 uv run python scripts/run_perf.py catalog-bytes
 uv run python scripts/run_perf.py download-bench
@@ -453,14 +487,15 @@ more. Passed under `playwright.performance.config.ts`.
 
 ### Rollback
 
-Round `21197fe` application commits revert newest-first (`e33a602`,
-`bf44716`, `d92a269`, `87e3b43`, `bac25c5`, `3fe3878`, `24c478c`,
-`84cd598`, `216dcb7`, then harness `025bd71` if desired). Earlier Stage 1–5
-commits revert newest-first (`686f863`, `5077734`, `0796ee6`, `1b9c47f`,
-`7dc61fa`, then the original harness if desired). This round added **no**
-Alembic revision. If a later index revision exists, keep it and add a
-forward migration to drop the index; do not run an old image that does not
-recognize that revision.
+Round `21197fe` application commits revert newest-first (`17c0706`,
+`ebdfcaa`, `f533781`, `1156678`, `e33a602`, `bf44716`, `d92a269`,
+`87e3b43`, `bac25c5`, `3fe3878`, `24c478c`, `84cd598`, `216dcb7`, then
+harness `025bd71` if desired). Earlier Stage 1–5 commits revert
+newest-first (`686f863`, `5077734`, `0796ee6`, `1b9c47f`, `7dc61fa`, then
+the original harness if desired). This round added **no** Alembic revision.
+If a later index revision exists, keep it and add a forward migration to
+drop the index; do not run an old image that does not recognize that
+revision.
 
 Push, deploy, and live restart stay out of default scope.
 
