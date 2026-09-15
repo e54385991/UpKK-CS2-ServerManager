@@ -2,23 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import Link from "next/link";
-import { Bot, LoaderCircle, Plus, TriangleAlert } from "lucide-react";
+import { Bot, Plus, TriangleAlert } from "lucide-react";
 import {
   createAssistantConversationClient,
   decideAssistantToolClient,
   interruptAssistantConversationClient,
   loadAssistantConversationClient,
-  loadAssistantRunClient,
   loadAssistantWorkspace,
   sendAssistantMessageClient,
 } from "@/modules/assistant/assistant-client";
+import { AssistantMessages } from "@/modules/assistant/assistant-messages";
 import {
-  parseAssistantSseData,
-  toolFromApprovalPayload,
-} from "@/modules/assistant/assistant-wire";
+  AssistantApprovals,
+  AssistantStreamText,
+  AssistantTokenActivity,
+} from "@/modules/assistant/assistant-run-panel";
+import { useAssistantRun } from "@/modules/assistant/use-assistant-run";
 import {
   ASSISTANT_EXAMPLE_KEYS,
   type AssistantConversationDetail,
@@ -39,32 +41,6 @@ import {
 import { Select } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
 import { cn } from "@/shared/lib/cn";
-import { createTextDisplayBuffer } from "@/shared/lib/render-coalesce";
-
-const TERMINAL_RUN = new Set(["completed", "failed", "interrupted", "expired", "cancelled"]);
-
-type TokenUsage = {
-  readonly input: number;
-  readonly output: number;
-  readonly total: number;
-  /** Input tokens the upstream prompt cache served; already inside `input`. */
-  readonly cached: number;
-  readonly estimated: boolean;
-};
-
-const EMPTY_TOKEN_USAGE: TokenUsage = {
-  input: 0,
-  output: 0,
-  total: 0,
-  cached: 0,
-  estimated: true,
-};
-
-function tokenCount(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
-  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
-  return 0;
-}
 
 export function AssistantChat({
   initial,
@@ -78,7 +54,6 @@ export function AssistantChat({
   servers: readonly AssistantServerOption[];
 }) {
   const t = useTranslations("assistant");
-  const format = useFormatter();
   const router = useRouter();
   const [workspace, setWorkspace] = useState(initial);
   const [detail, setDetail] = useState(initialDetail);
@@ -88,10 +63,6 @@ export function AssistantChat({
   );
   const [pending, setPending] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [streamText, setStreamText] = useState("");
-  const [pendingTools, setPendingTools] = useState<AssistantTool[]>([]);
-  const [tokenUsage, setTokenUsage] = useState<TokenUsage>(EMPTY_TOKEN_USAGE);
   const [error, setError] = useState<string | null>(null);
   const detailIdRef = useRef(initialDetail?.id ?? null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -106,185 +77,24 @@ export function AssistantChat({
     return map;
   }, [servers]);
 
-  const selectedServer = selectedServerId == null ? null : serverById.get(selectedServerId) ?? null;
-  const boundServer = detail?.serverId == null ? null : serverById.get(detail.serverId) ?? null;
+  const selectedServer = selectedServerId == null ? null : (serverById.get(selectedServerId) ?? null);
+  const boundServer = detail?.serverId == null ? null : (serverById.get(detail.serverId) ?? null);
   const busy = pending || Boolean(runId);
 
   const reloadConversation = useCallback(async () => {
     const id = detailIdRef.current;
     if (!id) return;
     const result = await loadAssistantConversationClient(id);
-    if (result.ok) setDetail(result.data);
+    if (result.ok && detailIdRef.current === id) setDetail(result.data);
   }, []);
+  const finishRun = useCallback(() => {
+    setRunId(null);
+  }, []);
+  const run = useAssistantRun(runId, reloadConversation, finishRun);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [detail, streamText, pendingTools, status]);
-
-  useEffect(() => {
-    if (!runId) return;
-    let closed = false;
-    const source = new EventSource(`/ai-stream/runs/${runId}`);
-    const display = createTextDisplayBuffer((chunk) => {
-      setStreamText((current) => current + chunk);
-    });
-
-    function onEvent(raw: MessageEvent<string>) {
-      const event = parseAssistantSseData(raw.data);
-      if (!event) return;
-      if (event.type === "token_usage") {
-        const input = tokenCount(event.payload.input_tokens);
-        const output = tokenCount(event.payload.output_tokens);
-        const total = tokenCount(event.payload.total_tokens) || input + output;
-        const cached = tokenCount(event.payload.cached_input_tokens);
-        const streaming = event.payload.streaming === true;
-        setTokenUsage((current) => ({
-          input: streaming ? Math.max(current.input, input) : input,
-          output: streaming ? Math.max(current.output, output) : output,
-          total: streaming ? Math.max(current.total, total) : total,
-          // Streaming rounds carry no usage block; keep the last real number.
-          cached: streaming ? current.cached : Math.max(current.cached, cached),
-          estimated: event.payload.estimated !== false,
-        }));
-        return;
-      }
-      if (event.type === "run_started") {
-        setStatus(t("thinking"));
-        return;
-      }
-      if (event.type === "assistant_delta") {
-        const delta = typeof event.payload.delta === "string" ? event.payload.delta : "";
-        if (delta) display.append(delta);
-        return;
-      }
-      display.flush();
-      if (event.type === "assistant_message") {
-        setStreamText("");
-        void reloadConversation();
-        return;
-      }
-      if (event.type === "tool_approval_required") {
-        const tool = toolFromApprovalPayload(event.payload);
-        if (tool) {
-          setPendingTools((current) =>
-            current.some((item) => item.id === tool.id) ? current : [...current, tool],
-          );
-        }
-        setStatus(t("waitingApproval"));
-        return;
-      }
-      if (event.type === "run_waiting_approval") {
-        setStatus(t("waitingApproval"));
-        return;
-      }
-      if (event.type === "tool_started" || event.type === "tool_queued") {
-        const name = typeof event.payload.tool_name === "string" ? event.payload.tool_name : "";
-        setStatus(name ? t("runningTool", { name }) : t("running"));
-        return;
-      }
-      if (event.type === "run_retrying") {
-        const attempt = tokenCount(event.payload.attempt);
-        const maxAttempts = tokenCount(event.payload.max_attempts);
-        setStatus(
-          attempt && maxAttempts
-            ? t("retrying", { attempt, maxAttempts })
-            : t("thinking"),
-        );
-        return;
-      }
-      if (event.type === "tool_progress" || event.type === "diagnostic_progress") {
-        if (typeof event.payload.message === "string" && event.payload.message) {
-          setStatus(event.payload.message);
-        }
-        return;
-      }
-      if (event.type === "run_completed") {
-        finishRun(false, t("completed"));
-        return;
-      }
-      if (event.type === "run_failed" || event.type === "run_interrupted") {
-        const message =
-          typeof event.payload.error === "string" && event.payload.error
-            ? event.payload.error
-            : t("runFailed");
-        finishRun(true, message);
-      }
-    }
-
-    function finishRun(failed: boolean, message: string) {
-      if (closed) return;
-      closed = true;
-      setRunId(null);
-      setStreamText("");
-      setPendingTools([]);
-      setStatus(message);
-      if (failed) setError(message);
-      void reloadConversation();
-      source.close();
-    }
-
-    const named = [
-      "run_started",
-      "assistant_delta",
-      "token_usage",
-      "assistant_message",
-      "tool_approval_required",
-      "run_waiting_approval",
-      "tool_started",
-      "tool_queued",
-      "run_retrying",
-      "tool_progress",
-      "diagnostic_progress",
-      "run_completed",
-      "run_failed",
-      "run_interrupted",
-    ];
-    for (const name of named) source.addEventListener(name, onEvent);
-
-    return () => {
-      closed = true;
-      display.dispose();
-      source.close();
-    };
-  }, [reloadConversation, runId, t]);
-
-  useEffect(() => {
-    if (!runId) return;
-    let cancelled = false;
-    async function tick() {
-      if (!runId) return;
-      const result = await loadAssistantRunClient(runId);
-      if (cancelled || !result.ok) return;
-      const waiting = result.data.tools.filter(
-        (tool) => tool.status === "pending_approval" || tool.requiresApproval,
-      );
-      if (waiting.length > 0) {
-        setPendingTools((current) => mergeTools(current, waiting));
-        setStatus(t("waitingApproval"));
-      }
-      if (TERMINAL_RUN.has(result.data.status)) {
-        setRunId(null);
-        setStreamText("");
-        setPendingTools([]);
-        if (result.data.status === "completed") {
-          setStatus(t("completed"));
-        } else {
-          const message = result.data.error || t("runFailed");
-          setStatus(message);
-          setError(message);
-        }
-        void reloadConversation();
-      }
-    }
-    const timer = window.setInterval(() => {
-      void tick();
-    }, 2000);
-    void tick();
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [reloadConversation, runId, t]);
+  }, [detail, run.streamText, run.pendingTools, run.status]);
 
   async function refreshWorkspace() {
     const result = await loadAssistantWorkspace();
@@ -298,12 +108,10 @@ export function AssistantChat({
       return;
     }
     setDetail(result.data);
+    detailIdRef.current = result.data.id;
     setSelectedServerId(result.data.serverId);
     setError(null);
-    setStatus(null);
-    setStreamText("");
-    setPendingTools([]);
-    setTokenUsage(EMPTY_TOKEN_USAGE);
+    run.resetLive();
     setRunId(null);
     router.replace(`/assistant?conversation=${id}` as Route);
   }
@@ -358,7 +166,7 @@ export function AssistantChat({
     if (!(await confirmServer())) return;
     setPending(true);
     setError(null);
-    setStatus(t("sending"));
+    run.setStatus(t("sending"));
     try {
       let conversationId = detail?.id ?? null;
       if (!conversationId || detail?.serverId !== selectedServerId) {
@@ -379,13 +187,11 @@ export function AssistantChat({
         return;
       }
       setDraft("");
-      setStreamText("");
-      setPendingTools([]);
-      setTokenUsage(EMPTY_TOKEN_USAGE);
+      run.resetLive();
       setRunId(result.data.id);
-      setStatus(t("running"));
+      run.setStatus(t("running"));
       const next = await loadAssistantConversationClient(conversationId);
-      if (next.ok) setDetail(next.data);
+      if (next.ok && detailIdRef.current === conversationId) setDetail(next.data);
     } finally {
       setPending(false);
     }
@@ -394,20 +200,17 @@ export function AssistantChat({
   async function decide(tool: AssistantTool, decision: "approve" | "reject") {
     if (!runId) return;
     setPending(true);
-    const result = await decideAssistantToolClient(
-      runId,
-      tool.id,
-      decision,
-      tool.argumentsHash,
-    );
+    const result = await decideAssistantToolClient(runId, tool.id, decision, tool.argumentsHash);
     setPending(false);
     if (!result.ok) {
       setError(result.error || t("failed"));
       return;
     }
-    setPendingTools((current) => current.filter((item) => item.id !== tool.id));
-    setStatus(decision === "approve" ? t("approved") : t("rejected"));
+    run.dropTool(tool.id);
+    run.setStatus(decision === "approve" ? t("approved") : t("rejected"));
   }
+
+  const visibleError = error || run.error;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
@@ -523,17 +326,15 @@ export function AssistantChat({
             ) : null}
             {selectedServerId != null ? (
               <Button asChild size="sm" variant="ghost">
-                <Link href={`/servers/${selectedServerId}/discord` as Route}>
-                  {t("openAgentPolicy")}
-                </Link>
+                <Link href={`/servers/${selectedServerId}/discord` as Route}>{t("openAgentPolicy")}</Link>
               </Button>
             ) : null}
           </CardContent>
         </Card>
 
-        {error ? (
+        {visibleError ? (
           <p className="rounded-lg border border-danger/30 bg-danger-muted/40 px-4 py-3 text-sm text-danger">
-            {error}
+            {visibleError}
           </p>
         ) : null}
 
@@ -558,97 +359,17 @@ export function AssistantChat({
             >
               {!detail ? (
                 <p className="text-sm text-fg-muted">{t("pickConversation")}</p>
-              ) : detail.messages.length === 0 && !streamText ? (
+              ) : detail.messages.length === 0 && !run.streamText ? (
                 <p className="text-sm text-fg-muted">{t("noMessages")}</p>
               ) : (
-                (detail?.messages ?? []).map((message) => (
-                  <div key={message.id} className="space-y-1">
-                    <p className="text-xs font-medium text-fg-subtle">
-                      {message.role === "user"
-                        ? t("roleUser")
-                        : message.role === "assistant"
-                          ? t("roleAssistant")
-                          : message.role}
-                    </p>
-                    <p className="whitespace-pre-wrap text-sm text-fg">
-                      {message.content || message.toolName || "—"}
-                    </p>
-                  </div>
-                ))
+                <AssistantMessages messages={detail.messages} />
               )}
-              {streamText ? (
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-fg-subtle">{t("roleAssistant")}</p>
-                  <p className="whitespace-pre-wrap text-sm text-fg">{streamText}</p>
-                </div>
-              ) : null}
+              <AssistantStreamText streamText={run.streamText} />
             </div>
 
-            {pendingTools.length > 0 ? (
-              <div className="space-y-3">
-                {pendingTools.map((tool) => (
-                  <div
-                    key={tool.id}
-                    className="space-y-2 rounded-md border border-warn/40 bg-warn-muted/20 p-3"
-                  >
-                    <p className="text-sm font-medium text-fg">
-                      {t("approvalRequired")}: {tool.toolName}
-                    </p>
-                    <pre className="max-h-40 overflow-auto rounded-md bg-canvas p-2 text-xs text-fg-muted">
-                      {JSON.stringify(
-                        { summary: tool.summary, arguments: tool.arguments },
-                        null,
-                        2,
-                      )}
-                    </pre>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => void decide(tool, "approve")}
-                      >
-                        {t("approve")}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={() => void decide(tool, "reject")}
-                      >
-                        {t("reject")}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            <AssistantApprovals tools={run.pendingTools} pending={pending} onDecide={decide} />
 
-            {busy || tokenUsage.total > 0 ? (
-              <div
-                className="rounded-md border border-primary/30 bg-primary-muted/20 px-3 py-2 text-xs text-fg-muted"
-                aria-live="polite"
-                data-testid="assistant-token-activity"
-              >
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {busy ? <LoaderCircle className="size-3.5 animate-spin text-primary" /> : null}
-                  <span className={cn(busy && "font-medium text-fg")}>{status || t("thinking")}</span>
-                  <span>{t("inputTokens", { count: format.number(tokenUsage.input) })}</span>
-                  <span>{t("outputTokens", { count: format.number(tokenUsage.output) })}</span>
-                  <span>{t("totalTokens", { count: format.number(tokenUsage.total) })}</span>
-                  {tokenUsage.cached > 0 ? (
-                    <span data-testid="assistant-cached-tokens">
-                      {t("cachedTokens", { count: format.number(tokenUsage.cached) })}
-                    </span>
-                  ) : null}
-                  {tokenUsage.estimated ? <span className="text-fg-subtle">{t("estimated")}</span> : null}
-                </div>
-                {busy ? <p className="mt-1 text-fg-subtle">{t("thinkingHint")}</p> : null}
-              </div>
-            ) : status ? (
-              <p className="text-xs text-fg-subtle">{status}</p>
-            ) : null}
+            <AssistantTokenActivity busy={busy} status={run.status} tokenUsage={run.tokenUsage} />
 
             <div className="flex flex-wrap gap-1">
               {ASSISTANT_EXAMPLE_KEYS.map((key) => (
@@ -687,10 +408,8 @@ export function AssistantChat({
                 onClick={() => {
                   if (detail) void interruptAssistantConversationClient(detail.id);
                   setRunId(null);
-                  setStreamText("");
-                  setPendingTools([]);
-                  setTokenUsage(EMPTY_TOKEN_USAGE);
-                  setStatus(t("interrupt"));
+                  run.resetLive();
+                  run.setStatus(t("interrupt"));
                 }}
               >
                 {t("interrupt")}
@@ -701,23 +420,4 @@ export function AssistantChat({
       </div>
     </div>
   );
-}
-
-function mergeTools(
-  current: readonly AssistantTool[],
-  incoming: readonly AssistantTool[],
-): AssistantTool[] {
-  const next = [...current];
-  for (const tool of incoming) {
-    const existing = next.find((item) => item.id === tool.id);
-    if (!existing) {
-      next.push(tool);
-    } else if (
-      Object.keys(existing.arguments).length === 0 &&
-      Object.keys(tool.arguments).length > 0
-    ) {
-      next[next.indexOf(existing)] = tool;
-    }
-  }
-  return next;
 }
