@@ -32,23 +32,25 @@ export function subscribeVisiblePoll<T>(input: {
 }): { stop: () => void; refresh: () => void } {
   const host = input.host ?? browserVisiblePollHost();
   let cancelled = false;
-  let generation = 0;
-  let inflight = false;
+  let nextRequestId = 0;
+  let inflightId = 0;
   let timer = 0;
   let abort = new AbortController();
 
   const interval = () =>
     typeof input.intervalMs === "function" ? input.intervalMs() : input.intervalMs;
 
+  const isCurrent = (id: number) => !cancelled && inflightId === id;
+
   const clearTimer = () => {
     host.cancel(timer);
     timer = 0;
   };
 
-  const abortInflight = () => {
+  const invalidateInflight = () => {
     abort.abort();
     abort = new AbortController();
-    inflight = false;
+    inflightId = 0;
   };
 
   const arm = () => {
@@ -60,23 +62,25 @@ export function subscribeVisiblePoll<T>(input: {
   };
 
   const run = async (reason: "start" | "timer" | "visible" | "manual") => {
-    if (cancelled || host.hidden() || inflight) return;
+    if (cancelled || host.hidden() || inflightId !== 0) return;
     if (reason === "timer" && input.shouldPull && !input.shouldPull()) {
       arm();
       return;
     }
-    inflight = true;
-    const gen = generation;
+    const id = nextRequestId + 1;
+    nextRequestId = id;
+    inflightId = id;
     const controller = abort;
     arm();
     try {
       const result = await input.pull(controller.signal);
-      if (cancelled || gen !== generation || controller.signal.aborted) return;
+      if (!isCurrent(id) || controller.signal.aborted) return;
       input.onResult(result);
     } catch {
       /* aborted or transport errors are ignored; the next arm retries */
     } finally {
-      if (gen === generation) inflight = false;
+      if (inflightId !== id) return;
+      inflightId = 0;
       if (!cancelled && !host.hidden() && timer === 0) arm();
     }
   };
@@ -88,7 +92,7 @@ export function subscribeVisiblePoll<T>(input: {
   const stopVisibility = host.onVisibilityChange(() => {
     if (cancelled) return;
     if (host.hidden()) {
-      abortInflight();
+      invalidateInflight();
       clearTimer();
       return;
     }
@@ -101,8 +105,7 @@ export function subscribeVisiblePoll<T>(input: {
     refresh,
     stop: () => {
       cancelled = true;
-      generation += 1;
-      abortInflight();
+      invalidateInflight();
       clearTimer();
       stopVisibility();
     },

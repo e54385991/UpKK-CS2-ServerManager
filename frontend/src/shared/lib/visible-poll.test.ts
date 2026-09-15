@@ -108,6 +108,49 @@ test("subscribeVisiblePoll pauses while hidden and pulls when visible", async ()
   stop();
 });
 
+test("subscribeVisiblePoll does not let a hidden pull clear the restored request", async () => {
+  const harness = hostHarness();
+  const releases: Array<() => void> = [];
+  const signals: AbortSignal[] = [];
+  let started = 0;
+  let received = 0;
+  const { refresh, stop } = subscribeVisiblePoll({
+    intervalMs: 1_000,
+    host: harness.host,
+    pull: (signal) => {
+      started += 1;
+      signals.push(signal);
+      return new Promise<number>((resolve) => {
+        releases.push(() => resolve(started));
+      });
+    },
+    onResult: (value) => {
+      received = value;
+    },
+  });
+  await Promise.resolve();
+  assert.equal(started, 1);
+  harness.setHidden(true);
+  assert.equal(signals[0]?.aborted, true);
+  assert.equal(harness.pending(), 0);
+  harness.setHidden(false);
+  await Promise.resolve();
+  assert.equal(started, 2);
+  releases[0]?.();
+  await Promise.resolve();
+  harness.advance(1_000);
+  await Promise.resolve();
+  refresh();
+  await Promise.resolve();
+  assert.equal(started, 2);
+  assert.equal(received, 0);
+  assert.equal(signals.filter((signal) => !signal.aborted).length, 1);
+  releases[1]?.();
+  await Promise.resolve();
+  assert.equal(received, 2);
+  stop();
+});
+
 test("subscribeVisiblePoll ignores a result after stop", async () => {
   const harness = hostHarness();
   let release: ((value: number) => void) | null = null;
@@ -149,6 +192,29 @@ test("subscribeVisiblePoll skips a timer tick when the snapshot is still fresh",
   await Promise.resolve();
   assert.equal(pulls, 1);
   stop();
+});
+
+test("subscribeVisiblePoll stop drops timers listeners and ignores later errors", async () => {
+  const harness = hostHarness();
+  let started = 0;
+  const { stop } = subscribeVisiblePoll({
+    intervalMs: 1_000,
+    host: harness.host,
+    pull: async () => {
+      started += 1;
+      throw new Error("network");
+    },
+    onResult: () => {},
+  });
+  await Promise.resolve();
+  assert.equal(started, 1);
+  stop();
+  harness.setHidden(true);
+  harness.setHidden(false);
+  harness.advance(5_000);
+  await Promise.resolve();
+  assert.equal(started, 1);
+  assert.equal(harness.pending(), 0);
 });
 
 test("subscribeSharedVisiblePoll shares one pull until the last listener leaves", async () => {
