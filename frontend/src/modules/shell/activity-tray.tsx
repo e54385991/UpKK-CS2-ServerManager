@@ -1,411 +1,65 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { DialogContentLoading } from "@/shared/ui/dialog-loading";
-import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import type { Route } from "next";
-import { useFormatter, useTranslations } from "next-intl";
-import { Ban, ListTodo, LoaderCircle, Trash2, X } from "lucide-react";
-import { isDeployProgressVisible } from "@/modules/console/live-console";
-import { OpenLiveTerminalButton } from "@/modules/console/open-live-terminal";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import { ListTodo, LoaderCircle } from "lucide-react";
 import {
   closeActivityTray,
-  dismissActivityOperations,
-  markActivityTerminal,
   openActivityTray,
-  selectActivityOperation,
   useActivityTray,
 } from "@/modules/servers/activity-store";
+import { ActivityTrayPanel } from "@/modules/shell/activity-tray-panel";
 import {
-  clearFailedOperationsFromBrowser,
-  clearCompletedOperationsFromBrowser,
-  cancelOperationFromBrowser,
-  dismissFailedOperationFromBrowser,
-  dismissCompletedOperationFromBrowser,
-  loadOperationInboxFromBrowser,
-  loadOperationJournalFromBrowser,
-} from "@/modules/servers/operation-client";
-import {
-  OPERATION_STATUS_TONE,
-  isServerOperationAction,
-  isActiveOperation,
-  type OperationInbox,
-  type OperationInboxItem,
-  type OperationStreamEvent,
-} from "@/modules/servers/types";
-import {
-  OPERATION_INBOX_EVENTS_URL,
-  parseOperationInboxPayload,
-} from "@/modules/servers/operation-inbox";
-import {
-  lastEventSequence,
-  mergeOperationEvents,
-  operationEventsUrl,
-  parseOperationEvent,
-} from "@/modules/servers/operation-events";
-import { initializedHostOperationEventsUrl } from "@/modules/servers/initialized-host-operation-events";
-import {
-  OPERATION_INBOX_LOCK,
-  subscribeVisibleEventSource,
-} from "@/shared/lib/visible-event-source";
-import {
-  refreshSharedVisiblePoll,
-  snapshotIsFresh,
-  subscribeSharedVisiblePoll,
-} from "@/shared/lib/visible-poll";
-import {
-  createRenderCoalescer,
-  isTerminalOperationEventType,
-} from "@/shared/lib/render-coalesce";
-import { confirm, notify } from "@/shared/feedback";
-import { Badge, StatusDot } from "@/shared/ui/badge";
+  countActiveMarketTasks,
+  countFailedMarketTasks,
+  deriveCachedActivityLists,
+  hasVisibleMarketTasks,
+  visibleMarketImportTasks,
+  type TrayTab,
+} from "@/modules/shell/activity-tray-lists";
+import { useActivityCommands } from "@/modules/shell/use-activity-commands";
+import { setInboxPollRemaining, useActivityInbox } from "@/modules/shell/use-activity-inbox";
+import { StatusDot } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 
-const AIImportTasks = dynamic(
-  () => import("@/modules/plugins/ai-import-tasks").then((mod) => mod.AIImportTasks),
-  { loading: DialogContentLoading },
-);
-
-const GAME_ACTIONS = new Set(["start", "restart"]);
-const INBOX_POLL_KEY = "activity-tray:inbox";
-const inboxPollState = { remaining: 0, lastSseAt: 0 };
-
-type TrayTab = "queue" | "completed" | "failed";
-
-function mergeById(
-  groups: readonly (readonly OperationInboxItem[])[],
-): OperationInboxItem[] {
-  const byId = new Map<string, OperationInboxItem>();
-  for (const group of groups) {
-    for (const item of group) byId.set(item.operationId, item);
-  }
-  return [...byId.values()];
-}
-
-function ActivityConsole({ item }: { item: OperationInboxItem }) {
-  const t = useTranslations("shell");
-  const tDetail = useTranslations("serverDetail");
-  const format = useFormatter();
-  const [events, setEvents] = useState<OperationStreamEvent[]>([]);
-  const itemRef = useRef(item);
-
-  useEffect(() => {
-    itemRef.current = item;
-  }, [item]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const after = { current: "0" };
-    const journalAbort = new AbortController();
-    const coalescer = createRenderCoalescer<OperationStreamEvent>((batch) => {
-      setEvents((current) => mergeOperationEvents(current, batch));
-    });
-    if (item.serverId > 0) {
-      void loadOperationJournalFromBrowser(item.serverId, item.operationId, {
-        signal: journalAbort.signal,
-      }).then(
-        (result) => {
-          if (!cancelled && result.ok) {
-            setEvents((current) => mergeOperationEvents(current, result.data.events));
-            if (after.current === "0") {
-              after.current = lastEventSequence(result.data.events);
-            }
-          }
-        },
-      );
-    }
-    const ingest = (raw: string) => {
-      const event = parseOperationEvent(raw);
-      if (!event) return;
-      if (event.sequence && event.sequence !== "seed") {
-        after.current = event.sequence;
-      }
-      coalescer.push(event, {
-        immediate: isTerminalOperationEventType(event.type),
-      });
-      if (event.type === "operation_failed") {
-        markActivityTerminal(item.operationId, "failed", event.message);
-      } else if (event.type === "operation_completed") {
-        markActivityTerminal(item.operationId, "completed", event.message);
-      }
-    };
-    const stop = subscribeVisibleEventSource({
-      url: () =>
-        item.serverId < 0
-          ? initializedHostOperationEventsUrl(
-              -item.serverId,
-              item.operationId,
-              after.current,
-            )
-          : operationEventsUrl(item.serverId, item.operationId, after.current),
-      eventTypes: ["progress", "operation_completed", "operation_failed"],
-      shouldReconnect: () => isActiveOperation(itemRef.current),
-      onData: ingest,
-    });
-    return () => {
-      cancelled = true;
-      coalescer.dispose();
-      journalAbort.abort();
-      stop();
-    };
-  }, [item.operationId, item.serverId]);
-
-  const latest = item.latestMessage || events.at(-1)?.message || t("activityWaiting");
-  const transfer = [...events].reverse().find((event) => event.transfer)?.transfer ?? null;
-  const transferPhase = transfer
-    ? transfer.phase === "download"
-      ? tDetail("transferDownload")
-      : tDetail("transferUpload")
-    : "";
-  const transferred = transfer
-    ? `${format.number(transfer.bytesTransferred / (1024 * 1024), { maximumFractionDigits: 1 })} MB`
-    : "";
-  const progressLabel =
-    transfer && transfer.percent !== null
-      ? t("activityProgress", {
-          phase: transferPhase,
-          percent: `${format.number(transfer.percent, { maximumFractionDigits: 1 })}%`,
-        })
-      : transfer
-        ? t("activityProgressBytes", { phase: transferPhase, transferred })
-        : null;
-  const retryLabel =
-    transfer && transfer.retryCount > 0
-      ? t("activityRetries", { count: transfer.retryCount })
-      : null;
-
-  return (
-    <>
-      <div>
-        <p className="text-xs font-medium text-fg-subtle">{t("activityNow")}</p>
-        <p className="mt-1 text-sm text-fg-muted" data-testid="activity-step">
-          {latest}
-        </p>
-      </div>
-      {transfer && progressLabel ? (
-        <div className="space-y-1" data-testid="activity-transfer-progress">
-          <div className="flex items-center justify-between gap-2 text-xs text-fg-subtle">
-            <span>
-              {progressLabel}
-              {retryLabel ? ` · ${retryLabel}` : ""}
-            </span>
-            <span>{tDetail("transferElapsed", { seconds: transfer.elapsedSeconds.toFixed(1) })}</span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-line">
-            <div
-              className={cn(
-                "h-full rounded-full bg-primary transition-[width] duration-500",
-                transfer.percent === null ? "w-1/3 animate-pulse" : "",
-              )}
-              style={
-                transfer.percent === null
-                  ? undefined
-                  : { width: `${transfer.percent}%` }
-              }
-              aria-label={progressLabel}
-              aria-valuenow={transfer.percent ?? undefined}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              role="progressbar"
-            />
-          </div>
-        </div>
-      ) : null}
-      <div>
-        <p className="text-xs font-medium text-fg-subtle">{t("activityLog")}</p>
-        <pre className="mt-1 max-h-40 overflow-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-[11px] leading-5 text-fg-muted">
-          {events.length === 0
-            ? t("activityWaiting")
-            : events.map((event) => event.message).join("\n")}
-        </pre>
-      </div>
-    </>
-  );
-}
-
 export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
   const t = useTranslations("shell");
-  const tActions = useTranslations("serverDetail.actions");
-  const tStatus = useTranslations("serverDetail");
   const { open, selectedId, overlay, dismissedIds } = useActivityTray();
-  const [inbox, setInbox] = useState<OperationInbox | null>(null);
+  const { inbox, setInbox } = useActivityInbox();
   const [tab, setTab] = useState<TrayTab>("queue");
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const dismissed = useMemo(() => new Set(dismissedIds), [dismissedIds]);
-  const queue = useMemo(() => {
-    return mergeById([overlay, inbox?.items ?? []])
-      .filter((item) => !dismissed.has(item.operationId) && isActiveOperation(item))
-      .sort((left, right) => {
-        const rank = (status: string) => (status === "running" ? 0 : 1);
-        const delta = rank(left.status) - rank(right.status);
-        if (delta !== 0) return delta;
-        return right.startedAt.localeCompare(left.startedAt);
-      });
-  }, [dismissed, inbox?.items, overlay]);
-  const completed = useMemo(() => {
-    return mergeById([inbox?.completedItems ?? []])
-      .filter((item) => !dismissed.has(item.operationId) && item.status === "completed")
-      .sort((left, right) =>
-        (right.completedAt ?? right.startedAt).localeCompare(
-          left.completedAt ?? left.startedAt,
-        ),
-      );
-  }, [dismissed, inbox?.completedItems]);
-  const failed = useMemo(() => {
-    return mergeById([overlay, inbox?.failedItems ?? []])
-      .filter((item) => !dismissed.has(item.operationId) && item.status === "failed")
-      .sort((left, right) =>
-        (right.completedAt ?? right.startedAt).localeCompare(
-          left.completedAt ?? left.startedAt,
-        ),
-      );
-  }, [dismissed, inbox?.failedItems, overlay]);
-  const marketTasks = inbox?.marketImportItems ?? [];
-  const hasVisibleMarketTasks =
-    marketTasks.some((item) => item.status === "queued" || item.status === "running") ||
-    marketTasks.some((item) => item.status === "completed" || item.status === "cancelled") ||
-    marketTasks.some((item) => item.status === "failed");
-  const remaining = queue.length + marketTasks.filter(item => item.status === "queued" || item.status === "running").length;
+  const lists = useMemo(
+    () => deriveCachedActivityLists(inbox, overlay, dismissed),
+    [dismissed, inbox, overlay],
+  );
+  const { queue, completed, failed } = lists;
+  const marketTasks = visibleMarketImportTasks(inbox);
+  const remaining = queue.length + countActiveMarketTasks(marketTasks);
   const completedCount = completed.length;
   const failedCount = failed.length;
-  const allFailedCount = failedCount + marketTasks.filter(item => item.status === "failed").length;
-  const running = queue.some((item) => item.status === "running") || marketTasks.some(item => item.status === "running");
+  const allFailedCount = failedCount + countFailedMarketTasks(marketTasks);
+  const running =
+    queue.some((item) => item.status === "running") ||
+    marketTasks.some((item) => item.status === "running");
   const selectedIsFailed = Boolean(
     selectedId && failed.some((item) => item.operationId === selectedId),
   );
-  const activeTab: TrayTab =
-    tab === "queue" && selectedIsFailed ? "failed" : tab;
-  const visible =
-    activeTab === "queue" ? queue : activeTab === "completed" ? completed : failed;
+  const activeTab: TrayTab = tab === "queue" && selectedIsFailed ? "failed" : tab;
+  const visible = activeTab === "queue" ? queue : activeTab === "completed" ? completed : failed;
   const selected =
     visible.find((item) => item.operationId === selectedId) ?? visible[0] ?? null;
+  const commands = useActivityCommands({
+    completed,
+    failed,
+    completedCount,
+    allFailedCount,
+    setInbox,
+  });
 
   useEffect(() => {
-    inboxPollState.remaining = remaining;
+    setInboxPollRemaining(remaining);
   }, [remaining]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const intervalMs = () => (inboxPollState.remaining > 0 ? 8_000 : 20_000);
-    const stopPoll = subscribeSharedVisiblePoll({
-      key: INBOX_POLL_KEY,
-      intervalMs,
-      shouldPull: () => !snapshotIsFresh(inboxPollState.lastSseAt, Date.now(), intervalMs()),
-      pull: (signal) => loadOperationInboxFromBrowser({ signal }),
-      onResult: (result) => {
-        if (!cancelled && result.ok) setInbox(result.data);
-      },
-    });
-    const onImport = () => {
-      refreshSharedVisiblePoll(INBOX_POLL_KEY);
-    };
-    window.addEventListener("plugin-ai-import-submitted", onImport);
-    const stop = subscribeVisibleEventSource({
-      url: OPERATION_INBOX_EVENTS_URL,
-      eventTypes: ["inbox"],
-      lockName: OPERATION_INBOX_LOCK,
-      onData: (raw) => {
-        const next = parseOperationInboxPayload(raw);
-        if (!cancelled && next) {
-          inboxPollState.lastSseAt = Date.now();
-          setInbox(next);
-        }
-      },
-    });
-    return () => {
-      cancelled = true;
-      window.removeEventListener("plugin-ai-import-submitted", onImport);
-      stopPoll();
-      stop();
-    };
-  }, []);
-
-  const actionLabel = (action: string) => {
-    return isServerOperationAction(action) ? tActions(action) : action;
-  };
-
-  // Clears retained server-operation failures *and*, for administrators, the
-  // failed AI marketplace imports listed above them — both feed the red badge,
-  // so clearing only one half left it lit.
-  async function clearFailed() {
-    if (allFailedCount === 0) return;
-    if (
-      !(await confirm({
-        title: t("activityClearFailed"),
-        description: t("activityClearFailedConfirm"),
-        tone: "danger",
-      }))
-    ) {
-      return;
-    }
-    const result = await clearFailedOperationsFromBrowser();
-    if (!result.ok) {
-      notify.error(result.error || t("activityClearFailedError"));
-      return;
-    }
-    dismissActivityOperations(failed.map((item) => item.operationId));
-    window.dispatchEvent(new Event("plugin-ai-import-refresh"));
-    const inboxResult = await loadOperationInboxFromBrowser();
-    if (inboxResult.ok) setInbox(inboxResult.data);
-  }
-
-  async function clearCompleted() {
-    if (completedCount === 0) return;
-    if (
-      !(await confirm({
-        title: t("activityClearCompleted"),
-        description: t("activityClearCompletedConfirm", { count: completedCount }),
-        tone: "danger",
-      }))
-    ) {
-      return;
-    }
-    const result = await clearCompletedOperationsFromBrowser();
-    if (!result.ok) {
-      notify.error(result.error || t("activityClearCompletedError"));
-      return;
-    }
-    dismissActivityOperations(completed.map((item) => item.operationId));
-    const inboxResult = await loadOperationInboxFromBrowser();
-    if (inboxResult.ok) setInbox(inboxResult.data);
-  }
-
-  async function dismissTerminalOne(operationId: string, terminalTab: "completed" | "failed") {
-    const result =
-      terminalTab === "completed"
-        ? await dismissCompletedOperationFromBrowser(operationId)
-        : await dismissFailedOperationFromBrowser(operationId);
-    if (!result.ok) return;
-    dismissActivityOperations([operationId]);
-    const inboxResult = await loadOperationInboxFromBrowser();
-    if (inboxResult.ok) setInbox(inboxResult.data);
-  }
-
-  async function forceStopOne(item: OperationInboxItem) {
-    if (cancellingId) return;
-    if (
-      !(await confirm({
-        title: t("activityForceStop"),
-        description: t("activityForceStopConfirm"),
-        confirmLabel: t("activityForceStop"),
-        tone: "danger",
-      }))
-    ) {
-      return;
-    }
-    setCancellingId(item.operationId);
-    const result = await cancelOperationFromBrowser(item.serverId, item.operationId);
-    setCancellingId(null);
-    if (!result.ok) {
-      notify.error(result.error || t("activityForceStopFailed"));
-      return;
-    }
-    markActivityTerminal(item.operationId, "failed", result.data.message);
-    const inboxResult = await loadOperationInboxFromBrowser();
-    if (inboxResult.ok) setInbox(inboxResult.data);
-  }
 
   return (
     <div className="relative">
@@ -417,9 +71,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
         data-busy={remaining > 0 ? "true" : "false"}
         aria-expanded={open}
         aria-label={
-          remaining > 0
-            ? t("activityOpenBusy", { count: remaining })
-            : t("activityOpen")
+          remaining > 0 ? t("activityOpenBusy", { count: remaining }) : t("activityOpen")
         }
         className={cn(
           "relative gap-2 overflow-visible",
@@ -431,13 +83,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
             closeActivityTray();
             return;
           }
-          setTab(
-            remaining > 0
-              ? "queue"
-              : failedCount > 0
-                ? "failed"
-                : "completed",
-          );
+          setTab(remaining > 0 ? "queue" : failedCount > 0 ? "failed" : "completed");
           openActivityTray(selected?.operationId);
         }}
       >
@@ -454,11 +100,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
             <ListTodo className={cn("size-4", remaining > 0 && "animate-pulse")} />
           )}
         </span>
-        <span>
-          {remaining > 0
-            ? t("activityRemaining", { count: remaining })
-            : t("activityTitle")}
-        </span>
+        <span>{remaining > 0 ? t("activityRemaining", { count: remaining }) : t("activityTitle")}</span>
         {remaining > 0 ? (
           <span
             data-testid="activity-tray-count"
@@ -482,254 +124,27 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
       </Button>
 
       {open ? (
-        <div
-          role="dialog"
-          aria-label={t("activityTitle")}
-          data-testid="activity-tray-panel"
-          className="fixed right-4 sm:absolute sm:right-0 z-40 mt-2 flex w-[min(28rem,calc(100vw-2rem))] max-h-[min(36rem,70dvh)] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel"
-        >
-          {isAdmin && hasVisibleMarketTasks && <AIImportTasks initialTasks={marketTasks} />}
-          <header className="space-y-3 border-b border-line px-4 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-fg">{t("activityTitle")}</p>
-                <p className="text-xs text-fg-subtle">
-                  {activeTab === "queue"
-                    ? remaining > 0
-                      ? t("activityRemaining", { count: remaining })
-                      : t("activityEmpty")
-                    : activeTab === "completed"
-                      ? completedCount > 0
-                        ? t("activityCompletedCount", { count: completedCount })
-                        : t("activityCompletedEmpty")
-                      : failedCount > 0
-                        ? t("activityFailedCount", { count: failedCount })
-                        : t("activityFailedEmpty")}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {activeTab === "completed" && completedCount > 0 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-danger hover:bg-danger/10"
-                    data-testid="activity-tray-clear-completed"
-                    onClick={() => void clearCompleted()}
-                  >
-                    <Trash2 className="size-4" />
-                    {t("activityClearCompletedAll", { count: completedCount })}
-                  </Button>
-                ) : null}
-                {allFailedCount > 0 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-danger hover:bg-danger/10"
-                    data-testid="activity-tray-clear-failed"
-                    onClick={() => void clearFailed()}
-                  >
-                    <Trash2 className="size-4" />
-                    {t("activityClearFailedAll", { count: allFailedCount })}
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("activityClose")}
-                  onClick={() => closeActivityTray()}
-                >
-                  <X />
-                </Button>
-              </div>
-            </div>
-            <div
-              role="tablist"
-              aria-label={t("activityTitle")}
-              className="flex rounded-md border border-line bg-surface-raised p-0.5"
-            >
-              {(
-                [
-                  ["queue", t("activityTabQueue"), remaining],
-                  ["completed", t("activityTabCompleted"), completedCount],
-                  ["failed", t("activityTabFailed"), failedCount],
-                ] as const
-              ).map(([id, label, count]) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  data-testid={`activity-tray-tab-${id}`}
-                  aria-selected={activeTab === id}
-                  className={cn(
-                    "flex flex-1 items-center justify-center gap-1.5 rounded-[5px] px-3 py-1.5 text-sm font-medium transition-colors",
-                    activeTab === id
-                      ? "bg-surface text-fg shadow-sm"
-                      : "text-fg-muted hover:text-fg",
-                  )}
-                  onClick={() => {
-                    if (id === "queue") {
-                      selectActivityOperation(queue[0]?.operationId ?? null);
-                    }
-                    if (id === "completed") {
-                      selectActivityOperation(completed[0]?.operationId ?? null);
-                    }
-                    if (id === "failed") {
-                      selectActivityOperation(failed[0]?.operationId ?? null);
-                    }
-                    setTab(id);
-                  }}
-                >
-                  {label}
-                  {count > 0 ? (
-                    <span
-                      className={cn(
-                        "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold",
-                        id === "failed"
-                          ? "bg-danger text-white"
-                          : "bg-primary text-primary-foreground",
-                      )}
-                    >
-                      {count}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          </header>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {visible.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-fg-muted">
-                {activeTab === "queue"
-                  ? t("activityEmptyHelp")
-                  : activeTab === "completed"
-                    ? t("activityCompletedHelp")
-                    : t("activityFailedHelp")}
-              </p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {visible.map((item) => (
-                  <li key={item.operationId} className="flex items-stretch">
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex min-w-0 flex-1 flex-col gap-1 px-4 py-3 text-left hover:bg-surface-overlay",
-                        selected?.operationId === item.operationId && "bg-surface-overlay",
-                      )}
-                      onClick={() => selectActivityOperation(item.operationId)}
-                    >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="truncate text-sm font-medium text-fg">
-                          {actionLabel(item.action)}
-                        </span>
-                        <Badge tone={OPERATION_STATUS_TONE[item.status]}>
-                          {tStatus(`opStatus.${item.status}`)}
-                        </Badge>
-                      </span>
-                      <span className="truncate font-mono text-[11px] text-fg-muted">
-                        {item.command || actionLabel(item.action)}
-                      </span>
-                      <span className="truncate text-xs text-fg-subtle">
-                        {item.serverName}
-                        {item.queuePosition > 0
-                          ? ` · ${t("activityPosition", { position: item.queuePosition })}`
-                          : ""}
-                      </span>
-                    </button>
-                    {activeTab === "queue" ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="m-1 shrink-0 text-danger hover:bg-danger/10"
-                        aria-label={t("activityForceStop")}
-                        disabled={cancellingId === item.operationId}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void forceStopOne(item);
-                        }}
-                      >
-                        {cancellingId === item.operationId ? (
-                          <LoaderCircle className="animate-spin" />
-                        ) : (
-                          <Ban />
-                        )}
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="m-1 shrink-0"
-                        aria-label={
-                          activeTab === "completed"
-                            ? t("activityDismissCompleted")
-                            : t("activityDismissFailed")
-                        }
-                        onClick={() =>
-                          void dismissTerminalOne(item.operationId, activeTab)
-                        }
-                      >
-                        <X />
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {selected ? (
-              <div className="space-y-3 border-t border-line px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="truncate text-sm font-medium text-fg">
-                    {actionLabel(selected.action)}
-                  </p>
-                  <Badge
-                    data-testid="activity-status"
-                    tone={OPERATION_STATUS_TONE[selected.status]}
-                  >
-                    {tStatus(`opStatus.${selected.status}`)}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-fg-subtle">{t("activityCommand")}</p>
-                  <pre
-                    data-testid="activity-command"
-                    className="mt-1 overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-fg"
-                  >
-                    {selected.command || actionLabel(selected.action)}
-                  </pre>
-                </div>
-                <ActivityConsole key={selected.operationId} item={selected} />
-                <div className="flex flex-wrap gap-2">
-                  {selected.serverId > 0 ? (
-                    <Link
-                      href={`/servers/${selected.serverId}/operations` as Route}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      {t("activityOpenOperations")}
-                    </Link>
-                  ) : null}
-                  {isDeployProgressVisible({ operation: selected }) ? (
-                    <OpenLiveTerminalButton
-                      serverId={selected.serverId}
-                      view="deploy"
-                      label={t("activityOpenTmux")}
-                    />
-                  ) : null}
-                  {GAME_ACTIONS.has(selected.action) ? (
-                    <OpenLiveTerminalButton
-                      serverId={selected.serverId}
-                      view="game"
-                      label={t("activityOpenTmux")}
-                    />
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <ActivityTrayPanel
+          isAdmin={isAdmin}
+          hasVisibleMarketTasks={hasVisibleMarketTasks(marketTasks)}
+          marketTasks={marketTasks}
+          activeTab={activeTab}
+          remaining={remaining}
+          completedCount={completedCount}
+          failedCount={failedCount}
+          allFailedCount={allFailedCount}
+          queue={queue}
+          completed={completed}
+          failed={failed}
+          visible={visible}
+          selected={selected}
+          cancellingId={commands.cancellingId}
+          onTab={setTab}
+          onClearCompleted={() => void commands.clearCompleted()}
+          onClearFailed={() => void commands.clearFailed()}
+          onForceStop={commands.forceStopOne}
+          onDismiss={commands.dismissTerminalOne}
+        />
       ) : null}
     </div>
   );
