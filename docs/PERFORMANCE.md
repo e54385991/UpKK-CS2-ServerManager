@@ -264,10 +264,10 @@ is back to pk / github_url / title. See
 - Fleet-500 single-route and mixed 60 s / 300 s × 3 pairs are
   recorded above (all missed 20%; mixed market/servers/inbox also
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
-  events at pool size 10). Next: 60-minute soak, then 10 / 100 and
-  browser
+  events at pool size 10). Fleet-500 soak RSS missed +5%. Next: 10 /
+  100, browser, `check_baseline`
 - Same-protocol series on fleets 10 / 100 after the 500-server work
-- Production browser 5 / 30 × 3 and a 60-minute soak
+- Production browser 5 / 30 × 3
 - `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
   the 1000-row cap; seed after 10 / 100)
 - Marketplace indexes remain out (HTTP +15.4%, below 20%)
@@ -686,9 +686,10 @@ Fleet-500 same-protocol 60 s / 300 s × 3 on isolated `55442` / `56389`
 - Catalog compact JSON 142,964 / 139,750 bytes (en-US / zh-CN); login
   subset 1,653 / 1,582; overview chrome 18,521 / 18,291
 - Bundle budgets and `cacheComponents` / `partialPrefetching` unchanged
-- 60-minute soak, fleet-10 / 100 series, production browser 5 / 30 × 3,
-  full `check_baseline`, and the interactive tray / install / assistant
-  / files pass are still open
+- 60-minute fleet-500 soak on HEAD: **RSS fail** (934 MiB after first
+  load window → 1731 MiB at 60 min, +85%, gate +5%). HTTP 0 errors.
+  Next: fleet-10 / 100, production browser 5 / 30 × 3, `check_baseline`,
+  and the interactive tray / install / assistant / files pass
 
 Application changes revert by commit. This round added **no** Alembic
 revision. Push, deploy, and live restart are out of scope.

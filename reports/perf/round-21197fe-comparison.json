@@ -207,6 +207,18 @@
     "isolated_seed": null,
     "note": "Compatibility fleets only check the existing 1000-row cap. Isolated fleet-1000/1001 seed waits until after 10/100."
   },
+  "soak_fleet_500": {
+    "protocol": "3600s mixed closed-loop, RSS sampled each minute",
+    "http_errors": 0,
+    "head_sha": "93848d4e22d9be2279e6911d09f5817e91e8488b",
+    "rss_after_first_window_bytes": 979681280,
+    "rss_last_bytes": 1815134208,
+    "rss_growth": 0.853,
+    "rss_gate": 0.05,
+    "rss_pass": false,
+    "inbox_probe_ms": [2583.284, 2144.538],
+    "note": "Compare last RSS to the sample after the first load window, not t=0. Peak rss_max 2516910080."
+  },
   "indexes": {
     "submitted": false,
     "alembic_revision": null,
@@ -222,8 +234,7 @@
     }
   },
   "still_open": [
-    "60-minute soak on fleet-500",
-    "fleet-10 and fleet-100 same-protocol series",
+    "fleet-100 then fleet-10 same-protocol 60s/300s×3",
     "production browser 5/30×3 at 390 and 1440",
     "fleet-1000/1001 overview cap after the 500-server series",
     "uv run python scripts/check_baseline.py",
