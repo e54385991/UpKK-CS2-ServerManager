@@ -55,10 +55,14 @@
     "build_seconds": [0.0134, 0.0062],
     "write_p95_ms": [0.719, 0.458],
     "write_within_tolerance": true,
-    "http_p95_three_round_median": null
+    "http_p95_three_round_median": {
+      "before_ms": 7.101,
+      "after_ms": 6.01,
+      "improvement": 0.154,
+      "passed": false
+    }
   },
   "still_open": [
-    "fleet-500 market --with-index-candidates 60s/300s×3 vs HEAD 7.10 ms",
     "fleet-500 overview/servers 60s/300s×3 at 21197fe and HEAD",
     "measure-api --with-index-candidates three-round market HTTP p95",
     "fleet-10 and fleet-100 same-protocol series",

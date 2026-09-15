@@ -94,9 +94,10 @@ Same-protocol market **baseline** (60 s + 300 s × 3, 0 errors):
 | starting | **7.54 ms** | 7.54 / 6.76 / 8.77 | 145022 |
 | HEAD | **7.10 ms** | 7.03 / 7.10 / 7.82 | 145812 |
 
-Market 20% gate: **fail** (+5.8%). Still inside `max(5%, 20 ms)`. A
-`--with-index-candidates` series is running against the HEAD 7.10 ms
-line (need ≤ 5.68 ms to include the btrees).
+Market 20% gate: **fail** (+5.8%). Still inside `max(5%, 20 ms)`.
+Indexed HTTP (same arrival, then dropped): **6.01 ms** median
+(6.06 / 6.01 / 4.55), **15.4%** vs HEAD 7.10 ms. Below 20%, so **no
+Alembic revision**.
 
 `measure-api --with-index-candidates` creates the two btree candidates,
 measures, then `DROP INDEX` in `finally`. It is not an Alembic revision.
@@ -162,9 +163,10 @@ set (ports 55442 / 56389) captured:
 | EXPLAIN recommended | 1.808 ms Seq/heapsort → 0.043 ms Index Scan |
 | Build | 13 ms and 6 ms transactional `CREATE INDEX`, then rollback |
 | Writes | 0.72 ms → 0.46 ms p95, inside `max(5%, 20 ms)` |
-| HTTP three-round p95 | still missing |
+| HTTP three-round p95 | 7.101 ms → 6.010 ms (**15.4%**, gate 20%) |
 
-Inclusion fails closed without HTTP p95. See
+Inclusion **fails closed**. Measurement indexes were dropped; `pg_indexes`
+is back to pk / github_url / title. See
 `reports/perf/round-21197fe-indexes.json`.
 
 ### Correctness that landed without a speed claim
@@ -190,8 +192,7 @@ Inclusion fails closed without HTTP p95. See
   10 / 100 / 500
 - 30-session realtime, production browser 5 / 30 × 3, and a 60-minute soak
 - `fleet-1000` / `fleet-1001` overview cap only (after the 500-server series)
-- Three-round HTTP market p95 with vs without the candidate indexes
-  (EXPLAIN / write / build already captured; candidates still out)
+- Marketplace indexes remain out (HTTP +15.4%, below 20%)
 - Full `uv run python scripts/check_baseline.py` after `f533781` / `ebdfcaa`
   (the 03:46 contract/bundle failures now pass in isolation: token_usage,
   session cookie suffix, tray failed-import/history, files gzip)
