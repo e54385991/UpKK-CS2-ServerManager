@@ -364,8 +364,18 @@ HEAD SHA at those smokes: `f28c164`. Same-protocol inbox **baseline**
 | HEAD `181d4cd` | **36.9 ms** | 36.8 / 37.2 / 36.9 | 19869 |
 
 Inbox 20% gate: **fail** (−0.5%). Still inside `max(5%, 20 ms)`.
-`claimed_gains` stays **false**. Overview / market / servers on this
-seed are next.
+
+Same-protocol overview **baseline** (60 s + 300 s × 3, 0 errors,
+299.674 rps reused):
+
+| Tree | median p95 | round p95 | samples |
+| --- | ---: | --- | ---: |
+| starting | **3.30 ms** | 3.31 / 3.30 / 3.30 | 269702 |
+| HEAD `1eb0fa8` | **3.34 ms** | 3.34 / 3.34 / 3.34 | 269691 |
+
+Overview 20% gate: **fail** (−1.1%). Still inside `max(5%, 20 ms)`.
+`claimed_gains` stays **false**. Market / servers on this seed are
+next.
 
 ### Still open on this host
 
@@ -374,8 +384,8 @@ seed are next.
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
 - Fleet-100 API and 10-session realtime are recorded (API missed 20%;
-  realtime 0 events at pool size 10). Fleet-10 smoke and inbox
-  (−0.5%) are recorded; overview / market / servers, browser,
+  realtime 0 events at pool size 10). Fleet-10 inbox (−0.5%) and
+  overview (−1.1%) are recorded; market / servers, browser,
   `check_baseline`
 - Production browser 5 / 30 × 3
 - `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
