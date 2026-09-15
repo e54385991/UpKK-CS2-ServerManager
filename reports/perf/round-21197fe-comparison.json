@@ -143,8 +143,39 @@
       "market": 22587,
       "servers": 22567
     },
-    "head_median_p95_ms": null,
-    "note": "HEAD 60s/300s×3 still running; smoke is not the gate."
+    "head_median_p95_ms": {
+      "inbox": 2749.768,
+      "overview": 25.491,
+      "market": 152.908,
+      "servers": 153.857
+    },
+    "head_round_p95_ms": {
+      "inbox": [2714.432, 2808.019, 2749.768],
+      "overview": [94.857, 24.672, 25.491],
+      "market": [154.093, 152.908, 152.715],
+      "servers": [156.412, 153.857, 153.745]
+    },
+    "head_samples": {
+      "inbox": 382,
+      "overview": 27773,
+      "market": 21088,
+      "servers": 21139
+    },
+    "head_sha": "5942153508b8892e4d23abafb1b926bb4f0a53cb",
+    "improvement": {
+      "inbox": -0.0565,
+      "overview": -0.2226,
+      "market": -0.7737,
+      "servers": -0.4422
+    },
+    "gate": 0.2,
+    "passed": false,
+    "within_regression_envelope": {
+      "inbox": false,
+      "overview": true,
+      "market": false,
+      "servers": false
+    }
   },
   "indexes": {
     "submitted": false,
@@ -161,7 +192,7 @@
     }
   },
   "still_open": [
-    "fleet-500 HEAD mixed 60s/300s×3 (21197fe done: inbox 2603 / overview 20.8 / market 86.2 / servers 106.7 ms)",
+    "measure-realtime --sessions 30",
     "fleet-10 and fleet-100 same-protocol series",
     "measure-realtime --sessions 30",
     "production browser 5/30×3 at 390 and 1440",
