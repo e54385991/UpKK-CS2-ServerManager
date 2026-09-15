@@ -620,8 +620,20 @@
       "tests/test_perf_harness.py::test_overview_keeps_the_existing_thousand_server_cap",
       "tests/test_overview_summary.py"
     ],
-    "isolated_seed": null,
-    "note": "Compatibility fleets only check the existing 1000-row cap. Isolated fleet-1000/1001 seed waits until after 10/100."
+    "isolated_seed": {
+      "fleet_1000": {
+        "db_servers": 1000,
+        "db_admin": 898,
+        "overview_summary_total": 898
+      },
+      "fleet_1001": {
+        "db_servers": 1001,
+        "db_admin": 899,
+        "overview_summary_total": 899
+      },
+      "head_sha": "fefb035f925cddc264821d858a0843d5750ef1d1"
+    },
+    "note": "Compatibility fleets seed 1000/1001 total rows. Admin ownership is 898/899, so GET /overview/summary does not hit the SQL LIMIT 1000. The cap remains unit-tested."
   },
   "soak_fleet_500": {
     "protocol": "3600s mixed closed-loop, RSS sampled each minute",
@@ -651,7 +663,6 @@
   },
   "still_open": [
     "production browser 5/30×3 at 390 and 1440",
-    "fleet-1000/1001 overview cap isolated seed",
     "uv run python scripts/check_baseline.py",
     "interactive browser pass of tray, install, assistant, files"
   ]

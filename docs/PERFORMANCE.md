@@ -430,11 +430,13 @@ trees: 0 HTTP errors, 0 events, first-inbox p95 0. The pool size was
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
 - Fleet-10 API and 1-session realtime are recorded (API missed 20%;
-  realtime 0 events). Browser 5 / 30 × 3, `fleet-1000` / `1001`
-  seed, `check_baseline`
+  realtime 0 events). Isolated 1000 / 1001 seed is recorded.
+  Browser 5 / 30 × 3, `check_baseline`
 - Production browser 5 / 30 × 3
-- `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
-  the 1000-row cap; seed after 10 / 100)
+- Isolated `fleet-1000` / `fleet-1001` seed is recorded (1000 / 1001
+  rows). Admin ownership is 898 / 899, so overview summary returns
+  898 / 899 and does not hit the SQL LIMIT 1000. Unit tests remain
+  the cap proof.
 - Marketplace indexes remain out (HTTP +15.4%, below 20%)
 - Full `uv run python scripts/check_baseline.py` after `f533781` / `ebdfcaa`
   (the 03:46 contract/bundle failures now pass in isolation: token_usage,
