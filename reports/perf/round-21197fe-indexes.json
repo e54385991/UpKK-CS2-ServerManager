@@ -31,28 +31,39 @@
       "name": "ix_market_plugins_framework_recommended_installs_created",
       "columns": ["framework", "is_recommended", "install_count", "created_at", "id"],
       "existing_index_covers": false,
-      "included": false
+      "included": false,
+      "build_seconds": 0.0134
     },
     {
       "name": "ix_market_plugins_framework_created_id",
       "columns": ["framework", "created_at", "id"],
       "existing_index_covers": false,
-      "included": false
+      "included": false,
+      "build_seconds": 0.0062
     }
   ],
   "gates": {
     "definition_coverage": "existing btree prefixes do not match either candidate",
-    "explain_analyze_buffers": "not captured; 127.0.0.1:55432 is listening but postgres_isolated is false",
+    "explain_analyze_buffers": "captured on isolated 55442 cs2_perf; 10,000 rows; recommended 1.808 ms Seq/heapsort → 0.043 ms Index Scan after transactional CREATE INDEX (rolled back)",
     "http_p95_three_round_median": null,
-    "write_p95_tolerance": null,
-    "build_seconds": null,
+    "write_p95_tolerance": {
+      "before_p95_ms": 0.719,
+      "after_p95_ms": 0.458,
+      "within_tolerance": true
+    },
+    "build_seconds": {
+      "recommended": 0.0134,
+      "created": 0.0062,
+      "limit": 5.0,
+      "passed": true
+    },
     "other_query_regression": null
   },
   "reason": [
     "Coverage is decided from column lists in Alembic 0001, not from index names.",
-    "EXPLAIN and HTTP three-round p95 require the isolated cs2_perf role on 55432.",
-    "This host's 55432 accepts connections but rejects cs2_perf password auth (another compose project).",
-    "Id-only microbenchmarks are not accepted as HTTP evidence.",
-    "Missing measurements fail closed; no CREATE INDEX and no Alembic revision."
+    "EXPLAIN, write probes, and transactional CREATE INDEX ran on the isolated 10,000-row set and rolled back.",
+    "Builds were 13 ms and 6 ms. Writes stayed inside max(5%, 20 ms).",
+    "Three-round HTTP market p95 is still missing, so inclusion fails closed.",
+    "Id-only microbenchmarks are not accepted as HTTP evidence."
   ]
 }

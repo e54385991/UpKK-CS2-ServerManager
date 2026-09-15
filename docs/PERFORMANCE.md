@@ -88,11 +88,12 @@ Same-protocol paced inbox **baseline** (60 s warmup + 300 s × 3, arrival
 | Tree | git SHA | median p95 | round p95 | samples | late (last round) |
 | --- | --- | ---: | --- | ---: | ---: |
 | starting | `21197fe` | **2156 ms** | 2748 / 2156 / 2156 | 453 | 136 |
-| HEAD | (running) | — | — | — | — |
+| HEAD | `d16e555` | **2210 ms** | 2299 / 2209 / 2210 | 453 | 140 |
 
-`claimed_gains` stays false until HEAD finishes this series and beats
-2156 ms by ≥ 20%. Historical Stage 7 timings stay in the archive and are
-not this round's before/after.
+Inbox 20% gate: **fail** (−2.5%). The change is inside `max(5%, 20 ms)`
+(limit 2264 ms), so it is not a mixed-load-style regression either.
+`claimed_gains` stays **false**. Historical Stage 7 timings stay in the
+archive and are not this round's before/after.
 
 | Batch | SHA | Change |
 | --- | --- | --- |
@@ -119,14 +120,18 @@ The two marketplace btree candidates remain **out**. Alembic `0001` already
 has `pk_market_plugins (id)`, `ix_market_plugins_github_url (github_url)`,
 and `ix_market_plugins_title (title)`. Those prefixes do not cover
 `(framework, is_recommended, install_count, created_at, id)` or
-`(framework, created_at, id)`. `scripts/perf/index_eval.py` judges coverage
-from `pg_indexes.indexdef` column lists and EXPLAINs the HTTP list shape
-(selected list columns, exact `COUNT(*)`, first page and offset 40, plus a
-category filter). A live EXPLAIN on the 10,000-row isolated set used Seq
-Scan + top-N heapsort (~1–3 ms). Write-probe and transactional
-`CREATE INDEX` (always rolled back, never `CONCURRENTLY`) are now in the
-harness (`17c0706`) but have not yet been captured on this seed. HTTP
-three-round market p95 is still missing, so inclusion fails closed. See
+`(framework, created_at, id)`. Isolated `explain-indexes` on the 10,000-row
+set (ports 55442 / 56389) captured:
+
+| Gate | Result |
+| --- | --- |
+| Coverage | existing prefixes do not cover either candidate |
+| EXPLAIN recommended | 1.808 ms Seq/heapsort → 0.043 ms Index Scan |
+| Build | 13 ms and 6 ms transactional `CREATE INDEX`, then rollback |
+| Writes | 0.72 ms → 0.46 ms p95, inside `max(5%, 20 ms)` |
+| HTTP three-round p95 | still missing |
+
+Inclusion fails closed without HTTP p95. See
 `reports/perf/round-21197fe-indexes.json`.
 
 ### Correctness that landed without a speed claim
@@ -152,8 +157,8 @@ three-round market p95 is still missing, so inclusion fails closed. See
   10 / 100 / 500
 - 30-session realtime, production browser 5 / 30 × 3, and a 60-minute soak
 - `fleet-1000` / `fleet-1001` overview cap only (after the 500-server series)
-- Isolated write + build + HTTP three-round market p95 for the two index
-  candidates
+- Three-round HTTP market p95 with vs without the candidate indexes
+  (EXPLAIN / write / build already captured; candidates still out)
 - Full `uv run python scripts/check_baseline.py` after `f533781` / `ebdfcaa`
 - Interactive browser pass of tray, install, assistant, and files
   (production runner now covers those surfaces at 390 / 1440; numbers
