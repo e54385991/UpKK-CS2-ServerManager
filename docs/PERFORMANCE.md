@@ -129,6 +129,25 @@ Inbox 20% gate: **fail** (−2.5%). The change is inside `max(5%, 20 ms)`
 `reports/perf/round-21197fe-comparison.json`. Historical Stage 7 timings
 stay in the archive and are not this round's before/after.
 
+Paced overview **smoke** (10 s, 0 errors) discovered 511.406 rps and
+targets 409.125 rps. Open-loop emit is ~323 rps, so slots are missed.
+That cadence is reused:
+
+| Tree | overview p95 | samples |
+| --- | ---: | ---: |
+| starting | 3.88 ms | 3222 |
+| HEAD | 3.84 ms | 3233 |
+
+Same-protocol overview **baseline** on the starting tree (60 s + 300 s ×
+3, 0 errors, arrival reused):
+
+| Tree | median p95 | round p95 | samples |
+| --- | ---: | --- | ---: |
+| starting | **3.55 ms** | 3.59 / 3.44 / 3.55 | 306253 |
+
+HEAD overview baseline is the next comparable run. Smoke is not a 20%
+gate.
+
 | Batch | SHA | Change |
 | --- | --- | --- |
 | 0 | `025bd71` | Starting protocol, arrival pacing, segments, realtime CLI, fingerprint |
@@ -187,9 +206,10 @@ is back to pk / github_url / title. See
 
 ### Still open on this host
 
-- Same-protocol 60 s / 300 s × 3 API series at `21197fe` vs HEAD for
-  inbox / overview / market / servers, plus mixed `--paced`, on fleets
-  10 / 100 / 500
+- Fleet-500 inbox and market 60 s / 300 s × 3 pairs are recorded above
+  (both missed 20%). Overview starting baseline is in; HEAD overview
+  baseline, then servers both trees, then mixed `--paced`
+- Same-protocol series on fleets 10 / 100 after the 500-server work
 - 30-session realtime, production browser 5 / 30 × 3, and a 60-minute soak
 - `fleet-1000` / `fleet-1001` overview cap only (after the 500-server series)
 - Marketplace indexes remain out (HTTP +15.4%, below 20%)
