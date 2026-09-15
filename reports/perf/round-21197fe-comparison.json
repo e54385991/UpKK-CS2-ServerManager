@@ -198,6 +198,15 @@
     "passed": false,
     "note": "REDIS_POOL_SIZE stays 10. Both trees open 30 sessions and deliver no events."
   },
+  "overview_cap": {
+    "limit": 1000,
+    "unit_tests": [
+      "tests/test_perf_harness.py::test_overview_keeps_the_existing_thousand_server_cap",
+      "tests/test_overview_summary.py"
+    ],
+    "isolated_seed": null,
+    "note": "Compatibility fleets only check the existing 1000-row cap. Isolated fleet-1000/1001 seed waits until after 10/100."
+  },
   "indexes": {
     "submitted": false,
     "alembic_revision": null,

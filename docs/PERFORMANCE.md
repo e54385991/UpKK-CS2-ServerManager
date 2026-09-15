@@ -268,7 +268,8 @@ is back to pk / github_url / title. See
   browser
 - Same-protocol series on fleets 10 / 100 after the 500-server work
 - Production browser 5 / 30 × 3 and a 60-minute soak
-- `fleet-1000` / `fleet-1001` overview cap only (after the 500-server series)
+- `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
+  the 1000-row cap; seed after 10 / 100)
 - Marketplace indexes remain out (HTTP +15.4%, below 20%)
 - Full `uv run python scripts/check_baseline.py` after `f533781` / `ebdfcaa`
   (the 03:46 contract/bundle failures now pass in isolation: token_usage,
@@ -621,8 +622,9 @@ more. Passed under `playwright.performance.config.ts`.
 
 Round `21197fe` application commits revert newest-first (`17c0706`,
 `ebdfcaa`, `f533781`, `1156678`, `e33a602`, `bf44716`, `d92a269`,
-`87e3b43`, `bac25c5`, `3fe3878`, `24c478c`, `84cd598`, `216dcb7`, then
-harness `025bd71` if desired). Earlier Stage 1–5 commits revert
+`87e3b43`, `bac25c5`, `3fe3878`, `24c478c`, `84cd598`, `216dcb7`).
+Realtime harness-only commits revert newest-first (`d4bb00a`,
+`13391d3`, `8d10320`, `480572a`, `ec2cfe0`, then `025bd71` if desired). Earlier Stage 1–5 commits revert
 newest-first (`686f863`, `5077734`, `0796ee6`, `1b9c47f`, `7dc61fa`, then
 the original harness if desired). This round added **no** Alembic revision.
 If a later index revision exists, keep it and add a forward migration to
@@ -651,6 +653,9 @@ Push, deploy, and live restart stay out of default scope.
   the mixed inbox/overview/market/servers load.
 - `soak --mode baseline` runs 3600 s mixed load and samples RSS each minute.
   Compare the sample after the first minute to the last; t=0 is pre-load.
+- `REDIS_POOL_SIZE` stays **10** (production default). Thirty concurrent
+  inbox SSE snapshots exhaust that pool and deliver no events; do not
+  raise the pool to make the realtime report look populated.
 
 ## Gates (not yet claimed)
 
