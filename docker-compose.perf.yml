@@ -1,5 +1,7 @@
 # Isolated PostgreSQL 18 + Redis 8 for performance measurement.
 # Bind loopback only. Do not point this file at a live panel volume.
+# Default host ports are 55432 / 56379. Override with UPKK_PERF_POSTGRES_PORT
+# and UPKK_PERF_REDIS_PORT when another loopback project already owns those.
 # Usage: docker compose -f docker-compose.perf.yml up -d --wait
 name: upkk-perf
 
@@ -13,7 +15,7 @@ services:
       POSTGRES_USER: cs2_perf
       POSTGRES_PASSWORD: cs2-perf-db-not-production
     ports:
-      - "127.0.0.1:55432:5432"
+      - "127.0.0.1:${UPKK_PERF_POSTGRES_PORT:-55432}:5432"
     volumes:
       - perf_postgres_data:/var/lib/postgresql
     healthcheck:
@@ -27,7 +29,7 @@ services:
     container_name: upkk_perf_redis
     restart: "no"
     ports:
-      - "127.0.0.1:56379:6379"
+      - "127.0.0.1:${UPKK_PERF_REDIS_PORT:-56379}:6379"
     volumes:
       - perf_redis_data:/data
     healthcheck:

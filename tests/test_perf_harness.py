@@ -15,6 +15,7 @@ from scripts.perf.env import (
     apply_isolated_env,
     assert_isolated_target,
     isolated_environ,
+    ports_from_environ,
 )
 from scripts.perf.profiles import (
     CACHE_PRUNE_SCANS_TODAY,
@@ -120,6 +121,26 @@ def test_percentile_block_matches_in_process_observability():
 
     values = [float(item) for item in range(1, 101)]
     assert percentile_block(values) == shared(values)
+
+
+def test_isolated_ports_keep_defaults_and_honor_host_overrides():
+    defaults = ports_from_environ({})
+    assert defaults.postgres == 55432
+    assert defaults.redis == 56379
+    override = ports_from_environ(
+        {
+            "UPKK_PERF_POSTGRES_PORT": "55442",
+            "UPKK_PERF_REDIS_PORT": "56389",
+        }
+    )
+    values = isolated_environ(override)
+    assert values["POSTGRES_PORT"] == "55442"
+    assert values["REDIS_PORT"] == "56389"
+    assert values["POSTGRES_HOST"] == "127.0.0.1"
+    assert values["POSTGRES_DATABASE"] == PERF_DATABASE
+    assert values["REDIS_KEY_PREFIX"] == PERF_REDIS_PREFIX
+    with pytest.raises(ValueError, match="UPKK_PERF_POSTGRES_PORT"):
+        ports_from_environ({"UPKK_PERF_POSTGRES_PORT": "0"})
 
 
 def test_isolated_env_rejects_production_targets(tmp_path: Path):

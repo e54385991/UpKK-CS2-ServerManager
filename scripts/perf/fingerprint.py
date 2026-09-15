@@ -18,6 +18,7 @@ from scripts.perf.env import (
     PERF_REDIS_PREFIX,
     IsolatedPorts,
     isolated_environ,
+    ports_from_environ,
 )
 from scripts.perf.profiles import ARRIVAL_RATIO, MEASURES, ROUND_START_SHA
 from scripts.perf.report import git_sha
@@ -129,7 +130,7 @@ def loopback_bind(host: str, port: int) -> bool:
 
 def capture_fingerprint(cwd: Path | None = None) -> dict[str, Any]:
     root = cwd or PROJECT_ROOT
-    ports = IsolatedPorts()
+    ports = ports_from_environ()
     spec = MEASURES["baseline"]
     return {
         "round": "21197fe",

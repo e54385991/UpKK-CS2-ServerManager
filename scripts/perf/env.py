@@ -10,6 +10,10 @@ PERF_POSTGRES_PORT = "55432"
 PERF_REDIS_PORT = "56379"
 PERF_STUB_PORT = "18080"
 PERF_API_PORT = "18000"
+HOST_POSTGRES_PORT_KEY = "UPKK_PERF_POSTGRES_PORT"
+HOST_REDIS_PORT_KEY = "UPKK_PERF_REDIS_PORT"
+HOST_STUB_PORT_KEY = "UPKK_PERF_STUB_PORT"
+HOST_API_PORT_KEY = "UPKK_PERF_API_PORT"
 PERF_DATABASE = "cs2_perf"
 PERF_REDIS_PREFIX = "perf:"
 PERF_PASSWORD = "perf-isolated-pass-not-production"
@@ -24,8 +28,27 @@ class IsolatedPorts:
     api: int = int(PERF_API_PORT)
 
 
+def _env_port(source: Mapping[str, str], key: str, default: str) -> int:
+    raw = str(source.get(key) or "").strip() or default
+    port = int(raw)
+    if port <= 0 or port > 65535:
+        raise ValueError(f"{key} must be a TCP port, got {raw!r}")
+    return port
+
+
+def ports_from_environ(source: Mapping[str, str] | None = None) -> IsolatedPorts:
+    """Keep 55432/56379 unless this host already bound them to another project."""
+    env = os.environ if source is None else source
+    return IsolatedPorts(
+        postgres=_env_port(env, HOST_POSTGRES_PORT_KEY, PERF_POSTGRES_PORT),
+        redis=_env_port(env, HOST_REDIS_PORT_KEY, PERF_REDIS_PORT),
+        stub=_env_port(env, HOST_STUB_PORT_KEY, PERF_STUB_PORT),
+        api=_env_port(env, HOST_API_PORT_KEY, PERF_API_PORT),
+    )
+
+
 def isolated_environ(ports: IsolatedPorts | None = None) -> dict[str, str]:
-    chosen = ports or IsolatedPorts()
+    chosen = ports or ports_from_environ()
     return {
         "POSTGRES_HOST": "127.0.0.1",
         "POSTGRES_PORT": str(chosen.postgres),

@@ -10,7 +10,7 @@ from typing import Any, Sequence
 
 from scripts.perf.catalog_bytes import catalog_byte_report
 from scripts.perf.download_bench import compare_chunks
-from scripts.perf.env import IsolatedPorts, apply_isolated_env, isolated_environ
+from scripts.perf.env import apply_isolated_env, isolated_environ, ports_from_environ
 from scripts.perf.profiles import CACHE_PRUNE_SCANS_TODAY, FLEETS, MARKETS, MEASURES
 from scripts.perf.report import empty_report, write_report
 from scripts.perf.stubs import StubServer
@@ -344,7 +344,7 @@ def _write_shell_report(args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    apply_isolated_env(isolated_environ(IsolatedPorts()))
+    apply_isolated_env(isolated_environ(ports_from_environ()))
     return dispatch(args)
 
 
