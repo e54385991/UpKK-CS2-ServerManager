@@ -292,8 +292,19 @@ Same-protocol overview **baseline** (60 s + 300 s × 3, 0 errors,
 | HEAD `3750245` | **3.37 ms** | 3.36 / 3.37 / 3.37 | 328808 |
 
 Overview 20% gate: **fail** (−0.6%). Still inside `max(5%, 20 ms)`
-(20 ms floor). `claimed_gains` stays **false**. Market / servers
-60 s / 300 s × 3 on this seed are next.
+(20 ms floor).
+
+Same-protocol market **baseline** (60 s + 300 s × 3, 0 errors,
+388.573 rps reused):
+
+| Tree | median p95 | round p95 | samples |
+| --- | ---: | --- | ---: |
+| starting | **4.78 ms** | 4.78 / 4.78 / 4.79 | 225569 |
+| HEAD `93b0d16` | **4.81 ms** | 4.81 / 4.87 / 4.81 | 223819 |
+
+Market 20% gate: **fail** (−0.6%). Still inside `max(5%, 20 ms)`.
+`claimed_gains` stays **false**. Servers 60 s / 300 s × 3 on this seed
+is next.
 
 ### Still open on this host
 
@@ -301,9 +312,9 @@ Overview 20% gate: **fail** (−0.6%). Still inside `max(5%, 20 ms)`
   recorded above (all missed 20%; mixed market/servers/inbox also
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
-- Fleet-100 smoke, inbox (−1.8%), and overview (−0.6%) 60 s / 300 s × 3
-  are recorded. Market / servers, then fleet-10, mixed, realtime,
-  browser, `check_baseline`
+- Fleet-100 smoke, inbox (−1.8%), overview (−0.6%), and market (−0.6%)
+  60 s / 300 s × 3 are recorded. Servers, then fleet-10, mixed,
+  realtime, browser, `check_baseline`
 - Production browser 5 / 30 × 3
 - `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
   the 1000-row cap; seed after 10 / 100)
@@ -725,10 +736,10 @@ Fleet-500 same-protocol 60 s / 300 s × 3 on isolated `55442` / `56389`
 - Bundle budgets and `cacheComponents` / `partialPrefetching` unchanged
 - 60-minute fleet-500 soak on HEAD: **RSS fail** (934 MiB after first
   load window → 1731 MiB at 60 min, +85%, gate +5%). HTTP 0 errors.
-  Fleet-100 smoke, inbox (−1.8%), and overview (−0.6%) 60 s / 300 s × 3
-  are recorded. Market / servers baselines are next, then fleet-10,
-  production browser 5 / 30 × 3, `check_baseline`, and the interactive
-  tray / install / assistant / files pass.
+  Fleet-100 smoke, inbox (−1.8%), overview (−0.6%), and market (−0.6%)
+  60 s / 300 s × 3 are recorded. Servers baseline is next, then
+  fleet-10, production browser 5 / 30 × 3, `check_baseline`, and the
+  interactive tray / install / assistant / files pass.
 
 Application changes revert by commit. This round added **no** Alembic
 revision. Push, deploy, and live restart are out of scope.
