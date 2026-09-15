@@ -11,14 +11,23 @@ from typing import Any, Sequence
 import httpx
 
 from modules.observability import set_enabled, snapshot_counts
-from scripts.perf.profiles import MEASURES, MeasureMode, actor_cycle
+from modules.observability.counters import loop_lag_latest, samples_items
+from scripts.perf.arrival import (
+    ArrivalStats,
+    arrival_report,
+    error_free_rates,
+    run_paced_route,
+    scale_rates,
+)
+from scripts.perf.profiles import ARRIVAL_RATIO, MEASURES, MeasureMode, actor_cycle
 from scripts.perf.report import (
     attach_route_summary,
     median_of_rounds,
     percentile_block,
     soak_holds_rss,
 )
-from services.panel_metrics import capture_panel_performance
+from scripts.perf.segments import latest_sample, panel_checked_out, segments_from_counts
+from services.panel_metrics import capture_panel_performance, database_pool_payload
 
 ROUTES = (
     ("inbox", "/api/v1/operations/inbox"),
@@ -51,12 +60,21 @@ async def probe_inbox(client: httpx.AsyncClient, token: str) -> dict[str, Any]:
     response = await client.get("/api/v1/operations/inbox", headers=_auth(token))
     elapsed_ms = (perf_counter() - started) * 1000
     after = snapshot_counts()
+    samples = dict(samples_items())
     return {
         "status": response.status_code,
         "latency_ms": round(elapsed_ms, 3),
         "sql": after.get("db.executions", 0) - before.get("db.executions", 0),
         "redis": after.get("redis.ops", 0) - before.get("redis.ops", 0),
         "bytes": len(response.content),
+        "segments": segments_from_counts(
+            before,
+            after,
+            sql_ms=latest_sample(samples, "db.execute_ms"),
+            redis_ms=latest_sample(samples, "redis.op_ms"),
+            db_checked_out=panel_checked_out({"database": database_pool_payload()}),
+            loop_lag_ms=loop_lag_latest(),
+        ),
     }
 
 
@@ -133,14 +151,25 @@ async def run_api_rounds(
     transport: httpx.AsyncBaseTransport | None,
     base_url: str,
     routes: Sequence[str] | None = None,
+    paced: bool = False,
+    arrival_targets: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     set_enabled(True)
     spec = MEASURES[mode]
     roles = actor_cycle(online_users)
     catalog = selected_routes(routes)
     rounds: list[dict[str, Any]] = []
+    reused = arrival_targets is not None
+    discovered: dict[str, float] | None = None
+    targets = dict(arrival_targets or {})
     async with httpx.AsyncClient(transport=transport, base_url=base_url, timeout=30.0) as client:
         probe = await probe_inbox(client, tokens["admin"])
+        if paced and not targets:
+            discovered = await _discover_rates(
+                client, tokens, roles, spec.api_warmup_seconds, catalog
+            )
+            if discovered:
+                targets = scale_rates(discovered, ARRIVAL_RATIO)
         for index in range(spec.api_rounds):
             rounds.append(
                 await _one_round(
@@ -150,21 +179,53 @@ async def run_api_rounds(
                     spec.api_warmup_seconds,
                     spec.api_measure_seconds,
                     catalog,
+                    targets if paced else None,
                 )
             )
             rounds[-1]["round"] = index + 1
     summary = _summarize_rounds(rounds, catalog)
     backend = await capture_panel_performance()
+    last_arrival = rounds[-1].get("arrival") if rounds else {}
     return {
         "probes": {"inbox": probe},
         "isolation": [name for name, _path in catalog],
+        "paced": paced,
+        "arrival": arrival_report(
+            discovered=discovered,
+            targets=targets,
+            stats=last_arrival if isinstance(last_arrival, dict) else {},
+            reused=reused,
+        ),
         "rounds": rounds,
         "summary": summary,
         "backend": {
             "rss_bytes": _rss_bytes(),
             "panel": backend,
         },
+        "segments": probe.get("segments") or {},
     }
+
+
+async def _discover_rates(
+    client: httpx.AsyncClient,
+    tokens: dict[str, str],
+    roles: tuple[str, ...],
+    seconds: int,
+    routes: tuple[tuple[str, str], ...],
+) -> dict[str, float] | None:
+    samples: dict[str, list[float]] = defaultdict(list)
+    errors: dict[str, int] = defaultdict(int)
+    counts: dict[str, int] = defaultdict(int)
+    started = monotonic()
+    await _run_window(client, tokens, roles, seconds, samples, errors, counts, True, routes)
+    elapsed = max(0.001, monotonic() - started)
+    recorded = {}
+    for name, _path in routes:
+        recorded[name] = {
+            "errors": errors[name],
+            "throughput_rps": round(counts[name] / elapsed, 3),
+        }
+    return error_free_rates(recorded)
 
 
 async def _one_round(
@@ -174,13 +235,23 @@ async def _one_round(
     warmup_seconds: int,
     measure_seconds: int,
     routes: tuple[tuple[str, str], ...],
+    targets: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     samples: dict[str, list[float]] = defaultdict(list)
     errors: dict[str, int] = defaultdict(int)
     counts: dict[str, int] = defaultdict(int)
     await _run_window(client, tokens, roles, warmup_seconds, samples, errors, counts, False, routes)
     started = monotonic()
-    await _run_window(client, tokens, roles, measure_seconds, samples, errors, counts, True, routes)
+    arrival: dict[str, Any] = {}
+    if targets:
+        paced = await _run_paced_window(
+            client, tokens, roles, measure_seconds, samples, errors, counts, True, routes, targets
+        )
+        arrival = {name: row.as_dict() for name, row in paced.items()}
+    else:
+        await _run_window(
+            client, tokens, roles, measure_seconds, samples, errors, counts, True, routes
+        )
     elapsed = max(0.001, monotonic() - started)
     recorded = {}
     for name, _path in routes:
@@ -188,7 +259,12 @@ async def _one_round(
         payload["throughput_rps"] = round(counts[name] / elapsed, 3)
         payload["latency_ms"] = percentile_block(samples[name])
         recorded[name] = payload
-    return {"elapsed_s": round(elapsed, 3), "routes": recorded, "rss_bytes": _rss_bytes()}
+    return {
+        "elapsed_s": round(elapsed, 3),
+        "routes": recorded,
+        "rss_bytes": _rss_bytes(),
+        "arrival": arrival,
+    }
 
 
 async def _run_window(
@@ -212,6 +288,43 @@ async def _run_window(
         for role in roles
     ]
     await asyncio.gather(*tasks)
+
+
+async def _run_paced_window(
+    client: httpx.AsyncClient,
+    tokens: dict[str, str],
+    roles: tuple[str, ...],
+    seconds: int,
+    samples: dict[str, list[float]],
+    errors: dict[str, int],
+    counts: dict[str, int],
+    record: bool,
+    routes: tuple[tuple[str, str], ...],
+    targets: dict[str, float],
+) -> dict[str, ArrivalStats]:
+    if seconds <= 0:
+        return {name: ArrivalStats(0, 0, 0, 0, ()) for name, _path in routes}
+    token_cycle = [tokens[role] for role in roles]
+    cursor = 0
+
+    async def emit(name: str, path: str) -> None:
+        nonlocal cursor
+        token = token_cycle[cursor % len(token_cycle)]
+        cursor += 1
+        await _one_request(client, token, path, samples, errors, counts, name, record)
+
+    tasks = [
+        run_paced_route(
+            name=name,
+            path=path,
+            target_rps=float(targets.get(name) or 0.0),
+            duration_s=float(seconds),
+            emit=emit,
+        )
+        for name, path in routes
+    ]
+    rows = await asyncio.gather(*tasks)
+    return {name: row for (name, _path), row in zip(routes, rows, strict=True)}
 
 
 def _summarize_rounds(

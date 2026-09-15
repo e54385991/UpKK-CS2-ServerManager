@@ -30,6 +30,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "stub",
             "seed",
             "measure-api",
+            "measure-realtime",
+            "fingerprint",
             "explain-indexes",
             "report",
         ),
@@ -53,6 +55,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=0,
         help="Soak duration. 0 uses the profile soak_seconds (3600 for baseline).",
     )
+    parser.add_argument(
+        "--paced",
+        action="store_true",
+        help="Mixed/single-route load at 80 percent of error-free discovery (or --arrival-from).",
+    )
+    parser.add_argument(
+        "--arrival-from",
+        default="",
+        help="Reuse arrival targets from a previous upkk-isolated-perf report.",
+    )
+    parser.add_argument(
+        "--sessions",
+        type=int,
+        default=0,
+        help="Realtime SSE sessions. 0 uses the fleet online_users count.",
+    )
     return parser.parse_args(argv)
 
 
@@ -71,6 +89,10 @@ def dispatch(args: argparse.Namespace) -> int:
         return asyncio.run(_run_soak(args))
     if args.command == "explain-indexes":
         return asyncio.run(_write_index_eval(args))
+    if args.command == "fingerprint":
+        return _write_fingerprint(args)
+    if args.command == "measure-realtime":
+        return asyncio.run(_run_realtime(args))
     return _write_shell_report(args)
 
 
@@ -168,6 +190,14 @@ async def _run_measure(args: argparse.Namespace) -> int:
         )
     app = create_app(lifespan=None)
     tokens = manifest["tokens"]
+    arrival_targets = None
+    if args.arrival_from:
+        from scripts.perf.arrival import load_arrival_targets
+        from scripts.perf.report import load_report
+
+        arrival_targets = load_arrival_targets(load_report(Path(args.arrival_from)))
+        if arrival_targets is None:
+            raise SystemExit("arrival report is missing arrival.targets")
     measured = await run_api_rounds(
         tokens=tokens,
         online_users=FLEETS[args.fleet].online_users,
@@ -175,11 +205,15 @@ async def _run_measure(args: argparse.Namespace) -> int:
         transport=ASGITransport(app=app),
         base_url="http://perf.local",
         routes=args.routes,
+        paced=args.paced,
+        arrival_targets=arrival_targets,
     )
     report = empty_report(profile=args.fleet, mode=args.mode, cwd=PROJECT_ROOT)
     report["catalog_bytes"] = catalog_byte_report()
     report["api"] = measured
     report["backend"] = measured.get("backend", {})
+    report["arrival"] = measured.get("arrival", {})
+    report["segments"] = measured.get("segments", {})
     isolated = "-".join(args.routes) if args.routes else args.mode
     default_name = (
         f"api-{args.fleet}-{args.mode}.json"
@@ -231,6 +265,72 @@ async def _run_soak(args: argparse.Namespace) -> int:
     write_report(path, report)
     print(path)
     return 0
+
+
+def _write_fingerprint(args: argparse.Namespace) -> int:
+    from scripts.perf.fingerprint import capture_fingerprint
+
+    report = empty_report(profile="fingerprint", mode=args.mode, cwd=PROJECT_ROOT)
+    report["fingerprint"] = capture_fingerprint(PROJECT_ROOT)
+    path = _output_path(args, "round-fingerprint.json")
+    write_report(path, report)
+    print(path)
+    return 0
+
+
+async def _run_realtime(args: argparse.Namespace) -> int:
+    from httpx import ASGITransport
+
+    from api.application import create_app
+    from modules.config import get_settings
+    from scripts.perf.hub_inject import HubInboxLifecycle
+    from scripts.perf.realtime import run_realtime_rounds
+    from scripts.perf.seed import run_seed
+
+    settings = get_settings()
+    manifest_path = Path(args.manifest) if args.manifest else REPORTS / "raw" / "seed-manifest.json"
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    else:
+        manifest = await run_seed(
+            fleet_name=args.fleet,
+            market_name=args.market,
+            history=args.history,
+            settings=settings,
+        )
+    actor_id = int(manifest["users"]["admin"]["id"])
+    server_id = await _admin_server_id(actor_id)
+    sessions = args.sessions or FLEETS[args.fleet].online_users
+    seconds = args.seconds or (15 if args.mode == "smoke" else 60)
+    app = create_app(lifespan=None)
+    measured = await run_realtime_rounds(
+        token=manifest["tokens"]["admin"],
+        sessions=sessions,
+        seconds=seconds,
+        transport=ASGITransport(app=app),
+        base_url="http://perf.local",
+        injector=HubInboxLifecycle(server_id, actor_id),
+    )
+    report = empty_report(profile=args.fleet, mode=args.mode, cwd=PROJECT_ROOT)
+    report["realtime"] = measured
+    path = _output_path(args, f"realtime-{args.fleet}-{args.mode}.json")
+    write_report(path, report)
+    print(path)
+    return 0
+
+
+async def _admin_server_id(actor_id: int) -> int:
+    from sqlmodel import select
+
+    from modules.database import async_session_maker
+    from modules.models import Server
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(Server).where(Server.user_id == actor_id).limit(1))
+        server = result.scalars().first()
+    if server is None or server.id is None:
+        raise SystemExit("seed has no administrator server")
+    return int(server.id)
 
 
 def _write_shell_report(args: argparse.Namespace) -> int:

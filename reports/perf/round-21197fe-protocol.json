@@ -1,0 +1,37 @@
+{
+  "format": "upkk-isolated-perf",
+  "version": 1,
+  "claimed_gains": false,
+  "round": "21197fe",
+  "starting_sha": "21197fec25b785db2200e9feb6fdb245559da773",
+  "protocol": {
+    "arrival_ratio": 0.8,
+    "api_warmup_seconds": 60,
+    "api_measure_seconds": 300,
+    "api_rounds": 3,
+    "browser_warmup": 5,
+    "browser_measure": 30,
+    "browser_rounds": 3,
+    "soak_seconds": 3600,
+    "realtime_sessions": 30,
+    "postgres": "isolated-loopback",
+    "redis": "isolated-loopback",
+    "database": "cs2_perf",
+    "redis_key_prefix": "perf:"
+  },
+  "matrix": {
+    "primary_fleets": ["fleet-10", "fleet-100", "fleet-500"],
+    "compatibility_fleets": ["fleet-1000", "fleet-1001"],
+    "markets": ["market-100", "market-1000", "market-10000"],
+    "history": ["empty", "daily", "max"],
+    "actors": ["admin", "member", "tenant_a", "tenant_b"],
+    "single_routes": ["inbox", "overview", "market", "servers"],
+    "browser_locales": ["en-US", "zh-CN"],
+    "browser_widths": [390, 1440]
+  },
+  "notes": [
+    "Historical Stage 7 timings are not this round's starting measurement.",
+    "Candidates reuse arrival.targets captured on the starting SHA.",
+    "Numbers remain measurements until a same-protocol candidate passes a gate."
+  ]
+}

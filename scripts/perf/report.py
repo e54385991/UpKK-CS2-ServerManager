@@ -125,6 +125,10 @@ def empty_report(
         "api": {"rounds": [], "summary": {}, "probes": {}},
         "backend": {"rounds": [], "summary": {}},
         "download": {"chunks": [], "prune_scans": None},
+        "fingerprint": {},
+        "arrival": {},
+        "segments": {},
+        "realtime": {},
         "gates": {},
         "notes": [
             "Numbers in this report are measurements, not accepted production gains.",

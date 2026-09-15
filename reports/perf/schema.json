@@ -18,6 +18,10 @@
     "api": { "type": "object" },
     "backend": { "type": "object" },
     "download": { "type": "object" },
+    "fingerprint": { "type": "object" },
+    "arrival": { "type": "object" },
+    "segments": { "type": "object" },
+    "realtime": { "type": "object" },
     "gates": { "type": "object" },
     "notes": { "type": "array", "items": { "type": "string" } }
   }

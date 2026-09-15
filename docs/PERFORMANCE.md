@@ -5,6 +5,51 @@ work. The numbers it produces are **measurements**, not accepted production
 gains. Timing comparisons stay on a fixed isolated host; default CI keeps
 deterministic call-count and protocol tests only.
 
+## Round `21197fe` (this comparison window)
+
+This round starts at `21197fec25b785db2200e9feb6fdb245559da773`. Historical
+Stage 7 numbers (including isolated inbox p95 ≈ 6427 ms at 500 / 30) stay in
+the archive below. They are **not** this round's starting measurement.
+
+Fixed protocol for every before/after pair in this round:
+
+| Item | Value |
+| --- | --- |
+| Starting SHA | `21197fec25b785db2200e9feb6fdb245559da773` |
+| Locks | current `uv.lock` and `frontend/package-lock.json` |
+| Stack | `docker-compose.perf.yml` PostgreSQL 18.6 + Redis 8.10.1 on loopback |
+| Database / prefix | `cs2_perf` / `perf:` |
+| Arrival | 80% of the starting version's error-free throughput; candidates reuse those targets |
+| API baseline | 60 s warmup, 300 s measure, 3 rounds; median of round p95 |
+| Realtime | 30 inbox SSE sessions plus progress / complete / fail / clear |
+| Browser | production build, 5 warmup / 30 measure / 3 rounds; en-US + zh-CN; 390 and 1440 |
+| Segments | SQL count/ms, pool checked-out, Redis ops/ms/bytes, lock wait, snapshot, DTO, JSON, loop lag |
+| `claimed_gains` | false until a candidate beats the same-protocol starting run |
+
+Commands added for this round:
+
+```bash
+uv run python scripts/run_perf.py fingerprint
+uv run python scripts/run_perf.py measure-api --fleet fleet-100 --mode smoke --paced
+uv run python scripts/run_perf.py measure-api --fleet fleet-100 --mode baseline --paced --arrival-from reports/perf/raw/api-fleet-100-baseline.json
+uv run python scripts/run_perf.py measure-realtime --fleet fleet-500 --mode smoke --sessions 30
+```
+
+`--paced` discovers error-free closed-loop rps on the starting tree, stores
+`arrival.targets`, and then emits each route independently. Missed and late
+slots are recorded so a slow inbox cannot reduce overview / market / servers
+volume. Snapshot / DTO / JSON segment fields stay `null` until those timers
+exist in the hub; SQL, Redis, pool checkout, and loop lag are collected now.
+
+Compatibility cases (`fleet-1000` / `fleet-1001`) only check the existing
+overview 1000-row cap. Primary inbox work stays on 10 / 100 / 500.
+
+This machine's loopback `55432` / `56379` may already be bound by another
+compose project. Fingerprint records `postgres_listening` / `postgres_isolated`
+and `redis_listening` / `redis_isolated`. A listening port is not enough:
+`postgres_isolated` is true only when the isolated user can open `cs2_perf`.
+Do not seed unless that flag is true and `REDIS_KEY_PREFIX=perf:`.
+
 `cacheComponents` and `partialPrefetching` remain off. This harness does not
 change that gate.
 
