@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
+
+
+def pick_injectable_server_id(ids: Sequence[int | None]) -> int:
+    """Prefer the lowest id so history-max seeds keep a daily admin host."""
+    chosen = [int(item) for item in ids if item is not None]
+    if not chosen:
+        raise SystemExit("seed has no administrator server")
+    return min(chosen)
 
 
 class HubInboxLifecycle:

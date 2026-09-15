@@ -67,6 +67,14 @@ def test_cli_accepts_fingerprint_realtime_and_paced_flags():
     assert parse_args(["fingerprint"]).command == "fingerprint"
 
 
+def test_realtime_inject_picks_the_lowest_admin_server_id():
+    from scripts.perf.hub_inject import pick_injectable_server_id
+
+    assert pick_injectable_server_id([12, 3, None, 8]) == 3
+    with pytest.raises(SystemExit):
+        pick_injectable_server_id([None])
+
+
 def test_this_round_starts_at_the_agreed_sha():
     assert ROUND_START_SHA.startswith("21197fe")
     assert ARRIVAL_RATIO == 0.80

@@ -340,7 +340,7 @@ async def _run_realtime(args: argparse.Namespace) -> int:
 
     from api.application import create_app
     from modules.config import get_settings
-    from scripts.perf.hub_inject import HubInboxLifecycle
+    from scripts.perf.hub_inject import HubInboxLifecycle, pick_injectable_server_id
     from scripts.perf.realtime import run_realtime_rounds
     from scripts.perf.seed import run_seed
 
@@ -356,7 +356,7 @@ async def _run_realtime(args: argparse.Namespace) -> int:
             settings=settings,
         )
     actor_id = int(manifest["users"]["admin"]["id"])
-    server_id = await _admin_server_id(actor_id)
+    server_id = pick_injectable_server_id(await _admin_server_ids(actor_id))
     sessions = args.sessions or FLEETS[args.fleet].online_users
     seconds = args.seconds or (15 if args.mode == "smoke" else 60)
     app = create_app(lifespan=None)
@@ -376,18 +376,15 @@ async def _run_realtime(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _admin_server_id(actor_id: int) -> int:
+async def _admin_server_ids(actor_id: int) -> list[int]:
     from sqlmodel import select
 
     from modules.database import async_session_maker
     from modules.models import Server
 
     async with async_session_maker() as session:
-        result = await session.execute(select(Server).where(Server.user_id == actor_id).limit(1))
-        server = result.scalars().first()
-    if server is None or server.id is None:
-        raise SystemExit("seed has no administrator server")
-    return int(server.id)
+        result = await session.execute(select(Server.id).where(Server.user_id == actor_id))
+        return [int(row) for row in result.scalars().all() if row is not None]
 
 
 def _write_shell_report(args: argparse.Namespace) -> int:
