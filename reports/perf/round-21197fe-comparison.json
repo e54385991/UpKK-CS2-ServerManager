@@ -661,8 +661,37 @@
       "passed": false
     }
   },
+  "browser_production_baseline": {
+    "protocol": "production Playwright 5 warmup / 30 measure / 3 rounds; en-US + zh-CN; 390 + 1440",
+    "passed": true,
+    "tests": 29,
+    "elapsed_s": 378,
+    "head_sha": "d7c832be25d6c1403ee47444907e2e16d14118e9",
+    "metric": "median of round critical_content_ms p95",
+    "claimed_gains": false,
+    "note": "HEAD-only mock-API production runner. Not a 20% vs-21197fe gate. ResponseAborted on activity-tray SSE is expected.",
+    "critical_content_median_p95_ms": {
+      "en-US": {
+        "login": {"390": 63, "1440": 65},
+        "overview": {"390": 78, "1440": 76},
+        "servers": {"390": 91, "1440": 83},
+        "activity-tray": {"390": 120, "1440": 126},
+        "plugins-install": {"390": 80, "1440": 87},
+        "assistant": {"390": 73, "1440": 77},
+        "files": {"390": 89, "1440": 90}
+      },
+      "zh-CN": {
+        "login": {"390": 61, "1440": 61},
+        "overview": {"390": 81, "1440": 82},
+        "servers": {"390": 89, "1440": 92},
+        "activity-tray": {"390": 123, "1440": 128},
+        "plugins-install": {"390": 93, "1440": 92},
+        "assistant": {"390": 79, "1440": 82},
+        "files": {"390": 96, "1440": 101}
+      }
+    }
+  },
   "still_open": [
-    "production browser 5/30×3 at 390 and 1440",
     "uv run python scripts/check_baseline.py",
     "interactive browser pass of tray, install, assistant, files"
   ]

@@ -429,9 +429,10 @@ trees: 0 HTTP errors, 0 events, first-inbox p95 0. The pool size was
   recorded above (all missed 20%; mixed market/servers/inbox also
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
-- Fleet-10 API and 1-session realtime are recorded (API missed 20%;
-  realtime 0 events). Isolated 1000 / 1001 seed is recorded.
-  Browser 5 / 30 × 3, `check_baseline`
+- Production browser 5 / 30 × 3 at 390 / 1440 passed (29 tests,
+  6.3 min). Critical-content median p95 is 58–128 ms. HEAD-only;
+  not a 20% vs-`21197fe` gate. `check_baseline` and the interactive
+  tray / install / assistant / files pass remain.
 - Production browser 5 / 30 × 3
 - Isolated `fleet-1000` / `fleet-1001` seed is recorded (1000 / 1001
   rows). Admin ownership is 898 / 899, so overview summary returns
@@ -503,6 +504,22 @@ files, in en-US / zh-CN at 390 and 1440. Subset with
 are `PERF_WARMUP=1 PERF_MEASURE=2 PERF_ROUNDS=1`. Reports land in
 `frontend/test-results/perf-baseline/`. Catalog compact JSON bytes are not
 HTML, RSC, or gzip transfer; the Playwright report records those separately.
+
+This-round HEAD production run (`d7c832b`, 29 passed, 6.3 min). Median
+of the three round p95 `critical_content_ms` values (not a 20% gate):
+
+| Surface | en-US 390 | en-US 1440 | zh-CN 390 | zh-CN 1440 |
+| --- | ---: | ---: | ---: | ---: |
+| login | 63 | 65 | 61 | 61 |
+| overview | 78 | 76 | 81 | 82 |
+| servers | 91 | 83 | 89 | 92 |
+| activity-tray | 120 | 126 | 123 | 128 |
+| plugins-install | 80 | 87 | 93 | 92 |
+| assistant | 73 | 77 | 79 | 82 |
+| files | 89 | 90 | 96 | 101 |
+
+`claimed_gains` stays **false**. Activity-tray visits log
+`ResponseAborted` when the inbox SSE is closed; that is expected.
 
 On this tree the merged catalogs (main JSON plus `settings.monitor`) compact to
 **142,964** bytes (en-US) and **139,750** bytes (zh-CN). After Stage 3, the
@@ -886,9 +903,10 @@ Fleet-10 same-protocol 60 s / 300 s × 3 (`market-100` / `history max`),
 - 60-minute fleet-500 soak on HEAD: **RSS fail** (934 MiB after first
   load window → 1731 MiB at 60 min, +85%, gate +5%). HTTP 0 errors.
   Fleet-10 / 100 / 500 API series are recorded (all missed 20%).
-  Realtime 0 events at 1 / 10 / 30 sessions. Next: production browser
-  5 / 30 × 3, `fleet-1000` / `1001` seed, `check_baseline`, and the
-  interactive tray / install / assistant / files pass.
+  Realtime 0 events at 1 / 10 / 30 sessions. Production browser
+  5 / 30 × 3 passed. Isolated 1000 / 1001 seed is recorded. Next:
+  `check_baseline` and the interactive tray / install / assistant /
+  files pass.
 
 Application changes revert by commit. This round added **no** Alembic
 revision. Push, deploy, and live restart are out of scope.
