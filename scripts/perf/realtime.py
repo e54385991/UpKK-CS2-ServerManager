@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from time import monotonic, perf_counter
+from collections.abc import Callable
 from typing import Any, Protocol
 
 import httpx
@@ -66,6 +67,30 @@ def next_cycle_step(index: int) -> str:
     return EVENT_CYCLE[index % len(EVENT_CYCLE)]
 
 
+async def next_sse_chunk(
+    stream: Any,
+    stop_at: float,
+    *,
+    now: Callable[[], float] | None = None,
+    waiter: Any = None,
+) -> str | None:
+    """Return the next chunk, or None when the window ends or the stream does."""
+    clock = now or monotonic
+    wait = waiter or asyncio.wait_for
+    while clock() < stop_at:
+        remaining = stop_at - clock()
+        try:
+            chunk = await wait(stream.__anext__(), timeout=min(1.0, remaining))
+        except TimeoutError:
+            continue
+        except StopAsyncIteration:
+            return None
+        if isinstance(chunk, str):
+            return chunk
+        return None
+    return None
+
+
 async def drain_sse(
     response: httpx.Response,
     stop_at: float,
@@ -75,17 +100,17 @@ async def drain_sse(
 ) -> None:
     first = True
     started = perf_counter()
-    async for chunk in response.aiter_text():
-        if monotonic() >= stop_at:
-            break
+    stream = response.aiter_text()
+    while True:
+        chunk = await next_sse_chunk(stream, stop_at)
+        if chunk is None:
+            return
         for event in parse_sse_chunk(chunk):
             names[event.name] = names.get(event.name, 0) + 1
             bytes_total[0] += event.bytes
             if first and event.name == "inbox":
                 latencies.append((perf_counter() - started) * 1000)
                 first = False
-        if monotonic() >= stop_at:
-            break
 
 
 async def open_inbox_sessions(

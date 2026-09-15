@@ -24,6 +24,7 @@ from scripts.perf.realtime import (
     ParsedEvent,
     ScriptedLifecycle,
     next_cycle_step,
+    next_sse_chunk,
     parse_sse_chunk,
     run_realtime_rounds,
 )
@@ -229,6 +230,33 @@ def test_sse_parser_keeps_inbox_events_and_keep_alives():
     assert events[0] == ParsedEvent("inbox", len(b'{"a":1}'))
     assert events[1].name == "keep-alive"
     assert [next_cycle_step(index) for index in range(4)] == list(EVENT_CYCLE)
+
+
+@pytest.mark.asyncio
+async def test_next_sse_chunk_ends_when_the_stream_or_window_does():
+    class Empty:
+        async def __anext__(self) -> str:
+            raise StopAsyncIteration
+
+    assert await next_sse_chunk(Empty(), 5.0) is None
+
+    clock = {"t": 0.0}
+
+    class Silent:
+        async def __anext__(self) -> str:
+            raise AssertionError("waiter should not await the real anext")
+
+    async def waiter(awaitable: object, timeout: float) -> str:
+        closer = getattr(awaitable, "close", None)
+        if callable(closer):
+            closer()
+        clock["t"] += float(timeout)
+        raise TimeoutError
+
+    assert (
+        await next_sse_chunk(Silent(), 0.5, now=lambda: clock["t"], waiter=waiter)
+        is None
+    )
 
 
 @pytest.mark.asyncio
