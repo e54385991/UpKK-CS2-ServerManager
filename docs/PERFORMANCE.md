@@ -403,8 +403,25 @@ Mixed `--paced` reuses the four single-route arrival targets. Smoke
 | starting | 109 ms | 23.0 ms | 24.6 ms | 22.6 ms |
 | HEAD `46eacd7` | 74.5 ms | 21.8 ms | 24.6 ms | 21.8 ms |
 
-Same-protocol mixed **baseline** (60 s + 300 s × 3) is running.
-`claimed_gains` stays **false**.
+Same-protocol mixed **baseline** (60 s + 300 s × 3, 0 errors):
+
+| Route | starting median | HEAD median | Δ | envelope |
+| --- | ---: | ---: | ---: | --- |
+| inbox | **54.8 ms** | **55.8 ms** | −1.8% | inside |
+| overview | **22.1 ms** | **21.8 ms** | +1.4% | inside |
+| market | **25.3 ms** | **24.6 ms** | +2.7% | inside |
+| servers | **23.0 ms** | **22.4 ms** | +2.4% | inside |
+
+Starting rounds: inbox 54.1 / 55.2 / 54.8; overview 22.3 / 21.8 /
+22.1; market 25.3 / 25.3 / 25.3; servers 22.9 / 23.0 / 23.0.
+HEAD `d04a5c9` rounds: inbox 55.1 / 55.8 / 56.0; overview 21.8 / 21.8 /
+21.8; market 24.6 / 24.7 / 24.6; servers 22.4 / 22.5 / 22.4.
+20% gate: **fail** on every mixed route. All four stay inside
+`max(5%, 20 ms)`.
+
+1-session realtime **smoke** (15 s) and **baseline** (60 s) on both
+trees: 0 HTTP errors, 0 events, first-inbox p95 0. The pool size was
+**not** raised. `claimed_gains` stays **false**.
 
 ### Still open on this host
 
@@ -412,8 +429,9 @@ Same-protocol mixed **baseline** (60 s + 300 s × 3) is running.
   recorded above (all missed 20%; mixed market/servers/inbox also
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
-- Fleet-10 single-route 60 s / 300 s × 3 is recorded (all missed
-  20%). Mixed, 1-session realtime, browser, `check_baseline`
+- Fleet-10 API and 1-session realtime are recorded (API missed 20%;
+  realtime 0 events). Browser 5 / 30 × 3, `fleet-1000` / `1001`
+  seed, `check_baseline`
 - Production browser 5 / 30 × 3
 - `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
   the 1000-row cap; seed after 10 / 100)
@@ -800,9 +818,10 @@ Push, deploy, and live restart stay out of default scope.
   the mixed inbox/overview/market/servers load.
 - `soak --mode baseline` runs 3600 s mixed load and samples RSS each minute.
   Compare the sample after the first minute to the last; t=0 is pre-load.
-- `REDIS_POOL_SIZE` stays **10** (production default). Thirty concurrent
-  inbox SSE snapshots exhaust that pool and deliver no events; do not
-  raise the pool to make the realtime report look populated.
+- `REDIS_POOL_SIZE` stays **10** (production default). Thirty and ten
+  concurrent inbox SSE snapshots exhaust that pool; even one session
+  delivered no events. Do not raise the pool to make the realtime
+  report look populated.
 
 ## Gates (not yet claimed)
 
@@ -839,10 +858,24 @@ Fleet-100 same-protocol 60 s / 300 s × 3 (`market-1000` / `history max`),
 | mixed market | 145 ms | 145 ms | −0.3% | fail | inside |
 | mixed servers | 144 ms | 143 ms | +0.2% | fail | inside |
 
+Fleet-10 same-protocol 60 s / 300 s × 3 (`market-100` / `history max`),
+0 HTTP errors:
+
+| Route | starting median p95 | HEAD median p95 | Δ | 20% | envelope |
+| --- | ---: | ---: | ---: | --- | --- |
+| inbox | 36.7 ms | 36.9 ms | −0.5% | fail | inside |
+| overview | 3.30 ms | 3.34 ms | −1.1% | fail | inside |
+| market | 4.59 ms | 4.61 ms | −0.5% | fail | inside |
+| servers | 3.81 ms | 3.82 ms | −0.2% | fail | inside |
+| mixed inbox | 54.8 ms | 55.8 ms | −1.8% | fail | inside |
+| mixed overview | 22.1 ms | 21.8 ms | +1.4% | fail | inside |
+| mixed market | 25.3 ms | 24.6 ms | +2.7% | fail | inside |
+| mixed servers | 23.0 ms | 22.4 ms | +2.4% | fail | inside |
+
 - Marketplace indexes: HTTP +15.4% (gate 20%), **no Alembic revision**
-- Realtime 30 sessions (fleet-500) and 10 sessions (fleet-100): both
-  trees open the sockets and deliver **0** events at
-  `REDIS_POOL_SIZE=10`
+- Realtime 30 / 10 / 1 sessions (fleet-500 / 100 / 10): both trees
+  open the sockets and deliver **0** events. `REDIS_POOL_SIZE` stays
+  10.
 - Visible-poll request identity and shared cookie helpers: unit tests
   on this tree
 - Catalog compact JSON 142,964 / 139,750 bytes (en-US / zh-CN); login
@@ -850,10 +883,10 @@ Fleet-100 same-protocol 60 s / 300 s × 3 (`market-1000` / `history max`),
 - Bundle budgets and `cacheComponents` / `partialPrefetching` unchanged
 - 60-minute fleet-500 soak on HEAD: **RSS fail** (934 MiB after first
   load window → 1731 MiB at 60 min, +85%, gate +5%). HTTP 0 errors.
-  Fleet-100 API and 10-session realtime are recorded (API missed 20%;
-  realtime 0 events). Next: fleet-10, production browser 5 / 30 × 3,
-  `check_baseline`, and the interactive tray / install / assistant /
-  files pass.
+  Fleet-10 / 100 / 500 API series are recorded (all missed 20%).
+  Realtime 0 events at 1 / 10 / 30 sessions. Next: production browser
+  5 / 30 × 3, `fleet-1000` / `1001` seed, `check_baseline`, and the
+  interactive tray / install / assistant / files pass.
 
 Application changes revert by commit. This round added **no** Alembic
 revision. Push, deploy, and live restart are out of scope.

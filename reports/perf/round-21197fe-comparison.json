@@ -354,6 +354,82 @@
     "head_sha": "46eacd7b020ce1331f40337fc8576e53104b9799",
     "note": "n=1; not a 20% gate. Concurrent open-loop at isolated single-route rates."
   },
+  "fleet_10_mixed_baseline": {
+    "protocol": "60s warmup + 300s × 3, paced reused single-route targets",
+    "errors": 0,
+    "starting_median_p95_ms": {
+      "inbox": 54.833,
+      "overview": 22.101,
+      "market": 25.308,
+      "servers": 22.966
+    },
+    "starting_round_p95_ms": {
+      "inbox": [54.117, 55.163, 54.833],
+      "overview": [22.320, 21.836, 22.101],
+      "market": [25.273, 25.328, 25.308],
+      "servers": [22.944, 22.966, 22.985]
+    },
+    "starting_samples": {
+      "inbox": 18042,
+      "overview": 61476,
+      "market": 51439,
+      "servers": 59474
+    },
+    "head_median_p95_ms": {
+      "inbox": 55.824,
+      "overview": 21.793,
+      "market": 24.637,
+      "servers": 22.419
+    },
+    "head_round_p95_ms": {
+      "inbox": [55.080, 55.824, 56.013],
+      "overview": [21.802, 21.793, 21.792],
+      "market": [24.637, 24.694, 24.636],
+      "servers": [22.419, 22.493, 22.415]
+    },
+    "head_samples": {
+      "inbox": 17827,
+      "overview": 60703,
+      "market": 50874,
+      "servers": 58735
+    },
+    "head_sha": "d04a5c9124360e0d7fe2893b8c30781d3dba9bb1",
+    "improvement": {
+      "inbox": -0.0181,
+      "overview": 0.0139,
+      "market": 0.0265,
+      "servers": 0.0238
+    },
+    "gate": 0.2,
+    "passed": false,
+    "within_regression_envelope": {
+      "inbox": true,
+      "overview": true,
+      "market": true,
+      "servers": true
+    }
+  },
+  "fleet_10_realtime_smoke": {
+    "protocol": "15s, 1 inbox SSE session, progress/complete/fail/clear",
+    "http_errors": 0,
+    "starting_events": 0,
+    "head_events": 0,
+    "starting_first_inbox_p95_ms": 0.0,
+    "head_first_inbox_p95_ms": 0.0,
+    "head_sha": "d04a5c9124360e0d7fe2893b8c30781d3dba9bb1",
+    "note": "One session still delivers no SSE events. Pool size was not raised."
+  },
+  "fleet_10_realtime_baseline": {
+    "protocol": "60s, 1 inbox SSE session, progress/complete/fail/clear",
+    "http_errors": 0,
+    "starting_events": 0,
+    "head_events": 0,
+    "starting_first_inbox_p95_ms": 0.0,
+    "head_first_inbox_p95_ms": 0.0,
+    "head_sha": "d04a5c9124360e0d7fe2893b8c30781d3dba9bb1",
+    "passed": false,
+    "note": "Both trees open 1 session and deliver no events."
+  },
   "inbox_baseline": {
     "protocol": "60s warmup + 300s × 3, paced 0.506 rps",
     "errors": 0,
@@ -574,9 +650,8 @@
     }
   },
   "still_open": [
-    "fleet-10 mixed then 1-session realtime, then browser and check_baseline",
     "production browser 5/30×3 at 390 and 1440",
-    "fleet-1000/1001 overview cap after the 500-server series",
+    "fleet-1000/1001 overview cap isolated seed",
     "uv run python scripts/check_baseline.py",
     "interactive browser pass of tray, install, assistant, files"
   ]
