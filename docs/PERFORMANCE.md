@@ -92,7 +92,11 @@ Same-protocol market **baseline** (60 s + 300 s × 3, 0 errors):
 | Tree | median p95 | round p95 | samples |
 | --- | ---: | --- | ---: |
 | starting | **7.54 ms** | 7.54 / 6.76 / 8.77 | 145022 |
-| HEAD | (running) | — | — |
+| HEAD | **7.10 ms** | 7.03 / 7.10 / 7.82 | 145812 |
+
+Market 20% gate: **fail** (+5.8%). Still inside `max(5%, 20 ms)`. A
+`--with-index-candidates` series is running against the HEAD 7.10 ms
+line (need ≤ 5.68 ms to include the btrees).
 
 `measure-api --with-index-candidates` creates the two btree candidates,
 measures, then `DROP INDEX` in `finally`. It is not an Alembic revision.

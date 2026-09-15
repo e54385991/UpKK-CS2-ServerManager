@@ -39,8 +39,14 @@
     "starting_median_p95_ms": 7.538,
     "starting_round_p95_ms": [7.538, 6.761, 8.770],
     "starting_samples": 145022,
-    "head_median_p95_ms": null,
-    "note": "HEAD 60s/300s×3 is running. 20% of 7.538 ms is 1.51 ms."
+    "head_median_p95_ms": 7.101,
+    "head_round_p95_ms": [7.027, 7.101, 7.821],
+    "head_samples": 145812,
+    "head_sha": "1ce92b787ce79f68be3f88d7aa2efabd605f6f8c",
+    "improvement": 0.058,
+    "gate": 0.2,
+    "passed": false,
+    "within_regression_envelope": true
   },
   "indexes": {
     "submitted": false,
@@ -52,7 +58,7 @@
     "http_p95_three_round_median": null
   },
   "still_open": [
-    "fleet-500 market HEAD 60s/300s×3 (starting captured at 7.54 ms)",
+    "fleet-500 market --with-index-candidates 60s/300s×3 vs HEAD 7.10 ms",
     "fleet-500 overview/servers 60s/300s×3 at 21197fe and HEAD",
     "measure-api --with-index-candidates three-round market HTTP p95",
     "fleet-10 and fleet-100 same-protocol series",
