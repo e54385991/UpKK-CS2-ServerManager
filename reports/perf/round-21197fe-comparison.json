@@ -222,6 +222,42 @@
     "passed": false,
     "note": "REDIS_POOL_SIZE stays 10. Both trees open 10 sessions and deliver no events."
   },
+  "fleet_10_smoke": {
+    "protocol": "10s × 1, paced from 21197fe discovery, 0 HTTP errors",
+    "seed": "fleet-10 / market-100 / history max",
+    "head_sha": "f28c164292b534441d838781846cd7ed25ceb545",
+    "targets_rps": {
+      "inbox": 22.0776,
+      "overview": 299.6736,
+      "market": 207.3416,
+      "servers": 266.236
+    },
+    "starting_p95_ms": {
+      "inbox": 35.269,
+      "overview": 3.284,
+      "market": 4.619,
+      "servers": 3.761
+    },
+    "starting_samples": {
+      "inbox": 220,
+      "overview": 2996,
+      "market": 2073,
+      "servers": 2662
+    },
+    "head_p95_ms": {
+      "inbox": 37.376,
+      "overview": 3.298,
+      "market": 4.511,
+      "servers": 3.800
+    },
+    "head_samples": {
+      "inbox": 220,
+      "overview": 2996,
+      "market": 2073,
+      "servers": 2662
+    },
+    "note": "n=1; not a 20% gate."
+  },
   "inbox_baseline": {
     "protocol": "60s warmup + 300s × 3, paced 0.506 rps",
     "errors": 0,
@@ -442,7 +478,7 @@
     }
   },
   "still_open": [
-    "fleet-10 same-protocol 60s/300s×3 after reseed",
+    "fleet-10 60s/300s×3 (smoke pair recorded; baselines next)",
     "production browser 5/30×3 at 390 and 1440",
     "fleet-1000/1001 overview cap after the 500-server series",
     "uv run python scripts/check_baseline.py",

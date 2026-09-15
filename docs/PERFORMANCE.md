@@ -341,7 +341,22 @@ HEAD `2ba62c9` rounds: inbox 524 / 513 / 515; overview 140.7 / 140.9 /
 10-session realtime **smoke** (15 s) and **baseline** (60 s) on both
 trees: 0 HTTP errors, 0 events, first-inbox p95 0. Production
 `REDIS_POOL_SIZE=10` is still exhausted; the pool size was **not**
-raised. `claimed_gains` stays **false**.
+raised.
+
+Fleet-10 was reseeded after that series (`market-100` / `history max`,
+manifest `reports/perf/raw/seed-manifest-fleet-10.json`). Isolated
+single-route **smoke** (10 s × 1, 0 errors, arrival from `21197fe`)
+is **not** a 20% gate:
+
+| Route | target rps | starting p95 | HEAD p95 | samples |
+| --- | ---: | ---: | ---: | ---: |
+| inbox | 22.078 | 35.3 ms | 37.4 ms | 220 / 220 |
+| overview | 299.674 | 3.28 ms | 3.30 ms | 2996 / 2996 |
+| market | 207.342 | 4.62 ms | 4.51 ms | 2073 / 2073 |
+| servers | 266.236 | 3.76 ms | 3.80 ms | 2662 / 2662 |
+
+HEAD SHA at those smokes: `f28c164`. Same-protocol 60 s / 300 s × 3
+on this seed is next. `claimed_gains` stays **false**.
 
 ### Still open on this host
 
@@ -350,8 +365,8 @@ raised. `claimed_gains` stays **false**.
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
 - Fleet-100 API and 10-session realtime are recorded (API missed 20%;
-  realtime 0 events at pool size 10). Fleet-10, browser,
-  `check_baseline`
+  realtime 0 events at pool size 10). Fleet-10 smoke pair is
+  recorded; 60 s / 300 s × 3, browser, `check_baseline`
 - Production browser 5 / 30 × 3
 - `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
   the 1000-row cap; seed after 10 / 100)
