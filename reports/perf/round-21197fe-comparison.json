@@ -146,6 +146,82 @@
     "head_sha": "dca867e8668ff16c4783aa0d5453e466a262843d",
     "note": "n=1; not a 20% gate. Concurrent open-loop at isolated single-route rates."
   },
+  "fleet_100_mixed_baseline": {
+    "protocol": "60s warmup + 300s × 3, paced reused single-route targets",
+    "errors": 0,
+    "starting_median_p95_ms": {
+      "inbox": 505.540,
+      "overview": 140.888,
+      "market": 145.068,
+      "servers": 143.647
+    },
+    "starting_round_p95_ms": {
+      "inbox": [510.382, 504.183, 505.540],
+      "overview": [139.966, 140.888, 140.998],
+      "market": [144.247, 145.068, 145.619],
+      "servers": [142.524, 143.647, 143.945]
+    },
+    "starting_samples": {
+      "inbox": 2407,
+      "overview": 34008,
+      "market": 28145,
+      "servers": 28789
+    },
+    "head_median_p95_ms": {
+      "inbox": 515.107,
+      "overview": 140.676,
+      "market": 145.476,
+      "servers": 143.317
+    },
+    "head_round_p95_ms": {
+      "inbox": [523.677, 512.879, 515.107],
+      "overview": [140.676, 140.878, 140.312],
+      "market": [146.020, 145.476, 144.896],
+      "servers": [143.317, 143.464, 143.100]
+    },
+    "head_samples": {
+      "inbox": 2384,
+      "overview": 33191,
+      "market": 27538,
+      "servers": 28069
+    },
+    "head_sha": "2ba62c99638d358ecd4eb155485af7a32ca04787",
+    "improvement": {
+      "inbox": -0.0189,
+      "overview": 0.0015,
+      "market": -0.0028,
+      "servers": 0.0023
+    },
+    "gate": 0.2,
+    "passed": false,
+    "within_regression_envelope": {
+      "inbox": true,
+      "overview": true,
+      "market": true,
+      "servers": true
+    }
+  },
+  "fleet_100_realtime_smoke": {
+    "protocol": "15s, 10 inbox SSE sessions, progress/complete/fail/clear",
+    "http_errors": 0,
+    "starting_events": 0,
+    "head_events": 0,
+    "starting_first_inbox_p95_ms": 0.0,
+    "head_first_inbox_p95_ms": 0.0,
+    "head_sha": "2ba62c99638d358ecd4eb155485af7a32ca04787",
+    "note": "REDIS_POOL_SIZE stays 10. Ten concurrent inbox snapshots still exhaust the pool; sessions stay open but deliver no events."
+  },
+  "fleet_100_realtime_baseline": {
+    "protocol": "60s, 10 inbox SSE sessions, progress/complete/fail/clear",
+    "http_errors": 0,
+    "starting_events": 0,
+    "head_events": 0,
+    "starting_first_inbox_p95_ms": 0.0,
+    "head_first_inbox_p95_ms": 0.0,
+    "head_sha": "2ba62c99638d358ecd4eb155485af7a32ca04787",
+    "passed": false,
+    "note": "REDIS_POOL_SIZE stays 10. Both trees open 10 sessions and deliver no events."
+  },
   "inbox_baseline": {
     "protocol": "60s warmup + 300s × 3, paced 0.506 rps",
     "errors": 0,
@@ -366,7 +442,7 @@
     }
   },
   "still_open": [
-    "fleet-100 mixed 60s/300s×3 then fleet-10 same-protocol series",
+    "fleet-10 same-protocol 60s/300s×3 after reseed",
     "production browser 5/30×3 at 390 and 1440",
     "fleet-1000/1001 overview cap after the 500-server series",
     "uv run python scripts/check_baseline.py",

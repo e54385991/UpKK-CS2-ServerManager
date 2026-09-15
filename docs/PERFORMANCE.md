@@ -322,8 +322,26 @@ Mixed `--paced` reuses the four single-route arrival targets. Smoke
 | starting | 534 ms | 136 ms | 156 ms | 139 ms |
 | HEAD `dca867e` | 539 ms | 137 ms | 140 ms | 139 ms |
 
-Same-protocol mixed **baseline** (60 s + 300 s × 3) is running.
-`claimed_gains` stays **false**.
+Same-protocol mixed **baseline** (60 s + 300 s × 3, 0 errors):
+
+| Route | starting median | HEAD median | Δ | envelope |
+| --- | ---: | ---: | ---: | --- |
+| inbox | **506 ms** | **515 ms** | −1.9% | inside |
+| overview | **141 ms** | **141 ms** | +0.2% | inside |
+| market | **145 ms** | **145 ms** | −0.3% | inside |
+| servers | **144 ms** | **143 ms** | +0.2% | inside |
+
+Starting rounds: inbox 510 / 504 / 506; overview 140.0 / 140.9 / 141.0;
+market 144.2 / 145.1 / 145.6; servers 142.5 / 143.6 / 143.9.
+HEAD `2ba62c9` rounds: inbox 524 / 513 / 515; overview 140.7 / 140.9 /
+140.3; market 146.0 / 145.5 / 144.9; servers 143.3 / 143.5 / 143.1.
+20% gate: **fail** on every mixed route. All four stay inside
+`max(5%, 20 ms)`.
+
+10-session realtime **smoke** (15 s) and **baseline** (60 s) on both
+trees: 0 HTTP errors, 0 events, first-inbox p95 0. Production
+`REDIS_POOL_SIZE=10` is still exhausted; the pool size was **not**
+raised. `claimed_gains` stays **false**.
 
 ### Still open on this host
 
@@ -331,9 +349,9 @@ Same-protocol mixed **baseline** (60 s + 300 s × 3) is running.
   recorded above (all missed 20%; mixed market/servers/inbox also
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
-- Fleet-100 single-route 60 s / 300 s × 3 and mixed smoke are
-  recorded (all missed 20%). Mixed baseline, then fleet-10, realtime,
-  browser, `check_baseline`
+- Fleet-100 API and 10-session realtime are recorded (API missed 20%;
+  realtime 0 events at pool size 10). Fleet-10, browser,
+  `check_baseline`
 - Production browser 5 / 30 × 3
 - `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
   the 1000-row cap; seed after 10 / 100)
@@ -745,9 +763,24 @@ Fleet-500 same-protocol 60 s / 300 s × 3 on isolated `55442` / `56389`
 | mixed market | 86.2 ms | 153 ms | −77.4% | fail | outside |
 | mixed servers | 107 ms | 154 ms | −44.2% | fail | outside |
 
+Fleet-100 same-protocol 60 s / 300 s × 3 (`market-1000` / `history max`),
+0 HTTP errors:
+
+| Route | starting median p95 | HEAD median p95 | Δ | 20% | envelope |
+| --- | ---: | ---: | ---: | --- | --- |
+| inbox | 406 ms | 413 ms | −1.8% | fail | inside |
+| overview | 3.35 ms | 3.37 ms | −0.6% | fail | inside |
+| market | 4.78 ms | 4.81 ms | −0.6% | fail | inside |
+| servers | 5.46 ms | 5.52 ms | −1.1% | fail | inside |
+| mixed inbox | 506 ms | 515 ms | −1.9% | fail | inside |
+| mixed overview | 141 ms | 141 ms | +0.2% | fail | inside |
+| mixed market | 145 ms | 145 ms | −0.3% | fail | inside |
+| mixed servers | 144 ms | 143 ms | +0.2% | fail | inside |
+
 - Marketplace indexes: HTTP +15.4% (gate 20%), **no Alembic revision**
-- Realtime 30 sessions: both trees open the sockets and deliver **0**
-  events at `REDIS_POOL_SIZE=10`
+- Realtime 30 sessions (fleet-500) and 10 sessions (fleet-100): both
+  trees open the sockets and deliver **0** events at
+  `REDIS_POOL_SIZE=10`
 - Visible-poll request identity and shared cookie helpers: unit tests
   on this tree
 - Catalog compact JSON 142,964 / 139,750 bytes (en-US / zh-CN); login
@@ -755,8 +788,8 @@ Fleet-500 same-protocol 60 s / 300 s × 3 on isolated `55442` / `56389`
 - Bundle budgets and `cacheComponents` / `partialPrefetching` unchanged
 - 60-minute fleet-500 soak on HEAD: **RSS fail** (934 MiB after first
   load window → 1731 MiB at 60 min, +85%, gate +5%). HTTP 0 errors.
-  Fleet-100 single-route 60 s / 300 s × 3 is recorded (all missed
-  20%). Mixed is next, then fleet-10, production browser 5 / 30 × 3,
+  Fleet-100 API and 10-session realtime are recorded (API missed 20%;
+  realtime 0 events). Next: fleet-10, production browser 5 / 30 × 3,
   `check_baseline`, and the interactive tray / install / assistant /
   files pass.
 
