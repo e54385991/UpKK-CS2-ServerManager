@@ -85,10 +85,12 @@
   },
   "servers_baseline": {
     "protocol": "60s warmup + 300s × 3, paced target 231.419 rps",
-    "errors": null,
-    "starting_median_p95_ms": null,
+    "errors": 0,
+    "starting_median_p95_ms": 5.808,
+    "starting_round_p95_ms": [5.891, 5.808, 5.748],
+    "starting_samples": 184160,
     "head_median_p95_ms": null,
-    "note": "21197fe 60s/300s×3 running; smoke is not the gate."
+    "note": "HEAD 60s/300s×3 still running; smoke is not the gate."
   },
   "indexes": {
     "submitted": false,
@@ -105,7 +107,7 @@
     }
   },
   "still_open": [
-    "fleet-500 servers 60s/300s×3 at 21197fe and HEAD (smoke 5.95 vs 5.90 ms)",
+    "fleet-500 HEAD servers 60s/300s×3 (21197fe done: 5.808 ms median p95)",
     "mixed --paced four-route series on fleet-500",
     "fleet-10 and fleet-100 same-protocol series",
     "measure-realtime --sessions 30",

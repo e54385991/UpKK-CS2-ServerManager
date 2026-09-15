@@ -158,8 +158,15 @@ missed. That cadence is reused:
 | starting | 5.95 ms | 1955 |
 | HEAD | 5.90 ms | 2011 |
 
-The comparable servers **baseline** (60 s + 300 s × 3) is the next
-gate. Smoke is not a 20% gate.
+Same-protocol servers **baseline** on the starting tree (60 s + 300 s ×
+3, 0 errors, arrival reused):
+
+| Tree | median p95 | round p95 | samples |
+| --- | ---: | --- | ---: |
+| starting | **5.81 ms** | 5.89 / 5.81 / 5.75 | 184160 |
+
+HEAD servers baseline is the next comparable run. Smoke is not a 20%
+gate.
 
 | Batch | SHA | Change |
 | --- | --- | --- |
@@ -220,8 +227,8 @@ is back to pk / github_url / title. See
 ### Still open on this host
 
 - Fleet-500 inbox / market / overview 60 s / 300 s × 3 pairs are
-  recorded above (all missed 20%). Servers smoke is in; next is the
-  servers baseline pair, then mixed `--paced`
+  recorded above (all missed 20%). Servers starting baseline is in;
+  next is HEAD servers, then mixed `--paced`
 - Same-protocol series on fleets 10 / 100 after the 500-server work
 - 30-session realtime, production browser 5 / 30 × 3, and a 60-minute soak
 - `fleet-1000` / `fleet-1001` overview cap only (after the 500-server series)
