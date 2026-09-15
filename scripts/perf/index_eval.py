@@ -20,6 +20,12 @@ INDEX_BUILD_LIMIT_SECONDS = 5.0
 P95_IMPROVEMENT_REQUIRED = 0.20
 WRITE_PROBE_COUNT = 30
 WRITE_URL_PREFIX = "https://perf-index.invalid/write"
+WRITE_INSERT_SQL = (
+    "INSERT INTO market_plugins "
+    "(github_url, title, category, framework, is_recommended, "
+    "install_count, download_count) "
+    "VALUES (:url, :title, 'UTILITY', 'COUNTERSTRIKESHARP', false, 0, 0)"
+)
 
 CANDIDATE_INDEXES: tuple[dict[str, str], ...] = (
     {
@@ -327,10 +333,7 @@ async def _time_writes(connection: Any, start: int) -> list[float]:
 
     from sqlalchemy import text
 
-    insert = text(
-        "INSERT INTO market_plugins (github_url, title, category, framework) "
-        "VALUES (:url, :title, 'UTILITY', 'COUNTERSTRIKESHARP')"
-    )
+    insert = text(WRITE_INSERT_SQL)
     samples: list[float] = []
     for offset in range(WRITE_PROBE_COUNT):
         started = time.perf_counter()

@@ -390,6 +390,14 @@ def test_index_coverage_uses_column_prefix_not_names():
     )
 
 
+def test_write_probe_sql_fills_not_null_market_columns():
+    from scripts.perf.index_eval import WRITE_INSERT_SQL
+
+    assert "is_recommended" in WRITE_INSERT_SQL
+    assert "install_count" in WRITE_INSERT_SQL
+    assert "download_count" in WRITE_INSERT_SQL
+
+
 def test_write_tolerance_matches_regression_envelope():
     from scripts.perf.index_eval import write_p95_within_tolerance
 
