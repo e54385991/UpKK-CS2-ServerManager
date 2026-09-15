@@ -47,6 +47,20 @@ def test_cli_accepts_fingerprint_realtime_and_paced_flags():
     indexed = parse_args(["measure-api", "--with-index-candidates", "--route", "market"])
     assert indexed.with_index_candidates is True
     assert indexed.routes == ["market"]
+    decide = parse_args(
+        [
+            "explain-indexes",
+            "--eval-from",
+            "reports/perf/raw/explain-indexes-fleet-500.json",
+            "--http-before",
+            "before.json",
+            "--http-after",
+            "after.json",
+        ]
+    )
+    assert decide.eval_from.endswith("explain-indexes-fleet-500.json")
+    assert decide.http_before == "before.json"
+    assert decide.http_after == "after.json"
     realtime = parse_args(["measure-realtime", "--sessions", "30", "--seconds", "15"])
     assert realtime.command == "measure-realtime"
     assert realtime.sessions == 30

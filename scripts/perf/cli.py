@@ -74,6 +74,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Reuse arrival targets from a previous upkk-isolated-perf report.",
     )
     parser.add_argument(
+        "--eval-from",
+        default="",
+        help="explain-indexes: reuse a previous indexes payload instead of connecting.",
+    )
+    parser.add_argument(
+        "--http-before",
+        default="",
+        help="explain-indexes: market report measured without candidate indexes.",
+    )
+    parser.add_argument(
+        "--http-after",
+        default="",
+        help="explain-indexes: market report measured with --with-index-candidates.",
+    )
+    parser.add_argument(
         "--sessions",
         type=int,
         default=0,
@@ -167,10 +182,27 @@ async def _run_seed(args: argparse.Namespace) -> int:
 
 
 async def _write_index_eval(args: argparse.Namespace) -> int:
-    from scripts.perf.index_eval import evaluate_market_indexes
+    from scripts.perf.index_eval import attach_http_from_reports, evaluate_market_indexes
+    from scripts.perf.report import load_report
 
+    if args.eval_from:
+        payload = load_report(Path(args.eval_from))
+        evaluation = payload.get("indexes", payload)
+        if not isinstance(evaluation, dict):
+            raise SystemExit("eval-from is missing an indexes object")
+        evaluation = dict(evaluation)
+    else:
+        evaluation = await evaluate_market_indexes()
+    if bool(args.http_before) != bool(args.http_after):
+        raise SystemExit("--http-before and --http-after must be used together")
+    if args.http_before and args.http_after:
+        evaluation = attach_http_from_reports(
+            evaluation,
+            load_report(Path(args.http_before)),
+            load_report(Path(args.http_after)),
+        )
     report = empty_report(profile="indexes", mode=args.mode, cwd=PROJECT_ROOT)
-    report["indexes"] = await evaluate_market_indexes()
+    report["indexes"] = evaluation
     path = _output_path(args, "explain-indexes.json")
     write_report(path, report)
     print(path)

@@ -100,6 +100,14 @@ line (need ≤ 5.68 ms to include the btrees).
 
 `measure-api --with-index-candidates` creates the two btree candidates,
 measures, then `DROP INDEX` in `finally`. It is not an Alembic revision.
+After that pair exists, decide without touching the database:
+
+```bash
+uv run python scripts/run_perf.py explain-indexes \
+  --eval-from reports/perf/raw/explain-indexes-fleet-500.json \
+  --http-before reports/perf/raw/api-fleet-500-baseline-market-head.json \
+  --http-after reports/perf/raw/api-fleet-500-baseline-market-head-indexed.json
+```
 
 | Tree | git SHA | inbox p95 | late slots |
 | --- | --- | ---: | ---: |

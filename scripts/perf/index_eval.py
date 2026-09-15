@@ -12,9 +12,9 @@ id-only microbenchmark.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Mapping
 
-from scripts.perf.report import percentile_block, within_regression
+from scripts.perf.report import improvement_ratio, percentile_block, within_regression
 
 INDEX_BUILD_LIMIT_SECONDS = 5.0
 P95_IMPROVEMENT_REQUIRED = 0.20
@@ -237,6 +237,38 @@ def attach_http_p95(
             "HTTP three-round market p95 improvement is below 20% or another "
             "inclusion gate failed; candidates stay out"
         )
+    return updated
+
+
+def market_p95_from_report(report: Mapping[str, Any]) -> float | None:
+    """Read the three-round market median p95 from an upkk-isolated-perf file."""
+    api = report.get("api")
+    if not isinstance(api, Mapping):
+        return None
+    summary = api.get("summary")
+    if not isinstance(summary, Mapping):
+        return None
+    market = summary.get("market")
+    if not isinstance(market, Mapping):
+        return None
+    latency = market.get("latency_ms")
+    if isinstance(latency, Mapping) and latency.get("p95") is not None:
+        return float(latency["p95"])
+    return None
+
+
+def attach_http_from_reports(
+    evaluation: dict[str, Any],
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Attach HTTP improvement from a without-index / with-index pair."""
+    before_p95 = market_p95_from_report(before)
+    after_p95 = market_p95_from_report(after)
+    if before_p95 is None or after_p95 is None:
+        return attach_http_p95(evaluation, None)
+    updated = attach_http_p95(evaluation, improvement_ratio(before_p95, after_p95))
+    updated["http_p95_ms"] = {"before": before_p95, "after": after_p95}
     return updated
 
 

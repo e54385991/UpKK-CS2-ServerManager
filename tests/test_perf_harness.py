@@ -425,6 +425,42 @@ def test_plan_execution_ms_reads_actual_total():
     assert plan_execution_ms("seq") is None
 
 
+def test_attach_http_from_reports_reads_market_median_p95():
+    from scripts.perf.index_eval import (
+        CANDIDATE_INDEXES,
+        attach_http_from_reports,
+        market_p95_from_report,
+    )
+
+    before = {"api": {"summary": {"market": {"latency_ms": {"p95": 7.5}}}}}
+    after = {"api": {"summary": {"market": {"latency_ms": {"p95": 5.0}}}}}
+    assert market_p95_from_report(before) == 7.5
+    assert market_p95_from_report({}) is None
+    ready = {
+        "reason": "waiting",
+        "candidates": [
+            {
+                "name": item["name"],
+                "purpose": item["purpose"],
+                "ddl": item["ddl"],
+                "columns": item["columns"],
+                "included": False,
+                "gate": {
+                    "existing_index_covers": False,
+                    "p95_improvement": None,
+                    "write_within_tolerance": True,
+                    "build_seconds": 0.01,
+                },
+            }
+            for item in CANDIDATE_INDEXES
+        ],
+    }
+    decided = attach_http_from_reports(ready, before, after)
+    assert decided["http_p95_ms"] == {"before": 7.5, "after": 5.0}
+    assert decided["indexes_submitted"] is True
+    assert attach_http_from_reports(ready, before, {"api": {}})["indexes_submitted"] is False
+
+
 def test_attach_http_p95_fails_closed_until_every_gate_passes():
     from scripts.perf.index_eval import CANDIDATE_INDEXES, attach_http_p95, skipped_evaluation
 
