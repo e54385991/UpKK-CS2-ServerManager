@@ -82,9 +82,17 @@ reused by HEAD:
 | starting | `21197fe` | 2174 ms | 1 |
 | HEAD at measure | `1156678` | 2140 ms | 2 |
 
-The matching 60 s / 300 s × 3 inbox series is in progress on `21197fe`.
-Historical Stage 7 timings stay in the archive and are not this round's
-before/after.
+Same-protocol paced inbox **baseline** (60 s warmup + 300 s × 3, arrival
+0.506 rps reused from the starting smoke, 0 HTTP errors):
+
+| Tree | git SHA | median p95 | round p95 | samples | late (last round) |
+| --- | --- | ---: | --- | ---: | ---: |
+| starting | `21197fe` | **2156 ms** | 2748 / 2156 / 2156 | 453 | 136 |
+| HEAD | (running) | — | — | — | — |
+
+`claimed_gains` stays false until HEAD finishes this series and beats
+2156 ms by ≥ 20%. Historical Stage 7 timings stay in the archive and are
+not this round's before/after.
 
 | Batch | SHA | Change |
 | --- | --- | --- |
