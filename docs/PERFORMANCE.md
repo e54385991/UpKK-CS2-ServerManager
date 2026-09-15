@@ -87,6 +87,13 @@ schedule misses slots. That cadence is reused:
 | starting | 6.14 ms | 1788 |
 | HEAD | 8.45 ms | 1478 |
 
+Same-protocol market **baseline** (60 s + 300 s × 3, 0 errors):
+
+| Tree | median p95 | round p95 | samples |
+| --- | ---: | --- | ---: |
+| starting | **7.54 ms** | 7.54 / 6.76 / 8.77 | 145022 |
+| HEAD | (running) | — | — |
+
 `measure-api --with-index-candidates` creates the two btree candidates,
 measures, then `DROP INDEX` in `finally`. It is not an Alembic revision.
 
