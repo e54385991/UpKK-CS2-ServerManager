@@ -61,8 +61,6 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     sortDir,
     selected,
     setSelected,
-    uploads,
-    uploadRate,
     dragOver,
     setDragOver,
     serverId,
@@ -355,7 +353,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                 </Button>
               </div>
             ) : null}
-            <FilesUploadDock items={uploads} rate={uploadRate} onCancel={cancelUpload} />
+            <FilesUploadDock onCancel={cancelUpload} />
             <div className="flex flex-wrap items-center gap-1">
               {FILE_KIND_FILTERS.map((id) => (
                 <Button

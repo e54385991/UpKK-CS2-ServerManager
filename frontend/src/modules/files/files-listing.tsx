@@ -1,6 +1,6 @@
 "use client";
 
-import type { DragEvent, RefObject } from "react";
+import { memo, type DragEvent, type RefObject } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   ArrowDown,
@@ -30,7 +30,7 @@ import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 
-export function FilesListing({
+function FilesListingView({
   workspace,
   pending,
   dragOver,
@@ -345,6 +345,8 @@ export function FilesListing({
     </div>
   );
 }
+
+export const FilesListing = memo(FilesListingView);
 
 function SortHeader({
   label,

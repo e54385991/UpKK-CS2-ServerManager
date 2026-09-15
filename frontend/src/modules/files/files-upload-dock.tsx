@@ -2,19 +2,17 @@
 
 import { useTranslations } from "next-intl";
 import { X } from "lucide-react";
-import { formatTransferRate, type UploadItem } from "@/modules/files/upload";
+import { useFilesUploadSnapshot } from "@/modules/files/files-upload-store";
+import { formatTransferRate } from "@/modules/files/upload";
 import { formatFileSize } from "@/modules/files/types";
 import { Button } from "@/shared/ui/button";
 
 export function FilesUploadDock({
-  items,
-  rate,
   onCancel,
 }: {
-  items: readonly UploadItem[];
-  rate: number;
   onCancel: () => void;
 }) {
+  const { items, rate } = useFilesUploadSnapshot();
   const t = useTranslations("files");
   const total = items.length;
   const done = items.filter((item) => item.status === "done").length;
