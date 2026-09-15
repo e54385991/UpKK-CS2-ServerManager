@@ -318,6 +318,42 @@
     "passed": false,
     "within_regression_envelope": true
   },
+  "fleet_10_mixed_smoke": {
+    "protocol": "10s × 1, paced reused single-route targets",
+    "errors": 0,
+    "targets_rps": {
+      "inbox": 22.078,
+      "overview": 299.674,
+      "market": 207.342,
+      "servers": 266.236
+    },
+    "starting_p95_ms": {
+      "inbox": 108.641,
+      "overview": 22.956,
+      "market": 24.645,
+      "servers": 22.628
+    },
+    "starting_samples": {
+      "inbox": 200,
+      "overview": 678,
+      "market": 565,
+      "servers": 661
+    },
+    "head_p95_ms": {
+      "inbox": 74.531,
+      "overview": 21.843,
+      "market": 24.603,
+      "servers": 21.761
+    },
+    "head_samples": {
+      "inbox": 198,
+      "overview": 679,
+      "market": 569,
+      "servers": 656
+    },
+    "head_sha": "46eacd7b020ce1331f40337fc8576e53104b9799",
+    "note": "n=1; not a 20% gate. Concurrent open-loop at isolated single-route rates."
+  },
   "inbox_baseline": {
     "protocol": "60s warmup + 300s × 3, paced 0.506 rps",
     "errors": 0,

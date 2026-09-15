@@ -394,7 +394,17 @@ Same-protocol servers **baseline** (60 s + 300 s × 3, 0 errors,
 | HEAD `c6cabbd` | **3.82 ms** | 3.81 / 3.82 / 3.83 | 239610 |
 
 Servers 20% gate: **fail** (−0.2%). Still inside `max(5%, 20 ms)`.
-`claimed_gains` stays **false**. Mixed `--paced` on this seed is next.
+
+Mixed `--paced` reuses the four single-route arrival targets. Smoke
+(10 s, 0 errors) is **not** a 20% gate:
+
+| Tree | inbox | overview | market | servers |
+| --- | ---: | ---: | ---: | ---: |
+| starting | 109 ms | 23.0 ms | 24.6 ms | 22.6 ms |
+| HEAD `46eacd7` | 74.5 ms | 21.8 ms | 24.6 ms | 21.8 ms |
+
+Same-protocol mixed **baseline** (60 s + 300 s × 3) is running.
+`claimed_gains` stays **false**.
 
 ### Still open on this host
 
