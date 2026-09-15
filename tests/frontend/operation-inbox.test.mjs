@@ -8,15 +8,19 @@ test("operation inbox and activity tray expose completed history", () => {
     resolve("frontend/src/modules/servers/operation-inbox.ts"),
     "utf8",
   );
-  const tray = readFileSync(
-    resolve("frontend/src/modules/shell/activity-tray.tsx"),
+  const panel = readFileSync(
+    resolve("frontend/src/modules/shell/activity-tray-panel.tsx"),
+    "utf8",
+  );
+  const commands = readFileSync(
+    resolve("frontend/src/modules/shell/use-activity-commands.ts"),
     "utf8",
   );
 
   assert.match(inbox, /completed_items/);
   assert.match(inbox, /completedItems/);
   assert.match(inbox, /completedRetentionDays/);
-  assert.match(tray, /activityTabCompleted/);
-  assert.match(tray, /clearCompletedOperationsFromBrowser/);
-  assert.match(tray, /dismissCompletedOperationFromBrowser/);
+  assert.match(panel, /activityTabCompleted/);
+  assert.match(commands, /clearCompletedOperationsFromBrowser/);
+  assert.match(commands, /dismissCompletedOperationFromBrowser/);
 });

@@ -16,11 +16,10 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { ExtractDialog, FileEditorDialog, MoveDialog, RenameDialog } from "@/modules/files/lazy-dialogs";
-import { FilesListing } from "@/modules/files/files-listing";
 import { FilesPathBar } from "@/modules/files/path-bar";
 import { FilesShortcuts } from "@/modules/files/files-shortcuts";
-import { FilesUploadDock } from "@/modules/files/files-upload-dock";
 import { isAtRoot, parentWithinRoot } from "@/modules/files/paths";
 import { FILE_KIND_FILTERS, isArchiveFile, isTextFile, type FilesWorkspace } from "@/modules/files/types";
 import { useFilesWorkspace } from "@/modules/files/use-files-workspace";
@@ -34,6 +33,22 @@ import {
 } from "@/shared/ui/card";
 import { Input, Label } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
+
+const FilesUploadDock = dynamic(() =>
+  import("@/modules/files/files-upload-dock").then((mod) => mod.FilesUploadDock),
+);
+const FilesListing = dynamic(
+  () => import("@/modules/files/files-listing").then((mod) => mod.FilesListing),
+  {
+    loading: () => (
+      <div
+        data-testid="files-dropzone"
+        className="min-h-64 rounded-lg bg-surface"
+        aria-busy="true"
+      />
+    ),
+  },
+);
 
 export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const t = useTranslations("files");

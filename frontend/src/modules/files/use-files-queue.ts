@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import type { FilesBanner } from "@/modules/files/files-banner";
 import { writeFileClipboard } from "@/modules/files/clipboard";

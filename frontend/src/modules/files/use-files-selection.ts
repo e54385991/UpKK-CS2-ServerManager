@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import {

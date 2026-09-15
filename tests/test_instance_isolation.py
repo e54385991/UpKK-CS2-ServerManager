@@ -127,7 +127,15 @@ def test_1panel_compose_isolates_shared_network_and_redis() -> None:
 
 
 def test_frontend_session_cookie_matches_this_instance_only() -> None:
-    text = (PROJECT_ROOT / "frontend/src/modules/auth/session.ts").read_text(encoding="utf-8")
-    assert 'process.env["SESSION_COOKIE_SUFFIX"]' in text
-    assert "store.has(sessionCookieName())" in text
-    assert "startsWith(`${SESSION_COOKIE}_`)" not in text
+    name = (
+        PROJECT_ROOT / "frontend/src/shared/auth/session-cookie-name.ts"
+    ).read_text(encoding="utf-8")
+    cookie = (
+        PROJECT_ROOT / "frontend/src/shared/auth/session-cookie.ts"
+    ).read_text(encoding="utf-8")
+    session = (PROJECT_ROOT / "frontend/src/modules/auth/session.ts").read_text(encoding="utf-8")
+    assert 'process.env["SESSION_COOKIE_SUFFIX"]' in name
+    assert "store.has(sessionCookieName())" in cookie
+    assert "sessionTokenFrom" in session
+    for text in (name, cookie, session):
+        assert "startsWith(`${SESSION_COOKIE}_`)" not in text

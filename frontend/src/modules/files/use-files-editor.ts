@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { getFileContentAction } from "@/modules/files/actions";

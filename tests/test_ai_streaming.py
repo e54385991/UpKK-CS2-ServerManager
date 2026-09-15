@@ -87,12 +87,17 @@ def test_token_usage_is_streamed_to_the_console():
     chat = (
         PROJECT_ROOT / "frontend" / "src" / "modules" / "assistant" / "assistant-chat.tsx"
     ).read_text(encoding="utf-8")
+    run = (
+        PROJECT_ROOT / "frontend" / "src" / "modules" / "assistant" / "use-assistant-run.ts"
+    ).read_text(encoding="utf-8")
 
     assert 'raw_usage = chunk.get("usage")' in streaming
     assert 'message["usage"] = self.usage' in streaming
     assert '"token_usage"' in orchestrator
     assert "_provider_token_usage(response)" in orchestrator
-    assert 'event.type === "token_usage"' in chat
+    assert 'event.type === "token_usage"' in run
+    assert "createTextDisplayBuffer" in run
+    assert "return confirm({" in chat
 
 
 def test_pending_write_tools_open_a_confirmation_prompt():

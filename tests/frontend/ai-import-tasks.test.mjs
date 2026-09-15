@@ -18,11 +18,19 @@ test('activity tray renders import tasks when completed or failed tasks exist', 
     new URL('../../frontend/src/modules/shell/activity-tray.tsx', import.meta.url),
     'utf8',
   );
+  const lists = readFileSync(
+    new URL('../../frontend/src/modules/shell/activity-tray-lists.ts', import.meta.url),
+    'utf8',
+  );
+  const panel = readFileSync(
+    new URL('../../frontend/src/modules/shell/activity-tray-panel.tsx', import.meta.url),
+    'utf8',
+  );
 
   assert.match(tray, /hasVisibleMarketTasks/);
-  assert.match(tray, /item\.status === "failed"/);
+  assert.match(lists, /item\.status === "failed"/);
   assert.match(
-    tray,
+    panel,
     /isAdmin && hasVisibleMarketTasks && <AIImportTasks initialTasks=\{marketTasks\} \/>/,
   );
 });
