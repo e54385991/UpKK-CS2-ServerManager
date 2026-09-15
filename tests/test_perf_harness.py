@@ -390,6 +390,58 @@ def test_index_coverage_uses_column_prefix_not_names():
     )
 
 
+def test_write_tolerance_matches_regression_envelope():
+    from scripts.perf.index_eval import write_p95_within_tolerance
+
+    assert write_p95_within_tolerance(10.0, 30.0) is True
+    assert write_p95_within_tolerance(10.0, 31.0) is False
+    assert write_p95_within_tolerance(1000.0, 1050.0) is True
+    assert write_p95_within_tolerance(1000.0, 1051.0) is False
+
+
+def test_plan_execution_ms_reads_actual_total():
+    from scripts.perf.index_eval import plan_execution_ms
+
+    assert plan_execution_ms([{"Plan": {"Actual Total Time": 1.25}}]) == 1.25
+    assert plan_execution_ms({"Plan": {"Actual Total Time": 2.0}}) == 2.0
+    assert plan_execution_ms({}) is None
+    assert plan_execution_ms("seq") is None
+
+
+def test_attach_http_p95_fails_closed_until_every_gate_passes():
+    from scripts.perf.index_eval import CANDIDATE_INDEXES, attach_http_p95, skipped_evaluation
+
+    skipped = attach_http_p95(skipped_evaluation("offline"), 0.50)
+    assert skipped["indexes_submitted"] is False
+    assert skipped["http_p95_improvement"] == 0.50
+
+    ready = {
+        "reason": "waiting for HTTP",
+        "candidates": [
+            {
+                "name": item["name"],
+                "purpose": item["purpose"],
+                "ddl": item["ddl"],
+                "columns": item["columns"],
+                "included": False,
+                "gate": {
+                    "existing_index_covers": False,
+                    "p95_improvement": None,
+                    "write_within_tolerance": True,
+                    "build_seconds": 0.01,
+                },
+            }
+            for item in CANDIDATE_INDEXES
+        ],
+    }
+    included = attach_http_p95(ready, 0.25)
+    assert included["indexes_submitted"] is True
+    assert all(item["included"] for item in included["candidates"])
+    rejected = attach_http_p95(ready, 0.10)
+    assert rejected["indexes_submitted"] is False
+    assert all(item["included"] is False for item in rejected["candidates"])
+
+
 def test_selected_routes_keep_catalog_order_and_reject_unknown_names():
     from scripts.perf.api_measure import ROUTES, selected_routes
 
