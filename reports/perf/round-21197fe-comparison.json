@@ -73,6 +73,23 @@
     "passed": false,
     "within_regression_envelope": true
   },
+  "servers_smoke": {
+    "protocol": "10s × 1, paced target 231.419 rps",
+    "errors": 0,
+    "starting_p95_ms": 5.950,
+    "starting_samples": 1955,
+    "head_p95_ms": 5.895,
+    "head_samples": 2011,
+    "head_sha": "9a9a98e80d67c166f10a211db919d5e35f8d41bb",
+    "note": "n=1; not a 20% gate. Open-loop target exceeds single-emit throughput."
+  },
+  "servers_baseline": {
+    "protocol": "60s warmup + 300s × 3, paced target 231.419 rps",
+    "errors": null,
+    "starting_median_p95_ms": null,
+    "head_median_p95_ms": null,
+    "note": "21197fe 60s/300s×3 running; smoke is not the gate."
+  },
   "indexes": {
     "submitted": false,
     "alembic_revision": null,
@@ -88,7 +105,7 @@
     }
   },
   "still_open": [
-    "fleet-500 servers smoke + 60s/300s×3 at 21197fe and HEAD",
+    "fleet-500 servers 60s/300s×3 at 21197fe and HEAD (smoke 5.95 vs 5.90 ms)",
     "mixed --paced four-route series on fleet-500",
     "fleet-10 and fleet-100 same-protocol series",
     "measure-realtime --sessions 30",

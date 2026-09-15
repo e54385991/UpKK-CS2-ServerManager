@@ -149,6 +149,18 @@ reused):
 Overview 20% gate: **fail** (−4.6%). Still inside `max(5%, 20 ms)`
 (limit 3.73 ms). Smoke is not a 20% gate.
 
+Paced servers **smoke** (10 s, 0 errors) discovered 289.274 rps and
+targets 231.419 rps. Open-loop emit is ~196–201 rps, so slots are
+missed. That cadence is reused:
+
+| Tree | servers p95 | samples |
+| --- | ---: | ---: |
+| starting | 5.95 ms | 1955 |
+| HEAD | 5.90 ms | 2011 |
+
+The comparable servers **baseline** (60 s + 300 s × 3) is the next
+gate. Smoke is not a 20% gate.
+
 | Batch | SHA | Change |
 | --- | --- | --- |
 | 0 | `025bd71` | Starting protocol, arrival pacing, segments, realtime CLI, fingerprint |
@@ -208,8 +220,8 @@ is back to pk / github_url / title. See
 ### Still open on this host
 
 - Fleet-500 inbox / market / overview 60 s / 300 s × 3 pairs are
-  recorded above (all missed 20%). Next: servers both trees, then
-  mixed `--paced`
+  recorded above (all missed 20%). Servers smoke is in; next is the
+  servers baseline pair, then mixed `--paced`
 - Same-protocol series on fleets 10 / 100 after the 500-server work
 - 30-session realtime, production browser 5 / 30 × 3, and a 60-minute soak
 - `fleet-1000` / `fleet-1001` overview cap only (after the 500-server series)
