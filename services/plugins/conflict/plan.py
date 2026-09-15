@@ -26,6 +26,35 @@ logger = logging.getLogger(__name__)
 host = LateBoundModule("services.plugin_conflict_service")
 
 
+class PreflightState:
+    __slots__ = (
+        "server_id",
+        "server",
+        "target",
+        "dependencies",
+        "ordered",
+        "managed",
+        "planned_ids",
+    )
+
+    def __init__(
+        self,
+        server_id: int,
+        server: Server,
+        target: MarketPlugin,
+        dependencies: list[MarketPlugin],
+        ordered: list[MarketPlugin],
+        managed: list[ManagedPlugin],
+    ) -> None:
+        self.server_id = server_id
+        self.server = server
+        self.target = target
+        self.dependencies = dependencies
+        self.ordered = ordered
+        self.managed = managed
+        self.planned_ids = {int(plugin.id) for plugin in ordered if plugin.id is not None}
+
+
 def _plugin_plan_confirmation_payload(plan: dict[str, Any]) -> dict[str, Any]:
     """Keep approval hashes stable while remote installation evidence changes."""
     return {
@@ -43,10 +72,53 @@ def _plugin_plan_confirmation_payload(plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _session_supports_batch(db: object) -> bool:
+    return getattr(db, "bind", None) is not None or getattr(db, "get_bind", None) is not None
+
+
+async def _fill_plugin_cache(
+    db: AsyncSession, plugin_ids: list[int], cache: dict[int, MarketPlugin]
+) -> None:
+    missing = [plugin_id for plugin_id in dict.fromkeys(plugin_ids) if plugin_id not in cache]
+    if not missing:
+        return
+    if _session_supports_batch(db):
+        loaded = await host.MarketPlugin.get_by_ids(db, missing)
+        for plugin in loaded:
+            if plugin.id is not None:
+                cache[int(plugin.id)] = plugin
+    still_missing = [plugin_id for plugin_id in missing if plugin_id not in cache]
+    for plugin_id in still_missing:
+        plugin = await host.MarketPlugin.get_by_id(db, plugin_id)
+        if plugin is not None:
+            cache[plugin_id] = plugin
+
+
+async def _prefetch_dependency_graph(
+    db: AsyncSession, root_plugin_id: int
+) -> dict[int, MarketPlugin]:
+    cache: dict[int, MarketPlugin] = {}
+    pending = [root_plugin_id]
+    queued = {root_plugin_id}
+    while pending:
+        batch = pending
+        pending = []
+        await _fill_plugin_cache(db, batch, cache)
+        for plugin_id in batch:
+            plugin = cache.get(plugin_id)
+            if plugin is None:
+                continue
+            for dependency_id in host.parse_dependency_ids(plugin.dependencies):
+                if dependency_id not in queued:
+                    queued.add(dependency_id)
+                    pending.append(dependency_id)
+    return cache
+
+
 async def _resolve_dependency_order(
     db: AsyncSession, root_plugin_id: int
 ) -> tuple[list[MarketPlugin], MarketPlugin]:
-    cache: dict[int, MarketPlugin] = {}
+    cache = await _prefetch_dependency_graph(db, root_plugin_id)
     visiting: list[int] = []
     visited: set[int] = set()
     ordered: list[MarketPlugin] = []
@@ -77,6 +149,97 @@ async def _resolve_dependency_order(
     return ordered[:-1], ordered[-1]
 
 
+async def _read_preflight_state(
+    db: AsyncSession,
+    server_id: int,
+    plugin_id: int,
+    *,
+    include_dependencies: bool,
+    server: Server | None,
+) -> PreflightState:
+    dependencies, target = await host._resolve_dependency_order(db, plugin_id)
+    if not include_dependencies:
+        dependencies = []
+    ordered = [*dependencies, target]
+    managed_result = await db.execute(
+        select(ManagedPlugin).where(ManagedPlugin.server_id == server_id)
+    )
+    current_server = server or await host.Server.get_by_id(db, server_id)
+    if current_server is None or current_server.id != server_id:
+        raise PluginPlanError("Server was not found while verifying installed plugins")
+    state = PreflightState(
+        server_id,
+        current_server,
+        target,
+        dependencies,
+        ordered,
+        list(managed_result.scalars().all()),
+    )
+    _materialize_preflight_state(state)
+    return state
+
+
+def _materialize_preflight_state(state: PreflightState) -> None:
+    """Load column values before the short read session closes."""
+    server = state.server
+    _ = (
+        server.id,
+        getattr(server, "host", None),
+        getattr(server, "ssh_port", None),
+        getattr(server, "ssh_user", None),
+        getattr(server, "auth_type", None),
+        getattr(server, "ssh_password", None),
+        getattr(server, "ssh_key_path", None),
+        getattr(server, "sudo_password", None),
+        getattr(server, "game_directory", None),
+        getattr(server, "github_proxy", None),
+        getattr(server, "is_password_auth", None),
+        getattr(server, "is_key_auth", None),
+    )
+    for plugin in state.ordered:
+        _ = (
+            plugin.id,
+            plugin.title,
+            plugin.framework,
+            plugin.dependencies,
+            plugin.github_url,
+            plugin.custom_install_path,
+            plugin.ai_metadata,
+        )
+    for item in state.managed:
+        _ = (
+            item.display_name,
+            item.market_plugin_id,
+            getattr(item, "framework_key", None),
+            getattr(item, "repo_url", None),
+            getattr(item, "custom_install_path", None),
+        )
+
+
+async def _inspect_inventory(server: Server) -> dict[str, Any]:
+    try:
+        return await host.inspect_remote_plugin_inventory(server)
+    except PluginInventoryError as exc:
+        raise PluginPlanError(f"Unable to verify installed plugins: {exc}") from exc
+
+
+async def _load_conflict_rules(
+    db: AsyncSession, relevant_ids: set[int]
+) -> list[PluginConflictRule]:
+    if not relevant_ids:
+        return []
+    rule_result = await db.execute(
+        select(PluginConflictRule).where(
+            col(PluginConflictRule.is_enabled).is_(True),
+            or_(
+                col(PluginConflictRule.plugin_a_id).in_(relevant_ids),
+                col(PluginConflictRule.plugin_b_id).in_(relevant_ids),
+            ),
+        )
+    )
+    return list(rule_result.scalars().all())
+
+
 async def build_plugin_install_plan(
     db: AsyncSession,
     server_id: int,
@@ -85,25 +248,59 @@ async def build_plugin_install_plan(
     include_dependencies: bool = True,
     server: Server | None = None,
 ) -> dict[str, Any]:
-    """Return a deterministic, recursively resolved installation preflight."""
-    dependencies, target = await host._resolve_dependency_order(db, plugin_id)
-    if not include_dependencies:
-        dependencies = []
-    ordered = [*dependencies, target]
-    planned_ids = {int(plugin.id) for plugin in ordered if plugin.id is not None}
-
-    managed_result = await db.execute(
-        select(ManagedPlugin).where(ManagedPlugin.server_id == server_id)
+    """Compatibility entry: uses the caller's session and never commits it."""
+    state = await _read_preflight_state(
+        db,
+        server_id,
+        plugin_id,
+        include_dependencies=include_dependencies,
+        server=server,
     )
-    managed = list(managed_result.scalars().all())
-    current_server = server or await host.Server.get_by_id(db, server_id)
-    if current_server is None or current_server.id != server_id:
-        raise PluginPlanError("Server was not found while verifying installed plugins")
-    try:
-        inventory = await host.inspect_remote_plugin_inventory(current_server)
-    except PluginInventoryError as exc:
-        raise PluginPlanError(f"Unable to verify installed plugins: {exc}") from exc
-    installed_ids = host.verified_market_plugin_ids(managed, ordered, inventory)
+    inventory = await _inspect_inventory(state.server)
+    installed_ids = host.verified_market_plugin_ids(state.managed, state.ordered, inventory)
+    rules = await _load_conflict_rules(db, state.planned_ids | installed_ids)
+    return _assemble_plan(state, inventory, installed_ids, rules)
+
+
+async def plan_plugin_install(
+    server_id: int,
+    plugin_id: int,
+    *,
+    include_dependencies: bool = True,
+    server: Server | None = None,
+    session_factory: Any | None = None,
+) -> dict[str, Any]:
+    """Own short read transactions; SSH runs only after the first session closes."""
+    from modules.database import async_session_maker
+
+    factory = session_factory or async_session_maker
+    async with factory() as db:
+        state = await _read_preflight_state(
+            db,
+            server_id,
+            plugin_id,
+            include_dependencies=include_dependencies,
+            server=server,
+        )
+    inventory = await _inspect_inventory(state.server)
+    installed_ids = host.verified_market_plugin_ids(state.managed, state.ordered, inventory)
+    async with factory() as db:
+        rules = await _load_conflict_rules(db, state.planned_ids | installed_ids)
+        return _assemble_plan(state, inventory, installed_ids, rules)
+
+
+def _assemble_plan(
+    state: PreflightState,
+    inventory: dict[str, Any],
+    installed_ids: set[int],
+    rules: list[PluginConflictRule],
+) -> dict[str, Any]:
+    planned_ids = state.planned_ids
+    relevant_ids = planned_ids | installed_ids
+    target = state.target
+    ordered = state.ordered
+    dependencies = state.dependencies
+    managed = state.managed
     unverified_tracking = sorted(
         item.display_name for item in managed if not host.installation_evidence(item, inventory)
     )
@@ -118,21 +315,6 @@ async def build_plugin_install_plan(
         for item in inventory["plugins"]
         if item.get("key") not in matched_remote_keys
     )
-
-    relevant_ids = planned_ids | installed_ids
-    rules: list[PluginConflictRule] = []
-    if relevant_ids:
-        rule_result = await db.execute(
-            select(PluginConflictRule).where(
-                col(PluginConflictRule.is_enabled).is_(True),
-                or_(
-                    col(PluginConflictRule.plugin_a_id).in_(relevant_ids),
-                    col(PluginConflictRule.plugin_b_id).in_(relevant_ids),
-                ),
-            )
-        )
-        rules = list(rule_result.scalars().all())
-
     conflicts: list[dict[str, Any]] = []
     for rule in rules:
         left = int(rule.plugin_a_id)
@@ -188,7 +370,7 @@ async def build_plugin_install_plan(
         target.framework, inventory.get("frameworks") or {}
     )
     plan = {
-        "server_id": server_id,
+        "server_id": state.server_id,
         "plugin": {"id": target.id, "title": target.title},
         "dependencies": [
             {"id": dependency.id, "title": dependency.title} for dependency in dependencies
@@ -205,8 +387,6 @@ async def build_plugin_install_plan(
         "ai_unreviewed": [
             plugin.id for plugin in ordered if (info := metadata(plugin)) and not info.reviewed
         ],
-        # Advisory only. Outstanding prerequisites and notes are shown before
-        # the install instead of aborting the preflight.
         "ai_notices": [
             notice for plugin in ordered if (notice := install_notice(plugin)) is not None
         ],

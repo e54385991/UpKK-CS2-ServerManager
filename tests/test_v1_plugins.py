@@ -29,6 +29,8 @@ def _database_session(*, rows=None):
         commit=AsyncMock(),
         refresh=AsyncMock(),
         execute=AsyncMock(return_value=_Result()),
+        is_active=True,
+        close=AsyncMock(),
     )
 
 
@@ -129,10 +131,9 @@ def _client(*, monkeypatch, session=None):
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_current_active_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
-    monkeypatch.setattr(
-        "api.routes.v1.plugins.require_server_access",
-        AsyncMock(return_value=_sample_server()),
-    )
+    access = AsyncMock(return_value=_sample_server())
+    monkeypatch.setattr("api.routes.v1.plugins.require_server_access", access)
+    monkeypatch.setattr("api.routes.v1.plugin_install.require_server_access", access)
     return TestClient(app), user
 
 
@@ -446,13 +447,14 @@ def test_v1_forget_all_plugin_records_reports_the_count(monkeypatch):
 
 
 def test_v1_plugin_preflight(monkeypatch):
-    client, _user = _client(monkeypatch=monkeypatch)
+    session = _database_session()
+    client, _user = _client(monkeypatch=monkeypatch, session=session)
     planner = AsyncMock(return_value=_sample_plan())
     monkeypatch.setattr(
-        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        "api.routes.v1.plugin_install.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
-    monkeypatch.setattr("api.routes.v1.plugins.build_plugin_install_plan", planner)
+    monkeypatch.setattr("api.routes.v1.plugin_install.plan_plugin_install", planner)
     response = client.get("/api/v1/servers/1/plugins/market/11/preflight")
     assert response.status_code == 200
     body = response.json()
@@ -461,16 +463,17 @@ def test_v1_plugin_preflight(monkeypatch):
     assert body["plan_hash"] == "abc123"
     assert body["steps"][0]["status"] == "install"
     assert planner.await_args.kwargs["include_dependencies"] is False
+    session.close.assert_awaited()
 
 
 def test_v1_plugin_preflight_can_include_dependencies(monkeypatch):
     client, _user = _client(monkeypatch=monkeypatch)
     planner = AsyncMock(return_value=_sample_plan())
     monkeypatch.setattr(
-        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        "api.routes.v1.plugin_install.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
-    monkeypatch.setattr("api.routes.v1.plugins.build_plugin_install_plan", planner)
+    monkeypatch.setattr("api.routes.v1.plugin_install.plan_plugin_install", planner)
     response = client.get("/api/v1/servers/1/plugins/market/11/preflight?install_dependencies=true")
     assert response.status_code == 200
     assert planner.await_args.kwargs["include_dependencies"] is True
@@ -491,11 +494,11 @@ def _mismatched_plan() -> dict:
 def test_v1_plugin_preflight_reports_the_runtime_mismatch(monkeypatch):
     client, _user = _client(monkeypatch=monkeypatch)
     monkeypatch.setattr(
-        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        "api.routes.v1.plugin_install.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.build_plugin_install_plan",
+        "api.routes.v1.plugin_install.plan_plugin_install",
         AsyncMock(return_value=_mismatched_plan()),
     )
 
@@ -512,18 +515,18 @@ def test_v1_plugin_install_refuses_a_runtime_mismatch_without_acknowledgement(mo
     client, _user = _client(monkeypatch=monkeypatch)
     enqueue = AsyncMock()
     monkeypatch.setattr(
-        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        "api.routes.v1.plugin_install.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.build_plugin_install_plan",
+        "api.routes.v1.plugin_install.plan_plugin_install",
         AsyncMock(return_value=_mismatched_plan()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
+        "api.routes.v1.plugin_install.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
     )
-    monkeypatch.setattr("api.routes.v1.plugins.enqueue_plugin_install", enqueue)
+    monkeypatch.setattr("api.routes.v1.plugin_install.enqueue_plugin_install", enqueue)
 
     response = client.post("/api/v1/servers/1/plugins/market/11/install", json={})
 
@@ -550,18 +553,18 @@ def test_v1_plugin_install_accepts_an_acknowledged_runtime_mismatch(monkeypatch)
         }
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        "api.routes.v1.plugin_install.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.build_plugin_install_plan",
+        "api.routes.v1.plugin_install.plan_plugin_install",
         AsyncMock(return_value=_mismatched_plan()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
+        "api.routes.v1.plugin_install.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
     )
-    monkeypatch.setattr("api.routes.v1.plugins.enqueue_plugin_install", enqueue)
+    monkeypatch.setattr("api.routes.v1.plugin_install.enqueue_plugin_install", enqueue)
 
     response = client.post(
         "/api/v1/servers/1/plugins/market/11/install",
@@ -576,19 +579,19 @@ def test_v1_plugin_install_returns_202(monkeypatch):
     client, user = _client(monkeypatch=monkeypatch)
     operation_id = str(uuid4())
     monkeypatch.setattr(
-        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        "api.routes.v1.plugin_install.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.build_plugin_install_plan",
+        "api.routes.v1.plugin_install.plan_plugin_install",
         AsyncMock(return_value=_sample_plan()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.validate_plugin_plan_acknowledgements",
+        "api.routes.v1.plugin_install.validate_plugin_plan_acknowledgements",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
+        "api.routes.v1.plugin_install.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
     )
     enqueue = AsyncMock(
@@ -605,7 +608,7 @@ def test_v1_plugin_install_returns_202(monkeypatch):
             "completed_at": None,
         }
     )
-    monkeypatch.setattr("api.routes.v1.plugins.enqueue_plugin_install", enqueue)
+    monkeypatch.setattr("api.routes.v1.plugin_install.enqueue_plugin_install", enqueue)
 
     response = client.post("/api/v1/servers/1/plugins/market/11/install", json={})
     assert response.status_code == 202
@@ -638,19 +641,19 @@ def test_v1_plugin_install_forwards_web_parity_options(monkeypatch):
         }
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        "api.routes.v1.plugin_install.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
-    monkeypatch.setattr("api.routes.v1.plugins.build_plugin_install_plan", planner)
+    monkeypatch.setattr("api.routes.v1.plugin_install.plan_plugin_install", planner)
     monkeypatch.setattr(
-        "api.routes.v1.plugins.validate_plugin_plan_acknowledgements",
+        "api.routes.v1.plugin_install.validate_plugin_plan_acknowledgements",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
+        "api.routes.v1.plugin_install.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
     )
-    monkeypatch.setattr("api.routes.v1.plugins.enqueue_plugin_install", enqueue)
+    monkeypatch.setattr("api.routes.v1.plugin_install.enqueue_plugin_install", enqueue)
 
     download_url = "https://github.com/shobhit-pathak/MatchZy/releases/download/v0.8.1/MatchZy.zip"
     response = client.post(
@@ -678,11 +681,11 @@ def test_v1_plugin_install_forwards_web_parity_options(monkeypatch):
 def test_v1_plugin_install_conflict_when_blocked(monkeypatch):
     client, _user = _client(monkeypatch=monkeypatch)
     monkeypatch.setattr(
-        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        "api.routes.v1.plugin_install.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.build_plugin_install_plan",
+        "api.routes.v1.plugin_install.plan_plugin_install",
         AsyncMock(
             return_value=_sample_plan(
                 blocked=True,
@@ -699,11 +702,11 @@ def test_v1_plugin_install_conflict_when_blocked(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.validate_plugin_plan_acknowledgements",
+        "api.routes.v1.plugin_install.validate_plugin_plan_acknowledgements",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
+        "api.routes.v1.plugin_install.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
     )
     response = client.post("/api/v1/servers/1/plugins/market/11/install", json={})
@@ -714,11 +717,11 @@ def test_v1_market_uninstall_returns_202(monkeypatch):
     client, user = _client(monkeypatch=monkeypatch)
     operation_id = str(uuid4())
     monkeypatch.setattr(
-        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        "api.routes.v1.plugin_install.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
+        "api.routes.v1.plugin_install.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
     )
     enqueue = AsyncMock(
@@ -736,7 +739,7 @@ def test_v1_market_uninstall_returns_202(monkeypatch):
         }
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.enqueue_github_plugin_uninstall",
+        "api.routes.v1.plugin_install.enqueue_github_plugin_uninstall",
         enqueue,
     )
     response = client.post(

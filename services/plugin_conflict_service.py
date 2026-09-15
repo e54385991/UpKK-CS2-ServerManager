@@ -45,6 +45,7 @@ from services.plugins.conflict.plan import (
     _plugin_plan_confirmation_payload,
     _resolve_dependency_order,
     build_plugin_install_plan,
+    plan_plugin_install,
     validate_plugin_plan_acknowledgements,
 )
 from services.plugins.market_integration import configure_market_plan_handlers
@@ -118,6 +119,7 @@ __all__ = [
     "_restart_payload",
     "build_plugin_install_plan",
     "derive_asset_glob",
+    "plan_plugin_install",
     "execute_plugin_install_plan",
     "validate_plugin_plan_acknowledgements",
 ]
