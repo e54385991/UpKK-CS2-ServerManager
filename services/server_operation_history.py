@@ -40,6 +40,21 @@ def current_id_from_stored(stored: object) -> str | None:
     return None
 
 
+def merge_retained_ids(
+    persisted: list[str], live: list[str], fallback: list[str]
+) -> list[str]:
+    """Prefer persisted order, then live adds; fallback only when both are empty."""
+    if not persisted and not live:
+        return list(dict.fromkeys(item for item in fallback if item))
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in [*persisted, *live]:
+        if item and item not in seen:
+            seen.add(item)
+            merged.append(item)
+    return merged
+
+
 async def reconcile_retained_index(
     *,
     redis: Any,
@@ -54,18 +69,16 @@ async def reconcile_retained_index(
     """Drop known-expired IDs without wiping IDs added during the read."""
     if not expired:
         return
-    persist = False
+    try:
+        stored = await redis.get(redis_key)
+    except Exception:
+        stored = None
+    persist = stored is not None
     async with lock:
-        cache.pop(server_id, None)
-        try:
-            stored = await redis.get(redis_key)
-        except Exception:
-            stored = None
-        if stored is None:
-            cache[server_id] = [item for item in fallback if item not in expired]
-        else:
-            cache[server_id] = [item for item in ids_from_stored(stored) if item not in expired]
-            persist = True
+        live = list(cache.get(server_id) or [])
+        persisted = ids_from_stored(stored) if stored is not None else []
+        merged = merge_retained_ids(persisted, live, fallback)
+        cache[server_id] = [item for item in merged if item not in expired]
     if persist:
         await persister(server_id)
 

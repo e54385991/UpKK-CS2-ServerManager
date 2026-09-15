@@ -58,11 +58,14 @@ async def collect_hub_snapshot(hub: InboxHub, server_ids: Sequence[int]) -> HubI
     wanted = [int(server_id) for server_id in server_ids]
     if not wanted:
         return HubInboxSnapshot(slices={}, memory_scans=0)
-    memory = await _scan_memory(hub, wanted)
+    memory, records = await _scan_memory(hub, wanted)
     await _fill_missing_indexes(hub, wanted, memory)
-    records = await _load_records(hub, wanted, memory)
-    messages = await _latest_messages(hub, records, memory.event_tails)
-    slices = await _build_slices(hub, wanted, memory, records, messages)
+    records = await _load_records(hub, wanted, memory, records)
+    plans = _plan_slices(wanted, memory, records)
+    visible = _message_ids(plans)
+    tails = await _memory_event_tails(hub, visible)
+    messages = await _latest_messages(hub, visible, records, tails)
+    slices = await _apply_plans(hub, plans, messages)
     return HubInboxSnapshot(slices=slices, memory_scans=memory.scans)
 
 
@@ -73,7 +76,6 @@ class _MemoryState:
         "pending",
         "failed",
         "completed",
-        "event_tails",
         "scans",
     )
 
@@ -83,19 +85,26 @@ class _MemoryState:
         self.pending: dict[int, list[str] | None] = {}
         self.failed: dict[int, list[str] | None] = {}
         self.completed: dict[int, list[str] | None] = {}
-        self.event_tails: dict[str, dict[str, Any]] = {}
         self.scans = 0
 
 
-async def _scan_memory(hub: InboxHub, wanted: list[int]) -> _MemoryState:
+async def _scan_memory(
+    hub: InboxHub, wanted: list[int]
+) -> tuple[_MemoryState, dict[str, dict[str, Any]]]:
     wanted_set = set(wanted)
     state = _MemoryState(wanted)
+    records: dict[str, dict[str, Any]] = {}
     async with hub._lock:
         state.scans = 1
         for record in hub._records.values():
             server_id = int(record.get("server_id") or 0)
-            if server_id in wanted_set:
-                state.grouped[server_id].append(dict(record))
+            if server_id not in wanted_set:
+                continue
+            operation_id = str(record.get("operation_id") or "")
+            if not operation_id:
+                continue
+            records[operation_id] = dict(record)
+            state.grouped[server_id].append(operation_id)
         for server_id in wanted:
             state.current[server_id] = (
                 hub._current[server_id] if server_id in hub._current else None
@@ -109,10 +118,7 @@ async def _scan_memory(hub: InboxHub, wanted: list[int]) -> _MemoryState:
             state.completed[server_id] = (
                 list(hub._completed[server_id]) if server_id in hub._completed else None
             )
-        for operation_id, events in hub._events.items():
-            if events:
-                state.event_tails[operation_id] = events[-1]
-    return state
+    return state, records
 
 
 async def _fill_missing_indexes(hub: InboxHub, wanted: list[int], state: _MemoryState) -> None:
@@ -162,13 +168,8 @@ async def _load_records(
     hub: InboxHub,
     wanted: list[int],
     state: _MemoryState,
+    records: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    records: dict[str, dict[str, Any]] = {}
-    for extras in state.grouped.values():
-        for record in extras:
-            operation_id = str(record.get("operation_id") or "")
-            if operation_id:
-                records[operation_id] = record
     needed: list[str] = []
     for server_id in wanted:
         for operation_id in _index_ids(state, server_id):
@@ -197,21 +198,34 @@ def _index_ids(state: _MemoryState, server_id: int) -> list[str]:
     return ids
 
 
+async def _memory_event_tails(
+    hub: InboxHub, operation_ids: Sequence[str]
+) -> dict[str, dict[str, Any]]:
+    tails: dict[str, dict[str, Any]] = {}
+    async with hub._lock:
+        for operation_id in operation_ids:
+            events = hub._events.get(operation_id)
+            if events:
+                tails[operation_id] = events[-1]
+    return tails
+
+
 async def _latest_messages(
     hub: InboxHub,
+    operation_ids: Sequence[str],
     records: dict[str, dict[str, Any]],
     event_tails: dict[str, dict[str, Any]],
 ) -> dict[str, str | None]:
     messages: dict[str, str | None] = {}
     need_redis: dict[str, str] = {}
-    for operation_id in records:
+    for operation_id in operation_ids:
         text = last_event_text([event_tails[operation_id]] if operation_id in event_tails else None)
         if text:
             messages[operation_id] = text
             continue
         need_redis[operation_id] = hub._events_key(operation_id)
     stored = await read_latest_messages(hub._history_redis, need_redis)
-    for operation_id in records:
+    for operation_id in operation_ids:
         if operation_id in messages:
             continue
         messages[operation_id] = stored.get(operation_id) or record_message(
@@ -223,26 +237,16 @@ async def _latest_messages(
 def _assemble_active(
     current_id: str | None,
     pending_ids: list[str],
-    extras: list[dict[str, Any]],
+    extras: list[str],
     records: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     seen: set[str] = set()
-    if current_id:
-        record = records.get(current_id)
-        if record:
-            items.append(dict(record))
-            seen.add(current_id)
-    for operation_id in pending_ids:
-        if operation_id in seen:
+    for operation_id in [current_id or "", *pending_ids, *extras]:
+        if not operation_id or operation_id in seen:
             continue
         record = records.get(operation_id)
-        if record:
-            items.append(dict(record))
-            seen.add(operation_id)
-    for record in extras:
-        operation_id = str(record.get("operation_id") or "")
-        if not operation_id or operation_id in seen:
+        if record is None:
             continue
         items.append(record)
         seen.add(operation_id)
@@ -268,14 +272,46 @@ def _active_rows(
     return rows
 
 
-def _retained_rows(
+class _ServerPlan:
+    __slots__ = (
+        "server_id",
+        "assembled",
+        "failed_items",
+        "completed_items",
+        "failed_expired",
+        "completed_expired",
+        "failed_fallback",
+        "completed_fallback",
+    )
+
+    def __init__(
+        self,
+        server_id: int,
+        assembled: list[dict[str, Any]],
+        failed_items: list[dict[str, Any]],
+        completed_items: list[dict[str, Any]],
+        failed_expired: set[str],
+        completed_expired: set[str],
+        failed_fallback: list[str],
+        completed_fallback: list[str],
+    ) -> None:
+        self.server_id = server_id
+        self.assembled = assembled
+        self.failed_items = failed_items
+        self.completed_items = completed_items
+        self.failed_expired = failed_expired
+        self.completed_expired = completed_expired
+        self.failed_fallback = failed_fallback
+        self.completed_fallback = completed_fallback
+
+
+def _partition_retained(
     operation_ids: list[str],
     records: dict[str, dict[str, Any]],
-    messages: dict[str, str | None],
     *,
     status: str,
     cutoff: datetime,
-) -> tuple[list[InboxRecordRow], set[str], list[str]]:
+) -> tuple[list[dict[str, Any]], set[str], list[str]]:
     kept: list[str] = []
     items: list[dict[str, Any]] = []
     for operation_id in operation_ids:
@@ -291,73 +327,120 @@ def _retained_rows(
         key=lambda item: str(item.get("completed_at") or item.get("started_at") or ""),
         reverse=True,
     )
-    rows = [
-        InboxRecordRow(
-            record=item,
-            latest_message=messages.get(str(item["operation_id"])),
-            queue_position=0,
-        )
-        for item in items
-    ]
-    expired = set(operation_ids) - set(kept)
-    return rows, expired, operation_ids
+    return items, set(operation_ids) - set(kept), operation_ids
 
 
-async def _build_slices(
-    hub: InboxHub,
+def _plan_slices(
     wanted: list[int],
     state: _MemoryState,
     records: dict[str, dict[str, Any]],
-    messages: dict[str, str | None],
-) -> dict[int, ServerInboxSlice]:
+) -> list[_ServerPlan]:
     now = datetime.now(timezone.utc)
     failed_cutoff = now - timedelta(seconds=FAILED_RETENTION_SECONDS)
     completed_cutoff = now - timedelta(seconds=COMPLETED_RETENTION_SECONDS)
-    slices: dict[int, ServerInboxSlice] = {}
+    plans: list[_ServerPlan] = []
     for server_id in wanted:
         assembled = _assemble_active(
             state.current.get(server_id),
             list(state.pending.get(server_id) or []),
-            state.grouped.get(server_id) or [],
+            list(state.grouped.get(server_id) or []),
             records,
         )
-        failed_rows, failed_expired, failed_fallback = _retained_rows(
+        failed_items, failed_expired, failed_fallback = _partition_retained(
             list(state.failed.get(server_id) or []),
             records,
-            messages,
             status="failed",
             cutoff=failed_cutoff,
         )
-        completed_rows, completed_expired, completed_fallback = _retained_rows(
+        completed_items, completed_expired, completed_fallback = _partition_retained(
             list(state.completed.get(server_id) or []),
             records,
-            messages,
             status="completed",
             cutoff=completed_cutoff,
         )
+        plans.append(
+            _ServerPlan(
+                server_id,
+                assembled,
+                failed_items,
+                completed_items,
+                failed_expired,
+                completed_expired,
+                failed_fallback,
+                completed_fallback,
+            )
+        )
+    return plans
+
+
+def _message_ids(plans: list[_ServerPlan]) -> list[str]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    for plan in plans:
+        for record in (
+            *[item for item in plan.assembled if item.get("status") in ACTIVE_STATUSES],
+            *plan.failed_items,
+            *plan.completed_items,
+        ):
+            operation_id = str(record.get("operation_id") or "")
+            if not operation_id or operation_id in seen:
+                continue
+            seen.add(operation_id)
+            ids.append(operation_id)
+    return ids
+
+
+def _rows_for(
+    items: list[dict[str, Any]],
+    messages: dict[str, str | None],
+    *,
+    queued_positions: bool,
+) -> list[InboxRecordRow]:
+    rows: list[InboxRecordRow] = []
+    for position, record in enumerate(items):
+        operation_id = str(record["operation_id"])
+        rows.append(
+            InboxRecordRow(
+                record=record,
+                latest_message=messages.get(operation_id),
+                queue_position=(
+                    position if queued_positions and record.get("status") == "queued" else 0
+                ),
+            )
+        )
+    return rows
+
+
+async def _apply_plans(
+    hub: InboxHub,
+    plans: list[_ServerPlan],
+    messages: dict[str, str | None],
+) -> dict[int, ServerInboxSlice]:
+    slices: dict[int, ServerInboxSlice] = {}
+    for plan in plans:
         await reconcile_retained_index(
             redis=hub._history_redis,
             lock=hub._lock,
-            server_id=server_id,
+            server_id=plan.server_id,
             cache=hub._failed,
-            redis_key=hub._failed_key(server_id),
+            redis_key=hub._failed_key(plan.server_id),
             persister=hub._persist_failed,
-            expired=failed_expired,
-            fallback=failed_fallback,
+            expired=plan.failed_expired,
+            fallback=plan.failed_fallback,
         )
         await reconcile_retained_index(
             redis=hub._history_redis,
             lock=hub._lock,
-            server_id=server_id,
+            server_id=plan.server_id,
             cache=hub._completed,
-            redis_key=hub._completed_key(server_id),
+            redis_key=hub._completed_key(plan.server_id),
             persister=hub._persist_completed,
-            expired=completed_expired,
-            fallback=completed_fallback,
+            expired=plan.completed_expired,
+            fallback=plan.completed_fallback,
         )
-        slices[server_id] = ServerInboxSlice(
-            active=_active_rows(assembled, messages),
-            failed=failed_rows,
-            completed=completed_rows,
+        slices[plan.server_id] = ServerInboxSlice(
+            active=_active_rows(plan.assembled, messages),
+            failed=_rows_for(plan.failed_items, messages, queued_positions=False),
+            completed=_rows_for(plan.completed_items, messages, queued_positions=False),
         )
     return slices

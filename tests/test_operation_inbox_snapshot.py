@@ -10,6 +10,7 @@ import pytest
 
 from services.operations.inbox_messages import REDIS_BATCH
 from services.operations.inbox_snapshot import collect_hub_snapshot
+from services.server_operation_history import merge_retained_ids
 from services.server_operation_hub import ServerOperationHub
 
 
@@ -79,6 +80,14 @@ class GuardedEvents(list):
 
     def copy(self):
         raise AssertionError("inbox snapshot must not copy event history")
+
+
+class ForeignEvents(dict):
+    def items(self):
+        raise AssertionError("inbox snapshot must not walk unrelated event histories")
+
+    def values(self):
+        raise AssertionError("inbox snapshot must not walk unrelated event histories")
 
 
 def _record(operation_id, *, status="queued", server_id=1, **extra):
@@ -220,4 +229,71 @@ async def test_snapshot_prune_keeps_ids_added_during_read(hub):
     snapshot = await collect_hub_snapshot(instance, [1])
     assert snapshot.slices[1].failed == []
     assert instance._failed[1] == ["new"]
+    instance._persist_failed.assert_awaited()
+
+
+def test_merge_retained_ids_keeps_live_adds_and_persisted_order():
+    assert merge_retained_ids(["old", "new"], ["old"], ["old"]) == ["old", "new"]
+    assert merge_retained_ids([], ["live"], ["fallback"]) == ["live"]
+    assert merge_retained_ids([], [], ["fallback"]) == ["fallback"]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_does_not_walk_unrelated_event_histories(hub):
+    instance, redis = hub
+    record = _record("live", status="running")
+    instance._records["live"] = record
+    instance._current[1] = "live"
+    instance._pending[1] = []
+    instance._failed[1] = []
+    instance._completed[1] = []
+    instance._events = ForeignEvents(
+        {
+            "other": GuardedEvents([{"message": "other server"}]),
+            "live": GuardedEvents([{"message": "Extracting archive"}]),
+        }
+    )
+    snapshot = await collect_hub_snapshot(instance, [1])
+    assert snapshot.slices[1].active[0].latest_message == "Extracting archive"
+    assert redis.lrange_calls == []
+
+
+@pytest.mark.asyncio
+async def test_snapshot_skips_event_reads_for_expired_history(hub):
+    instance, redis = hub
+    expired_at = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+    old = _record("old", status="failed", completed_at=expired_at)
+    instance._records["old"] = old
+    instance._current[1] = None
+    instance._pending[1] = []
+    instance._failed[1] = ["old"]
+    instance._completed[1] = []
+    redis.store[instance._failed_key(1)] = ["old"]
+    snapshot = await collect_hub_snapshot(instance, [1])
+    assert snapshot.slices[1].failed == []
+    assert redis.lrange_calls == []
+
+
+@pytest.mark.asyncio
+async def test_snapshot_prune_keeps_ids_added_while_redis_is_read(hub):
+    instance, redis = hub
+    expired_at = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+    old = _record("old", status="failed", completed_at=expired_at)
+    instance._records["old"] = old
+    instance._current[1] = None
+    instance._pending[1] = []
+    instance._failed[1] = ["old"]
+    instance._completed[1] = []
+
+    async def _get(key: str):
+        if key == instance._failed_key(1):
+            instance._failed[1].append("concurrent")
+            return ["old", "new"]
+        return redis.store.get(key)
+
+    redis.get = AsyncMock(side_effect=_get)
+    redis.store[instance._failed_key(1)] = ["old", "new"]
+    snapshot = await collect_hub_snapshot(instance, [1])
+    assert snapshot.slices[1].failed == []
+    assert instance._failed[1] == ["new", "concurrent"]
     instance._persist_failed.assert_awaited()
