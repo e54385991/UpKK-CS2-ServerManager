@@ -272,8 +272,17 @@ is **not** a 20% gate:
 | servers | 318.414 | 5.43 ms | 5.66 ms | 2311 / 2312 |
 
 HEAD SHA at those smokes: `1fb6942`. Inbox and servers miss open-loop
-slots. Same-protocol 60 s / 300 s × 3 on this seed is next.
-`claimed_gains` stays **false**.
+slots. Same-protocol inbox **baseline** (60 s + 300 s × 3, 0 errors,
+8.937 rps reused):
+
+| Tree | median p95 | round p95 | samples |
+| --- | ---: | --- | ---: |
+| starting | **406 ms** | 404 / 406 / 407 | 3315 |
+| HEAD `7c7cb2d` | **413 ms** | 411 / 413 / 414 | 3246 |
+
+Inbox 20% gate: **fail** (−1.8%). Still inside `max(5%, 20 ms)`
+(limit 426 ms). `claimed_gains` stays **false**. Overview / market /
+servers 60 s / 300 s × 3 on this seed are next.
 
 ### Still open on this host
 
@@ -281,8 +290,9 @@ slots. Same-protocol 60 s / 300 s × 3 on this seed is next.
   recorded above (all missed 20%; mixed market/servers/inbox also
   outside the 5%/20 ms envelope). Realtime 15 s smoke is in (0 SSE
   events at pool size 10). Fleet-500 soak RSS missed +5%.
-- Fleet-100 smoke pair is recorded; fleet-100 then fleet-10
-  60 s / 300 s × 3, mixed, realtime, browser, `check_baseline`
+- Fleet-100 smoke pair and inbox 60 s / 300 s × 3 are recorded
+  (−1.8%, fail 20%). Overview / market / servers, then fleet-10,
+  mixed, realtime, browser, `check_baseline`
 - Production browser 5 / 30 × 3
 - `fleet-1000` / `fleet-1001` isolated seed (unit tests already assert
   the 1000-row cap; seed after 10 / 100)
@@ -704,8 +714,9 @@ Fleet-500 same-protocol 60 s / 300 s × 3 on isolated `55442` / `56389`
 - Bundle budgets and `cacheComponents` / `partialPrefetching` unchanged
 - 60-minute fleet-500 soak on HEAD: **RSS fail** (934 MiB after first
   load window → 1731 MiB at 60 min, +85%, gate +5%). HTTP 0 errors.
-  Fleet-100 smoke pair (10 s, 0 errors) is recorded; same-protocol
-  60 s / 300 s × 3 is next. Then fleet-10, production browser 5 / 30 × 3,
+  Fleet-100 smoke pair (10 s, 0 errors) and inbox 60 s / 300 s × 3
+  (−1.8%, fail 20%) are recorded. Overview / market / servers baselines
+  are next, then fleet-10, production browser 5 / 30 × 3,
   `check_baseline`, and the interactive tray / install / assistant /
   files pass.
 
