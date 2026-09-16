@@ -13,6 +13,25 @@
 > [1Panel quick deployment](docs/1PANEL_QUICKSTART.md) is also supported. See
 > the [full documentation](docs/README.md) for more information.
 
+
+## Install prerequisites
+
+Update the package index and make sure `curl` is installed:
+
+```bash
+sudo apt update && sudo apt install -y curl
+```
+
+## Docker quick deployment
+
+Use a fresh **Ubuntu 24.04+** or **Debian 13+** host for the management panel.
+Run the following command as a user with `sudo` privileges:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-quickstart.sh | bash
+```
+
+
 ## Overview
 
 CS2 Server Manager is a modern, web-based **multi-server management panel for
@@ -101,22 +120,6 @@ An illustrated walkthrough is available in the console at
 `/deployment-tutorial` (also linked from Overview) and in
 [docs/ALIYUN_ECS_DEPLOY.md](docs/ALIYUN_ECS_DEPLOY.md).
 
-## Install prerequisites
-
-Update the package index and make sure `curl` is installed:
-
-```bash
-sudo apt update && sudo apt install -y curl
-```
-
-## Docker quick deployment
-
-Use a fresh **Ubuntu 24.04+** or **Debian 13+** host for the management panel.
-Run the following command as a user with `sudo` privileges:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-quickstart.sh | bash
-```
 
 Run the same command again to upgrade: it pulls the current `latest` images and
 recreates services whose configuration or image changed, while preserving `.env`
