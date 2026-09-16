@@ -69,3 +69,8 @@ export function subscribeLinkPending(listener: () => void) {
 export function getLinkPendingHref() {
   return pendingHref;
 }
+
+/** True while click-capture has marked this href, even after the router commits. */
+export function isCapturedLinkPending(href: string, pendingHref: string | null) {
+  return pendingHref === href;
+}

@@ -7,6 +7,7 @@ import {
   clearLinkPending,
   ensureLinkPendingCapture,
   getLinkPendingHref,
+  isCapturedLinkPending,
   subscribeLinkPending,
 } from "@/shared/ui/nav-pending";
 
@@ -15,13 +16,15 @@ import {
  * `pending` cannot shift the label; `useLinkStatus` only works in a
  * descendant of `Link`. A document capturing listener marks the target on
  * click, including Playwright's programmatic `HTMLAnchorElement.click()`.
+ * Keep that mark after the App Router commits the destination pathname in
+ * the same click (`loading.tsx` / streamed pages); the effect clears it.
  */
 export function LinkPendingHint({ href }: { href: string }) {
   const { pending } = useLinkStatus();
   const pathname = usePathname();
   const optimistic = useSyncExternalStore(
     subscribeLinkPending,
-    () => getLinkPendingHref() === href && pathname !== href,
+    () => isCapturedLinkPending(href, getLinkPendingHref()),
     () => false,
   );
   useEffect(() => {

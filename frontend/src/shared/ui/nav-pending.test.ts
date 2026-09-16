@@ -4,6 +4,7 @@ import {
   clearLinkPending,
   ensureLinkPendingCapture,
   getLinkPendingHref,
+  isCapturedLinkPending,
   markLinkPending,
   subscribeLinkPending,
 } from "./nav-pending.ts";
@@ -25,4 +26,11 @@ test("markLinkPending replaces the previous target and notifies listeners", () =
   clearLinkPending("/servers/1/console");
   assert.equal(getLinkPendingHref(), null);
   unsubscribe();
+});
+
+test("captured pending stays true after the router commits the same href", () => {
+  clearLinkPending();
+  markLinkPending("/servers/1/files");
+  assert.equal(isCapturedLinkPending("/servers/1/files", getLinkPendingHref()), true);
+  assert.equal(isCapturedLinkPending("/servers/1/console", getLinkPendingHref()), false);
 });
