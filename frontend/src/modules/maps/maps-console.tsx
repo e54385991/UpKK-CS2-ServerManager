@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
+  Info,
   Map as MapIcon,
   Plus,
   RefreshCw,
@@ -23,6 +25,8 @@ import {
 } from "@/modules/maps/actions";
 import {
   groupPluginFields,
+  mapchooserMarketHref,
+  MAPCHOOSER_PLUGIN_NAME,
   pluginGroupLabel,
   valuesFromWorkspace,
 } from "@/modules/maps/maps-helpers";
@@ -96,6 +100,10 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
 
   const canMutate = workspace.ready && Boolean(workspace.revision) && !pending;
   const serverId = workspace.serverId;
+  const marketHref = mapchooserMarketHref(
+    serverId,
+    workspace.pluginCenterName,
+  );
   const identity = (entry: MapEntry) => ({
     name: entry.name,
     workshopId: entry.workshopId,
@@ -139,6 +147,19 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
 
       <StatusBar workspace={workspace} />
       <p className="text-sm text-fg-muted">{t("pageHelp")}</p>
+      <p className="flex items-start gap-2 rounded-md border border-info/30 bg-info-muted/30 px-3 py-2 text-sm text-fg-muted">
+        <Info className="mt-0.5 size-4 shrink-0 text-info" />
+        <span>
+          {t("pluginSupportBefore")}
+          <Link
+            href={marketHref}
+            className="font-semibold text-primary underline-offset-2 hover:underline"
+          >
+            {workspace.pluginCenterName ?? MAPCHOOSER_PLUGIN_NAME}
+          </Link>
+          {t("pluginSupportAfter")}
+        </span>
+      </p>
 
       <form
         onSubmit={(event) => {

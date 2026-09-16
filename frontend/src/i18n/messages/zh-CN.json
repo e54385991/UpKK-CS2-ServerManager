@@ -1958,6 +1958,8 @@
     "statusTitle": "MapChooser 状态",
     "statusHelp": "管理地图池需要 SSH、CounterStrikeSharp 和 MapChooser。SSH 断开时页面仍可打开。",
     "pageHelp": "管理 CS2-Upkk-PanelPLG-Mapchooser 地图池，并快速添加 Steam 创意工坊地图。",
+    "pluginSupportBefore": "只有插件中心的 ",
+    "pluginSupportAfter": " 支持。",
     "sshOk": "SSH 正常",
     "sshDown": "SSH 断开",
     "sshDownHelp": "现在连不上这台主机。请先用上方的「手动重连」。地图池改动需要 SSH，远程同步地址仍可先保存。",

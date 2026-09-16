@@ -4,7 +4,10 @@ import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { Trash2 } from "lucide-react";
-import { pluginFieldKey } from "@/modules/maps/maps-helpers";
+import {
+  mapchooserMarketHref,
+  pluginFieldKey,
+} from "@/modules/maps/maps-helpers";
 import type { MapEntry, MapPluginField, MapsWorkspace } from "@/modules/maps/types";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -171,8 +174,10 @@ export function PluginFieldInput({
 
 export function StatusBar({ workspace }: { workspace: MapsWorkspace }) {
   const t = useTranslations("maps");
-  const marketHref =
-    `/plugins?q=${encodeURIComponent(workspace.pluginCenterName || "MapChooser")}&serverId=${workspace.serverId}` as Route;
+  const marketHref = mapchooserMarketHref(
+    workspace.serverId,
+    workspace.pluginCenterName,
+  );
   const operationsHref = `/servers/${workspace.serverId}/operations` as Route;
   const blocked =
     !workspace.sshOk || !workspace.counterStrikeSharpInstalled || !workspace.mapchooserInstalled;

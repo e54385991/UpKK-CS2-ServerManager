@@ -1958,6 +1958,8 @@
     "statusTitle": "MapChooser status",
     "statusHelp": "The pool needs SSH, CounterStrikeSharp, and MapChooser. The page still opens when SSH is down.",
     "pageHelp": "Manage the CS2-Upkk-PanelPLG-Mapchooser map pool and quickly add Steam Workshop maps.",
+    "pluginSupportBefore": "Only ",
+    "pluginSupportAfter": " from the plugin center is supported.",
     "sshOk": "SSH reachable",
     "sshDown": "SSH down",
     "sshDownHelp": "This host is unreachable. Use Reconnect above first. Pool edits need SSH; you can still save a remote sync URL.",
