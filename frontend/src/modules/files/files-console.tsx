@@ -40,6 +40,8 @@ const FilesUploadDock = dynamic(() =>
 const FilesListing = dynamic(
   () => import("@/modules/files/files-listing").then((mod) => mod.FilesListing),
   {
+    // Skip SSR so Playwright and users cannot click a painted table before handlers exist.
+    ssr: false,
     loading: () => (
       <div
         data-testid="files-dropzone"

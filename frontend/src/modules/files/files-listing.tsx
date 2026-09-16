@@ -320,6 +320,7 @@ function FilesListingView({
                         variant="ghost"
                         disabled={!canMutate}
                         aria-label={t("rename")}
+                        data-testid={`files-rename-${entry.name}`}
                         onClick={() => onRename(entry)}
                       >
                         <FileText />

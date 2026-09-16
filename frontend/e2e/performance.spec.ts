@@ -180,9 +180,10 @@ for (const locale of ['en-US', 'zh-CN']) {
     const m = locale === 'en-US' ? en : zh;
     await request.post(`${mock}/__test__/reset`); await login(context, 'admin', locale);
     await page.goto('/servers/1/files');
+    await expect(page.getByTestId('files-dropzone')).not.toHaveAttribute('aria-busy', 'true');
     const row = page.getByRole('row').filter({ has: page.getByText('server.cfg', { exact: true }) });
-    await row.getByRole('button', { name: m.files.rename, exact: true }).click();
-    await expect(page.getByRole('dialog').getByRole('textbox')).toHaveValue('server.cfg');
+    await row.getByTestId('files-rename-server.cfg').click();
+    await expect(page.getByTestId('files-rename-input')).toHaveValue('server.cfg');
     await page.keyboard.press('Escape');
     await row.getByRole('button', { name: m.files.edit, exact: true }).click();
     const editor = page.locator('.cm-content');
