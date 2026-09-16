@@ -17,6 +17,21 @@
 > 同时支持 [1Panel 快速部署](docs/1PANEL_QUICKSTART.md)，更多内容见
 > [完整文档](docs/README.md)。
 
+## 先更新下软件包 和 确保 CURL存在
+
+```bash
+sudo apt update && sudo apt install -y curl
+```
+
+## Docker 快速部署
+
+适用于全新的 **Ubuntu 24.04+** 或 **Debian 13+** 管理端主机。使用具有 `sudo`
+权限的用户执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-quickstart.sh | bash
+```
+
 ## 项目说明
 
 CS2 Server Manager 是一个现代化的 **Counter-Strike 2 多服务器 Web 管理面板**。
@@ -89,21 +104,6 @@ CS2 Server Manager 是一个现代化的 **Counter-Strike 2 多服务器 Web 管
 
 控制台内的图文教程在 `/deployment-tutorial`（总览页也有入口），文档版见
 [docs/ALIYUN_ECS_DEPLOY.md](docs/ALIYUN_ECS_DEPLOY.md)。
-
-## 先更新下软件包 和 确保 CURL存在
-
-```bash
-sudo apt update && sudo apt install -y curl
-```
-
-## Docker 快速部署
-
-适用于全新的 **Ubuntu 24.04+** 或 **Debian 13+** 管理端主机。使用具有 `sudo`
-权限的用户执行：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-quickstart.sh | bash
-```
 
 升级时可以再次执行同一条命令：脚本会拉取最新的 `latest` 镜像，并按配置或镜像
 变化重建需要更新的服务，同时保留 `.env` 和 Docker 数据卷。
