@@ -23,7 +23,7 @@ def inbox_item_lists_equal(left: Sequence[InboxItemData], right: Sequence[InboxI
 
 
 def inbox_payloads_equal(left: InboxPayload, right: InboxPayload) -> bool:
-    """Compare messages, commands, positions, results, imports, and retention."""
+    """Compare messages, commands, positions, results, plugin jobs, and retention."""
     return (
         left.completed_retention_days == right.completed_retention_days
         and left.failed_retention_days == right.failed_retention_days
@@ -31,4 +31,5 @@ def inbox_payloads_equal(left: InboxPayload, right: InboxPayload) -> bool:
         and inbox_item_lists_equal(left.completed_items, right.completed_items)
         and inbox_item_lists_equal(left.failed_items, right.failed_items)
         and left.import_jobs == right.import_jobs
+        and left.description_jobs == right.description_jobs
     )

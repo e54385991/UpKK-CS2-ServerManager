@@ -155,34 +155,11 @@ export type MarketPluginUpdateInput = {
   readonly installation?: components["schemas"]["InstallationConfig"];
 };
 
-export const DESCRIPTION_SYNC_ACTIONS = [
-  "updated",
-  "unchanged",
-  "skipped",
-  "failed",
-] as const;
-
-export type DescriptionSyncAction = (typeof DESCRIPTION_SYNC_ACTIONS)[number];
-
-export type DescriptionSyncItem = {
-  readonly pluginId: number;
-  readonly title: string;
-  readonly githubUrl: string;
-  readonly action: DescriptionSyncAction;
-  readonly message: string | null;
-};
-
-export type DescriptionSyncSummary = {
-  readonly total: number;
-  readonly updated: number;
-  readonly unchanged: number;
-  readonly skipped: number;
-  readonly failed: number;
-  readonly remaining: number;
-  readonly items: readonly DescriptionSyncItem[];
-};
+export type DescriptionSyncJob =
+  components["schemas"]["MarketPluginDescriptionSyncView"];
 
 export type DescriptionSyncInput = {
+  readonly requestId: string;
   readonly framework?: PluginFrameworkSection;
   readonly overwrite?: boolean;
   readonly pluginIds?: readonly number[];

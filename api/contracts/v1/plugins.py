@@ -217,6 +217,7 @@ class MarketPluginBulkDeleteRequest(ApiRequest):
 class MarketPluginDescriptionSyncRequest(ApiRequest):
     """Administrator request to refresh descriptions from GitHub READMEs."""
 
+    request_id: UUID
     plugin_ids: list[int] = Field(default_factory=list, max_length=200)
     framework: PluginFrameworkLiteral | None = None
     """Exact section match: syncing ``counterstrikesharp`` skips ``other``."""
@@ -241,18 +242,30 @@ class MarketPluginDescriptionSyncItemView(V1Model):
 
 
 class MarketPluginDescriptionSyncView(V1Model):
-    """Summary of a marketplace description sync.
+    """Persistent job snapshot for one marketplace description sync."""
 
-    ``remaining`` is non-zero when the marketplace holds more listings than one
-    request refreshes; run the sync again to continue.
-    """
-
+    operation_id: str
+    status: Literal["queued", "running", "waiting", "completed", "failed", "cancelled"]
+    command: str
+    framework: PluginFrameworkLiteral | None = None
+    overwrite: bool
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    phase: str
+    message: str
+    current_plugin_id: int | None = None
+    current_plugin_title: str | None = None
+    current_github_url: str | None = None
+    stop_reason: str | None = None
+    retry_at: int | None = None
+    cancel_requested: bool
     total: int
+    processed: int
     updated: int
     unchanged: int
     skipped: int
     failed: int
-    remaining: int = 0
     items: list[MarketPluginDescriptionSyncItemView] = Field(default_factory=list)
 
 

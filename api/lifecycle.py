@@ -223,6 +223,13 @@ class ApplicationLifecycle:
             await self._start_service(
                 "plugin AI imports", plugin_import_worker.start, plugin_import_worker.stop
             )
+            from services.plugins.description_sync_worker import description_sync_worker
+
+            await self._start_service(
+                "plugin description syncs",
+                description_sync_worker.start,
+                description_sync_worker.stop,
+            )
             from services.panel_monitor import start_panel_monitor, stop_panel_monitor
 
             await self._start_service(

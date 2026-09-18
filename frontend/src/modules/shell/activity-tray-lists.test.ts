@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { OperationInbox, OperationInboxItem } from "../servers/types.ts";
-import { deriveActivityLists } from "./activity-tray-lists.ts";
+import {
+  countActiveMarketTasks,
+  countFailedMarketTasks,
+  deriveActivityLists,
+} from "./activity-tray-lists.ts";
 
 function item(overrides: Partial<OperationInboxItem> & Pick<OperationInboxItem, "operationId" | "status">): OperationInboxItem {
   return {
@@ -75,5 +79,10 @@ describe("deriveActivityLists", () => {
       new Set(["gone"]),
     );
     assert.deepEqual(lists.queue.map((entry) => entry.operationId), ["r", "q"]);
+  });
+
+  it("keeps marketplace counts reusable for each job family", () => {
+    assert.equal(countActiveMarketTasks([{ status: "waiting" }, { status: "failed" }]), 1);
+    assert.equal(countFailedMarketTasks([{ status: "waiting" }, { status: "failed" }]), 1);
   });
 });

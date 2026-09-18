@@ -12,6 +12,8 @@ import {
 } from "@/modules/plugins/ai-import-actions";
 import { AIImportUsage } from "@/modules/plugins/ai-import-usage";
 import { latestSubmittedAIImport } from "@/modules/plugins/ai-import-activity";
+import { DescriptionSyncTasks } from "@/modules/plugins/description-sync-tasks";
+import type { DescriptionSyncJob } from "@/modules/plugins/types";
 import { Button } from "@/shared/ui/button";
 import { confirm, notify } from "@/shared/feedback";
 import { subscribeVisibleEventSource } from "@/shared/lib/visible-event-source";
@@ -19,11 +21,20 @@ import { subscribeVisiblePoll } from "@/shared/lib/visible-poll";
 import { Eraser, LoaderCircle } from "lucide-react";
 
 type Task = components["schemas"]["PluginAIImportView"];
+type MarketTask = Task | DescriptionSyncJob;
 const active = (task: Task) => task.status === "queued" || task.status === "running";
 const completed = (task: Task) => task.status === "completed" || task.status === "cancelled";
 const queueVisible = (task: Task) => active(task) || task.status === "failed";
 
-export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] }) {
+export function AIImportTasks({
+  initialTasks,
+}: {
+  initialTasks: readonly MarketTask[];
+}) {
+  const initialAiTasks = initialTasks.filter((task): task is Task => "options" in task);
+  const initialDescriptionTasks = initialTasks.filter(
+    (task): task is DescriptionSyncJob => "processed" in task,
+  );
   const t = useTranslations("plugins.aiImport");
   const statusLabel = (value: string) => {
     const key = (["queued", "running", "completed", "cancelled", "failed", "imported", "skipped"] as const).find(key => key === value);
@@ -33,10 +44,10 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
     const key = (["queued", "starting", "searching", "filtering", "reading", "analyzing", "importing", "skipped", "failed_item", "completed", "stopped", "rate_limited", "failed", "cancelled"] as const).find(key => key === value);
     return key ? t(`phase.${key}`) : value;
   };
-  const [tasks, setTasks] = useState<Task[]>([...initialTasks]);
-  const [selected, setSelected] = useState<Task | null>(() => latestSubmittedAIImport() ?? initialTasks[0] ?? null);
+  const [tasks, setTasks] = useState<Task[]>([...initialAiTasks]);
+  const [selected, setSelected] = useState<Task | null>(() => latestSubmittedAIImport() ?? initialAiTasks[0] ?? null);
   const [tab, setTab] = useState<"queue" | "completed">(
-    initialTasks.some(queueVisible) ? "queue" : "completed",
+    initialAiTasks.some(queueVisible) ? "queue" : "completed",
   );
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
@@ -71,7 +82,7 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
       window.removeEventListener("plugin-ai-import-submitted", onSubmit);
       window.removeEventListener("plugin-ai-import-refresh", onRefresh);
     };
-  }, [initialTasks.length]);
+  }, [initialAiTasks.length]);
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const discovery = selected ? [...selected.events].reverse().find(event => event.discovery)?.discovery : null;
@@ -123,7 +134,8 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
     notify.success(result.data.message || t("clearCompletedSuccess"));
     window.dispatchEvent(new Event("plugin-ai-import-refresh"));
   }
-  return <section className="max-h-80 overflow-y-auto border-b border-line p-4 text-sm">
+  return <>
+  {initialAiTasks.length > 0 ? <section className="max-h-80 overflow-y-auto border-b border-line p-4 text-sm">
     <div className="mb-2 flex items-center justify-between gap-2">
       <h3 className="font-semibold">{t("tasks")}</h3>
       {tab === "completed" && completedTasks.length > 0 ? <Button type="button" variant="ghost" size="sm" disabled={deleting} onClick={() => void clearCompleted()}><Eraser className="size-3.5" />{t("clearCompleted")}</Button> : null}
@@ -167,5 +179,9 @@ export function AIImportTasks({ initialTasks }: { initialTasks: readonly Task[] 
       <pre className="max-h-28 overflow-auto whitespace-pre-wrap text-xs text-fg-muted">{selected.events.filter(event => !event.token_usage).map(event => event.message).join("\n")}</pre>
     </div>}
     {error && <p role="alert" className="text-danger">{error}</p>}
-  </section>;
+  </section> : null}
+  {initialDescriptionTasks.length > 0 ? (
+    <DescriptionSyncTasks initialTasks={initialDescriptionTasks} />
+  ) : null}
+  </>;
 }

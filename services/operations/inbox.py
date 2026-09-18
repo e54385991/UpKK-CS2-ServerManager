@@ -10,6 +10,7 @@ from modules import Server
 from modules.database import async_session_maker
 from services.operations.inbox_types import InboxItemData, InboxPayload
 from services.plugins.ai_import_store import list_jobs
+from services.plugins.description_sync_store import list_jobs as list_description_jobs
 from services.server_operation_history import (
     COMPLETED_RETENTION_SECONDS,
     FAILED_RETENTION_SECONDS,
@@ -95,11 +96,13 @@ async def build_operation_inbox(
         reverse=True,
     )
     jobs = await list_jobs(active_only=True) if include_imports else []
+    description_jobs = await list_description_jobs() if include_imports else []
     return InboxPayload(
         items=items,
         completed_items=completed_items,
         failed_items=failed_items,
         import_jobs=jobs,
+        description_jobs=description_jobs,
         completed_retention_days=COMPLETED_RETENTION_SECONDS // 86400,
         failed_retention_days=FAILED_RETENTION_SECONDS // 86400,
     )

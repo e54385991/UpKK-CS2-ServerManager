@@ -160,12 +160,13 @@ HTTP request.
   （`swiftlys2`、`addons/swiftly`、`swiftly core` 等），不得用裸词 `swiftly`——它同时
   是英文副词，会把无关插件误判进 SwiftlyS2 分区。
 - 批量描述同步是 `POST /api/v1/plugins/market/descriptions/sync`（管理员）：
-  用仓库 README 覆盖 marketplace 描述。它只访问 GitHub、不做任何 SSH 操作，
-  因此**不进入**每服务器 FIFO，而是有界的同步 HTTP 调用——单次最多
-  `MAX_DESCRIPTION_SYNC_PLUGINS` 个插件、并发 `SYNC_CONCURRENCY`
-  （`services/plugins/description_sync.py`），剩余数量通过响应的 `remaining`
-  返回，由管理员再次触发。外部请求前必须先提交读事务，不得在 GitHub I/O 期间
-  持有请求数据库 session。
+  用仓库 README 覆盖 marketplace 描述。接口提交持久化的全局 FIFO 任务并立即
+  返回 `202`，由 `services/plugins/description_sync_worker.py` 串行执行：一次只处理
+  一个插件，README 请求之间至少间隔 2 秒。它只访问 GitHub、不做任何 SSH 操作，
+  因此**不进入**每服务器 FIFO，也不与插件安装队列共用 worker。任务进度、取消、
+  限流等待和断点恢复通过任务快照/SSE 与活动托盘暴露；GitHub `429` 或限流 `403`
+  不推进游标，等 `retry_at` 到点后自动继续。每个条目的描述、游标和计数在同一短事务
+  中提交，GitHub I/O 期间不得持有请求数据库 session。
 - **下载缓存**：面板代理下载的不可变压缩包（市场插件发行包，以及 Metamod:Source、
   CounterStrikeSharp、SwiftlyS2、CS2Fixes 运行时）先查本地缓存
   （`services/plugin_download_cache.py` + `services/plugins/download_reuse.py`）。

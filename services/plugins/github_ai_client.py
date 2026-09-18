@@ -120,14 +120,16 @@ def _retry_hint(error: Exception) -> float | None:
 class GitHubAIClient:
     def __init__(
         self,
-        token: str,
+        token: str | None,
         *,
         before_request: Callable[[], Awaitable[None]] | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         interval: float = 2.0,
         retry: BackgroundRetry | None = None,
+        require_token: bool = True,
     ) -> None:
-        if not token.strip():
+        normalized_token = (token or "").strip()
+        if require_token and not normalized_token:
             raise GitHubAuthenticationError("Configure the global GitHub token in Settings")
         self._retry = retry
         self._check = before_request
@@ -137,20 +139,22 @@ class GitHubAIClient:
         self._lock = asyncio.Lock()
         self._blocked: GitHubRateLimitError | None = None
         self._readmes: dict[str, ReadmeEvidence] = {}
+        headers = {
+            "Accept": "application/vnd.github+json",
+            # Some upstream proxies advertise gzip while returning an
+            # uncompressed body. Avoid client-side decompression failures.
+            "Accept-Encoding": "identity",
+            "User-Agent": "UpKK-CS2-ServerManager",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        if normalized_token:
+            headers["Authorization"] = f"Bearer {normalized_token}"
         self._client = httpx.AsyncClient(
             base_url="https://api.github.com",
             timeout=30,
             follow_redirects=False,
             transport=transport,
-            headers={
-                "Accept": "application/vnd.github+json",
-                # Some upstream proxies advertise gzip while returning an
-                # uncompressed body. Avoid client-side decompression failures.
-                "Accept-Encoding": "identity",
-                "Authorization": f"Bearer {token.strip()}",
-                "User-Agent": "UpKK-CS2-ServerManager",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
+            headers=headers,
         )
 
     async def close(self) -> None:

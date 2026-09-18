@@ -48,5 +48,6 @@ class InboxPayload:
     completed_items: list[InboxItemData]
     failed_items: list[InboxItemData]
     import_jobs: list[Any] = field(default_factory=list)
+    description_jobs: list[Any] = field(default_factory=list)
     completed_retention_days: int = 7
     failed_retention_days: int = 7

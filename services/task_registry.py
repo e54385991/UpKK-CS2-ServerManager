@@ -82,6 +82,7 @@ class BackgroundTaskRegistry:
 action_task_registry = BackgroundTaskRegistry("server actions")
 file_task_registry = BackgroundTaskRegistry("file operations")
 plugin_update_task_registry = BackgroundTaskRegistry("manual plugin updates")
+plugin_description_task_registry = BackgroundTaskRegistry("plugin description syncs")
 ai_task_registry = BackgroundTaskRegistry("AI assistant runs")
 discord_menu_task_registry = BackgroundTaskRegistry("Discord menu cleanup")
 
@@ -89,6 +90,7 @@ TASK_REGISTRIES = (
     action_task_registry,
     file_task_registry,
     plugin_update_task_registry,
+    plugin_description_task_registry,
     ai_task_registry,
     discord_menu_task_registry,
 )

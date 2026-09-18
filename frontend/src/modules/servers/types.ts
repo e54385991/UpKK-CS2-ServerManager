@@ -289,6 +289,7 @@ export type OperationInboxItem = ServerOperation & {
 
 export type OperationInbox = {
   readonly marketImportItems?: readonly components["schemas"]["PluginAIImportView"][];
+  readonly marketDescriptionItems?: readonly components["schemas"]["MarketPluginDescriptionSyncView"][];
   readonly items: readonly OperationInboxItem[];
   readonly completedItems: readonly OperationInboxItem[];
   readonly failedItems: readonly OperationInboxItem[];

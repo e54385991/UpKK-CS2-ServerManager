@@ -2468,6 +2468,38 @@
     "methods": [
       "GET"
     ],
+    "name": "get_market_description_sync",
+    "path": "/api/v1/plugins/market/descriptions/sync/{operation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "cancel_market_description_sync",
+    "path": "/api/v1/plugins/market/descriptions/sync/{operation_id}/cancel"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_market_description_sync",
+    "path": "/api/v1/plugins/market/descriptions/sync/{operation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "stream_market_description_sync",
+    "path": "/api/v1/plugins/market/descriptions/sync/{operation_id}/events"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "get_market_plugin",
     "path": "/api/v1/plugins/market/{plugin_id}"
   },

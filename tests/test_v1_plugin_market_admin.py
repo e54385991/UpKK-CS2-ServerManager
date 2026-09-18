@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from api.application import create_app
 from modules import get_current_active_user, get_current_user, get_db
 from modules.models.plugins import PluginCategory, PluginFramework
-from services.plugins.types import DescriptionSyncItem, DescriptionSyncResult
+from services.plugins.description_sync_store import DescriptionSyncJobSnapshot, now
 
 
 def _database_session():
@@ -50,6 +50,38 @@ def _sample_market(**overrides):
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+def _description_job(**overrides) -> DescriptionSyncJobSnapshot:
+    values = {
+        "operation_id": "11111111-1111-1111-1111-111111111111",
+        "actor_user_id": 1,
+        "status": "queued",
+        "command": "Sync plugin descriptions",
+        "framework": "counterstrikesharp",
+        "overwrite": True,
+        "created_at": now(),
+        "started_at": None,
+        "completed_at": None,
+        "phase": "queued",
+        "message": "Queued 2 plugin descriptions",
+        "current_plugin_id": None,
+        "current_plugin_title": None,
+        "current_github_url": None,
+        "stop_reason": None,
+        "retry_at": None,
+        "cancel_requested": False,
+        "target_ids": [11, 12],
+        "total": 2,
+        "processed": 0,
+        "updated": 0,
+        "unchanged": 0,
+        "skipped": 0,
+        "failed": 0,
+        "items": [],
+    }
+    values.update(overrides)
+    return DescriptionSyncJobSnapshot(**values)
 
 
 def _client(*, is_admin: bool = True):
@@ -225,74 +257,49 @@ def test_market_update_is_admin_only():
     assert response.status_code == 403
 
 
-def test_market_description_sync_returns_summary(monkeypatch):
+def test_market_description_sync_queues_job(monkeypatch):
     client, _user = _client()
-    sync = AsyncMock(
-        return_value=DescriptionSyncResult(
-            total=2,
-            updated=1,
-            unchanged=0,
-            skipped=0,
-            failed=1,
-            remaining=3,
-            items=[
-                DescriptionSyncItem(
-                    plugin_id=11,
-                    title="MatchZy",
-                    github_url="https://github.com/shobhit-pathak/MatchZy",
-                    action="updated",
-                ),
-                DescriptionSyncItem(
-                    plugin_id=12,
-                    title="Broken",
-                    github_url="https://github.com/example/broken",
-                    action="failed",
-                    message="Failed to fetch README: 404",
-                ),
-            ],
-        )
-    )
+    sync = AsyncMock(return_value=_description_job())
     audit = AsyncMock()
-    monkeypatch.setattr(
-        "api.routes.v1.plugins.get_effective_github_token", AsyncMock(return_value=None)
-    )
-    monkeypatch.setattr("api.routes.v1.plugins.sync_market_plugin_descriptions", sync)
+    monkeypatch.setattr("api.routes.v1.plugins.description_sync_store.enqueue", sync)
     monkeypatch.setattr("api.routes.v1.plugins.record_audit_event", audit)
 
     response = client.post(
         "/api/v1/plugins/market/descriptions/sync",
-        json={"framework": "counterstrikesharp", "overwrite": True},
+        json={
+            "request_id": "22222222-2222-2222-2222-222222222222",
+            "framework": "counterstrikesharp",
+            "overwrite": True,
+        },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     body = response.json()
-    assert body["updated"] == 1
-    assert body["failed"] == 1
-    assert body["remaining"] == 3
-    assert body["items"][1]["action"] == "failed"
+    assert body["operation_id"] == "11111111-1111-1111-1111-111111111111"
+    assert body["status"] == "queued"
+    assert body["total"] == 2
     assert sync.await_args.kwargs["framework"] is PluginFramework.COUNTERSTRIKESHARP
     assert sync.await_args.kwargs["plugin_ids"] is None
-    assert audit.await_args.kwargs["action"] == "plugin.catalog.sync_descriptions"
-    assert audit.await_args.kwargs["status"] == "partial"
+    assert audit.await_args.kwargs["action"] == "plugin.catalog.sync_descriptions.requested"
+    assert audit.await_args.kwargs["status"] == "requested"
 
 
 def test_market_description_sync_passes_selected_ids(monkeypatch):
     client, _user = _client()
-    sync = AsyncMock(
-        return_value=DescriptionSyncResult(total=1, updated=1, unchanged=0, skipped=0, failed=0)
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.plugins.get_effective_github_token", AsyncMock(return_value=None)
-    )
-    monkeypatch.setattr("api.routes.v1.plugins.sync_market_plugin_descriptions", sync)
+    sync = AsyncMock(return_value=_description_job(target_ids=[11, 12], total=2))
+    monkeypatch.setattr("api.routes.v1.plugins.description_sync_store.enqueue", sync)
     monkeypatch.setattr("api.routes.v1.plugins.record_audit_event", AsyncMock())
 
     response = client.post(
         "/api/v1/plugins/market/descriptions/sync",
-        json={"plugin_ids": [11, 11, 12], "overwrite": False},
+        json={
+            "request_id": "22222222-2222-2222-2222-222222222222",
+            "plugin_ids": [11, 11, 12],
+            "overwrite": False,
+        },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     assert sync.await_args.kwargs["plugin_ids"] == [11, 12]
     assert sync.await_args.kwargs["overwrite"] is False
 
@@ -300,7 +307,10 @@ def test_market_description_sync_passes_selected_ids(monkeypatch):
 def test_market_description_sync_is_admin_only():
     client, _user = _client(is_admin=False)
 
-    response = client.post("/api/v1/plugins/market/descriptions/sync", json={})
+    response = client.post(
+        "/api/v1/plugins/market/descriptions/sync",
+        json={"request_id": "22222222-2222-2222-2222-222222222222"},
+    )
 
     assert response.status_code == 403
 
@@ -308,9 +318,42 @@ def test_market_description_sync_is_admin_only():
 def test_market_description_sync_rejects_invalid_plugin_ids():
     client, _user = _client()
 
-    response = client.post("/api/v1/plugins/market/descriptions/sync", json={"plugin_ids": [0]})
+    response = client.post(
+        "/api/v1/plugins/market/descriptions/sync",
+        json={
+            "request_id": "22222222-2222-2222-2222-222222222222",
+            "plugin_ids": [0],
+        },
+    )
 
     assert response.status_code == 422
+
+
+def test_market_description_sync_status_cancel_and_delete(monkeypatch):
+    client, _user = _client()
+    operation_id = "11111111-1111-1111-1111-111111111111"
+    job = _description_job()
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.description_sync_store.get_job",
+        AsyncMock(return_value=job),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.description_sync_store.cancel_job",
+        AsyncMock(return_value=_description_job(status="running", cancel_requested=True)),
+    )
+    delete = AsyncMock()
+    monkeypatch.setattr("api.routes.v1.plugins.description_sync_store.delete_job", delete)
+
+    status = client.get(f"/api/v1/plugins/market/descriptions/sync/{operation_id}")
+    cancelled = client.post(f"/api/v1/plugins/market/descriptions/sync/{operation_id}/cancel")
+    deleted = client.delete(f"/api/v1/plugins/market/descriptions/sync/{operation_id}")
+
+    assert status.status_code == 200
+    assert status.json()["operation_id"] == operation_id
+    assert cancelled.status_code == 200
+    assert cancelled.json()["cancel_requested"] is True
+    assert deleted.status_code == 200
+    delete.assert_awaited_once_with(operation_id, 1)
 
 
 def test_market_update_changes_both_classifications(monkeypatch):

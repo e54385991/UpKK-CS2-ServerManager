@@ -3019,9 +3019,61 @@ export interface paths {
         put?: never;
         /**
          * Sync Market Descriptions
-         * @description Refresh marketplace descriptions in bulk from the upstream READMEs.
+         * @description Queue a throttled background refresh of marketplace descriptions.
          */
         post: operations["sync_market_descriptions_api_v1_plugins_market_descriptions_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/descriptions/sync/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Market Description Sync */
+        get: operations["get_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Market Description Sync */
+        delete: operations["delete_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/descriptions/sync/{operation_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Market Description Sync */
+        post: operations["cancel_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/descriptions/sync/{operation_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Market Description Sync */
+        get: operations["stream_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__events_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12299,26 +12351,63 @@ export interface components {
             overwrite: boolean;
             /** Plugin Ids */
             plugin_ids?: number[];
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
         };
         /**
          * MarketPluginDescriptionSyncView
-         * @description Summary of a marketplace description sync.
-         *
-         *     ``remaining`` is non-zero when the marketplace holds more listings than one
-         *     request refreshes; run the sync again to continue.
+         * @description Persistent job snapshot for one marketplace description sync.
          */
         MarketPluginDescriptionSyncView: {
+            /** Cancel Requested */
+            cancel_requested: boolean;
+            /** Command */
+            command: string;
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current Github Url */
+            current_github_url?: string | null;
+            /** Current Plugin Id */
+            current_plugin_id?: number | null;
+            /** Current Plugin Title */
+            current_plugin_title?: string | null;
             /** Failed */
             failed: number;
+            /** Framework */
+            framework?: ("counterstrikesharp" | "swiftly" | "other") | null;
             /** Items */
             items?: components["schemas"]["MarketPluginDescriptionSyncItemView"][];
-            /**
-             * Remaining
-             * @default 0
-             */
-            remaining: number;
+            /** Message */
+            message: string;
+            /** Operation Id */
+            operation_id: string;
+            /** Overwrite */
+            overwrite: boolean;
+            /** Phase */
+            phase: string;
+            /** Processed */
+            processed: number;
+            /** Retry At */
+            retry_at?: number | null;
             /** Skipped */
             skipped: number;
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled";
+            /** Stop Reason */
+            stop_reason?: string | null;
             /** Total */
             total: number;
             /** Unchanged */
@@ -12895,6 +12984,8 @@ export interface components {
             failed_retention_days: number;
             /** Items */
             items?: components["schemas"]["OperationInboxItem"][];
+            /** Market Description Items */
+            market_description_items?: components["schemas"]["MarketPluginDescriptionSyncView"][];
             /** Market Import Items */
             market_import_items?: components["schemas"]["PluginAIImportView"][];
             /**
@@ -23326,7 +23417,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -23341,6 +23432,148 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginDescriptionSyncView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginDescriptionSyncView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -40,6 +40,7 @@ export function useActivityInbox() {
       refreshSharedVisiblePoll(INBOX_POLL_KEY);
     };
     window.addEventListener("plugin-ai-import-submitted", onImport);
+    window.addEventListener("plugin-description-sync-submitted", onImport);
     const stop = subscribeVisibleEventSource({
       url: OPERATION_INBOX_EVENTS_URL,
       eventTypes: ["inbox"],
@@ -55,6 +56,7 @@ export function useActivityInbox() {
     return () => {
       cancelled = true;
       window.removeEventListener("plugin-ai-import-submitted", onImport);
+      window.removeEventListener("plugin-description-sync-submitted", onImport);
       stopPoll();
       stop();
     };

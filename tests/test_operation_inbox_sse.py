@@ -40,12 +40,14 @@ def _payload(
     failed: list[InboxItemData] | None = None,
     completed: list[InboxItemData] | None = None,
     import_jobs: list[object] | None = None,
+    description_jobs: list[object] | None = None,
 ) -> InboxPayload:
     return InboxPayload(
         items=items or [],
         completed_items=completed or [],
         failed_items=failed or [],
         import_jobs=list(import_jobs or []),
+        description_jobs=list(description_jobs or []),
     )
 
 
@@ -57,6 +59,7 @@ def test_payload_equality_covers_message_command_position_and_imports():
     assert inbox_payloads_equal(left, _payload([_item("op-1", command="other")])) is False
     assert inbox_payloads_equal(left, _payload([_item("op-1", queue_position=2)])) is False
     assert inbox_payloads_equal(left, _payload([_item("op-1")], import_jobs=["job"])) is False
+    assert inbox_payloads_equal(left, _payload([_item("op-1")], description_jobs=["job"])) is False
     assert inbox_payloads_equal(left, _payload(failed=[_item("op-2", status="failed")])) is False
 
 

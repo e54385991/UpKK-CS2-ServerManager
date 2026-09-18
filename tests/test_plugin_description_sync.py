@@ -1,238 +1,310 @@
-"""Bulk marketplace description refresh from GitHub READMEs."""
+"""Persistent queue and serial execution semantics for description syncs."""
 
 from __future__ import annotations
 
 import base64
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
+import httpx
 import pytest
 
-from modules.models.plugins import MarketPlugin, PluginFramework
-from services.plugins import description_sync
-from services.plugins.description_sync import sync_market_plugin_descriptions
+from modules.models import MarketPlugin, PluginDescriptionSyncJob
+from services.plugins import description_sync_runner as runner
+from services.plugins import description_sync_store as store
+from services.plugins import description_sync_worker as worker
+from services.plugins.github_ai_client import GitHubAIClient, GitHubRateLimitError
 
 
-class _Session:
-    """Minimal async session double recording commits and added rows."""
+class Result:
+    def __init__(self, rows=()):
+        self.rows = list(rows)
 
-    def __init__(self, rows: list[MarketPlugin]) -> None:
-        self._rows = rows
+    def scalars(self):
+        return self
+
+    def first(self):
+        return self.rows[0] if self.rows else None
+
+    def all(self):
+        return self.rows
+
+    def __iter__(self):
+        return iter(self.rows)
+
+
+class Session:
+    def __init__(self, statements=(), scalar_value=0, objects=None):
+        self.statements = list(statements)
+        self.scalar_value = scalar_value
+        self.objects = objects or {}
+        self.added = []
         self.commits = 0
-        self.added: list[MarketPlugin] = []
-        self.statements: list[object] = []
+        self.refreshes = 0
 
-    async def execute(self, statement):
-        self.statements.append(statement)
-        rows = self._rows
+    async def execute(self, _statement):
+        if self.statements:
+            value = self.statements.pop(0)
+            return value if isinstance(value, Result) else Result(value)
+        return Result()
 
-        class _Result:
-            def scalars(self):
-                return self
+    async def scalar(self, _statement):
+        return self.scalar_value
 
-            def all(self):
-                return rows
+    async def get(self, model, key):
+        return self.objects.get((model, key))
 
-        return _Result()
+    def add(self, value):
+        self.added.append(value)
 
-    async def commit(self) -> None:
+    async def commit(self):
         self.commits += 1
 
-    def add(self, row) -> None:
-        self.added.append(row)
+    async def refresh(self, _value):
+        self.refreshes += 1
 
 
-def _plugin(plugin_id: int, url: str, description: str | None = None) -> MarketPlugin:
-    return MarketPlugin(
-        id=plugin_id,
-        github_url=url,
+def _session_factory(session: Session):
+    @asynccontextmanager
+    async def maker():
+        yield session
+
+    return maker
+
+
+def _job(**overrides) -> PluginDescriptionSyncJob:
+    current = datetime.now(timezone.utc)
+    values = {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "actor_user_id": 1,
+        "request_key": "description_sync:1:request",
+        "scope_key": "scope:overwrite",
+        "status": "queued",
+        "framework": "counterstrikesharp",
+        "overwrite": True,
+        "command": "Sync descriptions",
+        "target_ids": [1, 2],
+        "total": 2,
+        "created_at": current,
+        "heartbeat_at": current,
+        "phase": "queued",
+        "message": "Queued",
+    }
+    values.update(overrides)
+    return PluginDescriptionSyncJob(**values)
+
+
+@pytest.fixture
+def store_env(monkeypatch):
+    session = Session()
+    monkeypatch.setattr(store, "async_session_maker", _session_factory(session))
+    monkeypatch.setattr(store, "authorize", AsyncMock())
+    monkeypatch.setattr(store, "_target_ids", AsyncMock(return_value=[1, 2]))
+    monkeypatch.setattr(store.redis_manager, "acquire_lock", AsyncMock(return_value=True))
+    monkeypatch.setattr(store.redis_manager, "release_lock", AsyncMock(return_value=True))
+    return session
+
+
+@pytest.mark.asyncio
+async def test_enqueue_persists_target_snapshot_and_idempotency_key(store_env):
+    store_env.statements = [Result(), Result()]
+    job = await store.enqueue(
+        1,
+        uuid4(),
+        framework=SimpleNamespace(value="counterstrikesharp"),
+        overwrite=True,
+    )
+
+    assert job.total == 2
+    assert job.target_ids == [1, 2]
+    assert store_env.added[0].target_ids == [1, 2]
+    assert store_env.added[0].scope_key
+    assert store_env.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_enqueue_reuses_request_and_active_scope(store_env):
+    existing = _job()
+    store_env.statements = [Result([existing])]
+    result = await store.enqueue(1, uuid4())
+    assert result.operation_id == existing.id
+
+    store_env.statements = [Result(), Result([existing])]
+    result = await store.enqueue(1, uuid4())
+    assert result.operation_id == existing.id
+
+
+@pytest.mark.asyncio
+async def test_enqueue_rejects_a_full_pending_queue(store_env):
+    store_env.statements = [Result(), Result()]
+    store_env.scalar_value = store.MAX_PENDING_JOBS
+    with pytest.raises(ValueError, match="queue is full"):
+        await store.enqueue(1, uuid4())
+
+
+@pytest.mark.asyncio
+async def test_record_item_updates_description_and_cursor_atomically(store_env):
+    job = _job(target_ids=[7], total=1)
+    plugin = MarketPlugin(
+        id=7,
+        title="Old",
+        github_url="https://github.com/acme/plugin",
+        description="old",
+        description_i18n={"original": "old"},
+    )
+    store_env.statements = [Result([job])]
+    store_env.objects[(MarketPlugin, 7)] = plugin
+
+    await store.record_item(
+        job.id,
+        plugin_id=7,
+        title="Old",
+        github_url=plugin.github_url,
+        action="updated",
+        description="# New",
+    )
+
+    assert plugin.description == "# New"
+    assert plugin.description_i18n is None
+    assert job.cursor == 1 and job.updated == 1
+    assert job.items[0]["action"] == "updated"
+    assert store_env.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_reconcile_requeues_running_jobs_without_losing_cursor(store_env):
+    job = _job(status="running", cursor=1)
+    store_env.statements = [Result([job])]
+    assert await store.reconcile_orphans() == 1
+    assert job.status == "queued" and job.cursor == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_wait_exits_when_a_waiting_job_is_cancelled(monkeypatch):
+    monkeypatch.setattr(worker.time, "time", lambda: 100)
+    monkeypatch.setattr(worker.asyncio, "sleep", AsyncMock())
+    monkeypatch.setattr(
+        worker.store,
+        "get_job",
+        AsyncMock(return_value=SimpleNamespace(status="cancelled")),
+    )
+
+    assert await worker.DescriptionSyncWorker._wait_until("job", 105) is False
+
+
+class FakeClient:
+    instances = []
+
+    def __init__(self, token, **kwargs):
+        self.token = token
+        self.kwargs = kwargs
+        self.requests: list[str] = []
+        self.responses: list[object] = []
+        self.closed = False
+        self.instances.append(self)
+
+    async def request(self, path: str):
+        self.requests.append(path)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    async def close(self):
+        self.closed = True
+
+
+def _readme(text: str) -> dict[str, str]:
+    return {"content": base64.b64encode(text.encode()).decode()}
+
+
+async def _targets(plugin_id: int):
+    return store.TargetPlugin(
+        plugin_id=plugin_id,
         title=f"Plugin {plugin_id}",
-        description=description,
+        github_url=f"https://github.com/acme/plugin-{plugin_id}",
+        description=None,
     )
-
-
-def _readme(text: str) -> dict:
-    return {"content": base64.b64encode(text.encode("utf-8")).decode("ascii")}
-
-
-def _http_get(responses: dict[str, tuple[bool, object, str | None]]):
-    async def get(url, **_kwargs):
-        return responses[url]
-
-    return get
 
 
 @pytest.mark.asyncio
-async def test_sync_writes_readme_into_description(monkeypatch):
-    plugin = _plugin(1, "https://github.com/acme/one", "old")
-    plugin.description_i18n = {"original": "old", "zh_cn": "旧描述"}
-    session = _Session([plugin])
-    monkeypatch.setattr(
-        description_sync.http_helper,
-        "get",
-        _http_get(
-            {
-                "https://api.github.com/repos/acme/one/readme": (
-                    True,
-                    _readme("# One\n\nDetailed docs."),
-                    None,
-                )
-            }
-        ),
-    )
+async def test_runner_is_serial_and_commits_each_item(monkeypatch):
+    FakeClient.instances.clear()
+    monkeypatch.setattr(runner, "GitHubAIClient", FakeClient)
+    monkeypatch.setattr(runner, "record_audit_event", AsyncMock())
+    monkeypatch.setattr(store, "credentials", AsyncMock(return_value=None))
+    monkeypatch.setattr(store, "is_cancel_requested", AsyncMock(return_value=False))
+    monkeypatch.setattr(store, "load_target", AsyncMock(side_effect=_targets))
+    monkeypatch.setattr(store, "set_current", AsyncMock())
+    record = AsyncMock()
+    monkeypatch.setattr(store, "record_item", record)
+    finish = AsyncMock(return_value=store.snapshot(_job(status="completed", cursor=2)))
+    monkeypatch.setattr(store, "finish_job", finish)
 
-    result = await sync_market_plugin_descriptions(session)
+    class ConfiguredClient(FakeClient):
+        def __init__(self, token, **kwargs):
+            super().__init__(token, **kwargs)
+            self.responses = [_readme("# One"), _readme("# Two")]
 
-    assert result.updated == 1
-    assert result.total == 1
-    assert session.added[0].description == "# One\n\nDetailed docs."
-    assert session.added[0].description_i18n is None
-    # One commit releases the read transaction before GitHub, one persists.
-    assert session.commits == 2
+    monkeypatch.setattr(runner, "GitHubAIClient", ConfiguredClient)
+    await runner.run_job(store.snapshot(_job()))
 
-
-@pytest.mark.asyncio
-async def test_sync_reports_unchanged_failed_and_missing_readme(monkeypatch):
-    session = _Session(
-        [
-            _plugin(1, "https://github.com/acme/one", "# One"),
-            _plugin(2, "https://github.com/acme/two"),
-            _plugin(3, "https://github.com/acme/three"),
-        ]
-    )
-    monkeypatch.setattr(
-        description_sync.http_helper,
-        "get",
-        _http_get(
-            {
-                "https://api.github.com/repos/acme/one/readme": (
-                    True,
-                    _readme("# One"),
-                    None,
-                ),
-                "https://api.github.com/repos/acme/two/readme": (False, None, "404"),
-                "https://api.github.com/repos/acme/three/readme": (
-                    True,
-                    _readme("   "),
-                    None,
-                ),
-            }
-        ),
-    )
-
-    result = await sync_market_plugin_descriptions(session)
-
-    actions = {item.plugin_id: item.action for item in result.items}
-    assert actions == {1: "unchanged", 2: "failed", 3: "skipped"}
-    assert result.failed == 1
-    assert session.added == []
-    # Nothing changed, so no second commit is issued.
-    assert session.commits == 1
+    assert record.await_count == 2
+    assert [call.kwargs["action"] for call in record.await_args_list] == ["updated", "updated"]
+    assert ConfiguredClient.instances[0].kwargs["interval"] == 2.0
+    assert ConfiguredClient.instances[0].kwargs["require_token"] is False
+    assert ConfiguredClient.instances[0].closed
+    assert finish.await_args.kwargs["status"] == "completed"
 
 
 @pytest.mark.asyncio
-async def test_sync_without_overwrite_keeps_existing_descriptions(monkeypatch):
-    session = _Session(
-        [
-            _plugin(1, "https://github.com/acme/one", "kept"),
-            _plugin(2, "https://github.com/acme/two", "   "),
-        ]
-    )
-    monkeypatch.setattr(
-        description_sync.http_helper,
-        "get",
-        _http_get(
-            {
-                "https://api.github.com/repos/acme/two/readme": (
-                    True,
-                    _readme("# Two"),
-                    None,
-                )
-            }
-        ),
-    )
+async def test_runner_rate_limit_waits_without_advancing_cursor(monkeypatch):
+    monkeypatch.setattr(runner, "record_audit_event", AsyncMock())
+    monkeypatch.setattr(store, "credentials", AsyncMock(return_value=None))
+    monkeypatch.setattr(store, "is_cancel_requested", AsyncMock(return_value=False))
+    monkeypatch.setattr(store, "load_target", AsyncMock(side_effect=_targets))
+    monkeypatch.setattr(store, "set_current", AsyncMock())
+    waiting = AsyncMock()
+    monkeypatch.setattr(store, "mark_waiting", waiting)
+    record = AsyncMock()
+    monkeypatch.setattr(store, "record_item", record)
+    finish = AsyncMock()
+    monkeypatch.setattr(store, "finish_job", finish)
 
-    result = await sync_market_plugin_descriptions(session, overwrite=False)
+    class LimitedClient(FakeClient):
+        def __init__(self, token, **kwargs):
+            super().__init__(token, **kwargs)
+            self.responses = [GitHubRateLimitError("limited", reset_at=123)]
 
-    actions = {item.plugin_id: item.action for item in result.items}
-    assert actions == {1: "skipped", 2: "updated"}
-    assert session.added[0].id == 2
+    monkeypatch.setattr(runner, "GitHubAIClient", LimitedClient)
+    await runner.run_job(store.snapshot(_job(target_ids=[1], total=1)))
 
-
-@pytest.mark.asyncio
-async def test_sync_reports_invalid_repository_url(monkeypatch):
-    session = _Session([_plugin(1, "https://example.com/acme/one")])
-    monkeypatch.setattr(description_sync.http_helper, "get", _http_get({}))
-
-    result = await sync_market_plugin_descriptions(session)
-
-    assert result.failed == 1
-    assert result.items[0].message == "Invalid GitHub repository URL format"
+    waiting.assert_awaited_once()
+    assert waiting.await_args.kwargs["retry_at"] == 123
+    record.assert_not_awaited()
+    finish.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_sync_caps_each_request_and_reports_remaining(monkeypatch):
-    monkeypatch.setattr(description_sync, "MAX_DESCRIPTION_SYNC_PLUGINS", 1)
-    session = _Session(
-        [
-            _plugin(1, "https://github.com/acme/one"),
-            _plugin(2, "https://github.com/acme/two"),
-        ]
+async def test_github_client_can_read_without_a_token():
+    requests = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"ok": True})
+
+    client = GitHubAIClient(
+        None,
+        require_token=False,
+        interval=0,
+        transport=httpx.MockTransport(handle),
     )
-    monkeypatch.setattr(
-        description_sync.http_helper,
-        "get",
-        _http_get(
-            {
-                "https://api.github.com/repos/acme/one/readme": (
-                    True,
-                    _readme("# One"),
-                    None,
-                )
-            }
-        ),
-    )
-
-    result = await sync_market_plugin_descriptions(session)
-
-    assert result.total == 1
-    assert result.remaining == 1
-
-
-@pytest.mark.asyncio
-async def test_sync_filters_by_framework(monkeypatch):
-    session = _Session([])
-    monkeypatch.setattr(description_sync.http_helper, "get", _http_get({}))
-
-    result = await sync_market_plugin_descriptions(
-        session, framework=PluginFramework.SWIFTLY, plugin_ids=[5, 5, 6]
-    )
-
-    assert result.total == 0
-    compiled = str(session.statements[0])
-    assert "market_plugins.framework" in compiled
-    assert "market_plugins.id IN" in compiled
-
-
-def test_readme_decoder_rejects_broken_payload():
-    assert description_sync.decode_readme("not base64 !!!") is None
-
-
-@pytest.mark.asyncio
-async def test_fetch_readme_rejects_non_dict_payload(monkeypatch):
-    monkeypatch.setattr(
-        description_sync.http_helper,
-        "get",
-        _http_get({"https://api.github.com/repos/acme/one/readme": (True, "not-json", None)}),
-    )
-
-    readme, error = await description_sync._fetch_readme(
-        "https://github.com/acme/one", github_token=None, github_proxy=None
-    )
-
-    assert readme is None
-    assert error is not None
-
-
-def test_market_plugin_defaults_to_counterstrikesharp_section():
-    assert _plugin(1, "https://github.com/acme/one").framework is (
-        PluginFramework.COUNTERSTRIKESHARP
-    )
+    try:
+        assert await client.request("/rate_limit") == {"ok": True}
+    finally:
+        await client.close()
+    assert len(requests) == 1
+    assert "authorization" not in requests[0].headers

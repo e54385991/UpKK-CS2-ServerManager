@@ -83,24 +83,12 @@ export function deriveActivityLists(
   return { queue, completed, failed };
 }
 
-export function visibleMarketImportTasks(inbox: OperationInbox | null) {
-  return inbox?.marketImportItems ?? [];
-}
-
-export function hasVisibleMarketTasks(
-  marketTasks: readonly { readonly status: string }[],
-): boolean {
-  return (
-    marketTasks.some((item) => item.status === "queued" || item.status === "running") ||
-    marketTasks.some((item) => item.status === "completed" || item.status === "cancelled") ||
-    marketTasks.some((item) => item.status === "failed")
-  );
-}
-
 export function countActiveMarketTasks(
   marketTasks: readonly { readonly status: string }[],
 ): number {
-  return marketTasks.filter((item) => item.status === "queued" || item.status === "running").length;
+  return marketTasks.filter(
+    (item) => item.status === "queued" || item.status === "running" || item.status === "waiting",
+  ).length;
 }
 
 export function countFailedMarketTasks(

@@ -30,7 +30,7 @@ import {
 } from "@/modules/plugins/market-admin-api";
 import type {
   DescriptionSyncInput,
-  DescriptionSyncSummary,
+  DescriptionSyncJob,
   GitHubArchive,
   GitHubInstallPlan,
   GitHubRepoInfo,
@@ -146,8 +146,8 @@ export async function deleteMarketPluginsAction(input: {
 }
 
 export async function syncMarketPluginDescriptionsAction(
-  input: DescriptionSyncInput = {},
-): Promise<ApiResult<DescriptionSyncSummary>> {
+  input: DescriptionSyncInput,
+): Promise<ApiResult<DescriptionSyncJob>> {
   const session = await getSession();
   if (!session?.isAdmin) {
     return { ok: false, status: 403, error: "Not enough permissions" };

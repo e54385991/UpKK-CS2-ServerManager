@@ -18,7 +18,7 @@ import type {
 import { toMarketPlugin } from "@/modules/plugins/market-mapper";
 import type {
   DescriptionSyncInput,
-  DescriptionSyncSummary,
+  DescriptionSyncJob,
   GitHubRepoInfo,
   MarketPlugin,
   MarketPluginCreateInput,
@@ -140,9 +140,10 @@ export async function updateMarketPlugin(
 }
 
 export async function syncMarketPluginDescriptions(
-  input: DescriptionSyncInput = {},
-): Promise<ApiResult<DescriptionSyncSummary>> {
+  input: DescriptionSyncInput,
+): Promise<ApiResult<DescriptionSyncJob>> {
   const body: MarketPluginDescriptionSyncRequestDto = {
+    request_id: input.requestId,
     overwrite: input.overwrite ?? true,
     framework: input.framework ?? null,
     plugin_ids: input.pluginIds ? [...input.pluginIds] : [],
@@ -156,24 +157,7 @@ export async function syncMarketPluginDescriptions(
     },
   );
   if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      total: result.data.total,
-      updated: result.data.updated,
-      unchanged: result.data.unchanged,
-      skipped: result.data.skipped,
-      failed: result.data.failed,
-      remaining: result.data.remaining ?? 0,
-      items: (result.data.items ?? []).map((item) => ({
-        pluginId: item.plugin_id,
-        title: item.title,
-        githubUrl: item.github_url,
-        action: item.action,
-        message: item.message ?? null,
-      })),
-    },
-  };
+  return { ok: true, data: result.data };
 }
 
 export async function deleteMarketPlugin(

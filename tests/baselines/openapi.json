@@ -14278,18 +14278,100 @@
             "maxItems": 200,
             "title": "Plugin Ids",
             "type": "array"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
           }
         },
+        "required": [
+          "request_id"
+        ],
         "title": "MarketPluginDescriptionSyncRequest",
         "type": "object"
       },
       "MarketPluginDescriptionSyncView": {
         "additionalProperties": false,
-        "description": "Summary of a marketplace description sync.\n\n``remaining`` is non-zero when the marketplace holds more listings than one\nrequest refreshes; run the sync again to continue.",
+        "description": "Persistent job snapshot for one marketplace description sync.",
         "properties": {
+          "cancel_requested": {
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_github_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Github Url"
+          },
+          "current_plugin_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Plugin Id"
+          },
+          "current_plugin_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Plugin Title"
+          },
           "failed": {
             "title": "Failed",
             "type": "integer"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "enum": [
+                  "counterstrikesharp",
+                  "swiftly",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
           },
           "items": {
             "items": {
@@ -14298,14 +14380,75 @@
             "title": "Items",
             "type": "array"
           },
-          "remaining": {
-            "default": 0,
-            "title": "Remaining",
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "overwrite": {
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "processed": {
+            "title": "Processed",
             "type": "integer"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
           },
           "skipped": {
             "title": "Skipped",
             "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Reason"
           },
           "total": {
             "title": "Total",
@@ -14321,7 +14464,16 @@
           }
         },
         "required": [
+          "operation_id",
+          "status",
+          "command",
+          "overwrite",
+          "created_at",
+          "phase",
+          "message",
+          "cancel_requested",
           "total",
+          "processed",
           "updated",
           "unchanged",
           "skipped",
@@ -16018,6 +16170,13 @@
               "$ref": "#/components/schemas/OperationInboxItem"
             },
             "title": "Items",
+            "type": "array"
+          },
+          "market_description_items": {
+            "items": {
+              "$ref": "#/components/schemas/MarketPluginDescriptionSyncView"
+            },
+            "title": "Market Description Items",
             "type": "array"
           },
           "market_import_items": {
@@ -37813,7 +37972,7 @@
     },
     "/api/v1/plugins/market/descriptions/sync": {
       "post": {
-        "description": "Refresh marketplace descriptions in bulk from the upstream READMEs.",
+        "description": "Queue a throttled background refresh of marketplace descriptions.",
         "operationId": "sync_market_descriptions_api_v1_plugins_market_descriptions_sync_post",
         "requestBody": {
           "content": {
@@ -37826,7 +37985,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -37846,6 +38005,74 @@
             },
             "description": "Forbidden"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Sync Market Descriptions",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/descriptions/sync/{operation_id}": {
+      "delete": {
+        "operationId": "delete_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -37862,7 +38089,147 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Sync Market Descriptions",
+        "summary": "Delete Market Description Sync",
+        "tags": [
+          "v1-plugins"
+        ]
+      },
+      "get": {
+        "operationId": "get_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketPluginDescriptionSyncView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Market Description Sync",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/descriptions/sync/{operation_id}/cancel": {
+      "post": {
+        "operationId": "cancel_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketPluginDescriptionSyncView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Cancel Market Description Sync",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/descriptions/sync/{operation_id}/events": {
+      "get": {
+        "operationId": "stream_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stream Market Description Sync",
         "tags": [
           "v1-plugins"
         ]

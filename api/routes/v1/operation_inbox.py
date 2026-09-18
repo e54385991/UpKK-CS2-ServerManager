@@ -18,10 +18,14 @@ from services.operations.inbox import (
 from services.operations.inbox_sse import InboxSseState, inbox_sse_headers, next_inbox_sse_frame
 from services.operations.inbox_types import InboxItemData, InboxPayload
 from services.plugins.ai_import_store import check_administrator, clear_failed_jobs
+from services.plugins.description_sync_store import (
+    clear_failed_jobs as clear_failed_description_jobs,
+)
 from services.server_operation_hub import server_operation_hub
 
 from .operations import to_view
 from .plugin_ai_imports import to_view as import_view
+from .plugins import _description_sync_view as description_sync_view
 from .schemas import ActionResult, OperationInboxItem, OperationInboxView
 
 router = APIRouter(prefix="/api/v1/operations", tags=["v1-operations"])
@@ -44,6 +48,7 @@ def to_inbox_view(payload: InboxPayload) -> OperationInboxView:
     running = [item for item in items if item.status == "running"]
     return OperationInboxView(
         market_import_items=[import_view(job) for job in payload.import_jobs],
+        market_description_items=[description_sync_view(job) for job in payload.description_jobs],
         items=items,
         completed_items=completed_items,
         failed_items=failed_items,
@@ -135,6 +140,10 @@ async def clear_failed_operations(
     if current_user.is_admin:
         try:
             cleared += await clear_failed_jobs(current_user.id)
+        except PermissionError:
+            pass
+        try:
+            cleared += await clear_failed_description_jobs(current_user.id)
         except PermissionError:
             pass
     return ActionResult(

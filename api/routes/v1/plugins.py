@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 from collections.abc import Sequence
 from typing import get_args
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
-from api.dependencies import ActiveUser, AdminUser, DatabaseSession, require_server_access
+from api.dependencies import (
+    ActiveUser,
+    AdminUser,
+    DatabaseSession,
+    StreamUser,
+    require_server_access,
+)
 from api.routes import plugin_market as legacy
 from modules import ManagedPlugin, MarketPlugin, PluginCategory, PluginFramework
 from modules.plugin_ai import PluginAIInfo, PluginDescriptionI18n
@@ -21,8 +31,8 @@ from services.audit_log_service import record_audit_event
 from services.github_credentials import get_effective_github_token
 from services.plugin_catalog import delete_market_plugin as remove_catalog_plugin
 from services.plugin_conflict_service import PluginPlanError
+from services.plugins import description_sync_store
 from services.plugins.common import framework_value, parse_dependency_ids, parse_framework
-from services.plugins.description_sync import sync_market_plugin_descriptions
 from services.plugins.tracking import forget_managed_plugin, forget_server_managed_plugins
 
 from .plugin_install import to_plan_view as to_plan_view
@@ -70,6 +80,45 @@ def _parse_framework_filter(framework: str | None) -> PluginFramework | None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+
+def _description_sync_view(
+    job: description_sync_store.DescriptionSyncJobSnapshot,
+) -> MarketPluginDescriptionSyncView:
+    return MarketPluginDescriptionSyncView(
+        operation_id=job.operation_id,
+        status=job.status,
+        command=job.command,
+        framework=_framework_literal(job.framework),
+        overwrite=job.overwrite,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        phase=job.phase,
+        message=job.message,
+        current_plugin_id=job.current_plugin_id,
+        current_plugin_title=job.current_plugin_title,
+        current_github_url=job.current_github_url,
+        stop_reason=job.stop_reason,
+        retry_at=job.retry_at,
+        cancel_requested=job.cancel_requested,
+        total=job.total,
+        processed=job.processed,
+        updated=job.updated,
+        unchanged=job.unchanged,
+        skipped=job.skipped,
+        failed=job.failed,
+        items=[
+            MarketPluginDescriptionSyncItemView(
+                plugin_id=item.plugin_id,
+                title=item.title,
+                github_url=item.github_url,
+                action=item.action,
+                message=item.message,
+            )
+            for item in job.items
+        ],
+    )
 
 
 def _to_plugin_ref(plugin: MarketPlugin) -> PluginRef:
@@ -334,54 +383,143 @@ async def create_market_plugin(
 @market_router.post(
     "/market/descriptions/sync",
     response_model=MarketPluginDescriptionSyncView,
-    responses={403: {"model": ProblemDetail}},
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        403: {"model": ProblemDetail},
+        409: {"model": ProblemDetail},
+        503: {"model": ProblemDetail},
+    },
 )
 async def sync_market_descriptions(
     body: MarketPluginDescriptionSyncRequest,
-    db: DatabaseSession,
     current_user: AdminUser,
     request: Request,
 ) -> MarketPluginDescriptionSyncView:
-    """Refresh marketplace descriptions in bulk from the upstream READMEs."""
-    github_token = await get_effective_github_token(db, current_user)
-    result = await sync_market_plugin_descriptions(
-        db,
-        github_token=github_token,
-        plugin_ids=list(body.plugin_ids) or None,
-        framework=_parse_framework_filter(body.framework),
-        overwrite=body.overwrite,
-    )
+    """Queue a throttled background refresh of marketplace descriptions."""
+    framework = _parse_framework_filter(body.framework)
+    try:
+        job = await description_sync_store.enqueue(
+            current_user.id,
+            body.request_id,
+            plugin_ids=list(body.plugin_ids) or None,
+            framework=framework,
+            overwrite=body.overwrite,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     await record_audit_event(
         category="plugin",
-        action="plugin.catalog.sync_descriptions",
-        status="success" if result.failed == 0 else "partial",
+        action="plugin.catalog.sync_descriptions.requested",
+        status="requested",
         user=current_user,
         request=request,
         details={
-            "total": result.total,
-            "updated": result.updated,
-            "failed": result.failed,
+            "operation_id": job.operation_id,
+            "total": job.total,
             "framework": body.framework,
             "overwrite": body.overwrite,
         },
     )
-    return MarketPluginDescriptionSyncView(
-        total=result.total,
-        updated=result.updated,
-        unchanged=result.unchanged,
-        skipped=result.skipped,
-        failed=result.failed,
-        remaining=result.remaining,
-        items=[
-            MarketPluginDescriptionSyncItemView(
-                plugin_id=item.plugin_id,
-                title=item.title,
-                github_url=item.github_url,
-                action=item.action,
-                message=item.message,
-            )
-            for item in result.items
-        ],
+    return _description_sync_view(job)
+
+
+@market_router.get(
+    "/market/descriptions/sync/{operation_id}",
+    response_model=MarketPluginDescriptionSyncView,
+)
+async def get_market_description_sync(
+    operation_id: UUID,
+    current_user: AdminUser,
+) -> MarketPluginDescriptionSyncView:
+    del current_user
+    job = await description_sync_store.get_job(str(operation_id))
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Description sync task not found",
+        )
+    return _description_sync_view(job)
+
+
+@market_router.post(
+    "/market/descriptions/sync/{operation_id}/cancel",
+    response_model=MarketPluginDescriptionSyncView,
+)
+async def cancel_market_description_sync(
+    operation_id: UUID,
+    current_user: AdminUser,
+) -> MarketPluginDescriptionSyncView:
+    try:
+        job = await description_sync_store.cancel_job(str(operation_id), current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _description_sync_view(job)
+
+
+@market_router.delete(
+    "/market/descriptions/sync/{operation_id}",
+    response_model=ActionResult,
+)
+async def delete_market_description_sync(
+    operation_id: UUID,
+    current_user: AdminUser,
+) -> ActionResult:
+    try:
+        await description_sync_store.delete_job(str(operation_id), current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return ActionResult(success=True, message="Description sync task deleted")
+
+
+@market_router.get("/market/descriptions/sync/{operation_id}/events", response_model=None)
+async def stream_market_description_sync(
+    operation_id: UUID,
+    request: Request,
+    current_user: StreamUser,
+) -> StreamingResponse:
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required"
+        )
+    if await description_sync_store.get_job(str(operation_id)) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Description sync task not found",
+        )
+
+    async def source():
+        last = ""
+        while not await request.is_disconnected():
+            job = await description_sync_store.get_job(str(operation_id))
+            if job is None:
+                return
+            payload = _description_sync_view(job).model_dump(mode="json")
+            encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            if encoded != last:
+                last = encoded
+                yield f"event: snapshot\ndata: {encoded}\n\n"
+            else:
+                yield ": heartbeat\n\n"
+            if job.status not in description_sync_store.ACTIVE:
+                return
+            await asyncio.sleep(1)
+
+    return StreamingResponse(
+        source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

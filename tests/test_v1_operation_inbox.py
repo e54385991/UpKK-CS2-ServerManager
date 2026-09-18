@@ -14,6 +14,7 @@ from api.dependencies import get_bearer_or_cookie_user
 from api.routes.v1.operation_inbox import _build_inbox
 from modules import get_current_active_user, get_current_user, get_db
 from services.operations.inbox_types import HubInboxSnapshot, InboxRecordRow, ServerInboxSlice
+from services.plugins.description_sync_store import DescriptionSyncJobSnapshot, now
 from services.server_operation_hub import server_operation_hub
 
 
@@ -137,12 +138,18 @@ def test_operation_inbox_lists_and_clears_failures(monkeypatch):
     )
     import_jobs = AsyncMock(return_value=2)
     monkeypatch.setattr("api.routes.v1.operation_inbox.clear_failed_jobs", import_jobs)
+    description_jobs = AsyncMock(return_value=0)
+    monkeypatch.setattr(
+        "api.routes.v1.operation_inbox.clear_failed_description_jobs",
+        description_jobs,
+    )
     wipe = client.delete("/api/v1/operations/inbox/failed")
     assert wipe.status_code == 200
     assert wipe.json()["success"] is True
     cleared.assert_awaited_once_with([1])
     # A member sees no AI import jobs, so none are cleared on their behalf.
     import_jobs.assert_not_awaited()
+    description_jobs.assert_not_awaited()
 
     monkeypatch.setattr(
         "api.routes.v1.operation_inbox.server_operation_hub.get",
@@ -212,19 +219,28 @@ def test_clear_failed_also_clears_admin_visible_ai_imports(monkeypatch):
     monkeypatch.setattr("api.routes.v1.operation_inbox.server_operation_hub.clear_failed", cleared)
     import_jobs = AsyncMock(return_value=2)
     monkeypatch.setattr("api.routes.v1.operation_inbox.clear_failed_jobs", import_jobs)
+    description_jobs = AsyncMock(return_value=1)
+    monkeypatch.setattr(
+        "api.routes.v1.operation_inbox.clear_failed_description_jobs",
+        description_jobs,
+    )
 
     response = client.delete("/api/v1/operations/inbox/failed")
 
     assert response.status_code == 200
-    assert "3" in response.json()["message"]
+    assert "4" in response.json()["message"]
     import_jobs.assert_awaited_once_with(1)
+    description_jobs.assert_awaited_once_with(1)
 
     # Losing administrator rights mid-request must not fail the whole clear.
     import_jobs.reset_mock()
     import_jobs.side_effect = PermissionError("no longer an administrator")
+    description_jobs.reset_mock()
+    description_jobs.side_effect = PermissionError("no longer an administrator")
     revoked = client.delete("/api/v1/operations/inbox/failed")
     assert revoked.status_code == 200
     assert "1" in revoked.json()["message"]
+    description_jobs.assert_awaited_once_with(1)
 
 
 def test_operation_inbox_events_requires_authentication():
@@ -264,3 +280,44 @@ async def test_build_inbox_includes_command_and_status(monkeypatch):
     assert view.items[0].command == "plugin-market install 11 --from latest"
     assert view.items[0].status == "running"
     assert view.items[0].latest_message == "Extracting archive"
+
+
+@pytest.mark.asyncio
+async def test_build_inbox_includes_admin_description_sync_jobs(monkeypatch):
+    _patch_snapshot(monkeypatch)
+    job = DescriptionSyncJobSnapshot(
+        operation_id=str(uuid4()),
+        actor_user_id=1,
+        status="running",
+        command="Sync plugin descriptions",
+        framework="counterstrikesharp",
+        overwrite=True,
+        created_at=now(),
+        started_at=now(),
+        completed_at=None,
+        phase="fetching",
+        message="Fetching README",
+        current_plugin_id=11,
+        current_plugin_title="MatchZy",
+        current_github_url="https://github.com/example/matchzy",
+        stop_reason=None,
+        retry_at=None,
+        cancel_requested=False,
+        target_ids=[11],
+        total=1,
+        processed=0,
+        updated=0,
+        unchanged=0,
+        skipped=0,
+        failed=0,
+    )
+    monkeypatch.setattr("services.operations.inbox.list_jobs", AsyncMock(return_value=[]))
+    monkeypatch.setattr(
+        "services.operations.inbox.list_description_jobs",
+        AsyncMock(return_value=[job]),
+    )
+
+    view = await _build_inbox([(1, "alpha")], include_imports=True)
+
+    assert view.market_description_items[0].operation_id == job.operation_id
+    assert view.market_description_items[0].current_plugin_title == "MatchZy"

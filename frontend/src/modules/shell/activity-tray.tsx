@@ -13,8 +13,6 @@ import {
   countActiveMarketTasks,
   countFailedMarketTasks,
   deriveCachedActivityLists,
-  hasVisibleMarketTasks,
-  visibleMarketImportTasks,
   type TrayTab,
 } from "@/modules/shell/activity-tray-lists";
 import { useActivityCommands } from "@/modules/shell/use-activity-commands";
@@ -34,7 +32,11 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
     [dismissed, inbox, overlay],
   );
   const { queue, completed, failed } = lists;
-  const marketTasks = visibleMarketImportTasks(inbox);
+  const marketTasks = [
+    ...(inbox?.marketImportItems ?? []),
+    ...(inbox?.marketDescriptionItems ?? []),
+  ];
+  const hasVisibleMarketTasks = marketTasks.length > 0;
   const remaining = queue.length + countActiveMarketTasks(marketTasks);
   const completedCount = completed.length;
   const failedCount = failed.length;
@@ -126,7 +128,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
       {open ? (
         <ActivityTrayPanel
           isAdmin={isAdmin}
-          hasVisibleMarketTasks={hasVisibleMarketTasks(marketTasks)}
+          hasVisibleMarketTasks={hasVisibleMarketTasks}
           marketTasks={marketTasks}
           activeTab={activeTab}
           remaining={remaining}

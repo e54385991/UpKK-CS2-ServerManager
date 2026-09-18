@@ -32,7 +32,10 @@ const GAME_ACTIONS = new Set(["start", "restart"]);
 type ActivityTrayPanelProps = {
   readonly isAdmin: boolean;
   readonly hasVisibleMarketTasks: boolean;
-  readonly marketTasks: NonNullable<OperationInbox["marketImportItems"]>;
+  readonly marketTasks: readonly (
+    | NonNullable<OperationInbox["marketImportItems"]>[number]
+    | NonNullable<OperationInbox["marketDescriptionItems"]>[number]
+  )[];
   readonly activeTab: TrayTab;
   readonly remaining: number;
   readonly completedCount: number;
