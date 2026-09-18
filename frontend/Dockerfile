@@ -3,16 +3,16 @@
 # pinned Next native Turbopack binding is not available on every arm64 build
 # host, so release images use the supported Webpack fallback while local
 # development/CI keep the faster Turbopack default.
-# Node 26.8.1 is the current stable release (alpine, multi-arch index).
+# Node 26.9.0 is the current stable release (alpine, multi-arch index).
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
 ARG DEPLOYMENT_ID=unknown
-FROM --platform=$BUILDPLATFORM node:26.8.1-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS deps
+FROM --platform=$BUILDPLATFORM node:26.9.0-alpine@sha256:dbaa92e5758cbbcf85d65d5403fdb530fe3442cbe8c6dbfb7ef23365450d5070 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM --platform=$BUILDPLATFORM node:26.8.1-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS builder
+FROM --platform=$BUILDPLATFORM node:26.9.0-alpine@sha256:dbaa92e5758cbbcf85d65d5403fdb530fe3442cbe8c6dbfb7ef23365450d5070 AS builder
 WORKDIR /app
 ARG GIT_SHA
 ARG DEPLOYMENT_ID
@@ -24,7 +24,7 @@ RUN --mount=type=secret,id=next_server_actions_key \
     NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$(cat /run/secrets/next_server_actions_key 2>/dev/null || true)" \
     mkdir -p public && npx next build --webpack
 
-FROM node:26.8.1-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS runner
+FROM node:26.9.0-alpine@sha256:dbaa92e5758cbbcf85d65d5403fdb530fe3442cbe8c6dbfb7ef23365450d5070 AS runner
 WORKDIR /app
 ARG GIT_SHA
 ARG BUILD_TIME

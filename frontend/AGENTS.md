@@ -28,11 +28,11 @@ backend through a same-origin proxy.
 | --- | --- | --- |
 | Framework | `next@16.3.5` (App Router, Turbopack) | Consult the matching bundled docs when changing Next.js behavior. |
 | UI runtime | `react`/`react-dom@19.3.0` | React Compiler-era; the `react-hooks` lint rules are strict. |
-| Language | `typescript@5.9.3` | Deliberate compatibility pin: the current `eslint-config-next@16.3.5` toolchain does not support TypeScript 7 yet. |
+| Language | `typescript@6.0.3` | Deliberate compatibility pin: the current `typescript-eslint@8.70` toolchain supports TypeScript `<6.1`, so TypeScript 7 is not yet usable. |
 | Styling | `tailwindcss@4.3.3` + `@tailwindcss/postcss` | v4 engine; design tokens live in `src/app/globals.css` under `@theme`. |
-| Lint | `eslint@9.39.5` + `eslint-config-next@16.3.5` | Deliberate compatibility pin: the current Next.js ESLint plugin set is not compatible with ESLint 10 yet. |
+| Lint | `eslint@9.39.5` + `eslint-config-next@16.3.5` | Deliberate compatibility pin: the bundled React, import, and JSX accessibility plugins do not support ESLint 10 yet. |
 | Icons | `lucide-react` | Import per-icon; never pass an icon **component** across the server→client boundary (see RSC rules). |
-| Docker runtime | `node:26.8.1-alpine` | Production image + CI use Node 26 Current. |
+| Docker runtime | `node:26.9.0-alpine` | Production image + CI use Node 26 Current. |
 
 Dependencies are pinned to exact versions and committed with `package-lock.json`.
 Do not broadly upgrade or rewrite the lockfile without a reason.
