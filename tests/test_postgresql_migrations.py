@@ -337,7 +337,7 @@ async def test_postgresql_18_empty_upgrade_concurrency_crud_and_drift_check():
                     "WHERE table_schema = 'public' AND data_type = 'jsonb'"
                 )
             )
-            assert application_table_count == 31
+            assert application_table_count == len(SQLModel.metadata.tables)
             assert native_enum_count == 0
             assert jsonb_count and jsonb_count > 0
 
