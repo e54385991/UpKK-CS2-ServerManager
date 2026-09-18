@@ -40,7 +40,6 @@ export default async function PluginsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const serversPromise = listServers();
   const [t, sp, session] = await Promise.all([
     getTranslations("plugins"),
     searchParams,
@@ -62,7 +61,7 @@ export default async function PluginsPage({
     offset,
   };
   const resultPromise = listMarketPlugins(query);
-  const serversResult = await serversPromise;
+  const serversResult = await listServers(session.isAdmin ? "all" : "mine");
   const key = JSON.stringify({ ...query, serverId: sp.serverId ?? null });
 
   return (

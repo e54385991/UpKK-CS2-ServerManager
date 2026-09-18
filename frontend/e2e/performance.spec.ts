@@ -81,6 +81,23 @@ for (const navigation of ['initial', 'client']) for (const route of ['/plugins',
   });
 }
 
+test('plugin installer server scope follows session permissions', async ({ page, context, request }) => {
+  for (const actor of ['admin', 'member'] as const) {
+    await login(context, actor);
+    for (const route of ['/plugins', '/plugins/1']) {
+      await request.post(`${mock}/__test__/reset`);
+      await page.goto(route);
+      await expect.poll(async () => (await state(request)).requests.some(
+        (record: { path: string }) => record.path === '/api/v1/servers',
+      )).toBe(true);
+      const serverRequest = (await state(request)).requests.find(
+        (record: { path: string }) => record.path === '/api/v1/servers',
+      );
+      expect(serverRequest.query).toBe(actor === 'admin' ? '?scope=all' : '');
+    }
+  }
+});
+
 for (const locale of ['zh-CN', 'en-US']) for (const status of [200, 503]) {
   test(`${locale} state ${status}: slow lock cannot block workspace`, async ({ page, context, request }) => {
     await login(context, 'admin', locale);

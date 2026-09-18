@@ -36,7 +36,7 @@ export default async function PluginDetailPage({
   if (!Number.isInteger(pluginId)) notFound();
   const serverId = Number(sp.serverId);
   const resultPromise = getMarketPlugin(pluginId);
-  const serversResult = await listServers();
+  const serversResult = await listServers(session.isAdmin ? "all" : "mine");
   const servers = serversResult.ok
     ? serversResult.data.map((server) => ({
         id: server.id,
