@@ -2589,7 +2589,7 @@
     "fetchError": "Unable to load auto-update settings ({status}).",
     "enabled": "Enable auto-update",
     "interval": "Check interval (hours)",
-    "intervalHelp": "Range 0.0167–24 hours, same as the webpage.",
+    "intervalHelp": "Range 0.0167–24 hours; new servers default to 12 hours.",
     "policyWarning": "Backup and restart policies are configured per item and default to off. If several items request a restart, the server restarts once after the whole batch. Optional post-update quick commands also run only after the full batch finishes.",
     "liveStatus": "Live request / processing status",
     "lastCheck": "Last plugin check",

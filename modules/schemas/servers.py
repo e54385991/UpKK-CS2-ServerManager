@@ -4,6 +4,7 @@
 
 from modules.execstack import DEFAULT_EXECSTACK_TARGETS, normalize_execstack_targets
 from modules.models import AuthType
+from modules.models.servers import DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS
 from modules.server_startup import (
     normalize_additional_parameters,
     normalize_default_map,
@@ -137,7 +138,9 @@ class ServerCreate(SQLModel):
         description="Hours between version checks (0.0167-24, where 0.0167≈1 minute)",
     )
     enable_plugin_auto_update: bool = Field(default=False)
-    plugin_update_check_interval_hours: float = Field(default=1.0, ge=0.0167, le=24.0)
+    plugin_update_check_interval_hours: float = Field(
+        default=DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS, ge=0.0167, le=24.0
+    )
 
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(
@@ -387,7 +390,7 @@ class ServerResponse(SQLModel):
     last_update_check: Optional[datetime] = None
     last_update_time: Optional[datetime] = None
     enable_plugin_auto_update: bool = False
-    plugin_update_check_interval_hours: float = 1.0
+    plugin_update_check_interval_hours: float = DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS
     last_plugin_update_check: Optional[datetime] = None
 
     # CPU affinity configuration

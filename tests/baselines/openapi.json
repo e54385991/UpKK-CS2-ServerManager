@@ -22237,7 +22237,7 @@
             "type": "string"
           },
           "plugin_update_check_interval_hours": {
-            "default": 1.0,
+            "default": 12.0,
             "maximum": 24.0,
             "minimum": 0.0167,
             "title": "Plugin Update Check Interval Hours",
@@ -22830,7 +22830,7 @@
             "type": "string"
           },
           "plugin_update_check_interval_hours": {
-            "default": 1.0,
+            "default": 12.0,
             "maximum": 24.0,
             "minimum": 0.0167,
             "title": "Plugin Update Check Interval Hours",
@@ -24417,7 +24417,7 @@
             "type": "string"
           },
           "plugin_update_check_interval_hours": {
-            "default": 1.0,
+            "default": 12.0,
             "title": "Plugin Update Check Interval Hours",
             "type": "number"
           },
@@ -24817,7 +24817,7 @@
             "type": "string"
           },
           "plugin_update_check_interval_hours": {
-            "default": 1.0,
+            "default": 12.0,
             "title": "Plugin Update Check Interval Hours",
             "type": "number"
           },

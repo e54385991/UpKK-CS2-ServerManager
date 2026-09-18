@@ -23,6 +23,9 @@ class ServerStatus(str, enum.Enum):
     UNKNOWN = "unknown"
 
 
+DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS = 12.0
+
+
 class Server(SQLModel, table=True):
     """CS2 Server model"""
 
@@ -133,7 +136,9 @@ class Server(SQLModel, table=True):
 
     # Plugin auto-update configuration
     enable_plugin_auto_update: bool = Field(default=False)
-    plugin_update_check_interval_hours: float = Field(default=1.0)
+    plugin_update_check_interval_hours: float = Field(
+        default=DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS
+    )
     last_plugin_update_check: Optional[datetime] = Field(default=None)
     enable_plugin_post_update_commands: bool = Field(default=False)
     plugin_post_update_command_ids: List[int] = Field(

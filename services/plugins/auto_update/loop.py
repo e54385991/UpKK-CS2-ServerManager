@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 from sqlmodel import col, select
 
 from modules.models import Server
+from modules.models.servers import DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS
 from services.compat import LateBoundModule
 from services.redis_manager import redis_manager
 from services.server_operation_hub import (
@@ -181,7 +182,9 @@ class AutoUpdateLoopMixin:
             if server.should_skip_background_checks():
                 continue
             if self._due(
-                server.last_plugin_update_check, server.plugin_update_check_interval_hours or 1.0
+                server.last_plugin_update_check,
+                server.plugin_update_check_interval_hours
+                or DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS,
             ):
                 if await self._plugin_update_already_queued(server.id):
                     continue

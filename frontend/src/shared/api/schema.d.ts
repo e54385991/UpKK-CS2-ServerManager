@@ -15527,7 +15527,7 @@ export interface components {
             name: string;
             /**
              * Plugin Update Check Interval Hours
-             * @default 1
+             * @default 12
              */
             plugin_update_check_interval_hours: number;
             /** Rcon Password */
@@ -15805,7 +15805,7 @@ export interface components {
             name: string;
             /**
              * Plugin Update Check Interval Hours
-             * @default 1
+             * @default 12
              */
             plugin_update_check_interval_hours: number;
             /** Rcon Password */
@@ -16473,7 +16473,7 @@ export interface components {
             name: string;
             /**
              * Plugin Update Check Interval Hours
-             * @default 1
+             * @default 12
              */
             plugin_update_check_interval_hours: number;
             /** Rcon Password */
@@ -16599,7 +16599,7 @@ export interface components {
             name: string;
             /**
              * Plugin Update Check Interval Hours
-             * @default 1
+             * @default 12
              */
             plugin_update_check_interval_hours: number;
             /** Rcon Password */

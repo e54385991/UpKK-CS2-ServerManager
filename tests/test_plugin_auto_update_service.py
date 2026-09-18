@@ -47,7 +47,7 @@ def test_managed_plugin_defaults_to_auto_update_disabled():
     assert item.backup_before_update is False
     assert item.restart_after_update is False
     assert server.enable_plugin_auto_update is False
-    assert server.plugin_update_check_interval_hours == 1.0
+    assert server.plugin_update_check_interval_hours == 12.0
 
 
 @pytest.mark.asyncio
