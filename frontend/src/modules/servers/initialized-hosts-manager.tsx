@@ -17,7 +17,7 @@ import type {
   InitializedHost,
   InitializedHostOperation,
 } from "@/modules/servers/setup-api";
-import { addServerAfterSetupHref, isInvalidGameDirectory } from "@/modules/servers/initialized-hosts";
+import { addServerAfterSetupHref, isInvalidGameDirectory, suggestedDeployPort } from "@/modules/servers/initialized-hosts";
 import { parseOperationEvent } from "@/modules/servers/operation-events";
 import { initializedHostOperationEventsUrl } from "@/modules/servers/initialized-host-operation-events";
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
@@ -199,7 +199,7 @@ export function InitializedHostsManager({ hosts: initialHosts }: { hosts: Initia
   function openDeploy(host: InitializedHost) {
     setDeployTarget(host);
     setDeployName(`${host.name} CS2`);
-    setDeployPort("27015");
+    setDeployPort(suggestedDeployPort(host));
     setDeployDirectory(host.gameDirectory);
   }
 
@@ -208,7 +208,7 @@ export function InitializedHostsManager({ hosts: initialHosts }: { hosts: Initia
     const id = Number(deployTarget.key);
     const gamePort = Number(deployPort);
     const gameDirectory = deployDirectory.trim();
-    if (!Number.isInteger(id) || !Number.isInteger(gamePort) || gamePort < 1 || gamePort > 65535) {
+    if (!Number.isInteger(id) || !Number.isInteger(gamePort) || gamePort < 1 || gamePort > 65534) {
       await alertDialog({ title: t("deployFailed"), description: t("invalidDeployInput") });
       return;
     }
@@ -389,7 +389,8 @@ export function InitializedHostsManager({ hosts: initialHosts }: { hosts: Initia
           </div>
           <div>
             <Label htmlFor="initialized-deploy-port">{t("gamePort")}</Label>
-            <Input id="initialized-deploy-port" type="number" min={1} max={65535} value={deployPort} onChange={(event) => setDeployPort(event.target.value)} />
+            <Input id="initialized-deploy-port" type="number" min={1} max={65534} value={deployPort} onChange={(event) => setDeployPort(event.target.value)} />
+            <p className="mt-1 text-xs text-fg-muted">{t("gamePortHelp")}</p>
           </div>
           <div>
             <Label htmlFor="initialized-deploy-directory">{t("gameDirectory")}</Label>

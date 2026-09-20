@@ -73,6 +73,7 @@ def test_v1_setup_lists_initialized_hosts_without_passwords(monkeypatch):
     body = response.json()
     assert body[0]["key"] == "init:1:abc"
     assert body[0]["host"] == "192.168.50.143"
+    assert body[0]["suggested_game_port"] == 27015
     assert "ssh_password" not in body[0]
 
 

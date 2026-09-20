@@ -10,6 +10,7 @@ import {
   parseHostDirectoryConflict,
   pickInitializedHost,
   setupWizardHref,
+  suggestedDeployPort,
 } from "./initialized-hosts.ts";
 
 test("normalizeHost trims and lowercases", () => {
@@ -112,4 +113,10 @@ test("parseHostDirectoryConflict ignores other errors", () => {
     parseHostDirectoryConflict(409, "busy", { code: "other", existing_server_id: 1 }),
     undefined,
   );
+});
+
+test("suggestedDeployPort uses the host suggestion and falls back to 27015", () => {
+  assert.equal(suggestedDeployPort({ suggestedGamePort: 27025 }), "27025");
+  assert.equal(suggestedDeployPort({ suggestedGamePort: 0 }), "27015");
+  assert.equal(suggestedDeployPort(undefined), "27015");
 });

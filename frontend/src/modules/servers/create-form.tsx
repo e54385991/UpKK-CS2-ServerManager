@@ -31,6 +31,7 @@ import {
   setupWizardHref,
   isInvalidGameDirectory,
   parseHostDirectoryConflict,
+  suggestedDeployPort,
 } from "@/modules/servers/initialized-hosts";
 import { AptMirrorSwitcher } from "@/modules/servers/apt-mirror-switcher";
 import {
@@ -95,6 +96,7 @@ export function CreateServerForm({
   );
   const [displayName, setDisplayName] = useState(initialCredentials?.name ?? "");
   const [gameDirectory, setGameDirectory] = useState(initialCredentials?.gameDirectory ?? "");
+  const [gamePort, setGamePort] = useState("27015");
   const [aptMirror, setAptMirror] = useState<AptMirrorId>("official");
   const [steamAccountToken, setSteamAccountToken] = useState("");
   const [additionalParameters, setAdditionalParameters] = useState("");
@@ -114,6 +116,7 @@ export function CreateServerForm({
         setSelectedHostKey("");
         setAccount(undefined);
         setGameDirectory("");
+        setGamePort("27015");
         return;
       }
       const creds = await getInitializedHostCredentialsAction(key);
@@ -128,11 +131,14 @@ export function CreateServerForm({
       setSelectedHostKey(key);
       setAccount(creds.data);
       setGameDirectory(creds.data.gameDirectory);
+      setGamePort(
+        suggestedDeployPort(hosts.find((item) => item.key === key)),
+      );
       setDisplayName((current) =>
         current.trim() === "" ? creds.data.name : current,
       );
     },
-    [t],
+    [hosts, t],
   );
 
   useEffect(() => {
@@ -154,6 +160,7 @@ export function CreateServerForm({
       setHosts(listed.data);
       if (initialCredentials?.key) {
         rememberInitializedHost(initialCredentials.host);
+        setGamePort(suggestedDeployPort(listed.data.find((item) => item.key === initialCredentials.key)));
         setHostsLoading(false);
         return;
       }
@@ -171,6 +178,7 @@ export function CreateServerForm({
         setSelectedHostKey(match.key);
         setAccount(creds.data);
         setGameDirectory(creds.data.gameDirectory);
+        setGamePort(suggestedDeployPort(match));
         setDisplayName((current) =>
           current.trim() === "" ? creds.data.name : current,
         );
@@ -226,7 +234,7 @@ export function CreateServerForm({
       sshUser: account.sshUser,
       sshPassword: account.sshPassword,
       aptMirror,
-      gamePort: Number(form.get("gamePort") ?? 27015),
+      gamePort: Number(form.get("gamePort") ?? gamePort),
       gameDirectory: nextDirectory,
       description: String(form.get("description") ?? "") || undefined,
       captchaToken: captcha.token,
@@ -532,14 +540,15 @@ export function CreateServerForm({
               <Field className="sm:col-span-2" label={t("fields.serverName")} htmlFor="serverName">
                 <Input id="serverName" name="serverName" defaultValue="CS2 Server" required />
               </Field>
-              <Field label={t("fields.gamePort")} htmlFor="gamePort">
+              <Field label={t("fields.gamePort")} htmlFor="gamePort" hint={t("gamePortHelp")}>
                 <Input
                   id="gamePort"
                   name="gamePort"
                   type="number"
                   min={1}
-                  max={65535}
-                  defaultValue={27015}
+                  max={65534}
+                  value={gamePort}
+                  onChange={(event) => setGamePort(event.target.value)}
                   required
                 />
               </Field>

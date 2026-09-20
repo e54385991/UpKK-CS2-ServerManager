@@ -11547,6 +11547,11 @@ export interface components {
             ssh_port: number;
             /** Ssh User */
             ssh_user: string;
+            /**
+             * Suggested Game Port
+             * @default 27015
+             */
+            suggested_game_port: number;
         };
         /**
          * InspectArchiveRequest

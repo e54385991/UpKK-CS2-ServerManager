@@ -153,7 +153,7 @@ class InitializedHostDeployRequest(ApiRequest):
     """Create a new server record from a saved host and queue its deployment."""
 
     name: str = Field(min_length=1, max_length=255)
-    game_port: int = Field(default=27015, ge=1, le=65535)
+    game_port: int = Field(default=27015, ge=1, le=65534)
     server_name: str = Field(default="CS2 Server", min_length=1, max_length=255)
     game_directory: str | None = Field(default=None, max_length=500)
     redeploy_existing: bool = False

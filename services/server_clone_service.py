@@ -10,6 +10,14 @@ from sqlmodel import select
 from modules.models import Server
 from modules.schemas.servers import ServerCreate
 from services.server_directory import normalize_game_directory
+from services.server_ports import (
+    GAME_PORT_STRIDE,
+    GamePortUnavailableError,
+    game_port_available,
+    list_servers_on_host,
+    next_available_game_port,
+    occupied_game_ports,
+)
 
 
 class CloneConflictError(ValueError):
@@ -76,11 +84,6 @@ async def _servers_for_user(db: AsyncSession, user_id: int) -> list[Server]:
     return list(result.scalars().all())
 
 
-async def _servers_on_host(db: AsyncSession, host: str) -> list[Server]:
-    result = await db.execute(select(Server).where(Server.host == host))
-    return list(result.scalars().all())
-
-
 def _server_name_candidate(base: str, suffix: int) -> str:
     suffix_text = f" ({suffix})"
     return f"{base[: 255 - len(suffix_text)]}{suffix_text}"
@@ -93,43 +96,6 @@ def _directory_candidate(base: str, suffix: int) -> str:
     if not clipped:
         clipped = "/clone"
     return normalize_game_directory(f"{clipped}{suffix_text}")
-
-
-def _occupied_ports(servers: list[Server], host: str) -> set[int]:
-    occupied: set[int] = set()
-    for server in servers:
-        if server.host != host:
-            continue
-        if isinstance(server.game_port, int):
-            occupied.add(server.game_port)
-            client_port = getattr(server, "client_port", None) or server.game_port + 1
-            if 1 <= client_port <= 65535:
-                occupied.add(client_port)
-        tv_port = getattr(server, "tv_port", None)
-        if getattr(server, "tv_enable", False) and isinstance(tv_port, int):
-            occupied.add(tv_port)
-    return occupied
-
-
-def _port_available(candidate: int, occupied: set[int]) -> bool:
-    if not 1 <= candidate <= 65534:
-        return False
-    return candidate not in occupied and candidate + 1 not in occupied
-
-
-def _next_available_port(start: int, occupied: set[int]) -> int:
-    candidate = start
-    while candidate <= 65534:
-        if _port_available(candidate, occupied):
-            return candidate
-        candidate += 10
-
-    candidate = 27015
-    while candidate <= 65534:
-        if _port_available(candidate, occupied):
-            return candidate
-        candidate += 1
-    raise CloneConflictError("No available game port remains on this host")
 
 
 async def build_clone_template(
@@ -162,8 +128,11 @@ async def build_clone_template(
         directory_suffix += 1
         game_directory = _directory_candidate(source_directory, directory_suffix)
 
-    occupied = _occupied_ports(await _servers_on_host(db, source.host), source.host)
-    game_port = _next_available_port(source.game_port + 10, occupied)
+    occupied = occupied_game_ports(await list_servers_on_host(db, source.host), source.host)
+    try:
+        game_port = next_available_game_port(source.game_port + GAME_PORT_STRIDE, occupied)
+    except GamePortUnavailableError as exc:
+        raise CloneConflictError(str(exc)) from exc
     server_name = name
     raw_session_manager = getattr(source, "session_manager", "tmux")
     session_manager = "screen" if raw_session_manager == "screen" else "tmux"
@@ -226,8 +195,8 @@ async def prepare_clone_server(
                 f"A server with the same host ({source.host}) and game directory ({game_directory}) already exists"
             )
 
-    occupied = _occupied_ports(await _servers_on_host(db, source.host), source.host)
-    if not _port_available(values.game_port, occupied):
+    occupied = occupied_game_ports(await list_servers_on_host(db, source.host), source.host)
+    if not game_port_available(values.game_port, occupied):
         raise CloneConflictError(
             f"Game port {values.game_port} conflicts with another server on host {source.host}"
         )

@@ -12,6 +12,7 @@ export type InitializedHost = {
   readonly sshUser: string;
   readonly gameDirectory: string;
   readonly createdAt: number;
+  readonly suggestedGamePort: number;
 };
 
 export type AutoSetupInput = {
@@ -92,6 +93,7 @@ type InitializedHostDto = {
   ssh_user: string;
   game_directory: string;
   created_at: number;
+  suggested_game_port?: number;
 };
 
 type AutoSetupResultDto = {
@@ -172,6 +174,7 @@ function toInitializedHostOperation(
 }
 
 function toHost(raw: InitializedHostDto): InitializedHost {
+  const suggested = Number(raw.suggested_game_port);
   return {
     key: raw.key,
     name: raw.name,
@@ -180,6 +183,8 @@ function toHost(raw: InitializedHostDto): InitializedHost {
     sshUser: raw.ssh_user,
     gameDirectory: raw.game_directory,
     createdAt: raw.created_at,
+    suggestedGamePort:
+      Number.isInteger(suggested) && suggested >= 1 && suggested <= 65534 ? suggested : 27015,
   };
 }
 

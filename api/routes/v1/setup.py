@@ -39,6 +39,12 @@ from services.server_operation_hub import (
     ServerOperationConflict,
     server_operation_hub,
 )
+from services.server_ports import (
+    DEFAULT_GAME_PORT,
+    GamePortUnavailableError,
+    allocate_game_port,
+    suggested_game_ports_by_host,
+)
 from services.server_setup_script import build_manual_setup_script, validate_cs2_username
 
 from .operation_runner import enqueue_initialized_host_ssh_test, enqueue_server_operation
@@ -60,7 +66,11 @@ from .schemas import (
 router = APIRouter(prefix="/api/v1/setup", tags=["v1-setup"])
 
 
-def _to_list_item(raw: InitializedServerRecord) -> InitializedHostView:
+def _to_list_item(
+    raw: InitializedServerRecord,
+    *,
+    suggested_game_port: int = DEFAULT_GAME_PORT,
+) -> InitializedHostView:
     return InitializedHostView(
         key=raw.key,
         name=raw.name,
@@ -69,6 +79,7 @@ def _to_list_item(raw: InitializedServerRecord) -> InitializedHostView:
         ssh_user=raw.ssh_user,
         game_directory=raw.game_directory,
         created_at=raw.created_at,
+        suggested_game_port=suggested_game_port,
     )
 
 
@@ -161,7 +172,17 @@ async def list_initialized_hosts(
     current_user: ActiveUser,
 ) -> list[InitializedHostView]:
     servers = await list_saved_initialized_servers(db, current_user.id, legacy_store=redis_manager)
-    return [_to_list_item(item) for item in servers]
+    try:
+        suggested = await suggested_game_ports_by_host(db, {item.host for item in servers})
+    except Exception:
+        suggested = {}
+    return [
+        _to_list_item(
+            item,
+            suggested_game_port=suggested.get(item.host, DEFAULT_GAME_PORT),
+        )
+        for item in servers
+    ]
 
 
 @router.post(
@@ -326,6 +347,10 @@ async def deploy_from_initialized_host(
             server_id=duplicate.id,
             operation=to_view(operation),
         )
+    try:
+        game_port = await allocate_game_port(db, saved.host, body.game_port)
+    except GamePortUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     server_data = ServerCreate.model_validate(
         {
             "name": body.name,
@@ -333,7 +358,7 @@ async def deploy_from_initialized_host(
             "ssh_port": saved.ssh_port,
             "ssh_user": saved.ssh_user,
             "ssh_password": saved.ssh_password,
-            "game_port": body.game_port,
+            "game_port": game_port,
             "game_directory": game_directory,
             "server_name": body.server_name,
             "captcha_token": body.captcha_token,

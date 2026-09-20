@@ -96,6 +96,18 @@ export function addServerAfterSetupHref(input: {
   return `/servers/new?${params.toString()}`;
 }
 
+export const DEFAULT_GAME_PORT = 27015;
+
+export function suggestedDeployPort(
+  host: { suggestedGamePort?: number | null } | undefined,
+): string {
+  const port = host?.suggestedGamePort;
+  if (typeof port === "number" && Number.isInteger(port) && port >= 1 && port <= 65534) {
+    return String(port);
+  }
+  return String(DEFAULT_GAME_PORT);
+}
+
 export function canonicalGameDirectory(value: string): string {
   const raw = value.trim();
   if (!raw.startsWith("/")) return raw;

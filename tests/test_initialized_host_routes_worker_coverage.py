@@ -93,12 +93,27 @@ class _Hub:
         self.finished.append((operation_id, kwargs))
 
 
+class _QueryResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+
 class _Db:
-    def __init__(self, user=None):
+    def __init__(self, user=None, servers=None):
         self.user = user or SimpleNamespace(id=9, is_active=True)
+        self.servers = list(servers or [])
 
     async def get(self, *_args):
         return self.user
+
+    async def execute(self, *_args):
+        return _QueryResult(self.servers)
 
 
 @pytest.mark.asyncio
@@ -110,6 +125,19 @@ async def test_setup_helpers_and_basic_saved_host_routes(monkeypatch):
     monkeypatch.setattr(setup, "list_saved_initialized_servers", AsyncMock(return_value=[saved]))
     listed = await setup.list_initialized_hosts(_Db(), SimpleNamespace(id=9))
     assert listed[0].host == "host.example"
+    assert listed[0].suggested_game_port == 27015
+
+    occupied = [
+        SimpleNamespace(
+            host="host.example",
+            game_port=27015,
+            client_port=None,
+            tv_enable=False,
+            tv_port=None,
+        )
+    ]
+    suggested = await setup.list_initialized_hosts(_Db(servers=occupied), SimpleNamespace(id=9))
+    assert suggested[0].suggested_game_port == 27025
 
     monkeypatch.setattr(setup, "delete_saved_initialized_servers", AsyncMock(return_value=2))
     deleted = await setup.batch_delete_initialized_hosts(
@@ -249,6 +277,7 @@ async def test_setup_stream_delete_deploy_and_auto_setup_paths(monkeypatch):
     setup.create_server_record.assert_awaited()
     create_payload = setup.create_server_record.await_args.args[0]
     assert create_payload.game_directory == "/srv/cs2"
+    assert create_payload.game_port == 27015
     monkeypatch.setattr(
         setup, "enqueue_server_operation", AsyncMock(side_effect=ServerOperationConflict("busy"))
     )
@@ -373,6 +402,53 @@ async def test_deploy_from_initialized_host_custom_directory_conflict_and_redepl
     create_server.assert_not_awaited()
     enqueue.assert_awaited_once()
     assert enqueue.await_args.kwargs["server_id"] == 44
+
+
+@pytest.mark.asyncio
+async def test_deploy_from_initialized_host_offsets_occupied_game_port(monkeypatch):
+    saved = _record()
+    user = SimpleNamespace(id=9)
+    monkeypatch.setattr(setup, "_resolve_owned", AsyncMock(return_value=saved))
+    create_server = AsyncMock(return_value=SimpleNamespace(id=12))
+    monkeypatch.setattr(setup, "create_server_record", create_server)
+    monkeypatch.setattr(
+        setup, "persist_initialized_server_game_directory", AsyncMock(return_value=False)
+    )
+    monkeypatch.setattr(setup, "find_host_directory_server", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        setup,
+        "enqueue_server_operation",
+        AsyncMock(return_value=_operation(server_id=12, action="deploy")),
+    )
+    occupied = [
+        SimpleNamespace(
+            host="host.example",
+            game_port=27015,
+            client_port=None,
+            tv_enable=False,
+            tv_port=None,
+        )
+    ]
+
+    offset = await setup.deploy_from_initialized_host(
+        7,
+        InitializedHostDeployRequest(name="second"),
+        _Db(servers=occupied),
+        user,
+        SimpleNamespace(),
+    )
+    assert offset.server_id == 12
+    assert create_server.await_args.args[0].game_port == 27025
+
+    explicit = await setup.deploy_from_initialized_host(
+        7,
+        InitializedHostDeployRequest(name="second", game_port=27040),
+        _Db(servers=occupied),
+        user,
+        SimpleNamespace(),
+    )
+    assert explicit.server_id == 12
+    assert create_server.await_args.args[0].game_port == 27040
 
 
 @pytest.mark.asyncio

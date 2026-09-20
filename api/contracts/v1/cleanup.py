@@ -134,6 +134,7 @@ class InitializedHostView(V1Model):
     ssh_user: str
     game_directory: str
     created_at: float
+    suggested_game_port: int = Field(default=27015, ge=1, le=65534)
 
 
 class InitializedHostCredentialsView(V1Model):

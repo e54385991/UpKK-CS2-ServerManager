@@ -11868,7 +11868,7 @@
           },
           "game_port": {
             "default": 27015,
-            "maximum": 65535.0,
+            "maximum": 65534.0,
             "minimum": 1.0,
             "title": "Game Port",
             "type": "integer"
@@ -12067,6 +12067,13 @@
           "ssh_user": {
             "title": "Ssh User",
             "type": "string"
+          },
+          "suggested_game_port": {
+            "default": 27015,
+            "maximum": 65534.0,
+            "minimum": 1.0,
+            "title": "Suggested Game Port",
+            "type": "integer"
           }
         },
         "required": [
