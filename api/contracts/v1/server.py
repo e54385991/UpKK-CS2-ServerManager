@@ -14,6 +14,7 @@ from modules.models.servers import ServerStatus
 from modules.server_startup import normalize_additional_parameters
 from services.apt_mirrors import normalize_apt_mirror
 from services.server_compatibility import DEFAULT_EXECSTACK_TARGETS, normalize_execstack_targets
+from services.server_directory import normalize_game_directory
 
 
 class ServerSummary(V1Model):
@@ -327,6 +328,11 @@ class ServerCreateRequest(ApiRequest):
     steam_account_token: str | None = Field(default=None, max_length=255)
     additional_parameters: str | None = Field(default=None, max_length=4096)
     session_manager: Literal["screen", "tmux"] = "tmux"
+
+    @field_validator("game_directory")
+    @classmethod
+    def normalize_create_game_directory(cls, value: str) -> str:
+        return normalize_game_directory(value)
 
     @field_validator("sudo_password", "description", "rcon_password")
     @classmethod

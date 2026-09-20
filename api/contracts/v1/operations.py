@@ -12,6 +12,7 @@ from api.contracts.v1.identity import V1Model
 from api.contracts.v1.plugins import MarketPluginDescriptionSyncView, PluginAIImportView
 from modules.models.servers import ServerStatus
 from services.apt_mirrors import normalize_apt_mirror
+from services.server_directory import normalize_game_directory
 
 ServerLifecycleAction = Literal[
     "deploy",
@@ -154,8 +155,20 @@ class InitializedHostDeployRequest(ApiRequest):
     name: str = Field(min_length=1, max_length=255)
     game_port: int = Field(default=27015, ge=1, le=65535)
     server_name: str = Field(default="CS2 Server", min_length=1, max_length=255)
+    game_directory: str | None = Field(default=None, max_length=500)
+    redeploy_existing: bool = False
     captcha_token: str | None = Field(default=None, min_length=1)
     captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
+
+    @field_validator("game_directory")
+    @classmethod
+    def normalize_optional_game_directory(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            return None
+        return normalize_game_directory(stripped)
 
 
 class InitializedHostOperationView(V1Model):

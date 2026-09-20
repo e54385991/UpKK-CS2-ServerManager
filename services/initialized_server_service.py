@@ -308,6 +308,29 @@ async def delete_initialized_server(
     )
 
 
+async def persist_initialized_server_game_directory(
+    db,
+    *,
+    user_id: int,
+    key: str,
+    game_directory: str,
+    legacy_store: LegacyInitializedServerStore | None = None,
+) -> bool:
+    """Update the saved host default directory when a durable row exists."""
+
+    resolved = await resolve_initialized_server(db, key, user_id, legacy_store=legacy_store)
+    if resolved is None or resolved.database_record is None:
+        return False
+    row = resolved.database_record
+    if row.game_directory == game_directory:
+        return False
+    row.game_directory = game_directory
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return True
+
+
 async def delete_initialized_servers(db, ids: list[int], user_id: int) -> int:
     """Delete several durable hosts in one owner-scoped transaction."""
     if not ids:
@@ -333,6 +356,7 @@ __all__ = [
     "delete_initialized_server",
     "delete_initialized_servers",
     "list_initialized_servers",
+    "persist_initialized_server_game_directory",
     "resolve_initialized_server",
     "save_initialized_server",
 ]

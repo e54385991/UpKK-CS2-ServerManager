@@ -17,7 +17,7 @@ import type {
   InitializedHost,
   InitializedHostOperation,
 } from "@/modules/servers/setup-api";
-import { addServerAfterSetupHref } from "@/modules/servers/initialized-hosts";
+import { addServerAfterSetupHref, isInvalidGameDirectory } from "@/modules/servers/initialized-hosts";
 import { parseOperationEvent } from "@/modules/servers/operation-events";
 import { initializedHostOperationEventsUrl } from "@/modules/servers/initialized-host-operation-events";
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
@@ -72,6 +72,7 @@ export function InitializedHostsManager({ hosts: initialHosts }: { hosts: Initia
   const [deployTarget, setDeployTarget] = useState<DeployTarget>(null);
   const [deployName, setDeployName] = useState("");
   const [deployPort, setDeployPort] = useState("27015");
+  const [deployDirectory, setDeployDirectory] = useState("");
   const [deploying, setDeploying] = useState(false);
   const captcha = useCaptcha();
 
@@ -199,14 +200,20 @@ export function InitializedHostsManager({ hosts: initialHosts }: { hosts: Initia
     setDeployTarget(host);
     setDeployName(`${host.name} CS2`);
     setDeployPort("27015");
+    setDeployDirectory(host.gameDirectory);
   }
 
-  async function deploy() {
+  async function deploy(redeployExisting = false) {
     if (!deployTarget || deploying) return;
     const id = Number(deployTarget.key);
     const gamePort = Number(deployPort);
+    const gameDirectory = deployDirectory.trim();
     if (!Number.isInteger(id) || !Number.isInteger(gamePort) || gamePort < 1 || gamePort > 65535) {
       await alertDialog({ title: t("deployFailed"), description: t("invalidDeployInput") });
+      return;
+    }
+    if (isInvalidGameDirectory(gameDirectory)) {
+      await alertDialog({ title: t("deployFailed"), description: t("invalidGameDirectory") });
       return;
     }
     if (captcha.enabled && (!captcha.token || !captcha.code.trim())) {
@@ -218,10 +225,27 @@ export function InitializedHostsManager({ hosts: initialHosts }: { hosts: Initia
       name: deployName.trim(),
       gamePort,
       serverName: "CS2 Server",
+      gameDirectory,
+      redeployExisting,
       captchaToken: captcha.token,
       captchaCode: captcha.code.trim(),
     });
     setDeploying(false);
+    if (!result.ok && result.conflict && !redeployExisting) {
+      const confirmed = await confirmDialog({
+        title: t("redeployTitle"),
+        description: t("redeployHelp", {
+          name: result.conflict.existingServerName || result.conflict.host,
+          directory: result.conflict.gameDirectory,
+        }),
+        confirmLabel: t("redeployConfirm"),
+      });
+      if (confirmed) {
+        await deploy(true);
+        return;
+      }
+      return;
+    }
     if (!result.ok) {
       captcha.refresh();
       await alertDialog({ title: t("deployFailed"), description: result.error });
@@ -366,6 +390,17 @@ export function InitializedHostsManager({ hosts: initialHosts }: { hosts: Initia
           <div>
             <Label htmlFor="initialized-deploy-port">{t("gamePort")}</Label>
             <Input id="initialized-deploy-port" type="number" min={1} max={65535} value={deployPort} onChange={(event) => setDeployPort(event.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="initialized-deploy-directory">{t("gameDirectory")}</Label>
+            <Input
+              id="initialized-deploy-directory"
+              value={deployDirectory}
+              maxLength={500}
+              spellCheck={false}
+              onChange={(event) => setDeployDirectory(event.target.value)}
+            />
+            <p className="mt-1 text-xs text-fg-muted">{t("gameDirectoryHelp")}</p>
           </div>
           <CaptchaField
             id="initialized-deploy-captcha"

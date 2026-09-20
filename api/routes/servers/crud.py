@@ -19,6 +19,11 @@ from services.host_initialization import (
     ensure_steamcmd_packages,
 )
 from services.server_compatibility import parse_linux_release
+from services.server_directory import (
+    find_host_directory_server,
+    host_directory_conflict_payload,
+    normalize_game_directory,
+)
 from services.system_dependencies import STEAMCMD_REQUIRED_PACKAGES
 
 from .common import *
@@ -153,19 +158,23 @@ async def create_server_record(
             detail=f"Server with name '{server_data.name}' already exists",
         )
 
-    # Check if server with same host and game_directory already exists for this user
-    duplicate_server = await Server.get_by_host_directory_and_user(
+    try:
+        server_data.game_directory = normalize_game_directory(server_data.game_directory)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+    duplicate_server = await find_host_directory_server(
         db, server_data.host, server_data.game_directory, current_user.id
     )
     if duplicate_server:
         raise HTTPException(
-            status_code=(
-                status.HTTP_409_CONFLICT
-                if source_server_id is not None
-                else status.HTTP_400_BAD_REQUEST
+            status_code=status.HTTP_409_CONFLICT,
+            detail=host_directory_conflict_payload(
+                duplicate_server, server_data.host, server_data.game_directory
             ),
-            detail=f"A server with the same host ({server_data.host}) and game directory ({server_data.game_directory}) already exists. "
-            f"If you want to add a new server on this host, please use a different game directory or manually delete the existing directory on the server first.",
         )
 
     await db.commit()

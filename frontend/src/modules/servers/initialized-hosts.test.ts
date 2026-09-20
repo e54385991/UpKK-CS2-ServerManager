@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   addServerAfterSetupHref,
+  canonicalGameDirectory,
   hostsMatch,
   isHostReadyToAdd,
+  isInvalidGameDirectory,
   normalizeHost,
+  parseHostDirectoryConflict,
   pickInitializedHost,
   setupWizardHref,
 } from "./initialized-hosts.ts";
@@ -65,5 +68,48 @@ test("setup and add-server hrefs carry the init gate", () => {
       sshUser: "cs2server",
     }),
     "/servers/new?initialized=1&host=192.168.50.141&from=init%3A1%3Aabc&sshUser=cs2server",
+  );
+});
+
+test("canonicalGameDirectory collapses dots and trailing slashes", () => {
+  assert.equal(canonicalGameDirectory("/home/cs2server/cs2/"), "/home/cs2server/cs2");
+  assert.equal(canonicalGameDirectory("/home/cs2server/cs2/../cs2-2"), "/home/cs2server/cs2-2");
+});
+
+test("isInvalidGameDirectory rejects relative and root paths", () => {
+  assert.equal(isInvalidGameDirectory("/home/cs2server/cs2"), false);
+  assert.equal(isInvalidGameDirectory("home/cs2server/cs2"), true);
+  assert.equal(isInvalidGameDirectory("/"), true);
+  assert.equal(isInvalidGameDirectory(" / "), true);
+});
+
+test("parseHostDirectoryConflict reads a structured 409 body", () => {
+  const conflict = parseHostDirectoryConflict(409, "fallback", {
+    code: "host_directory_exists",
+    message: "occupied",
+    existing_server_id: 12,
+    existing_server_name: "lan",
+    host: "192.168.50.143",
+    game_directory: "/home/cs2server/cs2",
+  });
+  assert.deepEqual(conflict, {
+    code: "host_directory_exists",
+    message: "occupied",
+    existingServerId: 12,
+    existingServerName: "lan",
+    host: "192.168.50.143",
+    gameDirectory: "/home/cs2server/cs2",
+  });
+});
+
+test("parseHostDirectoryConflict ignores other errors", () => {
+  assert.equal(
+    parseHostDirectoryConflict(400, "bad", { code: "host_directory_exists", existing_server_id: 1 }),
+    undefined,
+  );
+  assert.equal(parseHostDirectoryConflict(409, "busy", "lock held"), undefined);
+  assert.equal(
+    parseHostDirectoryConflict(409, "busy", { code: "other", existing_server_id: 1 }),
+    undefined,
   );
 });

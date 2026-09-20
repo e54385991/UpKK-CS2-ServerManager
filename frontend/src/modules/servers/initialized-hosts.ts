@@ -95,3 +95,51 @@ export function addServerAfterSetupHref(input: {
   if (sshUser) params.set("sshUser", sshUser);
   return `/servers/new?${params.toString()}`;
 }
+
+export function canonicalGameDirectory(value: string): string {
+  const raw = value.trim();
+  if (!raw.startsWith("/")) return raw;
+  const parts: string[] = [];
+  for (const part of raw.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return `/${parts.join("/")}` || "/";
+}
+
+export function isInvalidGameDirectory(value: string): boolean {
+  const raw = value.trim();
+  return !raw.startsWith("/") || canonicalGameDirectory(raw) === "/";
+}
+
+export const HOST_DIRECTORY_EXISTS = "host_directory_exists";
+
+export type HostDirectoryConflict = {
+  readonly code: typeof HOST_DIRECTORY_EXISTS;
+  readonly message: string;
+  readonly existingServerId: number;
+  readonly existingServerName: string;
+  readonly host: string;
+  readonly gameDirectory: string;
+};
+
+export function parseHostDirectoryConflict(
+  status: number,
+  error: string,
+  detail?: unknown,
+): HostDirectoryConflict | undefined {
+  if (status !== 409 || !detail || typeof detail !== "object") return undefined;
+  const raw = detail as Record<string, unknown>;
+  if (raw.code !== HOST_DIRECTORY_EXISTS) return undefined;
+  const existingServerId = Number(raw.existing_server_id);
+  if (!Number.isInteger(existingServerId) || existingServerId <= 0) return undefined;
+  return {
+    code: HOST_DIRECTORY_EXISTS,
+    message: typeof raw.message === "string" && raw.message.trim() ? raw.message : error,
+    existingServerId,
+    existingServerName: String(raw.existing_server_name ?? ""),
+    host: String(raw.host ?? ""),
+    gameDirectory: String(raw.game_directory ?? ""),
+  };
+}

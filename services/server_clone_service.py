@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import posixpath
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +9,7 @@ from sqlmodel import select
 
 from modules.models import Server
 from modules.schemas.servers import ServerCreate
+from services.server_directory import normalize_game_directory
 
 
 class CloneConflictError(ValueError):
@@ -69,21 +69,6 @@ class ServerCloneTemplateData:
     game_type: str
     session_manager: str
     additional_parameters: str | None
-
-
-def normalize_game_directory(value: str) -> str:
-    """Return a safe absolute game directory for comparisons and storage."""
-
-    raw = str(value or "").strip()
-    if not raw.startswith("/"):
-        raise ValueError("Game directory must be an absolute path")
-    raw = "/" + raw.lstrip("/")
-    normalized = posixpath.normpath(raw)
-    if normalized == "/":
-        raise ValueError("Game directory cannot be the filesystem root")
-    if len(normalized) > 500:
-        raise ValueError("Game directory must be at most 500 characters")
-    return normalized
 
 
 async def _servers_for_user(db: AsyncSession, user_id: int) -> list[Server]:

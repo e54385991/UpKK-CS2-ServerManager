@@ -12,9 +12,11 @@ from api.routes.servers.crud import create_server_record
 from api.routes.setup import ServerSetupRequest, auto_setup_server, generate_secure_password
 from modules import ServerCreate
 from modules.database import async_session_maker
+from services.captcha_policy import require_captcha
 from services.initialized_server_service import (
     InitializedServerAccessDenied,
     InitializedServerRecord,
+    persist_initialized_server_game_directory,
     resolve_initialized_server,
 )
 from services.initialized_server_service import (
@@ -27,6 +29,11 @@ from services.initialized_server_service import (
     list_initialized_servers as list_saved_initialized_servers,
 )
 from services.redis_manager import redis_manager
+from services.server_directory import (
+    find_host_directory_server,
+    host_directory_conflict_payload,
+    normalize_game_directory,
+)
 from services.server_operation_hub import (
     ACTIVE_STATUSES,
     ServerOperationConflict,
@@ -92,6 +99,40 @@ async def _resolve_owned(db, key: str, user_id: int) -> InitializedServerRecord:
             detail="Initialized server not found",
         )
     return resolved.record
+
+
+def _normalized_deploy_directory(override: str | None, saved_directory: str) -> str:
+    try:
+        return normalize_game_directory(override or saved_directory)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+async def _enqueue_initialized_host_deploy(server_id: int, actor_user_id: int) -> dict:
+    try:
+        return await enqueue_server_operation(
+            server_id=server_id,
+            action="deploy",
+            actor_user_id=actor_user_id,
+        )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+async def _sync_initialized_host_directory(
+    db, *, user_id: int, key: str, saved_directory: str, game_directory: str
+) -> None:
+    if game_directory == saved_directory:
+        return
+    await persist_initialized_server_game_directory(
+        db,
+        user_id=user_id,
+        key=key,
+        game_directory=game_directory,
+        legacy_store=redis_manager,
+    )
 
 
 def _host_operation_view(record: dict, initialized_server_id: int) -> InitializedHostOperationView:
@@ -263,6 +304,28 @@ async def deploy_from_initialized_host(
     request: Request,
 ) -> InitializedHostDeployView:
     saved = await _resolve_owned(db, str(initialized_server_id), current_user.id)
+    game_directory = _normalized_deploy_directory(body.game_directory, saved.game_directory)
+    duplicate = await find_host_directory_server(db, saved.host, game_directory, current_user.id)
+    if duplicate is not None and not body.redeploy_existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=host_directory_conflict_payload(duplicate, saved.host, game_directory),
+        )
+    await _sync_initialized_host_directory(
+        db,
+        user_id=current_user.id,
+        key=str(initialized_server_id),
+        saved_directory=saved.game_directory,
+        game_directory=game_directory,
+    )
+    if duplicate is not None:
+        await require_captcha(db, body.captcha_token, body.captcha_code)
+        operation = await _enqueue_initialized_host_deploy(duplicate.id, current_user.id)
+        return InitializedHostDeployView(
+            initialized_server_id=initialized_server_id,
+            server_id=duplicate.id,
+            operation=to_view(operation),
+        )
     server_data = ServerCreate.model_validate(
         {
             "name": body.name,
@@ -271,7 +334,7 @@ async def deploy_from_initialized_host(
             "ssh_user": saved.ssh_user,
             "ssh_password": saved.ssh_password,
             "game_port": body.game_port,
-            "game_directory": saved.game_directory,
+            "game_directory": game_directory,
             "server_name": body.server_name,
             "captcha_token": body.captcha_token,
             "captcha_code": body.captcha_code,
@@ -284,14 +347,7 @@ async def deploy_from_initialized_host(
         request,
         skip_host_initialization=True,
     )
-    try:
-        operation = await enqueue_server_operation(
-            server_id=server.id,
-            action="deploy",
-            actor_user_id=current_user.id,
-        )
-    except ServerOperationConflict as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    operation = await _enqueue_initialized_host_deploy(server.id, current_user.id)
     return InitializedHostDeployView(
         initialized_server_id=initialized_server_id,
         server_id=server.id,

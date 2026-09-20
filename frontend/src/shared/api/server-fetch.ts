@@ -5,7 +5,12 @@ import { internalApiUrl } from "@/shared/config/internal-api";
 
 export type ApiResult<T> =
   | { readonly ok: true; readonly data: T }
-  | { readonly ok: false; readonly status: number; readonly error: string };
+  | {
+      readonly ok: false;
+      readonly status: number;
+      readonly error: string;
+      readonly detail?: unknown;
+    };
 
 export type ApiFetchInit = Omit<RequestInit, "signal"> & {
   signal?: AbortSignal | null;
@@ -65,10 +70,12 @@ export async function apiFetch<T>(
       },
     });
     if (!response.ok) {
+      const parsed = await readApiError(response, path);
       return {
         ok: false,
         status: response.status,
-        error: await readApiError(response, path),
+        error: parsed.error,
+        detail: parsed.detail,
       };
     }
     const data = (await response.json()) as T;
@@ -82,27 +89,31 @@ export async function apiFetch<T>(
   }
 }
 
-async function readApiError(response: Response, path: string): Promise<string> {
+async function readApiError(
+  response: Response,
+  path: string,
+): Promise<{ error: string; detail?: unknown }> {
   const fallback = `Request to ${path} failed with ${response.status}`;
   try {
     const body = (await response.json()) as { detail?: unknown };
-    if (typeof body.detail === "string" && body.detail.trim()) {
-      return body.detail;
+    const detail = body.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return { error: detail, detail };
     }
-    if (Array.isArray(body.detail) && body.detail.length > 0) {
-      const first = body.detail[0] as { msg?: unknown };
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0] as { msg?: unknown };
       if (typeof first?.msg === "string" && first.msg.trim()) {
-        return first.msg;
+        return { error: first.msg, detail };
       }
     }
-    if (body.detail && typeof body.detail === "object") {
-      const detail = body.detail as { message?: unknown };
-      if (typeof detail.message === "string" && detail.message.trim()) {
-        return detail.message;
+    if (detail && typeof detail === "object") {
+      const message = (detail as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim()) {
+        return { error: message, detail };
       }
     }
   } catch {
     // The error body is optional; keep the status-based fallback.
   }
-  return fallback;
+  return { error: fallback };
 }

@@ -161,7 +161,7 @@ async def test_create_record_captcha_duplicates_defaults_and_audit(monkeypatch):
     request = SimpleNamespace()
     monkeypatch.setattr(crud, "require_captcha", AsyncMock())
     monkeypatch.setattr(crud.Server, "get_by_name_and_user", AsyncMock(return_value=None))
-    monkeypatch.setattr(crud.Server, "get_by_host_directory_and_user", AsyncMock(return_value=None))
+    monkeypatch.setattr(crud, "find_host_directory_server", AsyncMock(return_value=None))
     monkeypatch.setattr(crud, "inherit_global_discord_binding", AsyncMock())
     monkeypatch.setattr(crud, "record_audit_event", AsyncMock())
     monkeypatch.setattr(crud, "generate_api_key", lambda: "api-key")
@@ -207,12 +207,18 @@ async def test_create_record_captcha_duplicates_defaults_and_audit(monkeypatch):
     assert exc.value.status_code == 409
 
     monkeypatch.setattr(crud.Server, "get_by_name_and_user", AsyncMock(return_value=None))
-    monkeypatch.setattr(
-        crud.Server, "get_by_host_directory_and_user", AsyncMock(return_value=SimpleNamespace())
-    )
+    finder = AsyncMock(return_value=SimpleNamespace(id=4, name="dup"))
+    monkeypatch.setattr(crud, "find_host_directory_server", finder)
     with pytest.raises(HTTPException) as exc:
-        await crud.create_server_record(_create(), _DB(), user, request)
-    assert exc.value.status_code == 400
+        await crud.create_server_record(_create(game_directory="/srv/cs2/"), _DB(), user, request)
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "host_directory_exists"
+    assert exc.value.detail["existing_server_id"] == 4
+    assert finder.await_args.args[2] == "/srv/cs2"
+
+    with pytest.raises(HTTPException) as invalid_dir:
+        await crud.create_server_record(_create(game_directory="/"), _DB(), user, request)
+    assert invalid_dir.value.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -220,7 +226,7 @@ async def test_create_record_skip_validation_proxy_modes_and_listing(monkeypatch
     user = SimpleNamespace(id=8)
     monkeypatch.setattr(crud, "require_captcha", AsyncMock())
     monkeypatch.setattr(crud.Server, "get_by_name_and_user", AsyncMock(return_value=None))
-    monkeypatch.setattr(crud.Server, "get_by_host_directory_and_user", AsyncMock(return_value=None))
+    monkeypatch.setattr(crud, "find_host_directory_server", AsyncMock(return_value=None))
     monkeypatch.setattr(crud, "inherit_global_discord_binding", AsyncMock())
     monkeypatch.setattr(crud, "record_audit_event", AsyncMock())
     monkeypatch.setattr(crud, "generate_api_key", lambda: "key")

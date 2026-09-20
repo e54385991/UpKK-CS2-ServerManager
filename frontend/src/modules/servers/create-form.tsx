@@ -29,6 +29,8 @@ import {
   pickInitializedHost,
   rememberInitializedHost,
   setupWizardHref,
+  isInvalidGameDirectory,
+  parseHostDirectoryConflict,
 } from "@/modules/servers/initialized-hosts";
 import { AptMirrorSwitcher } from "@/modules/servers/apt-mirror-switcher";
 import {
@@ -92,6 +94,7 @@ export function CreateServerForm({
     initialCredentials?.key ?? "",
   );
   const [displayName, setDisplayName] = useState(initialCredentials?.name ?? "");
+  const [gameDirectory, setGameDirectory] = useState(initialCredentials?.gameDirectory ?? "");
   const [aptMirror, setAptMirror] = useState<AptMirrorId>("official");
   const [steamAccountToken, setSteamAccountToken] = useState("");
   const [additionalParameters, setAdditionalParameters] = useState("");
@@ -110,6 +113,7 @@ export function CreateServerForm({
       if (!key) {
         setSelectedHostKey("");
         setAccount(undefined);
+        setGameDirectory("");
         return;
       }
       const creds = await getInitializedHostCredentialsAction(key);
@@ -123,6 +127,7 @@ export function CreateServerForm({
       rememberInitializedHost(creds.data.host);
       setSelectedHostKey(key);
       setAccount(creds.data);
+      setGameDirectory(creds.data.gameDirectory);
       setDisplayName((current) =>
         current.trim() === "" ? creds.data.name : current,
       );
@@ -165,6 +170,7 @@ export function CreateServerForm({
         rememberInitializedHost(creds.data.host);
         setSelectedHostKey(match.key);
         setAccount(creds.data);
+        setGameDirectory(creds.data.gameDirectory);
         setDisplayName((current) =>
           current.trim() === "" ? creds.data.name : current,
         );
@@ -203,6 +209,14 @@ export function CreateServerForm({
       router.push(setupWizardHref({ name }) as Route);
       return;
     }
+    const nextDirectory = gameDirectory.trim();
+    if (isInvalidGameDirectory(nextDirectory)) {
+      await alertDialog({
+        title: t("errorTitle"),
+        description: t("invalidGameDirectory"),
+      });
+      return;
+    }
     setError(null);
     setPending(true);
     const result = await createServerAction({
@@ -213,7 +227,7 @@ export function CreateServerForm({
       sshPassword: account.sshPassword,
       aptMirror,
       gamePort: Number(form.get("gamePort") ?? 27015),
-      gameDirectory: account.gameDirectory,
+      gameDirectory: nextDirectory,
       description: String(form.get("description") ?? "") || undefined,
       captchaToken: captcha.token,
       captchaCode: String(form.get("captcha") ?? "").trim(),
@@ -231,6 +245,24 @@ export function CreateServerForm({
     setPending(false);
     if (!result.ok) {
       refreshCaptcha();
+      const conflict = parseHostDirectoryConflict(result.status, result.error, result.detail);
+      if (conflict) {
+        const { confirm: confirmDialog } = await import("@/shared/feedback/confirm-store");
+        const confirmed = await confirmDialog({
+          title: t("directoryExistsTitle"),
+          description: t("directoryExistsHelp", {
+            name: conflict.existingServerName || conflict.host,
+            directory: conflict.gameDirectory,
+          }),
+          confirmLabel: t("directoryExistsConfirm"),
+        });
+        if (confirmed) {
+          router.push(`/servers/${conflict.existingServerId}/operations` as Route);
+          router.refresh();
+          return;
+        }
+        return;
+      }
       void alertDialog({
         title: t("errorTitle"),
         description: result.error,
@@ -416,11 +448,20 @@ export function CreateServerForm({
                     <SummaryItem label={t("fields.host")} value={account.host} testId="selected-account-host" />
                     <SummaryItem label={t("fields.sshUser")} value={account.sshUser} testId="selected-account-ssh-user" />
                     <SummaryItem label={t("fields.sshPort")} value={String(account.sshPort)} />
-                    <SummaryItem
+                    <Field
                       className="sm:col-span-2"
                       label={t("fields.gameDirectory")}
-                      value={account.gameDirectory}
-                    />
+                      htmlFor="create-game-directory"
+                      hint={t("gameDirectoryHelp")}
+                    >
+                      <Input
+                        id="create-game-directory"
+                        value={gameDirectory}
+                        maxLength={500}
+                        spellCheck={false}
+                        onChange={(event) => setGameDirectory(event.target.value)}
+                      />
+                    </Field>
                   </dl>
                   <p className="text-xs text-fg-subtle">{t("selectedAccountHelp")}</p>
                 </div>

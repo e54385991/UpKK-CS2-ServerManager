@@ -11449,6 +11449,8 @@ export interface components {
             captcha_code?: string | null;
             /** Captcha Token */
             captcha_token?: string | null;
+            /** Game Directory */
+            game_directory?: string | null;
             /**
              * Game Port
              * @default 27015
@@ -11456,6 +11458,11 @@ export interface components {
             game_port: number;
             /** Name */
             name: string;
+            /**
+             * Redeploy Existing
+             * @default false
+             */
+            redeploy_existing: boolean;
             /**
              * Server Name
              * @default CS2 Server

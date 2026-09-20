@@ -232,6 +232,10 @@ async def test_setup_stream_delete_deploy_and_auto_setup_paths(monkeypatch):
         "create_server_record",
         AsyncMock(return_value=SimpleNamespace(id=12)),
     )
+    monkeypatch.setattr(setup, "find_host_directory_server", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        setup, "persist_initialized_server_game_directory", AsyncMock(return_value=False)
+    )
     deploy_operation = _operation(server_id=12, action="deploy")
     monkeypatch.setattr(setup, "enqueue_server_operation", AsyncMock(return_value=deploy_operation))
     deployed = await setup.deploy_from_initialized_host(
@@ -242,6 +246,9 @@ async def test_setup_stream_delete_deploy_and_auto_setup_paths(monkeypatch):
         SimpleNamespace(),
     )
     assert deployed.server_id == 12 and deployed.operation.action == "deploy"
+    setup.create_server_record.assert_awaited()
+    create_payload = setup.create_server_record.await_args.args[0]
+    assert create_payload.game_directory == "/srv/cs2"
     monkeypatch.setattr(
         setup, "enqueue_server_operation", AsyncMock(side_effect=ServerOperationConflict("busy"))
     )
@@ -291,6 +298,81 @@ async def test_setup_stream_delete_deploy_and_auto_setup_paths(monkeypatch):
     )
     auto = await setup.run_auto_setup(body, user, _Db())
     assert auto.success and auto.logs == []
+
+
+@pytest.mark.asyncio
+async def test_deploy_from_initialized_host_custom_directory_conflict_and_redeploy(
+    monkeypatch,
+):
+    saved = _record()
+    user = SimpleNamespace(id=9)
+    monkeypatch.setattr(setup, "_resolve_owned", AsyncMock(return_value=saved))
+    create_server = AsyncMock(return_value=SimpleNamespace(id=12))
+    persist = AsyncMock(return_value=True)
+    monkeypatch.setattr(setup, "create_server_record", create_server)
+    monkeypatch.setattr(setup, "persist_initialized_server_game_directory", persist)
+    monkeypatch.setattr(setup, "find_host_directory_server", AsyncMock(return_value=None))
+    monkeypatch.setattr(setup, "require_captcha", AsyncMock())
+    enqueue = AsyncMock(return_value=_operation(server_id=12, action="deploy"))
+    monkeypatch.setattr(setup, "enqueue_server_operation", enqueue)
+
+    created = await setup.deploy_from_initialized_host(
+        7,
+        InitializedHostDeployRequest(name="second", game_directory="/home/cs2server/cs2-2"),
+        _Db(),
+        user,
+        SimpleNamespace(),
+    )
+    assert created.server_id == 12
+    assert create_server.await_args.args[0].game_directory == "/home/cs2server/cs2-2"
+    persist.assert_awaited_once()
+
+    create_server.reset_mock()
+    persist.reset_mock()
+    ignored = await setup.deploy_from_initialized_host(
+        7,
+        InitializedHostDeployRequest(
+            name="third",
+            game_directory="/home/cs2server/cs2-3",
+            redeploy_existing=True,
+        ),
+        _Db(),
+        user,
+        SimpleNamespace(),
+    )
+    assert ignored.server_id == 12
+    create_server.assert_awaited_once()
+    persist.assert_awaited_once()
+
+    existing = SimpleNamespace(id=44, name="lan")
+    monkeypatch.setattr(setup, "find_host_directory_server", AsyncMock(return_value=existing))
+    create_server.reset_mock()
+    with pytest.raises(HTTPException) as conflict:
+        await setup.deploy_from_initialized_host(
+            7,
+            InitializedHostDeployRequest(name="second"),
+            _Db(),
+            user,
+            SimpleNamespace(),
+        )
+    assert conflict.value.status_code == 409
+    assert conflict.value.detail["code"] == "host_directory_exists"
+    assert conflict.value.detail["existing_server_id"] == 44
+    create_server.assert_not_awaited()
+
+    enqueue.reset_mock()
+    enqueue.return_value = _operation(server_id=44, action="deploy")
+    redeployed = await setup.deploy_from_initialized_host(
+        7,
+        InitializedHostDeployRequest(name="second", redeploy_existing=True),
+        _Db(),
+        user,
+        SimpleNamespace(),
+    )
+    assert redeployed.server_id == 44
+    create_server.assert_not_awaited()
+    enqueue.assert_awaited_once()
+    assert enqueue.await_args.kwargs["server_id"] == 44
 
 
 @pytest.mark.asyncio

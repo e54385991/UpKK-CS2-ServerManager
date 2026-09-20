@@ -16,7 +16,7 @@ import {
   type AutoSetupResult,
   type InitializedHost,
   type InitializedHostCredentials,
-  type InitializedHostDeployResult,
+  type InitializedHostDeployOutcome,
   type InitializedHostOperation,
   type ManualSetupScript,
 } from "@/modules/servers/setup-api";
@@ -64,14 +64,17 @@ export async function deployFromInitializedHostAction(
     name: string;
     gamePort: number;
     serverName: string;
+    gameDirectory?: string;
+    redeployExisting?: boolean;
     captchaToken?: string;
     captchaCode?: string;
   },
-): Promise<ApiResult<InitializedHostDeployResult>> {
+): Promise<InitializedHostDeployOutcome> {
   const result = await deployFromInitializedHost(id, input);
   if (result.ok) {
     revalidatePath("/servers");
     revalidatePath("/servers/initialized");
+    revalidatePath(`/servers/${result.data.serverId}`);
   }
   return result;
 }

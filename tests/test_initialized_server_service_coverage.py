@@ -228,6 +228,33 @@ async def test_save_initialized_server_inserts_and_updates_by_identity():
 
 
 @pytest.mark.asyncio
+async def test_persist_initialized_server_game_directory_updates_durable_row():
+    row = _row(row_id=4, user_id=7, game_directory="/srv/cs2")
+    db = _DB(get_value=row)
+    changed = await service.persist_initialized_server_game_directory(
+        db, user_id=7, key="4", game_directory="/srv/cs2-2"
+    )
+    assert changed is True and row.game_directory == "/srv/cs2-2" and db.commits == 1
+
+    skipped = await service.persist_initialized_server_game_directory(
+        db, user_id=7, key="4", game_directory="/srv/cs2-2"
+    )
+    assert skipped is False and db.commits == 1
+
+    legacy = _Legacy(raw={"user_id": 7, "host": "legacy", "game_directory": "/old"})
+    assert (
+        await service.persist_initialized_server_game_directory(
+            _DB(get_value=None),
+            user_id=7,
+            key="legacy-key",
+            game_directory="/new",
+            legacy_store=legacy,
+        )
+        is False
+    )
+
+
+@pytest.mark.asyncio
 async def test_resolve_enforces_owner_and_handles_numeric_and_legacy_keys():
     row = _row(row_id=4, user_id=7)
     db = _DB(get_value=row)

@@ -1,6 +1,7 @@
 import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
 import { mapServerOperation } from "@/modules/servers/operation-inbox";
+import { parseHostDirectoryConflict, type HostDirectoryConflict } from "@/modules/servers/initialized-hosts";
 import type { ServerOperation } from "@/modules/servers/types";
 
 export type InitializedHost = {
@@ -77,6 +78,10 @@ export type InitializedHostDeployResult = {
   readonly initializedServerId: number;
   readonly serverId: number;
   readonly operation: ServerOperation;
+};
+
+export type InitializedHostDeployOutcome = ApiResult<InitializedHostDeployResult> & {
+  readonly conflict?: HostDirectoryConflict;
 };
 
 type InitializedHostDto = {
@@ -236,10 +241,12 @@ export async function deployFromInitializedHost(
     name: string;
     gamePort: number;
     serverName: string;
+    gameDirectory?: string;
+    redeployExisting?: boolean;
     captchaToken?: string;
     captchaCode?: string;
   },
-): Promise<ApiResult<InitializedHostDeployResult>> {
+): Promise<InitializedHostDeployOutcome> {
   const result = await apiFetch<InitializedHostDeployDto>(
     `/api/v1/setup/initialized-servers/${id}/deploy`,
     {
@@ -249,12 +256,19 @@ export async function deployFromInitializedHost(
         name: input.name,
         game_port: input.gamePort,
         server_name: input.serverName,
+        game_directory: input.gameDirectory || undefined,
+        redeploy_existing: input.redeployExisting === true,
         captcha_token: input.captchaToken || undefined,
         captcha_code: input.captchaCode || undefined,
       }),
     },
   );
-  if (!result.ok) return result;
+  if (!result.ok) {
+    return {
+      ...result,
+      conflict: parseHostDirectoryConflict(result.status, result.error, result.detail),
+    };
+  }
   return {
     ok: true,
     data: {
