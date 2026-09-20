@@ -18,7 +18,7 @@
 | Node.js | 26 Current（Docker `node:26.9.0-alpine`） | CI `setup-node` 与前端镜像对齐 |
 | 前端控制台 | Next.js 16.3.5、React 19.3.0 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
 
-关键安全包当前下限为 `boto3>=1.43.97`、`cryptography>=50.0.1`。Dependabot 每周检查
+关键安全包当前下限为 `boto3>=1.43.98`、`cryptography>=50.0.1`。Dependabot 每周检查
 uv、npm（`frontend/`）、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围，ESLint 10 与 Next.js 16.3.5 内置插件不兼容，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.17,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
 
 ## 更新流程
