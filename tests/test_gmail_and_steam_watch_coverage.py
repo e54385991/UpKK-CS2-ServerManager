@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock
@@ -140,6 +141,160 @@ async def test_gmail_oauth_flow_success_and_failure_redirect(monkeypatch):
     settings.gmail_credentials_json = "not-json"
     callback = await gmail.gmail_oauth_callback(SimpleNamespace(), code="code", db=db)
     assert callback.headers["location"] == "/settings?gmail_auth=error"
+
+
+def _install_gmail_flow(monkeypatch, flow_cls: type) -> None:
+    flow_module = ModuleType("google_auth_oauthlib.flow")
+    flow_module.Flow = flow_cls
+    package = ModuleType("google_auth_oauthlib")
+    package.flow = flow_module
+    monkeypatch.setitem(sys.modules, "google_auth_oauthlib", package)
+    monkeypatch.setitem(sys.modules, "google_auth_oauthlib.flow", flow_module)
+    monkeypatch.setattr(gmail.settings, "BACKEND_URL", "https://panel.invalid")
+    monkeypatch.setattr(gmail.settings, "SECRET_KEY", "s" * 32)
+
+
+@pytest.mark.asyncio
+async def test_gmail_callback_saves_token_when_google_adds_openid_scopes(monkeypatch):
+    send = "https://www.googleapis.com/auth/gmail.send"
+    granted = [
+        "https://www.googleapis.com/auth/userinfo.email",
+        send,
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.profile",
+    ]
+
+    class _Flow:
+        def __init__(self, code_verifier: str | None = None):
+            self.code_verifier = code_verifier
+            self.oauth2session = SimpleNamespace(token=None)
+
+        @classmethod
+        def from_client_config(cls, *_args, **kwargs):
+            return cls(code_verifier=kwargs.get("code_verifier"))
+
+        def fetch_token(self, **_kwargs):
+            warning = Warning(
+                'Scope has changed from "https://www.googleapis.com/auth/gmail.send" to '
+                '"https://www.googleapis.com/auth/userinfo.email '
+                "https://www.googleapis.com/auth/gmail.send openid "
+                'https://www.googleapis.com/auth/userinfo.profile".'
+            )
+            warning.new_scope = list(granted)
+            warning.token = {
+                "access_token": "access-kept",
+                "refresh_token": "refresh-kept",
+                "expires_at": 1_893_456_000,
+                "scope": list(granted),
+            }
+            raise warning
+
+        @property
+        def credentials(self):
+            token = self.oauth2session.token or {}
+            return SimpleNamespace(
+                token=token.get("access_token"),
+                refresh_token=token.get("refresh_token"),
+                token_uri="https://oauth.invalid/token",
+                client_id="client",
+                client_secret="secret",
+                scopes=[send],
+                granted_scopes=token.get("scope"),
+            )
+
+    _install_gmail_flow(monkeypatch, _Flow)
+    db = _Db()
+    settings = SimpleNamespace(
+        gmail_credentials_json='{"web": {"client_id": "id"}}', gmail_token_json=None
+    )
+    monkeypatch.setattr(
+        gmail.SystemSettings, "get_or_create_settings", AsyncMock(return_value=settings)
+    )
+    state = gmail.sign_oauth_state("https://panel.invalid", "a" * 43)
+    callback = await gmail.gmail_oauth_callback(SimpleNamespace(), code="code", state=state, db=db)
+    assert callback.headers["location"] == "/settings?gmail_auth=success"
+    assert settings.gmail_token_json is not None
+    saved = json.loads(settings.gmail_token_json)
+    assert saved["token"] == "access-kept"
+    assert saved["refresh_token"] == "refresh-kept"
+    assert send in saved["scopes"]
+    assert "openid" in saved["scopes"]
+    assert "access-kept" not in callback.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_gmail_callback_rejects_a_token_that_dropped_gmail_send(monkeypatch):
+    class _Flow:
+        def __init__(self, code_verifier: str | None = None):
+            self.code_verifier = code_verifier
+            self.oauth2session = SimpleNamespace(token=None)
+
+        @classmethod
+        def from_client_config(cls, *_args, **kwargs):
+            return cls(code_verifier=kwargs.get("code_verifier"))
+
+        def fetch_token(self, **_kwargs):
+            warning = Warning("Scope has changed")
+            warning.new_scope = ["openid"]
+            warning.token = {
+                "access_token": "dropped",
+                "refresh_token": "dropped",
+                "expires_at": 1,
+                "scope": ["openid"],
+            }
+            raise warning
+
+        @property
+        def credentials(self):
+            raise AssertionError("a token without gmail.send must not be stored")
+
+    _install_gmail_flow(monkeypatch, _Flow)
+    db = _Db()
+    settings = SimpleNamespace(
+        gmail_credentials_json='{"web": {"client_id": "id"}}', gmail_token_json=None
+    )
+    monkeypatch.setattr(
+        gmail.SystemSettings, "get_or_create_settings", AsyncMock(return_value=settings)
+    )
+    state = gmail.sign_oauth_state("https://panel.invalid", "a" * 43)
+    rejected = await gmail.gmail_oauth_callback(SimpleNamespace(), code="code", state=state, db=db)
+    assert rejected.headers["location"] == "/settings?gmail_auth=error"
+    assert settings.gmail_token_json is None
+
+
+def test_gmail_scope_helpers_accept_only_a_complete_send_token():
+    send = "https://www.googleapis.com/auth/gmail.send"
+    flow = SimpleNamespace(oauth2session=SimpleNamespace(token=None))
+
+    with pytest.raises(Warning):
+        gmail.exchange_gmail_code(SimpleNamespace(), "code")
+
+    def incomplete(**_kwargs):
+        warning = Warning("changed")
+        warning.new_scope = [send]
+        warning.token = {"access_token": "t"}
+        raise warning
+
+    flow.fetch_token = incomplete
+    with pytest.raises(Warning):
+        gmail.exchange_gmail_code(flow, "code")
+
+    def expanded(**_kwargs):
+        warning = Warning("changed")
+        warning.new_scope = f"openid {send}"
+        warning.token = {"access_token": "kept", "expires_at": 1}
+        raise warning
+
+    flow.fetch_token = expanded
+    gmail.exchange_gmail_code(flow, "code")
+    assert flow.oauth2session.token["access_token"] == "kept"
+
+    with pytest.raises(Warning):
+        gmail.exchange_gmail_code(SimpleNamespace(fetch_token=expanded), "code")
+
+    assert gmail.stored_gmail_scopes(SimpleNamespace(scopes=[send])) == [send]
+    assert gmail.stored_gmail_scopes(SimpleNamespace()) == [send]
+    assert gmail._warning_scopes(Warning("x")) == []
 
 
 def test_gmail_authorize_origin_prefers_the_browser_over_backend_url(monkeypatch):
