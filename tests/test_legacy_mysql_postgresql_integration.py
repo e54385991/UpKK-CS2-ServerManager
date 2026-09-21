@@ -78,6 +78,8 @@ def _legacy_test_metadata() -> MetaData:
         for column in table.columns:
             if isinstance(column.type, JSONB):
                 column.type = JSON()
+                # PostgreSQL defaults such as '[]'::jsonb are not valid MySQL.
+                column.server_default = None
         _mysql_safe_unique_string_columns(table)
 
     servers = metadata.tables["servers"]
@@ -124,6 +126,8 @@ def test_legacy_schema_compiles_for_mysql_without_database():
                     assert length <= _MYSQL_UTF8MB4_UNIQUE_CHAR_LIMIT
     credential_id = metadata.tables["webauthn_credentials"].c.credential_id
     assert getattr(credential_id.type, "length", None) == _MYSQL_UTF8MB4_UNIQUE_CHAR_LIMIT
+    compiled = str(CreateTable(metadata.tables["webauthn_credentials"]).compile(dialect=dialect))
+    assert "::jsonb" not in compiled.casefold()
 
 
 def _placeholder(column, variant: int):

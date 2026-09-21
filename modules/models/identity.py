@@ -2,7 +2,7 @@
 
 # ruff: noqa: F403,F405
 
-from sqlalchemy import BigInteger, LargeBinary
+from sqlalchemy import BigInteger, DateTime, LargeBinary
 
 from .common import *
 
@@ -118,15 +118,30 @@ class WebAuthnCredential(SQLModel, table=True):
         default=0,
         sa_column=Column(BigInteger(), nullable=False, server_default=text("0")),
     )
-    transports: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    transports: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False, server_default=text("'[]'::jsonb")),
+    )
     aaguid: Optional[str] = Field(default=None, max_length=36)
     backup_eligible: Optional[bool] = Field(default=None)
     backup_state: Optional[bool] = Field(default=None)
-    nickname: str = Field(default="", max_length=100)
-    created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    nickname: str = Field(
+        default="",
+        max_length=100,
+        sa_column_kwargs={"server_default": text("''")},
     )
-    last_used_at: Optional[datetime] = Field(default=None)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=text("CURRENT_TIMESTAMP"),
+            nullable=True,
+        ),
+    )
+    last_used_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
 
     def __repr__(self) -> str:
         return f"<WebAuthnCredential(id={self.id}, user_id={self.user_id})>"

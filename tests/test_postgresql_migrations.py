@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from alembic.migration import MigrationContext
-from sqlalchemy import Column, String, func, select, text
+from sqlalchemy import Column, DateTime, String, func, select, text
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
@@ -92,6 +92,22 @@ def test_models_use_jsonb_nonnative_enums_and_expected_query_indexes():
         "uq_users_email_ci",
         "ix_webauthn_credentials_user_id",
     } <= index_names
+
+
+def test_webauthn_credentials_match_revision_0033_column_contract():
+    table = SQLModel.metadata.tables["webauthn_credentials"]
+    context = MigrationContext.configure(dialect_name="postgresql")
+    created_at = Column("created_at", DateTime(timezone=True), nullable=True)
+    last_used_at = Column("last_used_at", DateTime(timezone=True), nullable=True)
+
+    assert context.impl.compare_type(created_at, table.c.created_at) is False
+    assert context.impl.compare_type(last_used_at, table.c.last_used_at) is False
+    assert table.c.created_at.type.timezone is True
+    assert table.c.last_used_at.type.timezone is True
+    assert table.c.transports.server_default is not None
+    assert "'[]'::jsonb" in str(table.c.transports.server_default.arg)
+    assert table.c.nickname.server_default is not None
+    assert str(table.c.nickname.server_default.arg) in {"", "''"}
 
 
 @pytest.mark.parametrize(
