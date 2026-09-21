@@ -11,7 +11,6 @@
 | PostgreSQL | Compose `18.6-alpine` | 健康检查后启动，Alembic 自动升级 |
 | Redis | Compose `8.10.1-alpine` | 保持 Redis 7 协议兼容，pipeline/MGET |
 | Caddy | Compose `2.11.4-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
-| MySQL | 测试 `8.4.11` LTS | 仅遗留迁移测试，不作为生产默认 |
 | HTTP | 生产 `httpx>=0.28.1` | 应用级共享 transport |
 | Starlette 测试客户端 | `httpx2>=2.13.0`（开发） | 仅用于测试兼容层 |
 | SSH | `asyncssh>=2.24.0` | 显式 lease 和连接池 |

@@ -83,7 +83,7 @@
    凭据或强制初始化流程。
 4. 数据库已改为 PostgreSQL 18+，Alembic 是唯一 schema 权威；启动时在 PostgreSQL
    advisory lock 下自动升级并验证唯一 head，生产路径不再调用
-   `SQLModel.metadata.create_all()` 或自定义 MySQL 迁移注册表。
+   `SQLModel.metadata.create_all()`。
 
 PostgreSQL 数据库集群的主版本升级不属于 ORM/Alembic schema 升级，仍须使用
 `pg_upgrade`、dump/restore 或逻辑复制，并单独制定备份、兼容验证和回滚方案。

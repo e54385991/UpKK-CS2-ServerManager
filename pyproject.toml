@@ -35,11 +35,6 @@ dependencies = [
     "webauthn>=3.0.0",
 ]
 
-[project.optional-dependencies]
-legacy-mysql-migration = [
-    "aiomysql>=0.3.2",
-]
-
 [tool.uv]
 package = false
 

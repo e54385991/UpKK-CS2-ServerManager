@@ -62,73 +62,6 @@ uv run python -m modules.db_admin upgrade
 
 CI 会禁止多个 Alembic head，并在真实 PostgreSQL 18 上检查空库升级、重复升级、并发升级、模型漂移、JSONB、检查约束、大小写规则和序列。
 
-## MySQL 8 离线迁移
-
-迁移前必须满足全部条件：
-
-- 停止最后一个 MySQL 兼容版本的所有写入和后台任务；
-- MySQL 已升级并规范化到该版本的最终 schema；
-- 已完成并验证 MySQL 备份；
-- PostgreSQL 目标数据库为空；如果新应用曾启动并生成数据，必须明确选择事务式覆盖；
-- 保留旧应用和 MySQL 备份，直到 PostgreSQL 观察期结束。
-
-一次性 MySQL 读取依赖不属于应用运行依赖。可先安装用于检查环境：
-
-```bash
-uv sync --locked --extra legacy-mysql-migration
-```
-
-通过部署平台的 secret 管理功能设置 `LEGACY_MYSQL_DATABASE_URL`；迁移器也会回退读取项目根目录的 `.env`。不要把密码放入命令参数、工单或日志，且必须确保 `.env` 未提交并限制文件权限。URL 必须使用异步驱动：
-
-```dotenv
-LEGACY_MYSQL_DATABASE_URL=mysql+aiomysql://legacy_user:secret@mysql-host:3306/cs2_manager
-```
-
-目标 PostgreSQL 继续使用 `.env` 中的 `POSTGRES_*` 配置。应用保持停止写入时执行唯一迁移命令：
-
-```bash
-uv run --extra legacy-mysql-migration \
-  python -m scripts.migrate_mysql_to_postgresql
-```
-
-如果 PostgreSQL 已经启动过应用，且目标库中的全部应用数据都应由 MySQL 数据替换，
-先停止所有连接该目标库的应用实例，再显式执行：
-
-```bash
-uv run --extra legacy-mysql-migration \
-  python -m scripts.migrate_mysql_to_postgresql --replace-target-data
-```
-
-该开关会清理当前 Alembic schema 管理的 25 张应用表，但保留 schema 和
-`alembic_version`。目标清理、MySQL 复制和内容校验位于同一个 PostgreSQL 事务；
-复制或校验失败时原目标数据会回滚恢复，成功后原目标数据会被永久替换。默认不覆盖，
-以防配置错误时误清理其他 PostgreSQL 数据库。覆盖前仍应备份目标库。
-
-迁移器会：
-
-- 在 MySQL `REPEATABLE READ` 一致性快照中按外键依赖顺序分批读取；
-- 在 PostgreSQL 单事务内批量写入全部 25 张表；
-- 转换布尔、枚举、JSON/JSONB、`NULL` 和无时区时间；
-- 校准所有整数自增序列；
-- 对每张表比较行数、主键范围和规范化 SHA-256 内容摘要；
-- 任一复制或校验错误时回滚 PostgreSQL 数据；
-- 始终保持 MySQL 源库不变；
-- 成功时只输出表名、行数、主键范围和摘要，不输出业务字段或凭据。
-
-迁移器识别最后一个 MySQL 兼容版本可能遗留、但现行应用已不再使用的
-`global_settings`、`user_settings` 表，以及 `servers.auto_restart_enabled`、
-`servers.monitoring_interval`、`servers.tickrate` 字段。这些历史项不会写入当前
-PostgreSQL schema，但会在 `deprecated_artifacts` 中记录行数、主键范围和内容摘要；
-MySQL 源库及备份继续保留原值。除这组明确白名单外，任何未知表或字段仍会中止迁移。
-
-迁移成功后先运行：
-
-```bash
-uv run python -m modules.db_admin check
-```
-
-然后启动应用，验证登录、服务器列表、插件、定时任务、AI 会话和新增记录。观察期内若出现不能接受的问题，停止新应用并恢复旧应用指向未修改的 MySQL；不要尝试自动执行可能丢失数据的 Alembic downgrade。
-
 ## 备份与恢复
 
 建议使用 `.pgpass`、容器 secret 或备份平台托管凭据，避免在命令行中暴露密码。
@@ -157,5 +90,3 @@ Alembic 只升级应用 schema，不能升级 PostgreSQL 数据库集群。Postg
 - `timed out ... migration lock`：另一实例仍在迁移或持锁连接异常；先检查实例与数据库会话，不要绕过锁。
 - `expected exactly one Alembic head`：代码包含分叉 revision；开发者必须合并 head 后重新发布。
 - `database heads ... do not match code head`：部署代码与数据库版本不一致；核对镜像、revision 和迁移日志。
-- `target PostgreSQL application tables must be empty`：目标已有数据；停止目标应用，确认这些数据应由 MySQL 完全替换并完成备份后，使用 `--replace-target-data`。不要手工删除表或绕过校验。
-- `legacy MySQL schema is not at the final supported revision`：先用最后一个 MySQL 兼容版本完成规范化，再重新冻结写入并迁移。
