@@ -9,6 +9,7 @@ test("editorLanguageId maps common server-manager files", () => {
   assert.equal(editorLanguageId("gamemode.ini"), "properties");
   assert.equal(editorLanguageId("console.log"), "cfg");
   assert.equal(editorLanguageId("gameinfo.vdf"), "cfg");
+  assert.equal(editorLanguageId("gameinfo.gi"), "cfg");
   assert.equal(editorLanguageId(".env"), "properties");
   assert.equal(editorLanguageId("readme.md"), "md");
   assert.equal(editorLanguageId("notes.txt"), "txt");

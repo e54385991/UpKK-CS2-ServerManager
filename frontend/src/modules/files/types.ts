@@ -32,6 +32,7 @@ export const TEXT_EXTENSIONS = [
   ".properties",
   ".toml",
   ".vdf",
+  ".gi",
 ] as const;
 
 export const ARCHIVE_EXTENSIONS = [

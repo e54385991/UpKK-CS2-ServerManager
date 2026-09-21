@@ -14,9 +14,14 @@ from services.ssh.gameinfo import ensure_remote_gameinfo_search_paths, gameinfo_
 from tests.gameinfo_samples import (
     GAMEINFO_BARE,
     GAMEINFO_BOTH,
+    GAMEINFO_LEFTOVER_VARIANTS,
     GAMEINFO_METAMOD,
+    GAMEINFO_MIXED_INDENT,
+    GAMEINFO_MIXED_INDENT_FIXED,
     GAMEINFO_SWIFTLY,
     GAMEINFO_SWIFTLY_THEN_METAMOD,
+    GAMEINFO_VALVE_BOTH,
+    GAMEINFO_VALVE_SEARCHPATHS,
 )
 
 
@@ -68,6 +73,47 @@ def test_rewrite_reports_missing_anchor():
     result = rewrite_gameinfo_search_paths("Game\tcsgo\n", include_swiftly=True)
     assert result.missing_anchor
     assert result.changed is False
+
+
+def test_rewrite_matches_valve_stock_indent_and_separator():
+    result = rewrite_gameinfo_search_paths(
+        GAMEINFO_VALVE_SEARCHPATHS,
+        include_metamod=True,
+        include_swiftly=True,
+    )
+    assert result.content == GAMEINFO_VALVE_BOTH
+    metamod_line = "\t\t\tGame\tcsgo/addons/metamod\n"
+    swiftly_line = "\t\t\tGame\tcsgo/addons/swiftlys2\n"
+    vanilla_line = "\t\t\tGame\tcsgo\n"
+    assert metamod_line in result.content
+    assert swiftly_line in result.content
+    assert result.content.index(metamod_line) < result.content.index(swiftly_line)
+    assert result.content.index(swiftly_line) < result.content.index(vanilla_line)
+
+
+def test_rewrite_realigns_mixed_indent_leftovers_to_game_csgo():
+    result = rewrite_gameinfo_search_paths(
+        GAMEINFO_MIXED_INDENT,
+        include_metamod=True,
+        include_swiftly=True,
+    )
+    assert result.content == GAMEINFO_MIXED_INDENT_FIXED
+    assert result.changed is True
+
+
+def test_rewrite_consumes_quoted_and_gamebin_leftovers():
+    result = rewrite_gameinfo_search_paths(
+        GAMEINFO_LEFTOVER_VARIANTS,
+        include_metamod=True,
+        include_swiftly=True,
+    )
+    assert result.has_metamod and result.has_swiftly
+    assert '"csgo/addons/metamod"' not in result.content
+    assert "GameBin" not in result.content
+    assert result.content.count(GAMEINFO_METAMOD_PATH) == 1
+    assert result.content.count(GAMEINFO_SWIFTLY_PATH) == 1
+    assert "\t\t\tGame\tcsgo/addons/metamod\n" in result.content
+    assert "\t\t\tGame\tcsgo/addons/swiftlys2\n" in result.content
 
 
 def test_gameinfo_has_search_path_ignores_plain_csgo_entry():

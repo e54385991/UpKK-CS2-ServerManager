@@ -4,6 +4,7 @@ import {
   compareEntries,
   filterAndSortEntries,
   highlightName,
+  isTextFile,
   matchesFileQuery,
   matchesKindFilter,
   type FileEntry,
@@ -37,9 +38,18 @@ test("matchesFileQuery requires every token in the file name", () => {
 test("kind filters split folders, archives, and text", () => {
   assert.equal(matchesKindFilter(entry("addons", "directory"), "folders"), true);
   assert.equal(matchesKindFilter(entry("notes.txt", "file"), "text"), true);
+  assert.equal(matchesKindFilter(entry("gameinfo.gi", "file"), "text"), true);
   assert.equal(matchesKindFilter(entry("mod.zip", "file"), "archives"), true);
   assert.equal(matchesKindFilter(entry("mod.zip", "file"), "text"), false);
   assert.equal(matchesKindFilter(entry("addons", "directory"), "files"), false);
+});
+
+test("isTextFile treats CS2 KeyValues suffixes as editable text", () => {
+  assert.equal(isTextFile("gameinfo.gi"), true);
+  assert.equal(isTextFile("GameInfo.GI"), true);
+  assert.equal(isTextFile("plugin.vdf"), true);
+  assert.equal(isTextFile(".gitignore"), true);
+  assert.equal(isTextFile("plugin.dll"), false);
 });
 
 test("filterAndSortEntries hides dot entries and keeps folders first", () => {

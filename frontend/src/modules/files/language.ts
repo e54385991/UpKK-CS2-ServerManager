@@ -8,6 +8,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
   log: "cfg",
   properties: "properties",
   sh: "sh",
+  gi: "cfg",
   vdf: "cfg",
   yml: "yaml",
 };

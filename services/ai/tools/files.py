@@ -320,6 +320,7 @@ async def patch_server_text_file(ctx: ToolContext, data: FilePatchInput) -> dict
         ".yml",
         ".toml",
         ".vdf",
+        ".gi",
         ".sp",
         ".cs",
         ".conf",
