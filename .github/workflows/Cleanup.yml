@@ -36,35 +36,36 @@ jobs:
     - name: Cleanup old container image versions (keep latest image)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        PACKAGE_NAME: upkk-cs2-servermanager
       run: |
-        echo "Fetching container image versions..."
-        versions=$(gh api --paginate \
-          "user/packages/container/${PACKAGE_NAME}/versions?per_page=100" \
-          --jq '.[] | [.id, .created_at] | @tsv' | sort -k2,2r)
+        for package_path in upkk-cs2-servermanager upkk-cs2-servermanager%2Fweb; do
+          echo "Fetching container image versions for ${package_path}..."
+          versions=$(gh api --paginate \
+            "user/packages/container/${package_path}/versions?per_page=100" \
+            --jq '.[] | [.id, .created_at] | @tsv' | sort -k2,2r)
 
-        if [ -z "$versions" ]; then
-          echo "No container image versions found"
-          exit 0
-        fi
+          if [ -z "$versions" ]; then
+            echo "No container image versions found for ${package_path}"
+            continue
+          fi
 
-        version_count=$(printf '%s\n' "$versions" | grep -c .)
-        keep_count=3
-        echo "Total container image versions: $version_count"
-        echo "Keeping the latest $keep_count versions (multi-arch manifest plus two platform images)"
+          version_count=$(printf '%s\n' "$versions" | grep -c .)
+          keep_count=3
+          echo "Total container image versions for ${package_path}: $version_count"
+          echo "Keeping the latest $keep_count versions (multi-arch manifest plus two platform images)"
 
-        if [ "$version_count" -le "$keep_count" ]; then
-          echo "No container image versions to delete"
-          exit 0
-        fi
+          if [ "$version_count" -le "$keep_count" ]; then
+            echo "No container image versions to delete for ${package_path}"
+            continue
+          fi
 
-        printf '%s\n' "$versions" | tail -n +$((keep_count + 1)) | \
-          while IFS=$'\t' read -r version_id created_at; do
-            if [ -n "$version_id" ]; then
-              echo "Deleting container image version ID: $version_id (created $created_at)"
-              gh api "user/packages/container/${PACKAGE_NAME}/versions/${version_id}" -X DELETE
-            fi
-          done
+          printf '%s\n' "$versions" | tail -n +$((keep_count + 1)) | \
+            while IFS=$'\t' read -r version_id created_at; do
+              if [ -n "$version_id" ]; then
+                echo "Deleting ${package_path} version ID: $version_id (created $created_at)"
+                gh api "user/packages/container/${package_path}/versions/${version_id}" -X DELETE
+              fi
+            done
+        done
 
     - name: Cleanup old releases (keep latest 5)
       env:
