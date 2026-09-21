@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from services.ssh_manager import SSHManager
+from tests.gameinfo_samples import GAMEINFO_BARE, GAMEINFO_BOTH
 
 
 def _server(**overrides):
@@ -48,11 +49,13 @@ async def test_selfcheck_fixes_steamclient_gameinfo_and_script(monkeypatch):
             return True, "", ""
         if "addons/metamod" in command and command.startswith("test -d"):
             return True, "exists", ""
+        if "swiftlys2" in command and command.startswith("test -d"):
+            return True, "", ""
         if command.startswith("test -f") and command.endswith("gameinfo.gi && echo 'exists'"):
             return True, "exists", ""
-        if command.startswith("grep -q"):
-            return True, "notfound", ""
-        if command.startswith("sed -i"):
+        if command.startswith("cat ") and "gameinfo.gi" in command:
+            return True, GAMEINFO_BARE, ""
+        if "base64 -d" in command:
             return True, "", ""
         if "cs2_autorestart.sh && test -x" in command:
             return False, "", "missing"
@@ -124,6 +127,8 @@ async def test_selfcheck_existing_configuration_and_deploy_failure(monkeypatch):
             return False, "", "missing"
         if command.startswith("test -f"):
             return True, "exists", ""
+        if command.startswith("cat ") and "gameinfo.gi" in command:
+            return True, GAMEINFO_BOTH, ""
         if command.startswith("grep -q"):
             return True, "found", ""
         if command.startswith("cat >"):

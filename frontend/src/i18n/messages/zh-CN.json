@@ -448,7 +448,7 @@
       "recommendedLabel": "推荐路径",
       "recommendedPath": "1. Metamod:Source（基座，必备）→ 2. CounterStrikeSharp（市场 C# 插件）→ 3. 按需装 CS2Fixes。装 CSS 时若还没有 Metamod，面板会自动补装。",
       "alternateLabel": "另一条栈",
-      "alternatePath": "SwiftlyS2 是独立的 C#/Lua 运行时，可以不依赖 Metamod。它和 CounterStrikeSharp / CS2Fixes 互斥，同一台服只选一条栈。",
+      "alternatePath": "SwiftlyS2 用自己的 Loader（gameinfo.gi 写 Game csgo/addons/swiftlys2），不依赖 Metamod。若这台服已经自动装过 Metamod，两者可以共存：先写 Metamod，再写 SwiftlyS2。它仍和 CounterStrikeSharp / CS2Fixes 互斥，同一台服只选一条栈。",
       "install": "安装",
       "update": "更新",
       "installed": "已记录",
@@ -481,8 +481,8 @@
         },
         "swiftly": {
           "name": "SwiftlyS2",
-          "summary": "独立 C#/Lua 运行时，不走市场默认栈。",
-          "purpose": "用途：只在需要 Swiftly 插件时选用。与 CounterStrikeSharp、CS2Fixes 冲突，不要混装。"
+          "summary": "独立 Loader 运行时，可与已装的 Metamod 共存。",
+          "purpose": "用途：只在需要 Swiftly 插件时选用。官方 gameinfo.gi 先写 Metamod，再写 SwiftlyS2。与 CounterStrikeSharp、CS2Fixes 冲突，不要混装。"
         }
       }
     },
@@ -532,7 +532,7 @@
       "install_metamod": "安装必备的 Metamod:Source？这是绝大多数 CS2 插件的加载器，应最先安装。",
       "install_counterstrikesharp": "安装 CounterStrikeSharp？它需要 Metamod（没有会自动补装），并且与 SwiftlyS2 互斥，不要混装。",
       "install_cs2fixes": "安装 CS2Fixes？这是 Metamod 插件，需要先有 Metamod，不要和 SwiftlyS2 混装。",
-      "install_swiftly": "安装 SwiftlyS2？它和 CounterStrikeSharp / CS2Fixes 互斥。同一台服只选一条插件栈。",
+      "install_swiftly": "安装 SwiftlyS2？它用自己的 Loader，已自动安装的 Metamod 可以保留。它和 CounterStrikeSharp / CS2Fixes 互斥，同一台服只选一条插件栈。",
       "clearLock": "清除部署锁并终止残留的 SteamCMD 进程？",
       "forceStop": "确定强制终止当前部署或更新？会取消面板任务，并只结束这台服目录下的 SteamCMD。"
     },

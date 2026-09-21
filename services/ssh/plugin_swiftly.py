@@ -4,6 +4,7 @@
 
 from .common import *
 from .common import _cleanup_local_download_dir
+from .gameinfo import ensure_remote_gameinfo_search_paths, gameinfo_progress_detail
 
 
 class SwiftlyMixin(SSHMixinBase):
@@ -11,8 +12,9 @@ class SwiftlyMixin(SSHMixinBase):
         """
         Install SwiftlyS2 framework for CS2 server
 
-        SwiftlyS2 is a C#/Lua plugin framework that can run standalone (loader mode)
-        without depending on Metamod updates.
+        SwiftlyS2 is a C#/Lua plugin framework with its own Loader
+        (``Game csgo/addons/swiftlys2``). It does not need Metamod, but keeps a
+        previously installed Metamod SearchPath and lists Metamod first.
 
         Args:
             server: Server instance
@@ -297,10 +299,21 @@ class SwiftlyMixin(SSHMixinBase):
                 await self.execute_command(f"rm -rf {temp_dir}")
                 return False, "SwiftlyS2 extraction failed: 'addons' directory not found in archive"
 
-            # The parent of the addons dir contains what we need to copy into csgo_dir
-            source_dir = addons_path.rsplit("/addons", 1)[0]
-            await send_progress(f"Copying SwiftlyS2 files to {csgo_dir}...")
-            copy_cmd = f"cp -rf {shlex.quote(source_dir)}/* {shlex.quote(csgo_dir)}/"
+            # Official archives ship addons/swiftlys2 (the Loader). Copy only that
+            # tree so a leftover addons/metamod in an older zip cannot overwrite a
+            # panel-installed Metamod.
+            swiftly_src = f"{addons_path.rstrip('/')}/swiftlys2"
+            check_src = f"test -d {shlex.quote(swiftly_src)} && echo 'found'"
+            src_ok, src_out, _ = await self.execute_command(check_src)
+            if not src_ok or "found" not in src_out:
+                await self.execute_command(f"rm -rf {temp_dir}")
+                return False, "SwiftlyS2 extraction failed: addons/swiftlys2 not found in archive"
+
+            await send_progress(f"Copying SwiftlyS2 Loader to {csgo_dir}/addons/swiftlys2...")
+            copy_cmd = (
+                f"mkdir -p {shlex.quote(csgo_dir + '/addons')} && "
+                f"cp -rf {shlex.quote(swiftly_src)} {shlex.quote(csgo_dir + '/addons/')}"
+            )
             success, stdout, stderr = await self.execute_command(copy_cmd, timeout=120)
 
             # Check if extraction actually succeeded by checking the directory
@@ -325,6 +338,26 @@ class SwiftlyMixin(SSHMixinBase):
             verify_success, verify_stdout, _ = await self.execute_command(verify_cmd)
 
             if verify_success and "installed" in verify_stdout:
+                gameinfo_path = f"{csgo_dir}/gameinfo.gi"
+                await send_progress("Updating gameinfo.gi for the SwiftlyS2 Loader...")
+                gi_ok, gi_msg, gi_result = await ensure_remote_gameinfo_search_paths(
+                    self.execute_command,
+                    gameinfo_path,
+                    include_swiftly=True,
+                    detect_metamod_dir=f"{csgo_dir}/addons/metamod",
+                )
+                if not gi_ok:
+                    return False, gi_msg
+                if gi_msg == "already configured":
+                    await send_progress("✓ SwiftlyS2 already configured in gameinfo.gi")
+                else:
+                    await send_progress(
+                        f"✓ gameinfo.gi updated ({gameinfo_progress_detail(gi_result)})"
+                    )
+                    if gi_result is not None and gi_result.has_metamod:
+                        await send_progress(
+                            "✓ Existing Metamod SearchPath kept first so both loaders coexist"
+                        )
                 await send_progress("=" * 60)
                 await send_progress("✓ SwiftlyS2 installed successfully!")
                 await send_progress("=" * 60)
@@ -332,10 +365,12 @@ class SwiftlyMixin(SSHMixinBase):
                     "NOTE: You need to restart your server for changes to take effect."
                 )
                 await send_progress(
-                    "SwiftlyS2 is loaded via Metamod. Make sure Metamod is installed."
+                    "SwiftlyS2 uses its own Loader (Game csgo/addons/swiftlys2). "
+                    "It does not require Metamod."
                 )
                 await send_progress(
-                    "After restart, use 'sw' command in console to verify installation."
+                    "After restart, use 'sw' in console to verify SwiftlyS2. "
+                    "If Metamod is also installed, use 'meta list' to verify it."
                 )
                 return True, "SwiftlyS2 installed successfully"
             else:

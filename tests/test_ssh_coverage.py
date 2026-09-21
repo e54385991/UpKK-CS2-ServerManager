@@ -11,6 +11,7 @@ import pytest
 from asyncssh.constants import FILEXFER_TYPE_DIRECTORY, FILEXFER_TYPE_REGULAR, FILEXFER_TYPE_SYMLINK
 
 from services.ssh_manager import SSHManager
+from tests.gameinfo_samples import GAMEINFO_BOTH
 
 
 class _Context:
@@ -463,6 +464,7 @@ async def test_selfcheck_summary_and_session_preflight(monkeypatch):
             "",
         ),
         "test -d /srv/cs2/cs2/game/csgo/addons/metamod && echo 'exists'": (False, "", ""),
+        "test -d /srv/cs2/cs2/game/csgo/addons/swiftlys2 && echo 'exists'": (False, "", ""),
         "test -f /srv/cs2/cs2_autorestart.sh && test -x /srv/cs2/cs2_autorestart.sh && echo 'exists'": (
             True,
             "exists",
@@ -597,6 +599,8 @@ async def test_plugin_adapters_install_success_paths(monkeypatch):
             return True, "installed", ""
         if "test -d /srv/cs2/cs2/game/csgo/addons/counterstrikesharp" in command:
             return True, "installed", ""
+        if command.startswith("cat ") and "gameinfo.gi" in command:
+            return True, GAMEINFO_BOTH, ""
         if "grep -q 'addons/metamod'" in command:
             return True, "found", ""
         if command.startswith("stat "):
@@ -640,6 +644,10 @@ async def test_swiftly_install_and_plugin_backup_paths(monkeypatch, tmp_path):
     async def execute(command, **_kwargs):
         if "find /tmp/swiftly_install_8/extracted" in command:
             return True, "/tmp/swiftly_install_8/extracted/package/addons\n", ""
+        if "echo 'found'" in command:
+            return True, "found", ""
+        if command.startswith("cat ") and "gameinfo.gi" in command:
+            return True, GAMEINFO_BOTH, ""
         if "echo 'extracted'" in command:
             return True, "extracted", ""
         if "swiftlys2/releases/latest" in command:

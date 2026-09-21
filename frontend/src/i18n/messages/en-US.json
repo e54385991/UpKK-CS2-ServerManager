@@ -448,7 +448,7 @@
       "recommendedLabel": "Recommended path",
       "recommendedPath": "1. Metamod:Source (base, required) → 2. CounterStrikeSharp (most market plugins) → 3. CS2Fixes if you need it. Installing CSS also installs Metamod when it is missing.",
       "alternateLabel": "Alternate stack",
-      "alternatePath": "SwiftlyS2 is a standalone C#/Lua runtime and can run without Metamod. It conflicts with CounterStrikeSharp and CS2Fixes — pick one stack per server.",
+      "alternatePath": "SwiftlyS2 uses its own Loader (gameinfo.gi: Game csgo/addons/swiftlys2) and does not need Metamod. If Metamod is already installed they coexist — Metamod first, then SwiftlyS2. It still conflicts with CounterStrikeSharp and CS2Fixes — pick one stack per server.",
       "install": "Install",
       "update": "Update",
       "installed": "Tracked",
@@ -481,8 +481,8 @@
         },
         "swiftly": {
           "name": "SwiftlyS2",
-          "summary": "Standalone C#/Lua runtime. Not the market default.",
-          "purpose": "Purpose: only when you need Swiftly plugins. Conflicts with CounterStrikeSharp and CS2Fixes — do not mix."
+          "summary": "Standalone Loader runtime. Can coexist with Metamod.",
+          "purpose": "Purpose: only when you need Swiftly plugins. Official gameinfo.gi lists Metamod first, then SwiftlyS2. Conflicts with CounterStrikeSharp and CS2Fixes — do not mix."
         }
       }
     },
@@ -532,7 +532,7 @@
       "install_metamod": "Install required Metamod:Source? It is the loader most CS2 plugins need and should be installed first.",
       "install_counterstrikesharp": "Install CounterStrikeSharp? It needs Metamod (auto-installed if missing) and conflicts with SwiftlyS2 — do not mix them.",
       "install_cs2fixes": "Install CS2Fixes? It is a Metamod plugin and should not be mixed with SwiftlyS2.",
-      "install_swiftly": "Install SwiftlyS2? It conflicts with CounterStrikeSharp and CS2Fixes. Keep one plugin stack per server.",
+      "install_swiftly": "Install SwiftlyS2? It uses its own Loader and can keep an existing Metamod install. It conflicts with CounterStrikeSharp and CS2Fixes — keep one plugin stack per server.",
       "clearLock": "Clear the deployment lock and stop any leftover SteamCMD process?",
       "forceStop": "Force-stop this deploy or update? The panel task will be cancelled, and only this server's SteamCMD process will be stopped."
     },

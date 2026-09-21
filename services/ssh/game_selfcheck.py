@@ -3,6 +3,7 @@
 # ruff: noqa: F403,F405
 
 from .common import *
+from .gameinfo import ensure_remote_gameinfo_search_paths, gameinfo_progress_detail
 
 
 class GameSelfCheckMixin(SSHMixinBase):
@@ -37,6 +38,50 @@ class GameSelfCheckMixin(SSHMixinBase):
         else:
             await send_progress("✗ Failed to create steamclient.so symlink")
 
+    async def _selfcheck_gameinfo(
+        self, server: Server, send_progress, issues_found, issues_fixed
+    ) -> None:
+        await send_progress("Checking gameinfo.gi configuration...")
+        csgo_dir = f"{server.game_directory}/cs2/game/csgo"
+        gameinfo_path = f"{csgo_dir}/gameinfo.gi"
+        metamod_dir = f"{csgo_dir}/addons/metamod"
+        swiftly_dir = f"{csgo_dir}/addons/swiftlys2"
+        mm_ok, mm_out, _ = await self.execute_command(
+            f"test -d {shlex.quote(metamod_dir)} && echo 'exists'"
+        )
+        sw_ok, sw_out, _ = await self.execute_command(
+            f"test -d {shlex.quote(swiftly_dir)} && echo 'exists'"
+        )
+        metamod_installed = bool(mm_ok and "exists" in mm_out)
+        swiftly_installed = bool(sw_ok and "exists" in sw_out)
+        if not metamod_installed and not swiftly_installed:
+            await send_progress("✓ No Metamod or SwiftlyS2 install - gameinfo.gi check skipped")
+            return
+
+        gi_ok, gi_msg, gi_result = await ensure_remote_gameinfo_search_paths(
+            self.execute_command,
+            gameinfo_path,
+            include_metamod=metamod_installed,
+            include_swiftly=swiftly_installed,
+        )
+        if not gi_ok:
+            if "not found" in gi_msg:
+                await send_progress(
+                    "⚠ gameinfo.gi not found (addons installed but game not deployed)"
+                )
+                return
+            issues_found.append("gameinfo.gi SearchPaths need repair")
+            await send_progress(f"✗ Failed to update gameinfo.gi automatically: {gi_msg}")
+            return
+        if gi_msg == "already configured":
+            await send_progress(
+                f"✓ gameinfo.gi SearchPaths are correct ({gameinfo_progress_detail(gi_result)})"
+            )
+            return
+        issues_found.append("gameinfo.gi SearchPaths needed repair")
+        issues_fixed.append("gameinfo.gi SearchPaths (Metamod/SwiftlyS2)")
+        await send_progress(f"✓ gameinfo.gi repaired ({gameinfo_progress_detail(gi_result)})")
+
     async def _selfcheck_summary(
         self, send_progress, issues_found, issues_fixed
     ) -> Tuple[bool, str]:
@@ -70,7 +115,7 @@ class GameSelfCheckMixin(SSHMixinBase):
         Checks performed:
         - CS2 executable exists and has proper permissions
         - steamclient.so symlink exists and is valid
-        - gameinfo.gi is properly configured for Metamod (if installed)
+        - gameinfo.gi is properly configured for Metamod and/or SwiftlyS2 (if installed)
         - Auto-restart script is deployed
 
         Args:
@@ -116,58 +161,7 @@ class GameSelfCheckMixin(SSHMixinBase):
                     await send_progress("⚠ CS2 executable found but could not set permissions")
 
             await self._selfcheck_steamclient(server, send_progress, issues_found, issues_fixed)
-
-            # Check 3: gameinfo.gi for Metamod
-            await send_progress("Checking gameinfo.gi configuration...")
-            cs2_dir = f"{server.game_directory}/cs2"
-            gameinfo_path = f"{cs2_dir}/game/csgo/gameinfo.gi"
-            metamod_dir = f"{cs2_dir}/game/csgo/addons/metamod"
-
-            # Check if Metamod is installed
-            check_mm_cmd = f"test -d {metamod_dir} && echo 'exists'"
-            mm_exists_success, mm_exists_stdout, _ = await self.execute_command(check_mm_cmd)
-
-            if mm_exists_success and "exists" in mm_exists_stdout:
-                # Check if gameinfo.gi exists
-                check_gi_cmd = f"test -f {gameinfo_path} && echo 'exists'"
-                gi_exists_success, gi_exists_stdout, _ = await self.execute_command(check_gi_cmd)
-
-                if gi_exists_success and "exists" in gi_exists_stdout:
-                    # Check if Metamod is configured in gameinfo.gi
-                    check_mm_line = f"grep -q 'addons/metamod' {gameinfo_path} && echo 'found' || echo 'notfound'"
-                    check_line_success, check_line_stdout, _ = await self.execute_command(
-                        check_mm_line
-                    )
-
-                    if "notfound" in check_line_stdout:
-                        issues_found.append("Metamod not configured in gameinfo.gi")
-                        await send_progress(
-                            "✗ Metamod installed but not configured in gameinfo.gi - attempting to fix..."
-                        )
-
-                        # Backup gameinfo.gi
-                        backup_cmd = (
-                            f"cp {gameinfo_path} {gameinfo_path}.backup.$(date +%Y%m%d_%H%M%S)"
-                        )
-                        await self.execute_command(backup_cmd)
-
-                        # Add Metamod to gameinfo.gi
-                        sed_cmd = f"sed -i '/Game_LowViolence/a\\			Game\\tcsgo/addons/metamod' {gameinfo_path}"
-                        sed_success, _, _ = await self.execute_command(sed_cmd)
-
-                        if sed_success:
-                            issues_fixed.append("gameinfo.gi Metamod configuration")
-                            await send_progress("✓ Metamod added to gameinfo.gi successfully")
-                        else:
-                            await send_progress("✗ Failed to update gameinfo.gi automatically")
-                    else:
-                        await send_progress("✓ Metamod is properly configured in gameinfo.gi")
-                else:
-                    await send_progress(
-                        "⚠ gameinfo.gi not found (Metamod installed but game not deployed)"
-                    )
-            else:
-                await send_progress("✓ Metamod not installed - gameinfo.gi check skipped")
+            await self._selfcheck_gameinfo(server, send_progress, issues_found, issues_fixed)
 
             # Check 4: Auto-restart script
             await send_progress("Checking auto-restart script...")

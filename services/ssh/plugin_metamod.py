@@ -4,6 +4,7 @@
 
 from .common import *
 from .common import _cleanup_local_download_dir
+from .gameinfo import ensure_remote_gameinfo_search_paths, gameinfo_progress_detail
 
 
 class MetamodMixin(SSHMixinBase):
@@ -228,51 +229,28 @@ class MetamodMixin(SSHMixinBase):
 
             await send_progress("✓ Metamod extracted successfully")
 
-            # Modify gameinfo.gi to add Metamod
             gameinfo_path = f"{cs2_dir}/game/csgo/gameinfo.gi"
             await send_progress("Updating gameinfo.gi...")
-
-            # Check if gameinfo.gi exists
-            check_cmd = f"test -f {gameinfo_path} && echo 'exists'"
-            check_success, check_stdout, _ = await self.execute_command(check_cmd)
-
-            if not check_success or "exists" not in check_stdout:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                return False, "gameinfo.gi not found. Server may not be properly installed."
-
-            # Check if Metamod is already in gameinfo.gi
-            check_mm_cmd = (
-                f"grep -q 'addons/metamod' {gameinfo_path} && echo 'found' || echo 'notfound'"
+            gi_ok, gi_msg, gi_result = await ensure_remote_gameinfo_search_paths(
+                self.execute_command,
+                gameinfo_path,
+                include_metamod=True,
+                detect_swiftly_dir=f"{csgo_dir}/addons/swiftlys2",
             )
-            check_success, check_stdout, _ = await self.execute_command(check_mm_cmd)
-
-            if check_success and check_stdout.strip() == "found":
+            if not gi_ok:
+                await self.execute_command(f"rm -rf {temp_dir}")
+                return False, gi_msg
+            if gi_msg == "already configured":
                 await send_progress("✓ Metamod already configured in gameinfo.gi")
             else:
-                # Backup gameinfo.gi
-                backup_cmd = f"cp {gameinfo_path} {gameinfo_path}.backup"
-                await self.execute_command(backup_cmd)
                 await send_progress("✓ Created backup of gameinfo.gi")
-
-                # Add Metamod to gameinfo.gi
-                # We need to add "Game csgo/addons/metamod" after the Game_LowViolence line
-                sed_cmd = f"sed -i '/Game_LowViolence/a\\			Game\\tcsgo/addons/metamod' {gameinfo_path}"
-                success, stdout, stderr = await self.execute_command(sed_cmd)
-
-                if not success:
-                    await send_progress("⚠ Warning: Could not automatically update gameinfo.gi")
-                    await send_progress(
-                        "You may need to manually add 'Game csgo/addons/metamod' to gameinfo.gi"
-                    )
-                else:
-                    await send_progress("✓ gameinfo.gi updated successfully")
-
-                verify_config_success, _, _ = await self.execute_command(
-                    f"grep -qF 'csgo/addons/metamod' {gameinfo_path}"
+                await send_progress(
+                    f"✓ gameinfo.gi updated ({gameinfo_progress_detail(gi_result)})"
                 )
-                if not verify_config_success:
-                    await self.execute_command(f"rm -rf {temp_dir}")
-                    return False, "Metamod gameinfo.gi configuration verification failed"
+                if gi_result is not None and gi_result.has_swiftly:
+                    await send_progress(
+                        "✓ Existing SwiftlyS2 SearchPath kept after Metamod so both loaders coexist"
+                    )
 
             # Clean up temp directory
             await self.execute_command(f"rm -rf {temp_dir}")

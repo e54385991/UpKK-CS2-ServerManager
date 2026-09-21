@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from services.ssh_manager import SSHManager
+from tests.gameinfo_samples import GAMEINFO_BARE, GAMEINFO_METAMOD, GAMEINFO_SWIFTLY
 
 
 def _server(**overrides):
@@ -119,6 +120,7 @@ async def test_metamod_install_covers_gameinfo_and_verification_branches(monkeyp
     base = {
         "default": (True, "", ""),
         "test -d /srv/cs2/cs2": (True, "exists", ""),
+        "test -d /srv/cs2/cs2/game/csgo/addons/swiftlys2": (False, "", ""),
         "test -f /tmp/metamod_install_8/metamod.tar.gz": (True, "exists", ""),
         "stat -f%z": (True, "2000", ""),
         "tar -xzf": (True, "", ""),
@@ -131,7 +133,7 @@ async def test_metamod_install_covers_gameinfo_and_verification_branches(monkeyp
     assert "gameinfo.gi not found" in (await manager.install_metamod(server))[1]
 
     base["test -f /srv/cs2/cs2/game/csgo/gameinfo.gi"] = (True, "exists", "")
-    base["grep -q"] = (True, "found", "")
+    base["cat /srv/cs2/cs2/game/csgo/gameinfo.gi"] = (True, GAMEINFO_METAMOD, "")
     base["test -d /srv/cs2/cs2/game/csgo/addons/metamod"] = (False, "", "missing")
     manager = _manager(monkeypatch, module, markers=base)
     manager._fetch_latest_metamod_url = AsyncMock(
@@ -139,9 +141,8 @@ async def test_metamod_install_covers_gameinfo_and_verification_branches(monkeyp
     )
     assert "verification failed" in (await manager.install_metamod(server))[1]
 
-    base["grep -q"] = (True, "notfound", "")
-    base["grep -qF"] = (False, "", "missing")
-    base["sed -i"] = (False, "", "read-only")
+    base["cat /srv/cs2/cs2/game/csgo/gameinfo.gi"] = (True, GAMEINFO_BARE, "")
+    base["base64 -d"] = (False, "", "read-only")
     base["test -d /srv/cs2/cs2/game/csgo/addons/metamod"] = (True, "installed", "")
     manager = _manager(monkeypatch, module, markers=base)
     manager._fetch_latest_metamod_url = AsyncMock(
@@ -395,10 +396,14 @@ async def test_swiftly_install_success_copies_nested_addons(monkeypatch):
             (True, "", ""),  # unzip available
             (True, "", ""),  # extract
             (True, "/tmp/swiftly_install_8/extracted/release/addons", ""),
+            (True, "found", ""),
             (True, "", ""),  # copy
             (True, "extracted", ""),
             (True, "", ""),
             (True, "installed", ""),
+            (True, "exists", ""),
+            (True, "", ""),
+            (True, GAMEINFO_SWIFTLY, ""),
         ]
     )
     manager.execute_command_streaming = AsyncMock(return_value=(True, "", ""))
@@ -406,3 +411,11 @@ async def test_swiftly_install_success_copies_nested_addons(monkeypatch):
     assert result == (True, "SwiftlyS2 installed successfully")
     download_command = manager.execute_command_streaming.await_args.args[0]
     assert "proxy.invalid" in download_command
+    copy_commands = [
+        call.args[0]
+        for call in manager.execute_command.await_args_list
+        if "cp -rf" in call.args[0]
+    ]
+    assert copy_commands
+    assert "addons/swiftlys2" in copy_commands[0]
+    assert "/*" not in copy_commands[0]

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from services.ssh_manager import SSHManager
+from tests.gameinfo_samples import GAMEINFO_BOTH, GAMEINFO_METAMOD, GAMEINFO_SWIFTLY
 
 
 def _server(**overrides):
@@ -55,12 +56,21 @@ def _responses(*, package="unzip", extract=True, addons=True, copied=True, insta
             (True, "/tmp/swiftly_install_8/extracted/release/addons", "")
             if addons
             else (True, "", ""),
+            (True, "found", "") if addons else (True, "", ""),
             (True, "", "") if copied else (False, "", "copy failed"),
             (True, "extracted", "") if addons else (False, "", "missing"),
             (True, "", "") if addons else (True, "", ""),
             (True, "installed", "") if installed else (False, "", "missing"),
         ]
     )
+    if addons and installed:
+        responses.extend(
+            [
+                (True, "exists", ""),
+                (True, "", ""),
+                (True, GAMEINFO_SWIFTLY, ""),
+            ]
+        )
     return responses
 
 
@@ -137,6 +147,26 @@ async def test_swiftly_fallback_sudo_install_recheck_and_extract_errors(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_swiftly_rejects_archive_without_loader_tree(monkeypatch):
+    manager, _module, server = _manager(monkeypatch, responses=())
+    manager.execute_command.side_effect = [
+        (True, "exists", ""),
+        (False, "", "primary"),
+        (True, "url", ""),
+        (True, "", ""),
+        (True, "exists", ""),
+        (True, "20000", ""),
+        (True, "/usr/bin/unzip", ""),
+        (True, "", ""),
+        (True, "/tmp/swiftly_install_8/extracted/release/addons", ""),
+        (False, "", "missing loader"),
+        (True, "", ""),
+    ]
+    result = await manager.install_swiftly(server)
+    assert not result[0] and "addons/swiftlys2 not found in archive" in result[1]
+
+
+@pytest.mark.asyncio
 async def test_swiftly_addons_copy_and_install_verification_failures(monkeypatch):
     for addons, copied, installed, expected in (
         (False, True, True, "addons' directory not found"),
@@ -174,10 +204,14 @@ async def test_swiftly_panel_proxy_download_upload_and_cleanup(monkeypatch, tmp_
         (True, "", ""),
         (True, "", ""),
         (True, "/tmp/swiftly_install_8/extracted/release/addons", ""),
+        (True, "found", ""),
         (True, "", ""),
         (True, "extracted", ""),
         (True, "", ""),
         (True, "installed", ""),
+        (True, "exists", ""),
+        (True, "", ""),
+        (True, GAMEINFO_SWIFTLY, ""),
     ]
     monkeypatch.setattr(module.tempfile, "gettempdir", lambda: str(tmp_path))
     from modules.http_helper import http_helper
@@ -244,3 +278,58 @@ async def test_swiftly_panel_proxy_download_and_upload_failures(monkeypatch, tmp
     manager.upload_file_with_progress = AsyncMock(return_value=(False, "upload"))
     result = await manager.install_swiftly(server)
     assert not result[0] and "Failed to upload" in result[1]
+
+
+@pytest.mark.asyncio
+async def test_swiftly_install_keeps_existing_metamod_first_in_gameinfo(monkeypatch):
+    import base64
+
+    manager, _module, server = _manager(monkeypatch, responses=())
+    written: list[str] = []
+    manager.execute_command_streaming = AsyncMock(return_value=(True, "", ""))
+
+    async def execute(command: str, **_kwargs):
+        if command.startswith("test -d") and command.endswith("cs2 && echo 'exists'"):
+            return True, "exists", ""
+        if "releases/latest" in command:
+            return True, "https://github.com/swiftly.zip", ""
+        if command.startswith("mkdir -p /tmp/swiftly_install_8"):
+            return True, "", ""
+        if command.startswith("test -f") and "swiftly.zip" in command:
+            return True, "exists", ""
+        if command.startswith("stat "):
+            return True, "20000", ""
+        if command == "command -v unzip":
+            return True, "/usr/bin/unzip", ""
+        if command.startswith("mkdir -p") and "extracted" in command:
+            return True, "", ""
+        if "find " in command and "-name 'addons'" in command:
+            return True, "/tmp/swiftly_install_8/extracted/release/addons", ""
+        if "echo 'found'" in command:
+            return True, "found", ""
+        if "cp -rf" in command:
+            assert "/addons/swiftlys2" in command
+            assert "/*" not in command
+            return True, "", ""
+        if "echo 'extracted'" in command or "echo 'installed'" in command:
+            return True, "extracted" if "extracted" in command else "installed", ""
+        if command.startswith("rm -rf"):
+            return True, "", ""
+        if command.startswith("test -f") and "gameinfo.gi" in command:
+            return True, "exists", ""
+        if command.startswith("test -d") and "addons/metamod" in command:
+            return True, "exists", ""
+        if command.startswith("cat ") and "gameinfo.gi" in command:
+            return True, GAMEINFO_METAMOD, ""
+        if command.startswith("cp ") and "gameinfo.gi" in command:
+            return True, "", ""
+        if "base64 -d" in command:
+            payload = command.split("printf '%s' ", 1)[1].split(" | base64", 1)[0].strip("'")
+            written.append(base64.b64decode(payload).decode())
+            return True, "", ""
+        return True, "", ""
+
+    manager.execute_command = execute
+    result = await manager.install_swiftly(server)
+    assert result == (True, "SwiftlyS2 installed successfully")
+    assert written == [GAMEINFO_BOTH]

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from services.ssh_manager import SSHManager
+from tests.gameinfo_samples import GAMEINFO_METAMOD
 
 
 def _server(**overrides):
@@ -78,7 +79,8 @@ async def test_metamod_panel_proxy_success_and_upload_failure(monkeypatch, tmp_p
             (True, "", ""),
             (True, "", ""),
             (True, "exists", ""),
-            (True, "found", ""),
+            (True, "", ""),
+            (True, GAMEINFO_METAMOD, ""),
             (True, "", ""),
             (True, "installed", ""),
         ]

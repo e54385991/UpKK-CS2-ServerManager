@@ -32,7 +32,9 @@ KNOWLEDGE_TOPICS = {
     ),
     "metamod": (
         "Metamod:Source is the native plugin loader. Verify it under game/csgo/addons/metamod "
-        "and confirm gameinfo integration before installing dependent native plugins."
+        "and confirm gameinfo.gi has `Game csgo/addons/metamod` immediately after "
+        "Game_LowViolence. SwiftlyS2 does not require Metamod; when both are installed, "
+        "gameinfo.gi must list Metamod first, then `Game csgo/addons/swiftlys2`."
     ),
     "counterstrikesharp": (
         "CounterStrikeSharp depends on Metamod and normally resides under "
