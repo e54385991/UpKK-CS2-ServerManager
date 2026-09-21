@@ -255,6 +255,17 @@ async def test_ai_write_handlers_cover_lifecycle_console_and_file_patch(monkeypa
     assert patched["success"] is True
     assert patched["backup_path"].startswith("cfg/server.cfg.ai-backup-")
 
+    gi_patched = await ai_tools.patch_server_text_file(
+        ctx,
+        ai_tools.FilePatchInput(
+            relative_path="cs2/game/csgo/gameinfo.gi",
+            expected_revision=expected,
+            content="new=2",
+        ),
+    )
+    assert gi_patched["success"] is True
+    assert gi_patched["path"] == "cs2/game/csgo/gameinfo.gi"
+
 
 @pytest.mark.asyncio
 async def test_ai_tool_dispatch_and_approval_summary_cover_validation(monkeypatch):
