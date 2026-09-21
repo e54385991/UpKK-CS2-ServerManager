@@ -6,6 +6,8 @@ import hashlib
 import hmac
 import json
 import logging
+import re
+import secrets
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -26,6 +28,7 @@ router = APIRouter(prefix="/api/gmail-oauth", tags=["gmail-oauth"])
 _CALLBACK_PATH = "/api/gmail-oauth/callback"
 _PUBLIC_ORIGIN_HEADER = "x-upkk-public-origin"
 _SETTINGS_RETURN = "/settings"
+_VERIFIER_RE = re.compile(r"^[A-Za-z0-9\-._~]{43,128}$")
 
 
 def normalize_public_origin(value: str | None) -> str | None:
@@ -60,24 +63,55 @@ def authorize_origin(request: Request) -> str:
     return normalize_public_origin(raw) or settings.BACKEND_URL
 
 
-def sign_oauth_state(origin: str) -> str:
-    return f"{_origin_digest(origin)}.{origin}"
+def generate_code_verifier() -> str:
+    """PKCE verifier. Google requires the same value when the code is exchanged."""
+    return secrets.token_urlsafe(64)
 
 
-def origin_from_oauth_state(state: str | None) -> str | None:
+def sign_oauth_state(origin: str, code_verifier: str) -> str:
+    payload = json.dumps({"o": origin, "v": code_verifier}, separators=(",", ":"))
+    return f"{_origin_digest(payload)}.{payload}"
+
+
+def oauth_state_payload(state: str | None) -> dict | None:
     if not state or "." not in state:
         return None
-    digest, _, raw_origin = state.partition(".")
-    origin = normalize_public_origin(raw_origin)
-    if origin is None or not digest:
+    digest, _, payload = state.partition(".")
+    if not digest or not payload.startswith("{"):
         return None
     try:
-        matches = hmac.compare_digest(digest, _origin_digest(origin))
+        matches = hmac.compare_digest(digest, _origin_digest(payload))
     except ValueError:
         return None
     if not matches:
         return None
-    return origin
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def origin_from_oauth_state(state: str | None) -> str | None:
+    data = oauth_state_payload(state)
+    if data is None:
+        return None
+    origin = data.get("o")
+    if not isinstance(origin, str):
+        return None
+    return normalize_public_origin(origin)
+
+
+def verifier_from_oauth_state(state: str | None) -> str | None:
+    data = oauth_state_payload(state)
+    if data is None:
+        return None
+    verifier = data.get("v")
+    if not isinstance(verifier, str) or _VERIFIER_RE.fullmatch(verifier) is None:
+        return None
+    return verifier
 
 
 def callback_origin(state: str | None) -> str:
@@ -122,19 +156,22 @@ async def gmail_oauth_authorize(
             ) from None
 
         origin = authorize_origin(request)
+        code_verifier = generate_code_verifier()
         flow = Flow.from_client_config(
             credentials_info,
             scopes=["https://www.googleapis.com/auth/gmail.send"],
             redirect_uri=gmail_redirect_uri(origin),
+            code_verifier=code_verifier,
+            autogenerate_code_verifier=False,
         )
 
-        # Generate authorization URL. State carries the signed browser origin so
-        # the callback exchanges the code with the same redirect URI.
+        # State carries the signed origin and PKCE verifier. The callback builds
+        # a new Flow, so the verifier has to travel with the browser redirect.
         authorization_url, state = flow.authorization_url(
             access_type="offline",
             include_granted_scopes="true",
             prompt="consent",  # Force consent screen to get refresh token
-            state=sign_oauth_state(origin),
+            state=sign_oauth_state(origin, code_verifier),
         )
 
         # Store state in session or cache for verification in callback
@@ -197,6 +234,13 @@ async def gmail_oauth_callback(
                 detail="Gmail API credentials not configured",
             )
 
+        code_verifier = verifier_from_oauth_state(state)
+        if code_verifier is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth code verifier is missing",
+            )
+
         # Parse credentials JSON
         credentials_info = json.loads(sys_settings.gmail_credentials_json)
 
@@ -204,6 +248,8 @@ async def gmail_oauth_callback(
             credentials_info,
             scopes=["https://www.googleapis.com/auth/gmail.send"],
             redirect_uri=gmail_redirect_uri(callback_origin(state)),
+            code_verifier=code_verifier,
+            autogenerate_code_verifier=False,
         )
 
         # Exchange authorization code for tokens
