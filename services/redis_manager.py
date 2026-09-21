@@ -130,6 +130,27 @@ class RedisManager:
             logger.warning("Redis batch cache read failed (keys=%d)", len(keys))
             return [None] * len(keys)
 
+    async def getdel(self, key: str) -> Optional[Any]:
+        """Atomically get and delete a namespaced key (Redis GETDEL)."""
+        prefixed = self.prefixed_key(key)
+        started = time.monotonic()
+        try:
+            try:
+                value = await self.client.getdel(prefixed)
+            except AttributeError:
+                value = await self.client.get(prefixed)
+                if value:
+                    await self.client.delete(prefixed)
+            _observe_redis(duration_ms=(time.monotonic() - started) * 1000)
+            return self._decode_value(value)
+        except TimeoutError:
+            _observe_redis(timeout=True, failed=True)
+            return None
+        except Exception as e:
+            _observe_redis(failed=True)
+            print(f"Redis getdel error: {e}")
+            return None
+
     async def delete(self, key: str) -> bool:
         """Delete a key from Redis"""
         key = self.prefixed_key(key)

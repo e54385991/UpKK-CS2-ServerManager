@@ -59,6 +59,8 @@ def test_production_is_the_default_runtime_mode():
         ("RUN_MODE", "staging"),
         ("BACKEND_URL", "localhost:8000"),
         ("SECRET_KEY", "short"),
+        ("WEBAUTHN_ORIGIN", "https://panel.example.com/login"),
+        ("WEBAUTHN_RP_ID", "https://panel.example.com"),
     ],
 )
 def test_settings_reject_invalid_operational_values(field: str, value: object):
@@ -80,3 +82,15 @@ def test_settings_normalizes_case_for_enum_like_values():
     assert value.SSH_AUTH_MODE == "both"
     assert value.RUN_MODE == "development"
     assert value.BACKEND_URL == "http://127.0.0.1:8000"
+
+
+def test_settings_accept_empty_webauthn_overrides():
+    value = _settings(WEBAUTHN_ORIGIN="", WEBAUTHN_RP_ID="")
+    assert value.WEBAUTHN_ORIGIN == ""
+    assert value.WEBAUTHN_RP_ID == ""
+
+
+def test_settings_normalize_webauthn_origin():
+    value = _settings(WEBAUTHN_ORIGIN="https://Panel.Example.com/", WEBAUTHN_RP_ID="Example.com")
+    assert value.WEBAUTHN_ORIGIN == "https://Panel.Example.com"
+    assert value.WEBAUTHN_RP_ID == "example.com"

@@ -1,7 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
-import { getProfile, getProfileAi, getS3Settings } from "@/modules/profile/api";
+import { getPasskeys, getProfile, getProfileAi, getS3Settings } from "@/modules/profile/api";
 import { ApiKeyForm } from "@/modules/profile/api-key-form";
+import { PasskeyForm } from "@/modules/profile/passkey-form";
 import { PasswordForm } from "@/modules/profile/password-form";
 import { ProfileCredentialsForm } from "@/modules/profile/profile-credentials-form";
 import { S3Form } from "@/modules/profile/s3-form";
@@ -14,10 +15,11 @@ import { Skeleton } from "@/shared/ui/skeleton";
 export async function ProfilePanel() {
   const t = await getTranslations("profile");
   const tShell = await getTranslations("shell");
-  const [profileResult, s3Result, aiResult] = await Promise.all([
+  const [profileResult, s3Result, aiResult, passkeysResult] = await Promise.all([
     getProfile(),
     getS3Settings(),
     getProfileAi(),
+    getPasskeys(),
   ]);
 
   if (!profileResult.ok) {
@@ -57,6 +59,10 @@ export async function ProfilePanel() {
       <UserAiForm initial={aiResult.ok ? aiResult.data : null} />
       <SteamcmdRetryForm initial={profile} />
       <PasswordForm />
+      <PasskeyForm
+        initial={passkeysResult.ok ? passkeysResult.data : []}
+        loadError={!passkeysResult.ok}
+      />
       <ApiKeyForm initial={profile} />
     </div>
   );

@@ -22,6 +22,7 @@ from .discord import (
 from .identity import (
     PasswordResetToken,
     User,
+    WebAuthnCredential,
 )
 from .legacy import GlobalSettings, InstalledPlugin, Plugin, UserSettings
 from .plugin_description_syncs import PluginDescriptionSyncJob

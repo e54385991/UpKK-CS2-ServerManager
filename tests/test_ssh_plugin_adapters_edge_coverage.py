@@ -412,9 +412,7 @@ async def test_swiftly_install_success_copies_nested_addons(monkeypatch):
     download_command = manager.execute_command_streaming.await_args.args[0]
     assert "proxy.invalid" in download_command
     copy_commands = [
-        call.args[0]
-        for call in manager.execute_command.await_args_list
-        if "cp -rf" in call.args[0]
+        call.args[0] for call in manager.execute_command.await_args_list if "cp -rf" in call.args[0]
     ]
     assert copy_commands
     assert "addons/swiftlys2" in copy_commands[0]

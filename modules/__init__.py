@@ -65,6 +65,7 @@ from .models import (
     UserAISettings,
     UserDiscordBot,
     UserSettings,
+    WebAuthnCredential,
 )
 from .schemas import (
     A2SCachedData,
@@ -256,6 +257,7 @@ __all__ = [
     "SSHServerSudo",
     "SystemSettings",
     "PasswordResetToken",
+    "WebAuthnCredential",
     "ServerStatus",
     "AuthType",
     "DiscordCapability",

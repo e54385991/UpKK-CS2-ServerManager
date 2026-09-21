@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useCallback, useRef, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { RefreshCw, LogIn, TriangleAlert } from "lucide-react";
 import { GoogleLoginButton } from "@/modules/auth/google-login";
+import { PasskeyLoginButton } from "@/modules/auth/passkey-login";
 import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
@@ -28,6 +29,7 @@ export function LoginForm({ registrationEnabled }: { registrationEnabled: boolea
   const [captchaLoading, setCaptchaLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const requestCaptcha = useCallback(async (): Promise<Captcha | null> => {
     return fetchCaptchaChallenge();
@@ -106,7 +108,7 @@ export function LoginForm({ registrationEnabled }: { registrationEnabled: boolea
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={onSubmit} className="space-y-4">
       {error ? (
         <div className="flex items-center gap-2 rounded-md border border-danger/30 bg-danger-muted/50 px-3 py-2 text-sm text-danger">
           <TriangleAlert className="size-4 shrink-0" />
@@ -119,7 +121,7 @@ export function LoginForm({ registrationEnabled }: { registrationEnabled: boolea
         <Input
           id="username"
           name="username"
-          autoComplete="username"
+          autoComplete="username webauthn"
           required
           autoFocus
           placeholder="admin"
@@ -188,6 +190,14 @@ export function LoginForm({ registrationEnabled }: { registrationEnabled: boolea
         <LogIn className="size-4" />
         {pending ? t("submitting") : t("submit")}
       </Button>
+
+      <PasskeyLoginButton
+        nextPath={nextPath}
+        username={() => {
+          const field = formRef.current?.elements.namedItem("username");
+          return field instanceof HTMLInputElement ? field.value : "";
+        }}
+      />
 
       <GoogleLoginButton
         nextPath={nextPath}

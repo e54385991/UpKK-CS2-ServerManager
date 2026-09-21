@@ -144,3 +144,20 @@ async def test_redis_batch_and_monitoring_corrupt_or_unavailable_paths(monkeypat
     manager.client.delete = AsyncMock(side_effect=RuntimeError("delete down"))
     assert await manager.clear_monitoring_logs(1, "status_check") is False
     assert await manager.clear_monitoring_logs(1) is False
+
+
+@pytest.mark.asyncio
+async def test_redis_getdel_uses_native_command_then_get_delete_fallback(monkeypatch):
+    manager = _manager(monkeypatch)
+    manager.client.getdel = AsyncMock(return_value='{"type":"login"}')
+    assert await manager.getdel("webauthn:challenge:abc") == {"type": "login"}
+    manager.client.getdel.assert_awaited()
+
+    del manager.client.getdel
+    manager.client.get = AsyncMock(return_value='{"type":"register"}')
+    manager.client.delete = AsyncMock(return_value=1)
+    assert await manager.getdel("webauthn:challenge:def") == {"type": "register"}
+    manager.client.delete.assert_awaited()
+
+    manager.client.get = AsyncMock(side_effect=RuntimeError("get down"))
+    assert await manager.getdel("webauthn:challenge:err") is None

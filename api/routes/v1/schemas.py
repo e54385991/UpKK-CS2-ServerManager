@@ -16,6 +16,7 @@ from api.contracts.v1.identity import *  # noqa: F401,F403
 from api.contracts.v1.maps_files import *  # noqa: F401,F403
 from api.contracts.v1.operations import *  # noqa: F401,F403
 from api.contracts.v1.overview import *  # noqa: F401,F403
+from api.contracts.v1.passkeys import *  # noqa: F401,F403
 from api.contracts.v1.plugins import *  # noqa: F401,F403
 from api.contracts.v1.server import *  # noqa: F401,F403
 from api.contracts.v1.settings import *  # noqa: F401,F403

@@ -69,6 +69,16 @@ export type ProfileGslt = {
   readonly steamid: string | null;
 };
 
+export type PasskeyItem = {
+  readonly id: number;
+  readonly nickname: string;
+  readonly transports: readonly string[];
+  readonly createdAt: string | null;
+  readonly lastUsedAt: string | null;
+  readonly backupEligible: boolean | null;
+  readonly backupState: boolean | null;
+};
+
 export type AiProtocol = "chat_completions" | "responses";
 export type AiMode = "global" | "custom";
 

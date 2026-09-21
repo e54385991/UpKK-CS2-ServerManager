@@ -27,6 +27,7 @@ from . import (
     operation_inbox,
     operations,
     overview,
+    passkeys,
     plugin_ai_imports,
     plugin_catalog,
     plugin_configs,
@@ -47,6 +48,7 @@ from . import (
 
 router = APIRouter()
 router.include_router(auth.router)
+router.include_router(passkeys.router)
 router.include_router(profile.router)
 router.include_router(batch.router)
 router.include_router(servers.router)

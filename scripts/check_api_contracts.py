@@ -42,6 +42,7 @@ SENSITIVE_FIELDS = frozenset(
 # These are deliberately narrow, one-time or explicitly requested capabilities.
 SECRET_RESPONSE_ALLOWLIST: dict[str, frozenset[str]] = {
     "/api/v1/auth/google-oauth": frozenset({"access_token"}),
+    "/api/v1/auth/passkeys/login/verify": frozenset({"access_token"}),
     "/api/v1/profile/api-key": frozenset({"api_key"}),
     "/api/v1/profile/gslt": frozenset({"login_token"}),
     "/api/v1/setup/initialized-servers/{server_key:path}/credentials": frozenset({"ssh_password"}),

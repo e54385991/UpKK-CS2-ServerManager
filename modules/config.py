@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     # "both" - Both password and key authentication allowed
     SSH_AUTH_MODE: str
 
+    # Optional WebAuthn relying-party overrides. Empty values derive origin
+    # from the browser Origin header and rpId from that hostname.
+    WEBAUTHN_ORIGIN: str = ""
+    WEBAUTHN_RP_ID: str = ""
+
     # Google OAuth Configuration
     GOOGLE_CLIENT_ID: str | None = None
     # Legacy mirror presets retained for the unversioned compatibility API.
@@ -183,6 +188,35 @@ class Settings(BaseSettings):
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("URL must include an http or https scheme and host")
         return value.strip().rstrip("/")
+
+    @field_validator("WEBAUTHN_ORIGIN")
+    @classmethod
+    def validate_webauthn_origin(cls, value: str) -> str:
+        text = (value or "").strip().rstrip("/")
+        if not text:
+            return ""
+        parsed = urlparse(text)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+            or parsed.username
+            or parsed.password
+        ):
+            raise ValueError("WEBAUTHN_ORIGIN must be an http(s) origin without a path")
+        return f"{parsed.scheme}://{parsed.netloc}"
+
+    @field_validator("WEBAUTHN_RP_ID")
+    @classmethod
+    def validate_webauthn_rp_id(cls, value: str) -> str:
+        text = (value or "").strip().casefold()
+        if not text:
+            return ""
+        if "://" in text or "/" in text or ":" in text or "@" in text:
+            raise ValueError("WEBAUTHN_RP_ID must be a hostname without a scheme or port")
+        return text
 
     @field_validator("SECRET_KEY", "JWT_SECRET_KEY")
     @classmethod

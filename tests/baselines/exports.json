@@ -50,6 +50,7 @@
     "SSHServerSudo",
     "SystemSettings",
     "PasswordResetToken",
+    "WebAuthnCredential",
     "ServerStatus",
     "AuthType",
     "DiscordCapability",

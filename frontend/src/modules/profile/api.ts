@@ -4,6 +4,8 @@ import type {
   ActionResultDto,
   AssistantProviderTestViewDto,
   AssistantUserSettingsViewDto,
+  PasskeyListViewDto,
+  PasskeyViewDto,
   ProfileApiKeyViewDto,
   ProfileGsltViewDto,
   ProfileS3TestViewDto,
@@ -21,6 +23,7 @@ import type {
   ProfileS3Settings,
   ProfileS3Test,
   ProfileSettings,
+  PasskeyItem,
 } from "@/modules/profile/types";
 
 function toProfile(raw: ProfileViewDto): ProfileSettings {
@@ -272,4 +275,22 @@ export async function testProfileAi(): Promise<ApiResult<AssistantProviderTestVi
     body: "{}",
     timeoutMs: 180_000,
   });
+}
+
+export function toPasskeyItem(raw: PasskeyViewDto): PasskeyItem {
+  return {
+    id: raw.id,
+    nickname: raw.nickname ?? "",
+    transports: raw.transports ?? [],
+    createdAt: raw.created_at ?? null,
+    lastUsedAt: raw.last_used_at ?? null,
+    backupEligible: raw.backup_eligible ?? null,
+    backupState: raw.backup_state ?? null,
+  };
+}
+
+export async function getPasskeys(): Promise<ApiResult<PasskeyItem[]>> {
+  const result = await apiFetch<PasskeyListViewDto>("/api/v1/auth/passkeys");
+  if (!result.ok) return result;
+  return { ok: true, data: (result.data.items ?? []).map(toPasskeyItem) };
 }

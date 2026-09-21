@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from sqlalchemy import BigInteger, LargeBinary
+
 from .common import *
 
 
@@ -100,6 +102,63 @@ class User(SQLModel, table=True):
     async def get_by_google_id(cls, session: AsyncSession, google_id: str) -> Optional["User"]:
         """Get user by Google ID"""
         result = await session.execute(select(cls).where(cls.google_id == google_id))
+        return result.scalar_one_or_none()
+
+
+class WebAuthnCredential(SQLModel, table=True):
+    """A discoverable WebAuthn credential bound to a console user."""
+
+    __tablename__: ClassVar[str] = "webauthn_credentials"
+
+    id: int = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+    credential_id: str = Field(max_length=1024, unique=True, nullable=False)
+    public_key: bytes = Field(sa_column=Column(LargeBinary(), nullable=False))
+    sign_count: int = Field(
+        default=0,
+        sa_column=Column(BigInteger(), nullable=False, server_default=text("0")),
+    )
+    transports: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    aaguid: Optional[str] = Field(default=None, max_length=36)
+    backup_eligible: Optional[bool] = Field(default=None)
+    backup_state: Optional[bool] = Field(default=None)
+    nickname: str = Field(default="", max_length=100)
+    created_at: Optional[datetime] = Field(
+        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    )
+    last_used_at: Optional[datetime] = Field(default=None)
+
+    def __repr__(self) -> str:
+        return f"<WebAuthnCredential(id={self.id}, user_id={self.user_id})>"
+
+    @classmethod
+    async def list_for_user(cls, session: AsyncSession, user_id: int) -> list["WebAuthnCredential"]:
+        result = await session.execute(
+            select(cls).where(cls.user_id == user_id).order_by(col(cls.id).asc())
+        )
+        return list(result.scalars().all())
+
+    @classmethod
+    async def count_for_user(cls, session: AsyncSession, user_id: int) -> int:
+        result = await session.execute(
+            select(func.count(col(cls.id))).where(cls.user_id == user_id)
+        )
+        return int(result.scalar_one())
+
+    @classmethod
+    async def get_by_credential_id(
+        cls, session: AsyncSession, credential_id: str
+    ) -> Optional["WebAuthnCredential"]:
+        result = await session.execute(select(cls).where(cls.credential_id == credential_id))
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_for_user(
+        cls, session: AsyncSession, credential_pk: int, user_id: int
+    ) -> Optional["WebAuthnCredential"]:
+        result = await session.execute(
+            select(cls).where(cls.id == credential_pk, cls.user_id == user_id)
+        )
         return result.scalar_one_or_none()
 
 

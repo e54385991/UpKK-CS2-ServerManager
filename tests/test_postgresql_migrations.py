@@ -37,8 +37,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_postgresql_models_and_static_baseline_are_the_schema_authority():
-    assert len(SQLModel.metadata.tables) == 32
-    assert code_heads() == ("0032_description_sync_jobs",)
+    assert len(SQLModel.metadata.tables) == 33
+    assert code_heads() == ("0033_webauthn_credentials",)
     assert "create_all" not in (PROJECT_ROOT / "modules/database.py").read_text()
 
     revision = PROJECT_ROOT / "alembic/versions/0001_postgresql_baseline.py"
@@ -74,6 +74,7 @@ def test_models_use_jsonb_nonnative_enums_and_expected_query_indexes():
                 enum_columns.append(column)
 
     assert json_columns
+    assert "webauthn_credentials.transports" in json_columns
     assert enum_columns
     assert all(column.type.native_enum is False for column in enum_columns)
     assert {
@@ -89,6 +90,7 @@ def test_models_use_jsonb_nonnative_enums_and_expected_query_indexes():
         "ix_audit_logs_created_at",
         "uq_users_username_ci",
         "uq_users_email_ci",
+        "ix_webauthn_credentials_user_id",
     } <= index_names
 
 

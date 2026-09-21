@@ -1764,6 +1764,62 @@
     "methods": [
       "GET"
     ],
+    "name": "list_registered_passkeys",
+    "path": "/api/v1/auth/passkeys"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "register_options",
+    "path": "/api/v1/auth/passkeys/register/options"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "register_verify",
+    "path": "/api/v1/auth/passkeys/register/verify"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PATCH"
+    ],
+    "name": "patch_passkey",
+    "path": "/api/v1/auth/passkeys/{credential_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "remove_passkey",
+    "path": "/api/v1/auth/passkeys/{credential_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "login_options",
+    "path": "/api/v1/auth/passkeys/login/options"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "login_verify",
+    "path": "/api/v1/auth/passkeys/login/verify"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "read_profile",
     "path": "/api/v1/profile"
   },
