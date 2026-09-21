@@ -622,7 +622,39 @@ test("settings and profile render parity fields", async ({ page }) => {
   await expect(
     page.getByRole("heading", { level: 1, name: /个人中心|Account/ }),
   ).toBeVisible();
+  const profileNav = page.getByTestId("profile-category-nav");
+  await expect(profileNav).toBeVisible();
+  await expect(profileNav.getByRole("link", { name: /账号|Account/ })).toHaveAttribute(
+    "href",
+    "#profile-account",
+  );
+  await expect(profileNav.getByRole("link", { name: /邮箱与令牌|Email & tokens/ })).toHaveAttribute(
+    "href",
+    "#profile-credentials",
+  );
+  await expect(profileNav.getByRole("link", { name: /登录与访问|Sign-in & access/ })).toHaveAttribute(
+    "href",
+    "#profile-security",
+  );
+  await expect(profileNav.getByRole("link", { name: /^备份$|^Backups$/ })).toHaveAttribute(
+    "href",
+    "#profile-backups",
+  );
+  await expect(profileNav.getByRole("link", { name: /AI 助手|AI assistant/ })).toHaveAttribute(
+    "href",
+    "#profile-ai",
+  );
+  await expect(profileNav.getByRole("link", { name: /SteamCMD 恢复|SteamCMD recovery/ })).toHaveAttribute(
+    "href",
+    "#profile-operations",
+  );
+  await expect(page.getByTestId("profile-section-account")).toBeVisible();
+  await expect(page.getByTestId("profile-section-credentials")).toBeHidden();
+  await profileNav.getByRole("link", { name: /邮箱与令牌|Email & tokens/ }).click();
+  await expect(page.getByTestId("profile-section-credentials")).toBeVisible();
   await expect(page.getByText(/GitHub 个人访问令牌|GitHub personal access token/)).toBeVisible();
+  await profileNav.getByRole("link", { name: /SteamCMD 恢复|SteamCMD recovery/ }).click();
+  await expect(page.getByTestId("profile-section-operations")).toBeVisible();
   await expect(page.getByText(/SteamCMD 自动恢复|SteamCMD auto-recovery/)).toBeVisible();
   // S3 is rendered when GET /api/v1/profile/s3 succeeds; stale live APIs omit it.
 });
@@ -667,6 +699,7 @@ test("monitoring shows plugin diagnostics without executing", async ({
 
 test("profile steamcmd retries can be saved and restored", async ({ page }) => {
   await page.goto("/settings/profile");
+  await page.getByTestId("profile-category-nav").getByRole("link", { name: /SteamCMD 恢复|SteamCMD recovery/ }).click();
   const retries = page.getByLabel(/最大自动恢复次数|Maximum recovery attempts/);
   await expect(retries).toBeVisible();
   const original = await retries.inputValue();

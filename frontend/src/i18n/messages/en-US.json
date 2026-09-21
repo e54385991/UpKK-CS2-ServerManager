@@ -2773,7 +2773,42 @@
   },
   "profile": {
     "title": "Account",
-    "description": "Email, personal tokens, S3 backups, password, passkeys, API key, and SteamCMD recovery.",
+    "description": "Account details, tokens, sign-in methods, backups, personal AI, and SteamCMD recovery.",
+    "categoryNavLabel": "Account categories",
+    "categories": {
+      "account": "Account",
+      "credentials": "Email & tokens",
+      "security": "Sign-in & access",
+      "backups": "Backups",
+      "ai": "AI assistant",
+      "operations": "SteamCMD recovery"
+    },
+    "sections": {
+      "account": {
+        "title": "Account",
+        "description": "Username, role, and when this account was created."
+      },
+      "credentials": {
+        "title": "Email & tokens",
+        "description": "Change email and write-only Steam / GitHub credentials. Secrets are never echoed back."
+      },
+      "security": {
+        "title": "Sign-in & access",
+        "description": "Password, passkeys, and the API key used instead of a password."
+      },
+      "backups": {
+        "title": "Backups",
+        "description": "Per-user S3-compatible storage for plugin archives."
+      },
+      "ai": {
+        "title": "AI assistant",
+        "description": "Use the administrator provider or your own OpenAI-compatible endpoint."
+      },
+      "operations": {
+        "title": "SteamCMD recovery",
+        "description": "Automatic retries after SteamCMD network issues, crashes, or an unexpected exit."
+      }
+    },
     "account": "Account",
     "username": "Username",
     "email": "Email",
@@ -2806,6 +2841,7 @@
     "steamcmdHelp": "Deploy and update runs retry automatically after network issues, crashes, or an unexpected SteamCMD exit. The default cap is 20; raise or lower it here.",
     "steamcmdRetries": "Maximum recovery attempts",
     "steamcmdRetriesHelp": "Does not count the first run. Default {default}, range 0–{limit}. 0 disables retries.",
+    "s3LoadError": "Could not load backup storage settings.",
     "s3Title": "S3-compatible backups",
     "s3Help": "Per-user backup storage for plugin archives. The secret key is write-only.",
     "s3Configured": "Ready",

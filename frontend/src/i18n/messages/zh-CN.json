@@ -2773,7 +2773,42 @@
   },
   "profile": {
     "title": "个人中心",
-    "description": "邮箱、个人令牌、S3 备份、密码、通行证密钥、API Key，以及 SteamCMD 自动恢复。",
+    "description": "账号信息、个人令牌、登录方式、备份、个人 AI，以及 SteamCMD 自动恢复。",
+    "categoryNavLabel": "个人中心分类",
+    "categories": {
+      "account": "账号",
+      "credentials": "邮箱与令牌",
+      "security": "登录与访问",
+      "backups": "备份",
+      "ai": "AI 助手",
+      "operations": "SteamCMD 恢复"
+    },
+    "sections": {
+      "account": {
+        "title": "账号",
+        "description": "用户名、角色和账号创建时间。"
+      },
+      "credentials": {
+        "title": "邮箱与令牌",
+        "description": "修改邮箱，以及只写的 Steam / GitHub 凭据。密钥不会回显。"
+      },
+      "security": {
+        "title": "登录与访问",
+        "description": "密码、通行证密钥，以及代替密码使用的 API Key。"
+      },
+      "backups": {
+        "title": "备份",
+        "description": "每位用户自己的 S3 兼容存储，用于插件归档。"
+      },
+      "ai": {
+        "title": "AI 助手",
+        "description": "使用管理员提供的模型，或你自己的 OpenAI 兼容接口。"
+      },
+      "operations": {
+        "title": "SteamCMD 恢复",
+        "description": "SteamCMD 遇到网络问题、崩溃或意外退出时自动重试。"
+      }
+    },
     "account": "账号",
     "username": "用户名",
     "email": "邮箱",
@@ -2806,6 +2841,7 @@
     "steamcmdHelp": "部署或更新时，网络抖动、进程崩溃等意外退出会自动重试。默认最多 20 次，可按网络情况调整。",
     "steamcmdRetries": "最大自动恢复次数",
     "steamcmdRetriesHelp": "不含首次执行。默认 {default} 次，范围 0–{limit}。0 表示不重试。",
+    "s3LoadError": "无法加载备份存储设置。",
     "s3Title": "S3 兼容备份",
     "s3Help": "按用户配置的插件备份存储。密钥只写不读。",
     "s3Configured": "可用",

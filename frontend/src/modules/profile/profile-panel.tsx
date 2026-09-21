@@ -1,15 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
 import { getPasskeys, getProfile, getProfileAi, getS3Settings } from "@/modules/profile/api";
-import { ApiKeyForm } from "@/modules/profile/api-key-form";
-import { PasskeyForm } from "@/modules/profile/passkey-form";
-import { PasswordForm } from "@/modules/profile/password-form";
-import { ProfileCredentialsForm } from "@/modules/profile/profile-credentials-form";
-import { S3Form } from "@/modules/profile/s3-form";
-import { SteamcmdRetryForm } from "@/modules/profile/steamcmd-retry-form";
-import { UserAiForm } from "@/modules/profile/user-ai-form";
-import { Badge } from "@/shared/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
+import { ProfileWorkspace } from "@/modules/profile/profile-workspace";
+import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 export async function ProfilePanel() {
@@ -37,65 +30,35 @@ export async function ProfilePanel() {
     : t("joinedUnknown");
 
   return (
-    <div className="space-y-6">
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>{t("account")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Row label={t("username")} value={profile.username} />
-          <Row label={t("email")} value={profile.email ?? "—"} />
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-fg-muted">{t("role")}</span>
-            <Badge tone={profile.isAdmin ? "primary" : "neutral"}>
-              {profile.isAdmin ? tShell("admin") : tShell("user")}
-            </Badge>
-          </div>
-          <Row label={t("joinedAt")} value={joined} />
-        </CardContent>
-      </Card>
-      <ProfileCredentialsForm initial={profile} />
-      {s3Result.ok ? <S3Form initial={s3Result.data} /> : null}
-      <UserAiForm initial={aiResult.ok ? aiResult.data : null} />
-      <SteamcmdRetryForm initial={profile} />
-      <PasswordForm />
-      <PasskeyForm
-        initial={passkeysResult.ok ? passkeysResult.data : []}
-        loadError={!passkeysResult.ok}
-      />
-      <ApiKeyForm initial={profile} />
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-sm text-fg-muted">{label}</span>
-      <span className="text-sm font-medium text-fg">{value}</span>
-    </div>
+    <ProfileWorkspace
+      profile={profile}
+      joined={joined}
+      roleLabel={profile.isAdmin ? tShell("admin") : tShell("user")}
+      s3={s3Result.ok ? s3Result.data : null}
+      ai={aiResult.ok ? aiResult.data : null}
+      passkeys={passkeysResult.ok ? passkeysResult.data : []}
+      passkeysError={!passkeysResult.ok}
+    />
   );
 }
 
 export function ProfilePanelSkeleton() {
   return (
-    <div className="max-w-2xl space-y-6">
-      {Array.from({ length: 3 }, (_, index) => (
-        <div
-          key={index}
-          className="rounded-lg border border-line bg-surface p-5 shadow-panel"
-        >
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-3 w-72" />
-          </div>
-          <div className="mt-5 space-y-3">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-9 w-24" />
-          </div>
+    <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
+      <div className="h-fit rounded-lg border border-line bg-surface p-2 shadow-panel">
+        <div className="space-y-1">
+          {Array.from({ length: 6 }, (_, index) => (
+            <Skeleton key={index} className="h-9 w-full rounded-md" />
+          ))}
         </div>
-      ))}
+      </div>
+      <div className="max-w-2xl space-y-4 rounded-lg border border-line bg-surface p-5 shadow-panel">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-3 w-72" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-9 w-24" />
+      </div>
     </div>
   );
 }
