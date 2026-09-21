@@ -8,6 +8,7 @@ on:
 permissions:  # 添加这一部分
   actions: write  # 允许删除 workflow runs
   contents: write  # 允许删除 releases 和 tags
+  packages: write  # 允许删除容器包版本
 
 jobs:
   cleanup:
@@ -31,6 +32,39 @@ jobs:
           echo "Deleting workflow run ID: $run_id"
           gh api repos/${{ github.repository }}/actions/runs/$run_id -X DELETE
         done
+
+    - name: Cleanup old container image versions (keep latest image)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PACKAGE_NAME: upkk-cs2-servermanager
+      run: |
+        echo "Fetching container image versions..."
+        versions=$(gh api --paginate \
+          "user/packages/container/${PACKAGE_NAME}/versions?per_page=100" \
+          --jq '.[] | [.id, .created_at] | @tsv' | sort -k2,2r)
+
+        if [ -z "$versions" ]; then
+          echo "No container image versions found"
+          exit 0
+        fi
+
+        version_count=$(printf '%s\n' "$versions" | grep -c .)
+        keep_count=3
+        echo "Total container image versions: $version_count"
+        echo "Keeping the latest $keep_count versions (multi-arch manifest plus two platform images)"
+
+        if [ "$version_count" -le "$keep_count" ]; then
+          echo "No container image versions to delete"
+          exit 0
+        fi
+
+        printf '%s\n' "$versions" | tail -n +$((keep_count + 1)) | \
+          while IFS=$'\t' read -r version_id created_at; do
+            if [ -n "$version_id" ]; then
+              echo "Deleting container image version ID: $version_id (created $created_at)"
+              gh api "user/packages/container/${PACKAGE_NAME}/versions/${version_id}" -X DELETE
+            fi
+          done
 
     - name: Cleanup old releases (keep latest 5)
       env:
