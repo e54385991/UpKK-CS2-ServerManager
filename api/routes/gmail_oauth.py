@@ -28,6 +28,7 @@ router = APIRouter(prefix="/api/gmail-oauth", tags=["gmail-oauth"])
 _CALLBACK_PATH = "/api/gmail-oauth/callback"
 _PUBLIC_ORIGIN_HEADER = "x-upkk-public-origin"
 _SETTINGS_RETURN = "/settings"
+_GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 _VERIFIER_RE = re.compile(r"^[A-Za-z0-9\-._~]{43,128}$")
 
 
@@ -122,6 +123,59 @@ def _origin_digest(origin: str) -> str:
     return hmac.new(settings.SECRET_KEY.encode(), origin.encode(), hashlib.sha256).hexdigest()
 
 
+def _warning_scopes(warning: Warning) -> list[str]:
+    scopes = getattr(warning, "new_scope", None)
+    if isinstance(scopes, str):
+        return scopes.split()
+    if isinstance(scopes, list | tuple):
+        return [scope for scope in scopes if isinstance(scope, str) and scope]
+    return []
+
+
+def _keep_granted_gmail_token(flow: object, warning: Warning) -> None:
+    """Keep a token whose granted scopes still include Gmail send.
+
+    ``include_granted_scopes=true`` makes Google append scopes this OAuth client
+    already holds, such as the OpenID scopes used by Google sign-in. oauthlib
+    raises ``Warning`` for that change, and ``Warning`` is an ``Exception``, so
+    the callback used to discard a completed token exchange.
+    """
+    granted = _warning_scopes(warning)
+    if _GMAIL_SEND_SCOPE not in granted:
+        raise warning
+    token = getattr(warning, "token", None)
+    if not isinstance(token, dict) or not token.get("access_token") or "expires_at" not in token:
+        raise warning
+    session = getattr(flow, "oauth2session", None)
+    if session is None:
+        raise warning
+    session.token = token
+    logger.info("Gmail OAuth accepted granted scopes: %s", " ".join(granted))
+
+
+def exchange_gmail_code(flow: object, code: str) -> None:
+    """Exchange the authorization code, accepting extra previously granted scopes."""
+    try:
+        fetch_token = getattr(flow, "fetch_token", None)
+        if fetch_token is None:
+            raise Warning("OAuth token exchange is unavailable")
+        fetch_token(code=code)
+    except Warning as warning:
+        _keep_granted_gmail_token(flow, warning)
+
+
+def stored_gmail_scopes(credentials: object) -> list[str]:
+    granted = getattr(credentials, "granted_scopes", None)
+    if isinstance(granted, list | tuple) and _GMAIL_SEND_SCOPE in granted:
+        return [scope for scope in granted if isinstance(scope, str) and scope]
+    requested = getattr(credentials, "scopes", None)
+    if isinstance(requested, list | tuple):
+        scopes = [scope for scope in requested if isinstance(scope, str) and scope]
+        if scopes:
+            return scopes
+    return [_GMAIL_SEND_SCOPE]
+
+
 @router.get("/authorize")
 async def gmail_oauth_authorize(
     request: Request,
@@ -159,7 +213,7 @@ async def gmail_oauth_authorize(
         code_verifier = generate_code_verifier()
         flow = Flow.from_client_config(
             credentials_info,
-            scopes=["https://www.googleapis.com/auth/gmail.send"],
+            scopes=[_GMAIL_SEND_SCOPE],
             redirect_uri=gmail_redirect_uri(origin),
             code_verifier=code_verifier,
             autogenerate_code_verifier=False,
@@ -246,14 +300,15 @@ async def gmail_oauth_callback(
 
         flow = Flow.from_client_config(
             credentials_info,
-            scopes=["https://www.googleapis.com/auth/gmail.send"],
+            scopes=[_GMAIL_SEND_SCOPE],
             redirect_uri=gmail_redirect_uri(callback_origin(state)),
             code_verifier=code_verifier,
             autogenerate_code_verifier=False,
         )
 
-        # Exchange authorization code for tokens
-        flow.fetch_token(code=code)
+        # Exchange authorization code for tokens. Extra OpenID scopes are kept
+        # when gmail.send is still granted; the token is what clears "needs auth".
+        exchange_gmail_code(flow, code)
 
         # Get credentials
         credentials = flow.credentials
@@ -265,7 +320,7 @@ async def gmail_oauth_callback(
             "token_uri": getattr(credentials, "token_uri", None),
             "client_id": credentials.client_id,
             "client_secret": credentials.client_secret,
-            "scopes": credentials.scopes,
+            "scopes": stored_gmail_scopes(credentials),
         }
 
         # Save token to database
