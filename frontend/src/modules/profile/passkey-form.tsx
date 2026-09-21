@@ -16,6 +16,7 @@ import {
 } from "@/shared/ui/card";
 import { Dialog } from "@/shared/ui/dialog";
 import { Input, Label } from "@/shared/ui/input";
+import { PASSKEYS_PROXY_PATH } from "@/modules/profile/passkey-upstream";
 import type { PasskeyItem } from "@/modules/profile/types";
 import {
   creationOptionsFromJson,
@@ -66,8 +67,10 @@ export function PasskeyForm({
     setPending("bind");
     setBanner(null);
     try {
-      const optionsResponse = await fetch("/api/v1/auth/passkeys/register/options", {
+      const optionsResponse = await fetch(`${PASSKEYS_PROXY_PATH}?action=register-options`, {
         method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
       });
       if (!optionsResponse.ok) {
         setBanner(mapError(await extractPasskeyDetail(optionsResponse), optionsResponse.status));
@@ -85,8 +88,10 @@ export function PasskeyForm({
         setBanner(t("passkeyCancelled"));
         return;
       }
-      const verifyResponse = await fetch("/api/v1/auth/passkeys/register/verify", {
+      const verifyResponse = await fetch(`${PASSKEYS_PROXY_PATH}?action=register-verify`, {
         method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ credential: credentialToJson(credential) }),
       });
@@ -120,8 +125,10 @@ export function PasskeyForm({
     }
     setPending("rename");
     try {
-      const response = await fetch(`/api/v1/auth/passkeys/${renameId}`, {
+      const response = await fetch(`${PASSKEYS_PROXY_PATH}?id=${renameId}`, {
         method: "PATCH",
+        credentials: "same-origin",
+        cache: "no-store",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ nickname: trimmed }),
       });
@@ -146,7 +153,11 @@ export function PasskeyForm({
     setPending(`delete-${item.id}`);
     setBanner(null);
     try {
-      const response = await fetch(`/api/v1/auth/passkeys/${item.id}`, { method: "DELETE" });
+      const response = await fetch(`${PASSKEYS_PROXY_PATH}?id=${item.id}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
       if (!response.ok) {
         setBanner(mapError(await extractPasskeyDetail(response), response.status));
         return;
