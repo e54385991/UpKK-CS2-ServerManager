@@ -68,19 +68,44 @@ async function clickShowsPending(page: Page, selector: string) {
     if (!(link instanceof HTMLAnchorElement)) {
       throw new Error(`missing ${target}`);
     }
-    const hint = link.querySelector("[data-testid='link-pending-hint']");
-    if (!(hint instanceof HTMLElement)) {
+    const pendingNow = () => {
+      const hint = document
+        .querySelector(target)
+        ?.querySelector("[data-testid='link-pending-hint']");
+      return hint instanceof HTMLElement && hint.getAttribute("data-pending") === "true";
+    };
+    if (
+      !(
+        document
+          .querySelector(target)
+          ?.querySelector("[data-testid='link-pending-hint']") instanceof HTMLElement
+      )
+    ) {
       throw new Error(`missing pending hint for ${target}`);
     }
+    // Sample during capture. Next's click handler can block longer than 100ms
+    // on a cold route; the budget is until the hint flips, not until click()
+    // returns. Re-query so a render during the click cannot leave a stale node.
+    let elapsed = -1;
     const started = performance.now();
+    const mark = () => {
+      if (elapsed < 0 && pendingNow()) elapsed = performance.now() - started;
+    };
+    document.addEventListener("click", mark, true);
     link.click();
-    while (performance.now() - started <= 100) {
-      if (hint.getAttribute("data-pending") === "true") {
-        return performance.now() - started;
+    document.removeEventListener("click", mark, true);
+    const deadline = started + 100;
+    while (elapsed < 0 && performance.now() <= deadline) {
+      if (pendingNow()) {
+        elapsed = performance.now() - started;
+        break;
       }
       await new Promise((resolve) => requestAnimationFrame(resolve));
     }
-    throw new Error(`pending not set within 100ms for ${target}`);
+    if (elapsed < 0 || elapsed > 100) {
+      throw new Error(`pending not set within 100ms for ${target}`);
+    }
+    return elapsed;
   }, selector);
 }
 
