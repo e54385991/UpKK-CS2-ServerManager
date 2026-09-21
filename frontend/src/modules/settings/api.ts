@@ -192,10 +192,12 @@ export async function putGmailCredentials(
   });
 }
 
-export async function getGmailAuthorize(): Promise<
-  ApiResult<GmailAuthorizeResultDto>
-> {
-  return apiFetch<GmailAuthorizeResultDto>("/api/v1/settings/gmail/authorize");
+export async function getGmailAuthorize(
+  origin: string,
+): Promise<ApiResult<GmailAuthorizeResultDto>> {
+  return apiFetch<GmailAuthorizeResultDto>("/api/v1/settings/gmail/authorize", {
+    headers: { "x-upkk-public-origin": origin },
+  });
 }
 
 export async function deleteGmailAuthorization(): Promise<

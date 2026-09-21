@@ -2,9 +2,12 @@
 Gmail OAuth2 routes for system settings
 """
 
+import hashlib
+import hmac
 import json
 import logging
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -19,6 +22,70 @@ from modules import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/gmail-oauth", tags=["gmail-oauth"])
+
+_CALLBACK_PATH = "/api/gmail-oauth/callback"
+_PUBLIC_ORIGIN_HEADER = "x-upkk-public-origin"
+_SETTINGS_RETURN = "/settings"
+
+
+def normalize_public_origin(value: str | None) -> str | None:
+    """Accept an http(s) origin and reject paths, queries, and credentials."""
+    if not value or not value.strip():
+        return None
+    parsed = urlparse(value.strip())
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/"}
+    ):
+        return None
+    host = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+    if parsed.port:
+        return f"{parsed.scheme}://{host}:{parsed.port}"
+    return f"{parsed.scheme}://{host}"
+
+
+def gmail_redirect_uri(origin: str) -> str:
+    return f"{origin.rstrip('/')}{_CALLBACK_PATH}"
+
+
+def authorize_origin(request: Request) -> str:
+    """Browser origin from the console, otherwise the configured public URL."""
+    headers = getattr(request, "headers", None)
+    raw = headers.get(_PUBLIC_ORIGIN_HEADER) if headers is not None else None
+    return normalize_public_origin(raw) or settings.BACKEND_URL
+
+
+def sign_oauth_state(origin: str) -> str:
+    return f"{_origin_digest(origin)}.{origin}"
+
+
+def origin_from_oauth_state(state: str | None) -> str | None:
+    if not state or "." not in state:
+        return None
+    digest, _, raw_origin = state.partition(".")
+    origin = normalize_public_origin(raw_origin)
+    if origin is None or not digest:
+        return None
+    try:
+        matches = hmac.compare_digest(digest, _origin_digest(origin))
+    except ValueError:
+        return None
+    if not matches:
+        return None
+    return origin
+
+
+def callback_origin(state: str | None) -> str:
+    return origin_from_oauth_state(state) or settings.BACKEND_URL
+
+
+def _origin_digest(origin: str) -> str:
+    return hmac.new(settings.SECRET_KEY.encode(), origin.encode(), hashlib.sha256).hexdigest()
 
 
 @router.get("/authorize")
@@ -54,18 +121,20 @@ async def gmail_oauth_authorize(
                 detail="Invalid Gmail credentials JSON format",
             ) from None
 
-        # Create OAuth flow
+        origin = authorize_origin(request)
         flow = Flow.from_client_config(
             credentials_info,
             scopes=["https://www.googleapis.com/auth/gmail.send"],
-            redirect_uri=f"{settings.BACKEND_URL}/api/gmail-oauth/callback",
+            redirect_uri=gmail_redirect_uri(origin),
         )
 
-        # Generate authorization URL
+        # Generate authorization URL. State carries the signed browser origin so
+        # the callback exchanges the code with the same redirect URI.
         authorization_url, state = flow.authorization_url(
             access_type="offline",
             include_granted_scopes="true",
             prompt="consent",  # Force consent screen to get refresh token
+            state=sign_oauth_state(origin),
         )
 
         # Store state in session or cache for verification in callback
@@ -131,11 +200,10 @@ async def gmail_oauth_callback(
         # Parse credentials JSON
         credentials_info = json.loads(sys_settings.gmail_credentials_json)
 
-        # Create OAuth flow
         flow = Flow.from_client_config(
             credentials_info,
             scopes=["https://www.googleapis.com/auth/gmail.send"],
-            redirect_uri=f"{settings.BACKEND_URL}/api/gmail-oauth/callback",
+            redirect_uri=gmail_redirect_uri(callback_origin(state)),
         )
 
         # Exchange authorization code for tokens
@@ -163,14 +231,14 @@ async def gmail_oauth_callback(
 
         # Redirect to system settings page with success message
         return RedirectResponse(
-            url="/system-settings?gmail_auth=success", status_code=status.HTTP_302_FOUND
+            url=f"{_SETTINGS_RETURN}?gmail_auth=success", status_code=status.HTTP_302_FOUND
         )
 
     except Exception as e:
         logger.error(f"Error in Gmail OAuth callback: {e}", exc_info=True)
         # Redirect to system settings with error
         return RedirectResponse(
-            url="/system-settings?gmail_auth=error", status_code=status.HTTP_302_FOUND
+            url=f"{_SETTINGS_RETURN}?gmail_auth=error", status_code=status.HTTP_302_FOUND
         )
 
 

@@ -72,10 +72,10 @@ export async function uploadGmailCredentialsAction(
   return result;
 }
 
-export async function authorizeGmailAction(): Promise<
-  ApiResult<{ authorizationUrl: string }>
-> {
-  const result = await getGmailAuthorize();
+export async function authorizeGmailAction(
+  origin: string,
+): Promise<ApiResult<{ authorizationUrl: string }>> {
+  const result = await getGmailAuthorize(origin);
   if (!result.ok) return result;
   return {
     ok: true,

@@ -63,7 +63,7 @@ async def test_gmail_upload_revoke_status_and_authorize_guards(monkeypatch):
     assert denied.status_code == 302
     response = await gmail.gmail_oauth_callback(SimpleNamespace(), db=db)
     assert response.status_code == 302
-    assert "error" in response.headers["location"]
+    assert response.headers["location"] == "/settings?gmail_auth=error"
 
 
 @pytest.mark.asyncio
@@ -78,13 +78,15 @@ async def test_gmail_oauth_flow_success_and_failure_redirect(monkeypatch):
 
     class _Flow:
         credentials = _Credentials()
+        redirect_uris: list[str] = []
 
         @classmethod
-        def from_client_config(cls, *_args, **_kwargs):
+        def from_client_config(cls, *_args, **kwargs):
+            cls.redirect_uris.append(kwargs.get("redirect_uri", ""))
             return cls()
 
-        def authorization_url(self, **_kwargs):
-            return "https://accounts.invalid/auth", "state"
+        def authorization_url(self, **kwargs):
+            return "https://accounts.invalid/auth", kwargs.get("state", "state")
 
         def fetch_token(self, **_kwargs):
             return None
@@ -96,6 +98,8 @@ async def test_gmail_oauth_flow_success_and_failure_redirect(monkeypatch):
     monkeypatch.setitem(sys.modules, "google_auth_oauthlib", package)
     monkeypatch.setitem(sys.modules, "google_auth_oauthlib.flow", flow_module)
     monkeypatch.setattr(gmail.settings, "BACKEND_URL", "https://panel.invalid")
+    monkeypatch.setattr(gmail.settings, "SECRET_KEY", "s" * 32)
+    _Flow.redirect_uris = []
     db = _Db()
     settings = SimpleNamespace(
         gmail_credentials_json='{"web": {"client_id": "id"}}', gmail_token_json=None
@@ -104,15 +108,35 @@ async def test_gmail_oauth_flow_success_and_failure_redirect(monkeypatch):
         gmail.SystemSettings, "get_or_create_settings", AsyncMock(return_value=settings)
     )
     result = await gmail.gmail_oauth_authorize(SimpleNamespace(), db, _user())
-    assert result == {"authorization_url": "https://accounts.invalid/auth", "state": "state"}
-    callback = await gmail.gmail_oauth_callback(SimpleNamespace(), code="code", db=db)
+    assert result["authorization_url"] == "https://accounts.invalid/auth"
+    assert gmail.origin_from_oauth_state(result["state"]) == "https://panel.invalid"
+    callback = await gmail.gmail_oauth_callback(
+        SimpleNamespace(), code="code", state=result["state"], db=db
+    )
     assert callback.status_code == 302
-    assert "success" in callback.headers["location"]
+    assert callback.headers["location"] == "/settings?gmail_auth=success"
     assert "access" in settings.gmail_token_json
+    assert _Flow.redirect_uris == ["https://panel.invalid/api/gmail-oauth/callback"] * 2
 
     settings.gmail_credentials_json = "not-json"
     callback = await gmail.gmail_oauth_callback(SimpleNamespace(), code="code", db=db)
-    assert "error" in callback.headers["location"]
+    assert callback.headers["location"] == "/settings?gmail_auth=error"
+
+
+def test_gmail_authorize_origin_prefers_the_browser_over_backend_url(monkeypatch):
+    monkeypatch.setattr(gmail.settings, "BACKEND_URL", "http://127.0.0.1:8000")
+    monkeypatch.setattr(gmail.settings, "SECRET_KEY", "s" * 32)
+    request = SimpleNamespace(headers={"x-upkk-public-origin": "https://panel.example:31800/"})
+    origin = gmail.authorize_origin(request)
+    assert origin == "https://panel.example:31800"
+    assert (
+        gmail.gmail_redirect_uri(origin) == "https://panel.example:31800/api/gmail-oauth/callback"
+    )
+    state = gmail.sign_oauth_state(origin)
+    assert gmail.origin_from_oauth_state(state) == origin
+    assert gmail.origin_from_oauth_state("0" * 64 + ".https://evil.example") is None
+    assert gmail.normalize_public_origin("https://panel.example/callback") is None
+    assert gmail.authorize_origin(SimpleNamespace()) == "http://127.0.0.1:8000"
 
 
 @pytest.mark.asyncio

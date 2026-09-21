@@ -253,7 +253,7 @@ export function SettingsForm({
   async function onAuthorizeGmail() {
     setGmailBusy("auth");
     setBanner(null);
-    const result = await authorizeGmailAction();
+    const result = await authorizeGmailAction(window.location.origin);
     setGmailBusy(null);
     if (!result.ok) {
       setBanner({ tone: "danger", text: result.error });
