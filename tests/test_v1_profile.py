@@ -82,6 +82,7 @@ def test_v1_profile_returns_default_steamcmd_retry_budget():
     assert body["has_steam_api_key"] is False
     assert body["has_github_token"] is False
     assert body["has_api_key"] is False
+    assert body["google_linked"] is False
     assert "hashed_password" not in body
     assert "steam_api_key" not in body
     assert "github_token" not in body
@@ -416,3 +417,117 @@ def test_v1_profile_ai_hides_key(monkeypatch):
     assert body["api_key_configured"] is True
     assert body["reasoning_effort"] == "high"
     assert "api_key" not in body
+
+
+def test_v1_profile_google_requires_authentication():
+    client = TestClient(create_app(lifespan=None))
+    assert client.post("/api/v1/profile/google", json={"id_token": "x"}).status_code == 401
+    assert client.delete("/api/v1/profile/google").status_code == 401
+
+
+def _google_client(monkeypatch, **extra):
+    client, user = _client(monkeypatch=monkeypatch, **extra)
+    monkeypatch.setattr("api.routes.v1.profile.enforce_rate_limit", AsyncMock())
+    return client, user
+
+
+def test_v1_profile_binds_and_unbinds_a_verified_google_account(monkeypatch):
+    from services.google_oauth import GoogleIdentityError
+
+    client, user = _google_client(monkeypatch)
+    monkeypatch.setattr(
+        "services.google_oauth.verify_google_id_token",
+        AsyncMock(return_value={"sub": "gid-1", "email_verified": True}),
+    )
+    response = client.post("/api/v1/profile/google", json={"id_token": "secret-token"})
+    assert response.status_code == 200
+    assert response.json()["google_linked"] is True
+    assert "secret-token" not in response.text
+    assert "gid-1" not in response.text
+    assert user.google_id == "gid-1"
+    assert user.oauth_provider == "google"
+
+    again = client.post("/api/v1/profile/google", json={"id_token": "secret-token"})
+    assert again.status_code == 200
+    assert user.google_id == "gid-1"
+
+    removed = client.delete("/api/v1/profile/google")
+    assert removed.status_code == 200
+    assert removed.json()["google_linked"] is False
+    assert user.google_id is None
+    assert user.oauth_provider is None
+
+    monkeypatch.setattr(
+        "services.google_oauth.verify_google_id_token",
+        AsyncMock(side_effect=GoogleIdentityError("google_invalid_token")),
+    )
+    rejected = client.post("/api/v1/profile/google", json={"id_token": "nope"})
+    assert rejected.status_code == 401
+    assert rejected.json()["detail"] == "google_invalid_token"
+
+
+def test_v1_profile_refuses_to_replace_or_steal_a_google_account(monkeypatch):
+    client, user = _google_client(monkeypatch, google_id="already", oauth_provider="google")
+    monkeypatch.setattr(
+        "services.google_oauth.verify_google_id_token",
+        AsyncMock(return_value={"sub": "other", "email_verified": True}),
+    )
+    response = client.post("/api/v1/profile/google", json={"id_token": "token"})
+    assert response.status_code == 409
+    assert response.json()["detail"] == "google_already_linked"
+    assert user.google_id == "already"
+
+    client, user = _google_client(monkeypatch)
+    monkeypatch.setattr(
+        "services.google_oauth.verify_google_id_token",
+        AsyncMock(return_value={"sub": "gid", "email_verified": False}),
+    )
+    response = client.post("/api/v1/profile/google", json={"id_token": "token"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "google_email_unverified"
+    assert getattr(user, "google_id", None) in {None, ""}
+
+    monkeypatch.setattr(
+        "services.google_oauth.User.get_by_google_id",
+        AsyncMock(return_value=SimpleNamespace(id=99)),
+    )
+    monkeypatch.setattr(
+        "services.google_oauth.verify_google_id_token",
+        AsyncMock(return_value={"sub": "gid", "email_verified": True}),
+    )
+    response = client.post("/api/v1/profile/google", json={"id_token": "token"})
+    assert response.status_code == 409
+    assert response.json()["detail"] == "google_account_taken"
+    assert getattr(user, "google_id", None) in {None, ""}
+
+
+def test_v1_profile_rebinds_the_same_subject_and_preserves_other_providers(monkeypatch):
+    from services.google_oauth import GoogleIdentityError
+
+    client, user = _google_client(monkeypatch, google_id="gid-1", oauth_provider="google")
+    monkeypatch.setattr(
+        "services.google_oauth.User.get_by_google_id",
+        AsyncMock(return_value=SimpleNamespace(id=user.id)),
+    )
+    monkeypatch.setattr(
+        "services.google_oauth.verify_google_id_token",
+        AsyncMock(return_value={"sub": "gid-1", "email_verified": True}),
+    )
+    response = client.post("/api/v1/profile/google", json={"id_token": "token"})
+    assert response.status_code == 200
+    assert user.google_id == "gid-1"
+    assert user.oauth_provider == "google"
+
+    user.oauth_provider = "discord"
+    removed = client.delete("/api/v1/profile/google")
+    assert removed.status_code == 200
+    assert user.google_id is None
+    assert user.oauth_provider == "discord"
+
+    monkeypatch.setattr(
+        "services.google_oauth.verify_google_id_token",
+        AsyncMock(side_effect=GoogleIdentityError("google_not_configured")),
+    )
+    missing = client.post("/api/v1/profile/google", json={"id_token": "token"})
+    assert missing.status_code == 400
+    assert missing.json()["detail"] == "google_not_configured"

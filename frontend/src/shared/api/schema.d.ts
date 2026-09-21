@@ -3318,6 +3318,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/profile/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bind Google
+         * @description Bind a Google account the signed-in user can prove, so it can sign in here.
+         */
+        post: operations["bind_google_api_v1_profile_google_post"];
+        /**
+         * Unbind Google
+         * @description Remove Google sign-in from this account. Password login stays available.
+         */
+        delete: operations["unbind_google_api_v1_profile_google_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/profile/gslt": {
         parameters: {
             query?: never;
@@ -14568,6 +14592,14 @@ export interface components {
             created_at?: string | null;
         };
         /**
+         * ProfileGoogleBind
+         * @description Attach a Google account to the signed-in user. The ID token is write-only.
+         */
+        ProfileGoogleBind: {
+            /** Id Token */
+            id_token: string;
+        };
+        /**
          * ProfileGsltGenerate
          * @description Create a Steam GSLT with the signed-in user's Steam Web API key.
          */
@@ -14733,6 +14765,11 @@ export interface components {
             email?: string | null;
             /** Github Token Prefix */
             github_token_prefix?: string | null;
+            /**
+             * Google Linked
+             * @default false
+             */
+            google_linked: boolean;
             /**
              * Has Api Key
              * @default false
@@ -24341,6 +24378,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+        };
+    };
+    bind_google_api_v1_profile_google_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileGoogleBind"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unbind_google_api_v1_profile_google_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileView"];
                 };
             };
         };

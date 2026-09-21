@@ -650,7 +650,10 @@ async def google_oauth_login(
             if existing_email:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="An account with this email already exists. Please use regular login.",
+                    detail=(
+                        "An account with this email already exists. "
+                        "Sign in with your password, then bind Google in your profile."
+                    ),
                 )
 
             await db.commit()

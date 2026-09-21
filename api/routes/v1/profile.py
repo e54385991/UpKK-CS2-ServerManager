@@ -20,6 +20,12 @@ from services.captcha_policy import require_captcha
 
 # Kept as a compatibility alias for integrations that patch the legacy service directly.
 from services.captcha_service import captcha_service  # noqa: F401
+from services.google_oauth import (
+    GoogleIdentityError,
+    bind_google_account,
+    unbind_google_account,
+)
+from services.rate_limit import enforce_rate_limit
 from services.s3_backup_service import s3_backup_service
 from services.steam_api_service import steam_api_service
 from services.steamcmd_retry import (
@@ -36,6 +42,7 @@ from .schemas import (
     AssistantUserSettingsView,
     ProfileApiKeyGenerate,
     ProfileApiKeyView,
+    ProfileGoogleBind,
     ProfileGsltGenerate,
     ProfileGsltView,
     ProfilePasswordChange,
@@ -89,6 +96,7 @@ def to_view(user) -> ProfileView:
         has_github_token=bool((github_token or "").strip()),
         github_token_prefix=_secret_prefix(github_token, length=12),
         has_api_key=bool((api_key or "").strip()),
+        google_linked=bool((getattr(user, "google_id", None) or "").strip()),
     )
 
 
@@ -194,6 +202,78 @@ async def update_profile(
         user=current_user,
         request=request,
         details={"changed_fields": changed},
+    )
+    return to_view(current_user)
+
+
+_GOOGLE_BIND_STATUS = {
+    "google_not_configured": status.HTTP_400_BAD_REQUEST,
+    "google_invalid_token": status.HTTP_401_UNAUTHORIZED,
+    "google_email_unverified": status.HTTP_400_BAD_REQUEST,
+    "google_account_taken": status.HTTP_409_CONFLICT,
+    "google_already_linked": status.HTTP_409_CONFLICT,
+}
+
+
+def _google_bind_error(exc: GoogleIdentityError) -> HTTPException:
+    return HTTPException(
+        status_code=_GOOGLE_BIND_STATUS.get(exc.code, status.HTTP_400_BAD_REQUEST),
+        detail=exc.code,
+    )
+
+
+@router.post("/google", response_model=ProfileView)
+async def bind_google(
+    body: ProfileGoogleBind,
+    current_user: ActiveUser,
+    db: DatabaseSession,
+    request: Request,
+) -> ProfileView:
+    """Bind a Google account the signed-in user can prove, so it can sign in here."""
+    await enforce_rate_limit(
+        request, "profile_google_bind", limit=10, window=60, identity=str(current_user.id)
+    )
+    try:
+        await bind_google_account(db, current_user, body.id_token)
+    except GoogleIdentityError as exc:
+        await record_audit_event(
+            category="auth",
+            action="profile.google_bind",
+            status="failure",
+            user=current_user,
+            request=request,
+            details={"reason": exc.code},
+        )
+        raise _google_bind_error(exc) from exc
+    await record_audit_event(
+        category="auth",
+        action="profile.google_bind",
+        status="success",
+        user=current_user,
+        request=request,
+        details={"provider": "google"},
+    )
+    return to_view(current_user)
+
+
+@router.delete("/google", response_model=ProfileView)
+async def unbind_google(
+    current_user: ActiveUser,
+    db: DatabaseSession,
+    request: Request,
+) -> ProfileView:
+    """Remove Google sign-in from this account. Password login stays available."""
+    await enforce_rate_limit(
+        request, "profile_google_unbind", limit=10, window=60, identity=str(current_user.id)
+    )
+    await unbind_google_account(db, current_user)
+    await record_audit_event(
+        category="auth",
+        action="profile.google_unbind",
+        status="success",
+        user=current_user,
+        request=request,
+        details={"provider": "google"},
     )
     return to_view(current_user)
 

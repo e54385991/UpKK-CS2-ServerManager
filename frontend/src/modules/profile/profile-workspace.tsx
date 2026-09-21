@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ApiKeyForm } from "@/modules/profile/api-key-form";
+import { GoogleLinkForm } from "@/modules/profile/google-link-form";
 import { PasskeyForm } from "@/modules/profile/passkey-form";
 import { PasswordForm } from "@/modules/profile/password-form";
 import { ProfileCredentialsForm } from "@/modules/profile/profile-credentials-form";
@@ -152,6 +153,7 @@ export function ProfileWorkspace({
           >
             <div className="space-y-6">
               <PasswordForm />
+              <GoogleLinkForm initialLinked={profile.googleLinked} />
               <PasskeyForm initial={passkeys} loadError={passkeysError} />
               <ApiKeyForm initial={profile} />
             </div>

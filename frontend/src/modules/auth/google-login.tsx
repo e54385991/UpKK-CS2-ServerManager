@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { LoaderCircle, TriangleAlert } from "lucide-react";
+import {
+  googleIdTokenFromMessage,
+  openGoogleIdTokenPopup,
+} from "@/modules/auth/google-popup";
 import { Button } from "@/shared/ui/button";
 import { Dialog } from "@/shared/ui/dialog";
 import { Input, Label } from "@/shared/ui/input";
 
 type GoogleConfig = { clientId: string; enabled: boolean };
-const TOKEN_MESSAGE = "google-oauth-token";
-
 export function GoogleLoginButton({
   nextPath,
   registrationEnabled,
@@ -77,6 +79,10 @@ export function GoogleLoginButton({
           response,
           t("googleFailed", { status: response.status }),
         );
+        if (detail.includes("already exists")) {
+          setError(t("googleExistingAccount"));
+          return;
+        }
         if (
           response.status === 400 &&
           detail.includes("Username and password required")
@@ -101,16 +107,9 @@ export function GoogleLoginButton({
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
-      const data = event.data as { type?: unknown; id_token?: unknown } | null;
-      if (
-        !data ||
-        data.type !== TOKEN_MESSAGE ||
-        typeof data.id_token !== "string" ||
-        !data.id_token
-      ) {
-        return;
-      }
-      void finishSignIn(data.id_token);
+      const idToken = googleIdTokenFromMessage(event.data);
+      if (!idToken) return;
+      void finishSignIn(idToken);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -120,28 +119,8 @@ export function GoogleLoginButton({
 
   function startOAuth() {
     if (!config?.clientId) return;
-    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.set("client_id", config.clientId);
-    authUrl.searchParams.set(
-      "redirect_uri",
-      `${window.location.origin}/google-callback`,
-    );
-    authUrl.searchParams.set("response_type", "id_token");
-    authUrl.searchParams.set("scope", "openid email profile");
-    authUrl.searchParams.set("nonce", String(Date.now()));
-
-    const width = 500;
-    const height = 600;
-    const left = Math.max(0, Math.round(window.screen.width / 2 - width / 2));
-    const top = Math.max(0, Math.round(window.screen.height / 2 - height / 2));
-    const popup = window.open(
-      authUrl.toString(),
-      "Google Sign-In",
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`,
-    );
-    if (!popup) {
-      setError(t("googlePopupBlocked"));
-    }
+    const popup = openGoogleIdTokenPopup(config.clientId);
+    if (!popup) setError(t("googlePopupBlocked"));
   }
 
   async function onRegister() {

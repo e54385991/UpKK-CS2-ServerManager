@@ -13,6 +13,7 @@ export type ProfileSettings = {
   readonly hasGithubToken: boolean;
   readonly githubTokenPrefix: string | null;
   readonly hasApiKey: boolean;
+  readonly googleLinked: boolean;
 };
 
 export type ProfileCredentialsPatch = {

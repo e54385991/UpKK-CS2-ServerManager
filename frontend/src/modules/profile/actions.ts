@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ApiResult } from "@/shared/api/server-fetch";
 import type { ActionResultDto, AssistantProviderTestViewDto } from "@/shared/api/types";
 import {
+  bindGoogleAccount,
   changePassword,
   generateApiKey,
   generateGslt,
@@ -18,6 +19,7 @@ import {
   revokeApiKey,
   testProfileAi,
   testS3Settings,
+  unbindGoogleAccount,
 } from "@/modules/profile/api";
 import type {
   ProfileAiPatch,
@@ -46,6 +48,20 @@ export async function saveSteamcmdRetryAction(
 
 export async function refreshProfileAction(): Promise<ApiResult<ProfileSettings>> {
   return getProfile();
+}
+
+export async function bindGoogleAction(
+  idToken: string,
+): Promise<ApiResult<ProfileSettings>> {
+  const result = await bindGoogleAccount(idToken);
+  if (result.ok) revalidateProfile();
+  return result;
+}
+
+export async function unbindGoogleAction(): Promise<ApiResult<ProfileSettings>> {
+  const result = await unbindGoogleAccount();
+  if (result.ok) revalidateProfile();
+  return result;
 }
 
 export async function saveProfileCredentialsAction(

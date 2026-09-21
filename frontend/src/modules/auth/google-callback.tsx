@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
-
-const TOKEN_MESSAGE = "google-oauth-token";
+import { GOOGLE_ID_TOKEN_MESSAGE } from "@/modules/auth/google-popup";
 
 type CallbackSnapshot = {
   readonly idToken: string | null;
@@ -58,7 +57,7 @@ export function GoogleCallbackClient() {
     }
     posted.current = true;
     window.opener.postMessage(
-      { type: TOKEN_MESSAGE, id_token: snapshot.idToken },
+      { type: GOOGLE_ID_TOKEN_MESSAGE, id_token: snapshot.idToken },
       window.location.origin,
     );
     window.close();

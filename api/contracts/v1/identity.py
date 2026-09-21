@@ -115,6 +115,13 @@ class ProfileView(V1Model):
     has_github_token: bool = False
     github_token_prefix: str | None = None
     has_api_key: bool = False
+    google_linked: bool = False
+
+
+class ProfileGoogleBind(ApiRequest):
+    """Attach a Google account to the signed-in user. The ID token is write-only."""
+
+    id_token: str = Field(min_length=1, max_length=8192)
 
 
 class ProfilePatch(ApiRequest):
@@ -318,6 +325,7 @@ __all__ = [
     "GoogleSignInRequest",
     "AuthTokenView",
     "ProfileView",
+    "ProfileGoogleBind",
     "ProfilePatch",
     "ProfilePasswordChange",
     "ProfileApiKeyView",

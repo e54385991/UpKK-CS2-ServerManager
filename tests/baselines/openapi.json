@@ -19759,6 +19759,23 @@
         "title": "ProfileApiKeyView",
         "type": "object"
       },
+      "ProfileGoogleBind": {
+        "additionalProperties": false,
+        "description": "Attach a Google account to the signed-in user. The ID token is write-only.",
+        "properties": {
+          "id_token": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Id Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id_token"
+        ],
+        "title": "ProfileGoogleBind",
+        "type": "object"
+      },
       "ProfileGsltGenerate": {
         "additionalProperties": false,
         "description": "Create a Steam GSLT with the signed-in user's Steam Web API key.",
@@ -20299,6 +20316,11 @@
               }
             ],
             "title": "Github Token Prefix"
+          },
+          "google_linked": {
+            "default": false,
+            "title": "Google Linked",
+            "type": "boolean"
           },
           "has_api_key": {
             "default": false,
@@ -39234,6 +39256,78 @@
           }
         ],
         "summary": "Generate User Api Key",
+        "tags": [
+          "v1-profile"
+        ]
+      }
+    },
+    "/api/v1/profile/google": {
+      "delete": {
+        "description": "Remove Google sign-in from this account. Password login stays available.",
+        "operationId": "unbind_google_api_v1_profile_google_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Unbind Google",
+        "tags": [
+          "v1-profile"
+        ]
+      },
+      "post": {
+        "description": "Bind a Google account the signed-in user can prove, so it can sign in here.",
+        "operationId": "bind_google_api_v1_profile_google_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileGoogleBind"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Bind Google",
         "tags": [
           "v1-profile"
         ]

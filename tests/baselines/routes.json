@@ -1836,6 +1836,22 @@
     "methods": [
       "POST"
     ],
+    "name": "bind_google",
+    "path": "/api/v1/profile/google"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "unbind_google",
+    "path": "/api/v1/profile/google"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
     "name": "change_password",
     "path": "/api/v1/profile/password"
   },

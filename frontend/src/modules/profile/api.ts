@@ -42,6 +42,7 @@ function toProfile(raw: ProfileViewDto): ProfileSettings {
     hasGithubToken: raw.has_github_token,
     githubTokenPrefix: raw.github_token_prefix ?? null,
     hasApiKey: raw.has_api_key,
+    googleLinked: raw.google_linked ?? false,
   };
 }
 
@@ -58,6 +59,26 @@ function toS3(raw: ProfileS3ViewDto): ProfileS3Settings {
     hasSecret: raw.has_secret,
     isConfigured: raw.is_configured,
   };
+}
+
+export async function bindGoogleAccount(
+  idToken: string,
+): Promise<ApiResult<ProfileSettings>> {
+  const result = await apiFetch<ProfileViewDto>("/api/v1/profile/google", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id_token: idToken }),
+  });
+  if (!result.ok) return result;
+  return { ok: true, data: toProfile(result.data) };
+}
+
+export async function unbindGoogleAccount(): Promise<ApiResult<ProfileSettings>> {
+  const result = await apiFetch<ProfileViewDto>("/api/v1/profile/google", {
+    method: "DELETE",
+  });
+  if (!result.ok) return result;
+  return { ok: true, data: toProfile(result.data) };
 }
 
 export async function getProfile(): Promise<ApiResult<ProfileSettings>> {
