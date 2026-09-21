@@ -25,6 +25,7 @@ from sqlalchemy import (
     Table,
     Text,
     Time,
+    UniqueConstraint,
     func,
     select,
     text,
@@ -48,6 +49,24 @@ from scripts.migrate_mysql_to_postgresql import (
     migrate,
 )
 
+# InnoDB utf8mb4 unique indexes cannot exceed 3072 bytes. VARCHAR uses 4 bytes
+# per character plus a length prefix, so 767 is the largest safe unique length.
+_MYSQL_UTF8MB4_UNIQUE_CHAR_LIMIT = 767
+
+
+def _mysql_safe_unique_string_columns(table: Table) -> None:
+    """Cap unique VARCHAR columns so MySQL 8 can create the legacy fixture schema."""
+    unique_names = {column.name for column in table.columns if column.unique}
+    for constraint in table.constraints:
+        if isinstance(constraint, UniqueConstraint):
+            unique_names.update(column.name for column in constraint.columns)
+    for name in unique_names:
+        column = table.c[name]
+        length = getattr(column.type, "length", None)
+        if not isinstance(length, int) or length <= _MYSQL_UTF8MB4_UNIQUE_CHAR_LIMIT:
+            continue
+        column.type = String(length=_MYSQL_UTF8MB4_UNIQUE_CHAR_LIMIT)
+
 
 def _legacy_test_metadata() -> MetaData:
     """Build a MySQL-compatible copy used only to model the final legacy schema."""
@@ -59,6 +78,7 @@ def _legacy_test_metadata() -> MetaData:
         for column in table.columns:
             if isinstance(column.type, JSONB):
                 column.type = JSON()
+        _mysql_safe_unique_string_columns(table)
 
     servers = metadata.tables["servers"]
     servers.append_column(Column("auto_restart_enabled", Boolean(), nullable=True))
@@ -91,8 +111,19 @@ def _legacy_test_metadata() -> MetaData:
 
 def test_legacy_schema_compiles_for_mysql_without_database():
     metadata = _legacy_test_metadata()
+    dialect = mysql.dialect()
     for table in metadata.sorted_tables:
-        assert str(CreateTable(table).compile(dialect=mysql.dialect()))
+        compiled = str(CreateTable(table).compile(dialect=dialect))
+        assert compiled
+        for constraint in table.constraints:
+            if not isinstance(constraint, UniqueConstraint):
+                continue
+            for column in constraint.columns:
+                length = getattr(column.type, "length", None)
+                if isinstance(length, int):
+                    assert length <= _MYSQL_UTF8MB4_UNIQUE_CHAR_LIMIT
+    credential_id = metadata.tables["webauthn_credentials"].c.credential_id
+    assert getattr(credential_id.type, "length", None) == _MYSQL_UTF8MB4_UNIQUE_CHAR_LIMIT
 
 
 def _placeholder(column, variant: int):
