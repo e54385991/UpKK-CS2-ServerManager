@@ -3,9 +3,11 @@
 from fastapi import APIRouter, HTTPException, Request, status
 
 from api.contracts.v1.announcements import (
+    AnnouncementFeedView,
     AnnouncementListView,
     AnnouncementView,
     AnnouncementWrite,
+    CS2VersionNoticeView,
 )
 from api.contracts.v1.settings import ActionResult
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession
@@ -18,6 +20,7 @@ from services.announcements.service import (
 )
 from services.announcements.types import AnnouncementRecord
 from services.audit_log_service import record_audit_event
+from services.cs2_version_tracking import get_recent_update_notice
 
 router = APIRouter(prefix="/api/v1/announcements", tags=["v1-announcements"])
 
@@ -34,14 +37,26 @@ def _view(item: AnnouncementRecord) -> AnnouncementView:
     )
 
 
-@router.get("", response_model=AnnouncementListView)
+@router.get("", response_model=AnnouncementFeedView)
 async def list_announcements(
     db: DatabaseSession,
     _current_user: ActiveUser,
-) -> AnnouncementListView:
+) -> AnnouncementFeedView:
     """Return published announcements to every active console user."""
     items = await list_published_announcements(db)
-    return AnnouncementListView(items=[_view(item) for item in items])
+    notice = await get_recent_update_notice(db)
+    return AnnouncementFeedView(
+        items=[_view(item) for item in items],
+        cs2_update_notice=(
+            CS2VersionNoticeView(
+                version=notice.version,
+                changed_at=notice.changed_at,
+                expires_at=notice.expires_at,
+            )
+            if notice
+            else None
+        ),
+    )
 
 
 @router.get("/admin", response_model=AnnouncementListView)

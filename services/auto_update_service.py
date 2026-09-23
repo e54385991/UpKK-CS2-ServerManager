@@ -9,6 +9,7 @@ import math
 from typing import Any, Optional, Set, Tuple
 
 from modules.utils import get_current_time
+from services.cs2_version_tracking import remember_advertised_version
 from services.discord_notification_service import EVENT_AUTO_UPDATE, discord_notification_service
 from services.maintenance_lock import maintenance_lock_service
 from services.ssh_manager import SSHManager
@@ -23,12 +24,14 @@ class AutoUpdateService:
 
     VERSION_VERIFICATION_TIMEOUT_SECONDS = 5 * 60
     VERSION_VERIFICATION_POLL_INTERVAL_SECONDS = 30
+    PUBLIC_VERSION_CHECK_INTERVAL_SECONDS = 15 * 60
 
     def __init__(self):
         self.check_interval = 60  # Check every minute (configurable, supports debugging)
         self.task: Optional[asyncio.Task] = None
         self.running = False
         self.updating_servers: Set[int] = set()  # Track servers currently being updated
+        self._next_public_version_check_at = 0.0
 
     async def start(self):
         """Start the background auto-update task"""
@@ -51,12 +54,35 @@ class AutoUpdateService:
         """Main update check loop"""
         while self.running:
             try:
+                await self._check_public_cs2_version()
                 await self._check_and_update_servers()
             except Exception as e:
                 logger.error(f"Error in auto-update loop: {e}")
 
             # Wait for next interval
             await asyncio.sleep(self.check_interval)
+
+    async def _check_public_cs2_version(self) -> None:
+        """Track Steam's public build even when no server has auto-update enabled."""
+        loop = asyncio.get_running_loop()
+        now = loop.time()
+        if now < self._next_public_version_check_at:
+            return
+        self._next_public_version_check_at = now + self.PUBLIC_VERSION_CHECK_INTERVAL_SECONDS
+
+        try:
+            success, result = await steam_api_service.check_version(
+                timeout=8,
+                retries=1,
+                use_cache=True,
+            )
+            if not success or not isinstance(result, dict):
+                return
+            advertised_version = result.get("required_version")
+            if isinstance(advertised_version, str) and advertised_version.strip():
+                await remember_advertised_version(advertised_version)
+        except Exception:
+            logger.exception("Could not record Steam's public CS2 version")
 
     async def _check_and_update_servers(self):
         """Check all servers with auto-update enabled and update if needed"""

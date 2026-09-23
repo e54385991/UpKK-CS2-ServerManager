@@ -16,12 +16,15 @@ export default async function ConsoleLayout({
   children: React.ReactNode;
 }) {
   const user = await requireSession();
-  const announcements = await getPublishedAnnouncements();
+  const announcementFeed = await getPublishedAnnouncements();
   return (
     <ClientMessages namespaces={CONSOLE_NAMESPACES}>
       <ConsoleShell
         user={user}
-        announcements={announcements.ok ? announcements.data : []}
+        announcements={announcementFeed.ok ? announcementFeed.data.items : []}
+        cs2UpdateNotice={
+          announcementFeed.ok ? announcementFeed.data.cs2UpdateNotice : null
+        }
       >
         {children}
       </ConsoleShell>

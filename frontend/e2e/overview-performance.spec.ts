@@ -87,3 +87,21 @@ test("Next runtime reports no compilation or execution errors", async ({ page, c
       : { configErrors: [], sessionErrors: [] });
   }
 });
+
+test("recent CS2 update notice opens a detail dialog", async ({ page, context }) => {
+  await context.addCookies([
+    { name: "upkk_access_token", value: "isolated-fixture-session", domain: "127.0.0.1", path: "/" },
+    { name: "locale", value: "en-US", domain: "127.0.0.1", path: "/" },
+  ]);
+  await page.goto("/overview", { waitUntil: "commit" });
+
+  const notice = page.getByRole("button", { name: "CS2 update notice" });
+  await expect(notice).toBeVisible();
+  await notice.click();
+
+  const dialog = page.getByRole("dialog", { name: "Recent CS2 update" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("1.42.0.2");
+  await expect(dialog).toContainText("plugin");
+  await expect(dialog).toContainText("disable");
+});

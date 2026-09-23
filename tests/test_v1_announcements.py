@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from api.application import create_app
 from modules import get_current_active_user, get_current_admin_user, get_db
 from services.announcements.types import AnnouncementRecord
+from services.cs2_version_tracking import CS2VersionUpdateNotice
 
 BASE = "/api/v1/announcements"
 NOW = datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
@@ -54,6 +55,10 @@ def client(monkeypatch):
         AsyncMock(return_value=[make_announcement()]),
     )
     monkeypatch.setattr(
+        "api.routes.v1.announcements.get_recent_update_notice",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
         "api.routes.v1.announcements.list_admin_announcements",
         AsyncMock(
             return_value=[
@@ -85,6 +90,7 @@ def test_published_feed_and_admin_draft_list(client):
     assert public.status_code == 200
     assert [item["id"] for item in public.json()["items"]] == [1]
     assert public.json()["items"][0]["body_markdown"] == "**Scheduled maintenance**"
+    assert public.json()["cs2_update_notice"] is None
 
     admin = api.get(f"{BASE}/admin")
     assert admin.status_code == 200
@@ -94,6 +100,25 @@ def test_published_feed_and_admin_draft_list(client):
     assert api.get(BASE).status_code == 200
     assert api.get(f"{BASE}/admin").status_code == 403
     assert api.post(BASE, json={"title": "Notice", "body_markdown": "Text"}).status_code == 403
+
+
+def test_published_feed_includes_recent_cs2_update_notice(client):
+    api, _ = client
+    from api.routes.v1 import announcements as announcement_routes
+
+    announcement_routes.get_recent_update_notice.return_value = CS2VersionUpdateNotice(
+        version="1.42.0.2",
+        changed_at=NOW,
+        expires_at=NOW.replace(day=27),
+    )
+
+    response = api.get(BASE)
+    assert response.status_code == 200
+    assert response.json()["cs2_update_notice"] == {
+        "version": "1.42.0.2",
+        "changed_at": NOW.isoformat().replace("+00:00", "Z"),
+        "expires_at": NOW.replace(day=27).isoformat().replace("+00:00", "Z"),
+    }
 
 
 def test_admin_create_update_delete_and_input_validation(client):

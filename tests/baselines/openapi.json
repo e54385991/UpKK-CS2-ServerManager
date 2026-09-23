@@ -2099,6 +2099,33 @@
         "title": "AgentPolicyView",
         "type": "object"
       },
+      "AnnouncementFeedView": {
+        "additionalProperties": false,
+        "properties": {
+          "cs2_update_notice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CS2VersionNoticeView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnnouncementView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AnnouncementFeedView",
+        "type": "object"
+      },
       "AnnouncementListView": {
         "additionalProperties": false,
         "properties": {
@@ -4471,6 +4498,32 @@
           "file"
         ],
         "title": "Body_upload_file_servers__server_id__files_upload_post",
+        "type": "object"
+      },
+      "CS2VersionNoticeView": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_at": {
+            "format": "date-time",
+            "title": "Changed At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "changed_at",
+          "expires_at"
+        ],
+        "title": "CS2VersionNoticeView",
         "type": "object"
       },
       "CaptchaChallenge": {
@@ -35585,7 +35638,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnnouncementListView"
+                  "$ref": "#/components/schemas/AnnouncementFeedView"
                 }
               }
             },

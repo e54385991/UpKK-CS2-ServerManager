@@ -37,8 +37,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_postgresql_models_and_static_baseline_are_the_schema_authority():
-    assert len(SQLModel.metadata.tables) == 34
-    assert code_heads() == ("0035_announcements",)
+    assert len(SQLModel.metadata.tables) == 35
+    assert code_heads() == ("0036_cs2_version_state",)
     assert "create_all" not in (PROJECT_ROOT / "modules/database.py").read_text()
 
     revision = PROJECT_ROOT / "alembic/versions/0001_postgresql_baseline.py"
@@ -121,6 +121,13 @@ def test_announcements_match_revision_0035_column_contract():
     assert {
         foreign_key.target_fullname for foreign_key in table.c.created_by_user_id.foreign_keys
     } == {"users.id"}
+
+
+def test_cs2_version_state_is_a_singleton_with_a_timezone_aware_change_time():
+    table = SQLModel.metadata.tables["cs2_version_state"]
+    assert table.c.advertised_version.type.length == 50
+    assert table.c.version_changed_at.type.timezone is True
+    assert any("id = 1" in str(constraint.sqltext) for constraint in table.constraints)
 
 
 @pytest.mark.parametrize(

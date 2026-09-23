@@ -15,6 +15,15 @@ const snapshots = [...servers].reverse().map(server => ({
 }));
 const inbox = { items: [], failed_items: [], market_import_items: [], active_count: 0,
   running_count: 0, failed_count: 0, failed_retention_days: 7 };
+const cs2VersionChangedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+const announcements = {
+  items: [],
+  cs2_update_notice: {
+    version: "1.42.0.2",
+    changed_at: cs2VersionChangedAt,
+    expires_at: new Date(Date.now() + 71 * 60 * 60 * 1000).toISOString(),
+  },
+};
 let hostRequests = 0;
 let summaryRequests = 0;
 let outcome = "success";
@@ -57,6 +66,7 @@ const app = createServer(async (req, res) => {
     return json({ total: 2, running: 2, attention: 0, capacity: 64,
       ssh_connections: 0, ssh_in_use: 0, ssh_idle: 0, ssh_leases: 0 });
   }
+  if (path === "/api/v1/announcements") return json(announcements);
   if (path === "/api/v1/servers") return json(servers);
   if (path === "/api/v1/auth/me") return json({ id: 1, username: "fixture-admin", email: null,
     is_admin: true, is_active: true });

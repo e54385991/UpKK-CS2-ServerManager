@@ -6,7 +6,10 @@ import { StatusDot } from "@/shared/ui/badge";
 import { ActivityTray } from "@/modules/shell/activity-tray";
 import { SshPoolBadge } from "@/modules/shell/ssh-pool-badge";
 import type { SessionUser } from "@/modules/auth/session";
-import type { Announcement } from "@/modules/announcements/types";
+import type {
+  Announcement,
+  CS2UpdateNotice,
+} from "@/modules/announcements/types";
 import { AnnouncementCenter } from "@/modules/announcements/announcement-center";
 
 /**
@@ -17,9 +20,11 @@ import { AnnouncementCenter } from "@/modules/announcements/announcement-center"
 export async function Topbar({
   user,
   announcements,
+  cs2UpdateNotice,
 }: {
   user: SessionUser;
   announcements: readonly Announcement[];
+  cs2UpdateNotice: CS2UpdateNotice | null;
 }) {
   const t = await getTranslations("shell");
   return (
@@ -35,7 +40,10 @@ export async function Topbar({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <AnnouncementCenter announcements={announcements} />
+        <AnnouncementCenter
+          announcements={announcements}
+          cs2UpdateNotice={cs2UpdateNotice}
+        />
         <ActivityTray isAdmin={user.isAdmin} />
         <LanguageSwitcher />
         <UserMenu user={user} />

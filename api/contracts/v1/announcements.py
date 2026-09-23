@@ -22,6 +22,17 @@ class AnnouncementListView(V1Model):
     items: list[AnnouncementView]
 
 
+class CS2VersionNoticeView(V1Model):
+    version: str
+    changed_at: datetime
+    expires_at: datetime
+
+
+class AnnouncementFeedView(V1Model):
+    items: list[AnnouncementView]
+    cs2_update_notice: CS2VersionNoticeView | None = None
+
+
 class AnnouncementWrite(ApiRequest):
     title: str = Field(min_length=1, max_length=160)
     body_markdown: str = Field(min_length=1, max_length=20000)

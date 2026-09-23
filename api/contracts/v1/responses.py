@@ -1,6 +1,11 @@
 """Stable responses contract index for the versioned API."""
 
-from .announcements import AnnouncementListView, AnnouncementView
+from .announcements import (
+    AnnouncementFeedView,
+    AnnouncementListView,
+    AnnouncementView,
+    CS2VersionNoticeView,
+)
 from .assistant import (
     AgentPolicyView,
     AssistantConversationDetailView,
@@ -169,8 +174,10 @@ from .updates import (
 )
 
 __all__ = [
+    "AnnouncementFeedView",
     "AnnouncementListView",
     "AnnouncementView",
+    "CS2VersionNoticeView",
     "ConsoleWorkspaceView",
     "ConsolePaneView",
     "AssistantConversationView",

@@ -13,6 +13,7 @@ from .ai import (
 from .announcements import Announcement
 from .audit import AuditLog
 from .common import *
+from .cs2_version_state import CS2VersionState
 from .discord import (
     DEFAULT_AGENT_CAPABILITIES,
     DiscordOperationRun,

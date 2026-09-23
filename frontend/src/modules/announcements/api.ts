@@ -2,12 +2,15 @@ import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
 import type {
   ActionResultDto,
+  AnnouncementFeedViewDto,
   AnnouncementListViewDto,
   AnnouncementViewDto,
 } from "@/shared/api/types";
 import type {
   Announcement,
   AnnouncementWrite,
+  CS2UpdateNotice,
+  PublishedAnnouncementFeed,
 } from "@/modules/announcements/types";
 
 function toAnnouncement(raw: AnnouncementViewDto): Announcement {
@@ -22,12 +25,30 @@ function toAnnouncement(raw: AnnouncementViewDto): Announcement {
   };
 }
 
+function toCS2UpdateNotice(
+  raw: AnnouncementFeedViewDto["cs2_update_notice"],
+): CS2UpdateNotice | null {
+  return raw
+    ? {
+        version: raw.version,
+        changedAt: raw.changed_at,
+        expiresAt: raw.expires_at,
+      }
+    : null;
+}
+
 export async function getPublishedAnnouncements(): Promise<
-  ApiResult<Announcement[]>
+  ApiResult<PublishedAnnouncementFeed>
 > {
-  const result = await apiFetch<AnnouncementListViewDto>("/api/v1/announcements");
+  const result = await apiFetch<AnnouncementFeedViewDto>("/api/v1/announcements");
   if (!result.ok) return result;
-  return { ok: true, data: result.data.items.map(toAnnouncement) };
+  return {
+    ok: true,
+    data: {
+      items: result.data.items.map(toAnnouncement),
+      cs2UpdateNotice: toCS2UpdateNotice(result.data.cs2_update_notice),
+    },
+  };
 }
 
 export async function getAdminAnnouncements(): Promise<

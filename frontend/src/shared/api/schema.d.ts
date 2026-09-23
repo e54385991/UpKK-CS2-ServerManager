@@ -7994,6 +7994,12 @@ export interface components {
             /** Server Id */
             server_id: number;
         };
+        /** AnnouncementFeedView */
+        AnnouncementFeedView: {
+            cs2_update_notice?: components["schemas"]["CS2VersionNoticeView"] | null;
+            /** Items */
+            items: components["schemas"]["AnnouncementView"][];
+        };
         /** AnnouncementListView */
         AnnouncementListView: {
             /** Items */
@@ -8769,6 +8775,21 @@ export interface components {
         Body_upload_file_servers__server_id__files_upload_post: {
             /** File */
             file: string;
+        };
+        /** CS2VersionNoticeView */
+        CS2VersionNoticeView: {
+            /**
+             * Changed At
+             * Format: date-time
+             */
+            changed_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Version */
+            version: string;
         };
         /**
          * CaptchaChallenge
@@ -22104,7 +22125,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AnnouncementListView"];
+                    "application/json": components["schemas"]["AnnouncementFeedView"];
                 };
             };
         };
