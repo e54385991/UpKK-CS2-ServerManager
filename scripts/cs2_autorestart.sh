@@ -22,9 +22,10 @@ GAME_DIR="$4"
 shift 4
 START_COMMAND="$@"
 
-# Configuration
-MAX_RESTARTS=5          # Maximum number of restarts within time window
-TIME_WINDOW=600         # Time window in seconds (10 minutes)
+# Configuration. The panel exports TIME_WINDOW (seconds) for this server.
+# An unset value keeps the 2-hour default.
+MAX_RESTARTS="${MAX_RESTARTS:-5}"
+TIME_WINDOW="${TIME_WINDOW:-7200}"
 RESTART_DELAY=10        # Delay before restart in seconds
 CRASH_LOG="${GAME_DIR}/crash_history.log"
 

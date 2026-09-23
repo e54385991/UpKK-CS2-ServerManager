@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from services.ssh import game_start as game_start_module
+from services.ssh.autorestart_script import local_autorestart_script_text, script_digest
 from services.ssh.game_start import GameStartMixin
 from services.ssh_manager import SSHManager
 
@@ -116,22 +117,28 @@ async def test_start_server_handles_invalid_config_script_failure_and_start_fail
 
     server = _server(api_key="secret")
     manager = _manager(server)
-    manager.execute_command = AsyncMock(
-        side_effect=[
-            (True, "", ""),
-            (True, "exists", ""),
-            (False, "", "start failed"),
-        ]
-    )
+    digest = script_digest(local_autorestart_script_text())
+    commands: list[str] = []
+
+    async def execute(command, **_kwargs):
+        commands.append(command)
+        if command.startswith("sha256sum"):
+            return True, f"{digest}  /srv/cs2/cs2_autorestart.sh\n", ""
+        if "TIME_WINDOW=" in command:
+            return False, "", "start failed"
+        return True, "", ""
+
+    manager.execute_command = execute
     monkeypatch.setattr("services.ssh.game_start.asyncio.sleep", _no_sleep)
     ok, message = await manager.start_server(server)
     assert not ok and "Start command failed" in message
+    assert any("TIME_WINDOW=7200 " in command for command in commands)
 
 
 def _patch_monitor(monkeypatch, *, can_restart=(False, "restart disabled")):
     monitor = SimpleNamespace(
-        can_restart=lambda _id: can_restart,
-        record_restart=lambda _id: None,
+        can_restart=lambda _id, **_kwargs: can_restart,
+        record_restart=lambda _id, **_kwargs: None,
         queue_restart_notification=lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr("services.ssh.game_start.server_monitor", monitor)

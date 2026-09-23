@@ -1681,6 +1681,8 @@
       "enablePanel": "Enable panel monitoring",
       "interval": "Check interval (seconds)",
       "autoRestart": "Restart when the process disappears",
+      "protectionHours": "Restart protection (hours)",
+      "protectionHoursHelp": "After the crash limit is reached, auto-restart stays off for this long. Default is 2 hours, maximum is 720 hours (30 days).",
       "enableA2s": "Enable A2S probes",
       "a2sThreshold": "Failures before restart",
       "a2sInterval": "A2S interval (seconds)",
@@ -1759,6 +1761,7 @@
     "queuedDone": "Plugin diagnostic finished.",
     "openDiagnosticAssistant": "Open AI diagnosis",
     "diagnosticRestarts": "Recent restarts {count} / {max}",
+    "diagnosticProtection": "Protection lasts {hours} hours. Auto-restart can resume in about {minutes} minutes.",
     "diagnosticReasons": {
       "restart_loop_protection": "Restart-loop protection is active.",
       "post_update_start_failures": "The server failed to start several times after an update.",

@@ -234,6 +234,27 @@ test("monitoring streams diagnostics, A2S and logs independently", async ({ page
     data: { path: "/api/v1/servers/1/plugin-diagnostics/recommendation" },
   });
   await expect(page.getByTestId("plugin-diagnostics")).toBeVisible();
+  await expect(page.getByLabel(en.serverMonitoring.fields.protectionHours)).toHaveValue("6");
+  await expect(page.getByText("Protection lasts 6 hours")).toBeVisible();
+  await expect(page.getByText("about 360 minutes")).toBeVisible();
+  await page.getByLabel(en.serverMonitoring.fields.protectionHours).fill("8");
+  await page.getByRole("button", { name: en.serverMonitoring.save }).click();
+  await expect(page.getByText(en.serverMonitoring.saved)).toBeVisible();
+  await expect.poll(async () => {
+    const records = (await state(request)).requests as Array<{
+      path: string;
+      method: string;
+      input?: { restart_protection_hours?: number };
+    }>;
+    return records.some(
+      (record) =>
+        record.method === "PATCH" &&
+        record.path === "/api/v1/servers/1" &&
+        record.input?.restart_protection_hours === 8,
+    );
+  }).toBe(true);
+  await expect(page.getByText("Protection lasts 8 hours")).toBeVisible();
+  await expect(page.getByText("about 480 minutes")).toBeVisible();
   await expect(page.getByTestId("a2s-logs-loading")).toBeVisible();
   await expect(page.getByTestId("a2s-panel-loading")).toBeVisible();
   await request.post(`${mock}/__test__/release`, {

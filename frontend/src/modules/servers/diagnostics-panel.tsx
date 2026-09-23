@@ -150,6 +150,14 @@ export function PluginDiagnosticsPanel({
                 max: recommendation.maxRestarts,
               })}
             </p>
+            {recommendation.reason === "restart_loop_protection" ? (
+              <p>
+                {t("diagnosticProtection", {
+                  hours: recommendation.protectionWindowHours,
+                  minutes: recommendation.protectionMinutesRemaining,
+                })}
+              </p>
+            ) : null}
             <Button asChild variant="outline">
               <Link
                 href={`/assistant?prompt=crashIsolation` as Route}

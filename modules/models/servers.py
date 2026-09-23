@@ -113,6 +113,14 @@ class Server(SQLModel, table=True):
     enable_panel_monitoring: bool = Field(default=False)
     monitor_interval_seconds: int = Field(default=60)
     auto_restart_on_crash: bool = Field(default=True)
+    # How long a crash burst keeps automatic restarts paused. Five restarts
+    # inside this window disable auto-restart until the oldest one ages out.
+    restart_protection_hours: int = Field(
+        default=2,
+        ge=1,
+        le=720,
+        sa_column_kwargs={"server_default": text("2")},
+    )
     # Persisted user intent. This is deliberately separate from ``status``,
     # which records the last observed runtime state rather than whether
     # background services are allowed to start the server.

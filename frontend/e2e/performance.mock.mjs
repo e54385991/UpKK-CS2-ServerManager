@@ -6,7 +6,13 @@ let rules = {};
 let savedContent = 'hostname "fixture"\n';
 const waiters = new Map();
 const stamp = '2026-09-09T00:00:00Z';
-const server = id => ({ id, name: `fixture-server-${id}`, host: `fixture-${id}.invalid`, ssh_user: 'fixture', ssh_port: 22, game_port: 27015, status: 'running', default_map: 'de_dust2', max_players: 32, game_directory: '/srv/cs2', game_mode: '0', game_type: '0', server_name: 'fixture', session_manager: 'tmux', enable_panel_monitoring: true, monitor_interval_seconds: 60, auto_restart_on_crash: false, enable_a2s_monitoring: true, a2s_failure_threshold: 3, a2s_check_interval_seconds: 30, enable_auto_update: false, tv_enable: false, is_ssh_down: false, has_sudo_password: false, created_at: stamp, updated_at: stamp, last_deployed: stamp });
+let servers = new Map();
+const server = id => {
+  if (!servers.has(id)) {
+    servers.set(id, { id, name: `fixture-server-${id}`, host: `fixture-${id}.invalid`, ssh_user: 'fixture', ssh_port: 22, game_port: 27015, status: 'running', default_map: 'de_dust2', max_players: 32, game_directory: '/srv/cs2', game_mode: '0', game_type: '0', server_name: 'fixture', session_manager: 'tmux', enable_panel_monitoring: true, monitor_interval_seconds: 60, auto_restart_on_crash: false, restart_protection_hours: 6, enable_a2s_monitoring: true, a2s_failure_threshold: 3, a2s_check_interval_seconds: 30, enable_auto_update: false, tv_enable: false, is_ssh_down: false, has_sudo_password: false, created_at: stamp, updated_at: stamp, last_deployed: stamp });
+  }
+  return servers.get(id);
+};
 const plugin = { id: 1, title: 'Fixture Plugin', description: 'Fixture installation documentation', description_i18n: null, author: 'fixture', version: '1.0', category: 'utility', framework: 'counterstrikesharp', is_recommended: false, github_url: 'https://github.com/fixture/plugin', download_count: 0, install_count: 0, created_at: stamp, dependencies: [], ai_metadata: null };
 const inbox = { items: [], failed_items: [], market_import_items: [], active_count: 0, running_count: 0, failed_count: 0, failed_retention_days: 7 };
 const app = createServer(async (req, res) => {
@@ -21,7 +27,7 @@ const app = createServer(async (req, res) => {
   const input = text ? JSON.parse(text) : {};
   if (path === '/__test__/reset') {
     for (const callbacks of waiters.values()) for (const release of callbacks) release();
-    waiters.clear(); requests = []; rules = input.rules ?? {}; plugin.title = 'Fixture Plugin'; savedContent = 'hostname "fixture"\n';
+    waiters.clear(); requests = []; rules = input.rules ?? {}; servers = new Map(); plugin.title = 'Fixture Plugin'; savedContent = 'hostname "fixture"\n';
     return json({ ok: true });
   }
   if (path === '/__test__/release') {
@@ -74,7 +80,16 @@ const app = createServer(async (req, res) => {
     const id = Number(path.split('/').at(-1));
     if (id === 404) return json({ detail: 'Not found' }, 404);
     if (id === 2 && actor.includes('member')) return json({ detail: 'Forbidden' }, 403);
-    return json(server(id));
+    const current = server(id);
+    if (req.method === 'PATCH') {
+      if (input.restart_protection_hours != null) current.restart_protection_hours = input.restart_protection_hours;
+      if (input.auto_restart_on_crash != null) current.auto_restart_on_crash = input.auto_restart_on_crash;
+      if (input.enable_panel_monitoring != null) current.enable_panel_monitoring = input.enable_panel_monitoring;
+      if (input.monitor_interval_seconds != null) current.monitor_interval_seconds = input.monitor_interval_seconds;
+      if (input.enable_auto_update != null) current.enable_auto_update = input.enable_auto_update;
+      return json({ ...current, restart_required: false });
+    }
+    return json(current);
   }
   if (path.endsWith('/operations/current')) return json({ operation: null });
   if (path.endsWith('/operations/lock')) return json({ lock_active: false, server_status: 'running' });
@@ -101,7 +116,10 @@ const app = createServer(async (req, res) => {
   if (path === '/api/v1/plugin-catalog') return json({ format: 'upkk-cs2-plugin-catalog', version: 1, plugins: [], conflicts: [] });
   if (path === '/api/v1/assistant') return json({ provider_ready: true, mode: 'global', model: 'fixture-model', conversations: [{ id: 'conversation-1', title: 'Fixture conversation' }] });
   if (path === '/api/v1/assistant/conversations/conversation-1') return json({ id: 'conversation-1', title: 'Fixture conversation', messages: [] });
-  if (path.endsWith('/plugin-diagnostics/recommendation')) return json({ recommended: false, recently_updated: false, restart_count: 0, max_restarts: 3, window_minutes: 10 });
+  if (path.endsWith('/plugin-diagnostics/recommendation')) {
+    const hours = server(1).restart_protection_hours ?? 2;
+    return json({ recommended: true, reason: 'restart_loop_protection', recently_updated: false, restart_count: 5, max_restarts: 5, window_minutes: 30, protection_window_hours: hours, protection_minutes_remaining: hours * 60 });
+  }
   if (path.endsWith('/a2s')) return json({ query_host: 'fixture-1.invalid', query_port: 27015, success: true, cached: true, live: false, server_info: { server_name: 'fixture', map_name: 'de_dust2', game: 'cs2', player_count: 0, max_players: 32, bot_count: 0, password_protected: false, vac_enabled: true, version: '1', platform: 'linux' }, players: [], timestamp: stamp, last_updated: stamp, response_time_ms: 12 });
   if (path.endsWith('/monitoring-logs')) return json({ items: [{ id: 'log-1', event_type: 'a2s_check', status: 'ok', message: 'Fixture A2S log', created_at: stamp }] });
   if (path.endsWith('/files')) return json({ server_id: 1, root: '/srv/cs2', path: '/srv/cs2', ssh_ok: true, files: ['server.cfg', 'plugin.zip'].map(name => ({ name, path: `/srv/cs2/${name}`, type: 'file', size: 100, modified: Date.parse(stamp) / 1000, permissions: '-rw-r--r--', is_symlink: false })) });

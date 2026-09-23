@@ -38,6 +38,7 @@ export function ServerMonitoringForm({ server }: { server: ServerDetail }) {
       enablePanelMonitoring: enablePanel,
       monitorIntervalSeconds: Number(form.get("interval")),
       autoRestartOnCrash: autoRestart,
+      restartProtectionHours: Number(form.get("protectionHours")),
       enableAutoUpdate: autoUpdate,
     });
     setPending(false);
@@ -102,6 +103,18 @@ export function ServerMonitoringForm({ server }: { server: ServerDetail }) {
             checked={autoRestart}
             onCheckedChange={setAutoRestart}
           />
+          <Field label={t("fields.protectionHours")} htmlFor="protectionHours">
+            <Input
+              id="protectionHours"
+              name="protectionHours"
+              type="number"
+              min={1}
+              max={720}
+              required
+              defaultValue={server.restartProtectionHours}
+            />
+            <p className="text-sm text-fg-muted">{t("fields.protectionHoursHelp")}</p>
+          </Field>
           <SwitchRow
             id="autoUpdate"
             label={t("fields.autoUpdate")}

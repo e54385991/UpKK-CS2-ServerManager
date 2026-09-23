@@ -269,6 +269,7 @@ class ServerConfigEntry(ServerCreate):
     discord_notify_s3_backups: bool = True
     discord_notify_crash_restarts: bool = True
     discord_crash_restart_min_interval_minutes: int = Field(default=10, ge=1, le=1440)
+    restart_protection_hours: int = Field(default=2, ge=1, le=720)
     # SSH health monitoring configuration
     enable_ssh_health_monitoring: bool = True
     ssh_health_check_interval_hours: int = Field(default=2, ge=1, le=168)
@@ -375,6 +376,7 @@ class ServerResponse(SQLModel):
     enable_panel_monitoring: bool
     monitor_interval_seconds: int
     auto_restart_on_crash: bool
+    restart_protection_hours: int = 2
 
     # A2S query configuration
     a2s_query_host: Optional[str] = None

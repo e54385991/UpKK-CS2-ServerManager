@@ -153,6 +153,7 @@ export type ServerDetail = ServerSummary & {
   readonly enablePanelMonitoring: boolean;
   readonly monitorIntervalSeconds: number;
   readonly autoRestartOnCrash: boolean;
+  readonly restartProtectionHours: number;
   readonly enableA2sMonitoring: boolean;
   readonly a2sFailureThreshold: number;
   readonly a2sCheckIntervalSeconds: number;
@@ -205,6 +206,7 @@ function toDetail(raw: ServerDetailDto): ServerDetail {
     enablePanelMonitoring: raw.enable_panel_monitoring,
     monitorIntervalSeconds: raw.monitor_interval_seconds,
     autoRestartOnCrash: raw.auto_restart_on_crash,
+    restartProtectionHours: raw.restart_protection_hours ?? 2,
     enableA2sMonitoring: raw.enable_a2s_monitoring,
     a2sFailureThreshold: raw.a2s_failure_threshold,
     a2sCheckIntervalSeconds: raw.a2s_check_interval_seconds,
@@ -270,6 +272,7 @@ export type ServerUpdateInput = {
   readonly enablePanelMonitoring?: boolean;
   readonly monitorIntervalSeconds?: number;
   readonly autoRestartOnCrash?: boolean;
+  readonly restartProtectionHours?: number;
   readonly enableA2sMonitoring?: boolean;
   readonly a2sFailureThreshold?: number;
   readonly a2sCheckIntervalSeconds?: number;
@@ -315,6 +318,7 @@ export async function updateServer(
       enable_panel_monitoring: input.enablePanelMonitoring,
       monitor_interval_seconds: input.monitorIntervalSeconds,
       auto_restart_on_crash: input.autoRestartOnCrash,
+      restart_protection_hours: input.restartProtectionHours,
       enable_a2s_monitoring: input.enableA2sMonitoring,
       a2s_failure_threshold: input.a2sFailureThreshold,
       a2s_check_interval_seconds: input.a2sCheckIntervalSeconds,

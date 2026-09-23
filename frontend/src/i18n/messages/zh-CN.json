@@ -1681,6 +1681,8 @@
       "enablePanel": "启用面板监控",
       "interval": "检查间隔（秒）",
       "autoRestart": "进程消失时自动重启",
+      "protectionHours": "重启保护时长（小时）",
+      "protectionHoursHelp": "连续崩溃达到上限后，在这段时间内不再自动重启。默认 2 小时，最长 720 小时（30 天）。",
       "enableA2s": "启用 A2S 探测",
       "a2sThreshold": "连续失败几次后重启",
       "a2sInterval": "A2S 间隔（秒）",
@@ -1759,6 +1761,7 @@
     "queuedDone": "插件诊断已完成。",
     "openDiagnosticAssistant": "打开 AI 诊断",
     "diagnosticRestarts": "最近重启 {count} / {max} 次",
+    "diagnosticProtection": "保护时长 {hours} 小时，约 {minutes} 分钟后可再次自动重启。",
     "diagnosticReasons": {
       "restart_loop_protection": "已触发重启保护循环。",
       "post_update_start_failures": "更新后多次启动失败。",

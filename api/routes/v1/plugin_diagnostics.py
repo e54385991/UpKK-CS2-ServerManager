@@ -50,6 +50,8 @@ def _to_recommendation(raw: dict) -> PluginDiagnosticRecommendationView:
         restart_count=int(raw.get("restart_count") or 0),
         max_restarts=int(raw.get("max_restarts") or 0),
         window_minutes=int(raw.get("window_minutes") or 30),
+        protection_window_hours=int(raw.get("protection_window_hours") or 2),
+        protection_minutes_remaining=int(raw.get("protection_minutes_remaining") or 0),
     )
 
 

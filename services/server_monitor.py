@@ -1,7 +1,7 @@
 """
 Server monitoring and auto-restart service
 Monitors CS2 servers and automatically restarts them if they crash
-Allows up to 5 restarts within 10 minutes to prevent restart loops
+Allows up to 5 restarts within each server's protection window
 """
 
 import asyncio
@@ -12,11 +12,26 @@ from typing import Dict, List, Tuple
 from modules.utils import get_current_time
 from services.discord_notification_service import EVENT_CRASH_RESTART, discord_notification_service
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
+from services.restart_protection import (
+    DEFAULT_RESTART_PROTECTION_HOURS,
+    restart_protection_window,
+)
 from services.server_lifecycle_policy import (
     automatic_start_block_reason,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _window_hours(window: timedelta) -> int:
+    return max(1, int(window.total_seconds() // 3600))
+
+
+def _window_label(window: timedelta) -> str:
+    seconds = int(window.total_seconds())
+    if seconds >= 3600 and seconds % 3600 == 0:
+        return f"{seconds // 3600} hour(s)"
+    return f"{max(1, seconds // 60)} minute(s)"
 
 
 class ServerMonitor:
@@ -26,14 +41,20 @@ class ServerMonitor:
         # Track restart attempts: server_id -> list of (timestamp, restart_count)
         self.restart_history: Dict[int, List[datetime]] = {}
         self.max_restarts = 5  # Maximum restarts within time window
-        self.time_window = timedelta(minutes=10)  # Time window for restart tracking
+        # Legacy global knob. Live checks use each server's restart_protection_hours.
+        self.time_window = timedelta(hours=DEFAULT_RESTART_PROTECTION_HOURS)
         self.monitoring_tasks: Dict[int, asyncio.Task] = {}
         # Track consecutive A2S failures: server_id -> failure_count
         self.a2s_failure_count: Dict[int, int] = {}
         # Avoid repeating the same pause message on every monitoring interval.
         self.manual_stop_suppressed: set[int] = set()
 
-    def can_restart(self, server_id: int) -> Tuple[bool, str]:
+    def can_restart(
+        self,
+        server_id: int,
+        *,
+        window: timedelta | None = None,
+    ) -> Tuple[bool, str]:
         """
         Check if server can be restarted based on restart history
 
@@ -41,13 +62,14 @@ class ServerMonitor:
             Tuple[bool, str]: (can_restart, reason)
         """
         now = get_current_time()
+        active_window = window or timedelta(hours=DEFAULT_RESTART_PROTECTION_HOURS)
 
         # Get restart history for this server
         if server_id not in self.restart_history:
             self.restart_history[server_id] = []
 
         # Clean up old restart records (outside time window)
-        cutoff_time = now - self.time_window
+        cutoff_time = now - active_window
         self.restart_history[server_id] = [
             timestamp for timestamp in self.restart_history[server_id] if timestamp > cutoff_time
         ]
@@ -57,20 +79,22 @@ class ServerMonitor:
 
         if restart_count >= self.max_restarts:
             oldest_restart = min(self.restart_history[server_id])
-            retry_after = oldest_restart + self.time_window
+            retry_after = oldest_restart + active_window
             minutes_left = int((retry_after - now).total_seconds() / 60) + 1
+            window_label = _window_label(active_window)
 
             return False, (
-                f"Server has crashed {restart_count} times in the last 10 minutes. "
+                f"Server has crashed {restart_count} times in the last {window_label}. "
                 f"Auto-restart disabled to prevent restart loop. "
                 f"Manual restart will be available in {minutes_left} minute(s)."
             )
 
         return True, f"Auto-restart available ({restart_count}/{self.max_restarts} used)"
 
-    def record_restart(self, server_id: int):
+    def record_restart(self, server_id: int, *, window: timedelta | None = None):
         """Record a restart attempt for a server"""
         now = get_current_time()
+        active_window = window or timedelta(hours=DEFAULT_RESTART_PROTECTION_HOURS)
 
         if server_id not in self.restart_history:
             self.restart_history[server_id] = []
@@ -80,7 +104,7 @@ class ServerMonitor:
         restart_count = len(self.restart_history[server_id])
         logger.info(
             f"Recorded restart for server {server_id}. "
-            f"Count: {restart_count}/{self.max_restarts} in last 10 minutes"
+            f"Count: {restart_count}/{self.max_restarts} in last {_window_label(active_window)}"
         )
 
     def reset_restart_history(self, server_id: int):
@@ -93,31 +117,37 @@ class ServerMonitor:
             self.a2s_failure_count[server_id] = 0
             logger.info(f"Reset A2S failure counter for server {server_id}")
 
-    def get_restart_info(self, server_id: int) -> Dict:
+    def get_restart_info(self, server_id: int, *, window: timedelta | None = None) -> Dict:
         """Get restart information for a server"""
         now = get_current_time()
-        cutoff_time = now - self.time_window
+        active_window = window or timedelta(hours=DEFAULT_RESTART_PROTECTION_HOURS)
+        hours = _window_hours(active_window)
+        minutes = max(1, int(active_window.total_seconds() // 60))
 
         if server_id not in self.restart_history:
             return {
                 "restart_count": 0,
                 "max_restarts": self.max_restarts,
-                "time_window_minutes": 10,
+                "time_window_minutes": minutes,
+                "protection_window_hours": hours,
+                "protection_minutes_remaining": 0,
                 "can_restart": True,
                 "recent_restarts": [],
             }
 
-        # Clean up old records
-        recent_restarts = [
-            timestamp for timestamp in self.restart_history[server_id] if timestamp > cutoff_time
-        ]
-
-        can_restart, _ = self.can_restart(server_id)
+        can_restart, _ = self.can_restart(server_id, window=active_window)
+        recent_restarts = list(self.restart_history.get(server_id, []))
+        remaining = 0
+        if not can_restart and recent_restarts:
+            retry_after = min(recent_restarts) + active_window
+            remaining = max(0, int((retry_after - now).total_seconds() / 60) + 1)
 
         return {
             "restart_count": len(recent_restarts),
             "max_restarts": self.max_restarts,
-            "time_window_minutes": 10,
+            "time_window_minutes": minutes,
+            "protection_window_hours": hours,
+            "protection_minutes_remaining": remaining,
             "can_restart": can_restart,
             "recent_restarts": [ts.isoformat() for ts in recent_restarts],
         }
@@ -194,7 +224,10 @@ class ServerMonitor:
                             current_server,
                         )
 
-                self.record_restart(server_id)
+                self.record_restart(
+                    server_id,
+                    window=restart_protection_window(current_server),
+                )
                 (
                     manager_ready,
                     preflight_message,
@@ -434,7 +467,10 @@ class ServerMonitor:
 
                 if is_down and server.auto_restart_on_crash:
                     # Check if we can restart (respecting restart limits)
-                    can_restart, reason = self.can_restart(server_id)
+                    can_restart, reason = self.can_restart(
+                        server_id,
+                        window=restart_protection_window(server),
+                    )
 
                     if can_restart:
                         # Determine restart trigger source

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -60,6 +61,21 @@ def _server(**overrides):
     return SimpleNamespace(**values)
 
 
+def test_protection_window_uses_the_server_duration():
+    service = monitor_module.ServerMonitor()
+    window = timedelta(hours=3)
+    for _ in range(5):
+        service.record_restart(8, window=window)
+    allowed, reason = service.can_restart(8, window=window)
+    assert not allowed
+    assert "3 hour(s)" in reason
+    assert "minute" in reason
+    info = service.get_restart_info(8, window=window)
+    assert info["protection_window_hours"] == 3
+    assert info["time_window_minutes"] == 180
+    assert info["protection_minutes_remaining"] >= 179
+
+
 def test_restart_history_and_notification(monkeypatch):
     service = monitor_module.ServerMonitor()
     assert service.can_restart(3)[0]
@@ -69,6 +85,9 @@ def test_restart_history_and_notification(monkeypatch):
     assert not allowed and "disabled" in reason
     info = service.get_restart_info(3)
     assert info["restart_count"] == 5 and not info["can_restart"]
+    assert info["protection_window_hours"] == 2
+    assert info["protection_minutes_remaining"] >= 119
+    assert "2 hour(s)" in reason
     service.a2s_failure_count[3] = 2
     service.reset_restart_history(3)
     assert service.get_restart_info(99)["restart_count"] == 0
@@ -189,7 +208,7 @@ async def test_a2s_threshold_restart_failure_and_blocked_paths(monkeypatch):
     server = _server(auto_restart_on_crash=True, a2s_failure_threshold=1)
     sessions = iter([_Session(server), _Session(server), _Session(None)])
     monkeypatch.setattr(database, "async_session_maker", lambda: next(sessions))
-    monkeypatch.setattr(service, "can_restart", lambda _id: (False, "loop protected"))
+    monkeypatch.setattr(service, "can_restart", lambda _id, **_kwargs: (False, "loop protected"))
     monkeypatch.setattr(service, "queue_restart_notification", lambda *a, **k: True)
     await service.monitor_server(server.id, SimpleNamespace())
     assert server.status == ServerStatus.ERROR

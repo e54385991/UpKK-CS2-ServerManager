@@ -18752,6 +18752,16 @@
             "title": "Max Restarts",
             "type": "integer"
           },
+          "protection_minutes_remaining": {
+            "default": 0,
+            "title": "Protection Minutes Remaining",
+            "type": "integer"
+          },
+          "protection_window_hours": {
+            "default": 2,
+            "title": "Protection Window Hours",
+            "type": "integer"
+          },
           "reason": {
             "anyOf": [
               {
@@ -22477,6 +22487,13 @@
             "title": "Redacted Fields",
             "type": "array"
           },
+          "restart_protection_hours": {
+            "default": 2,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Restart Protection Hours",
+            "type": "integer"
+          },
           "server_name": {
             "default": "CS2 Server",
             "maxLength": 255,
@@ -23693,6 +23710,11 @@
             ],
             "title": "Owner Username"
           },
+          "restart_protection_hours": {
+            "default": 2,
+            "title": "Restart Protection Hours",
+            "type": "integer"
+          },
           "server_name": {
             "title": "Server Name",
             "type": "string"
@@ -24083,6 +24105,11 @@
               }
             ],
             "title": "Owner Username"
+          },
+          "restart_protection_hours": {
+            "default": 2,
+            "title": "Restart Protection Hours",
+            "type": "integer"
           },
           "server_name": {
             "title": "Server Name",
@@ -24647,6 +24674,11 @@
             ],
             "title": "Rcon Password"
           },
+          "restart_protection_hours": {
+            "default": 2,
+            "title": "Restart Protection Hours",
+            "type": "integer"
+          },
           "restart_required": {
             "default": false,
             "title": "Restart Required",
@@ -25046,6 +25078,11 @@
               }
             ],
             "title": "Rcon Password"
+          },
+          "restart_protection_hours": {
+            "default": 2,
+            "title": "Restart Protection Hours",
+            "type": "integer"
           },
           "restart_required": {
             "default": false,
@@ -26037,6 +26074,20 @@
             ],
             "title": "Rcon Password"
           },
+          "restart_protection_hours": {
+            "anyOf": [
+              {
+                "maximum": 720.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hours a crash burst keeps automatic restarts paused (1-720, default 2)",
+            "title": "Restart Protection Hours"
+          },
           "server_name": {
             "anyOf": [
               {
@@ -26521,6 +26572,19 @@
             ],
             "title": "Rcon Password"
           },
+          "restart_protection_hours": {
+            "anyOf": [
+              {
+                "maximum": 720.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restart Protection Hours"
+          },
           "server_name": {
             "anyOf": [
               {
@@ -26925,6 +26989,11 @@
               }
             ],
             "title": "Owner Username"
+          },
+          "restart_protection_hours": {
+            "default": 2,
+            "title": "Restart Protection Hours",
+            "type": "integer"
           },
           "restart_required": {
             "default": false,

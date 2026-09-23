@@ -14192,6 +14192,16 @@ export interface components {
              * @default 0
              */
             max_restarts: number;
+            /**
+             * Protection Minutes Remaining
+             * @default 0
+             */
+            protection_minutes_remaining: number;
+            /**
+             * Protection Window Hours
+             * @default 2
+             */
+            protection_window_hours: number;
             /** Reason */
             reason?: string | null;
             /**
@@ -15747,6 +15757,11 @@ export interface components {
             /** Redacted Fields */
             redacted_fields?: string[];
             /**
+             * Restart Protection Hours
+             * @default 2
+             */
+            restart_protection_hours: number;
+            /**
              * Server Name
              * @default CS2 Server
              */
@@ -16301,6 +16316,11 @@ export interface components {
             owner_is_admin?: boolean | null;
             /** Owner Username */
             owner_username?: string | null;
+            /**
+             * Restart Protection Hours
+             * @default 2
+             */
+            restart_protection_hours: number;
             /** Server Name */
             server_name: string;
             /**
@@ -16492,6 +16512,11 @@ export interface components {
             owner_is_admin?: boolean | null;
             /** Owner Username */
             owner_username?: string | null;
+            /**
+             * Restart Protection Hours
+             * @default 2
+             */
+            restart_protection_hours: number;
             /** Server Name */
             server_name: string;
             /**
@@ -16691,6 +16716,11 @@ export interface components {
             /** Rcon Password */
             rcon_password?: string | null;
             /**
+             * Restart Protection Hours
+             * @default 2
+             */
+            restart_protection_hours: number;
+            /**
              * Restart Required
              * @default false
              */
@@ -16816,6 +16846,11 @@ export interface components {
             plugin_update_check_interval_hours: number;
             /** Rcon Password */
             rcon_password?: string | null;
+            /**
+             * Restart Protection Hours
+             * @default 2
+             */
+            restart_protection_hours: number;
             /**
              * Restart Required
              * @default false
@@ -17142,6 +17177,11 @@ export interface components {
             plugin_update_check_interval_hours?: number | null;
             /** Rcon Password */
             rcon_password?: string | null;
+            /**
+             * Restart Protection Hours
+             * @description Hours a crash burst keeps automatic restarts paused (1-720, default 2)
+             */
+            restart_protection_hours?: number | null;
             /** Server Name */
             server_name?: string | null;
             /** Server Password */
@@ -17238,6 +17278,8 @@ export interface components {
             name?: string | null;
             /** Rcon Password */
             rcon_password?: string | null;
+            /** Restart Protection Hours */
+            restart_protection_hours?: number | null;
             /** Server Name */
             server_name?: string | null;
             /** Session Manager */
@@ -17387,6 +17429,11 @@ export interface components {
             owner_is_admin?: boolean | null;
             /** Owner Username */
             owner_username?: string | null;
+            /**
+             * Restart Protection Hours
+             * @default 2
+             */
+            restart_protection_hours: number;
             /**
              * Restart Required
              * @default false

@@ -2,6 +2,7 @@
 
 # ruff: noqa: F403,F405
 
+from .autorestart_script import ensure_autorestart_script
 from .common import *
 from .gameinfo import ensure_remote_gameinfo_search_paths, gameinfo_progress_detail
 
@@ -166,36 +167,25 @@ class GameSelfCheckMixin(SSHMixinBase):
             # Check 4: Auto-restart script
             await send_progress("Checking auto-restart script...")
             autorestart_script_path = f"{server.game_directory}/cs2_autorestart.sh"
-
-            check_script_cmd = f"test -f {autorestart_script_path} && test -x {autorestart_script_path} && echo 'exists'"
-            script_success, script_stdout, _ = await self.execute_command(check_script_cmd)
-
-            if not script_success or "exists" not in script_stdout:
-                issues_found.append("Auto-restart script not found or not executable")
-                await send_progress("✗ Auto-restart script missing - attempting to deploy...")
-
-                # Deploy the script
-                script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                local_script_path = os.path.join(script_dir, "scripts", "cs2_autorestart.sh")
-
-                try:
-                    async with await anyio.open_file(local_script_path, "r") as script_file:
-                        script_content = await script_file.read()
-
-                    create_script_cmd = f"cat > {autorestart_script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
-                    deploy_success, _, _ = await self.execute_command(create_script_cmd, timeout=10)
-
-                    if deploy_success:
-                        chmod_script_cmd = f"chmod +x {autorestart_script_path}"
-                        await self.execute_command(chmod_script_cmd)
-                        issues_fixed.append("auto-restart script")
-                        await send_progress("✓ Auto-restart script deployed successfully")
-                    else:
-                        await send_progress("✗ Failed to deploy auto-restart script")
-                except Exception as e:
-                    await send_progress(f"✗ Error deploying auto-restart script: {str(e)}")
-            else:
+            try:
+                script_ready, script_status = await ensure_autorestart_script(
+                    self.execute_command,
+                    autorestart_script_path,
+                )
+            except Exception as e:
+                script_ready, script_status = False, str(e)
+            if script_status == "current":
                 await send_progress("✓ Auto-restart script is deployed and executable")
+            elif script_ready and script_status in {"deployed", "updated"}:
+                issues_found.append("Auto-restart script not found or not executable")
+                issues_fixed.append("auto-restart script")
+                await send_progress("✓ Auto-restart script deployed successfully")
+            elif script_ready:
+                await send_progress(f"⚠ {script_status}")
+                await send_progress("✓ Auto-restart script is deployed and executable")
+            else:
+                issues_found.append("Auto-restart script not found or not executable")
+                await send_progress(f"✗ Failed to deploy auto-restart script: {script_status}")
 
             return await self._selfcheck_summary(send_progress, issues_found, issues_fixed)
 

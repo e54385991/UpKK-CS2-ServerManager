@@ -16,6 +16,7 @@ from services.system_dependencies import (
     apt_get_command,
 )
 
+from .autorestart_script import ensure_autorestart_script
 from .common import *
 from .common import _cleanup_local_download_dir
 
@@ -476,26 +477,18 @@ class GameDeploymentMixin(SSHMixinBase):
 
             autorestart_script_path = f"{server.game_directory}/cs2_autorestart.sh"
 
-            # Read the autorestart script content
-            script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            local_script_path = os.path.join(script_dir, "scripts", "cs2_autorestart.sh")
-
             try:
-                async with await anyio.open_file(local_script_path, "r") as script_file:
-                    script_content = await script_file.read()
-
-                # Create the script on remote server
-                create_script_cmd = (
-                    f"cat > {autorestart_script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
+                script_ready, script_status = await ensure_autorestart_script(
+                    self.execute_command,
+                    autorestart_script_path,
                 )
-                success, stdout, stderr = await self.execute_command(create_script_cmd, timeout=10)
-
-                if not success:
-                    await send_progress(f"⚠ Warning: Could not deploy autorestart script: {stderr}")
+                if not script_ready:
+                    await send_progress(
+                        f"⚠ Warning: Could not deploy autorestart script: {script_status}"
+                    )
+                elif script_status == "current":
+                    await send_progress("✓ Auto-restart wrapper script is current")
                 else:
-                    # Make script executable
-                    chmod_script_cmd = f"chmod +x {autorestart_script_path}"
-                    await self.execute_command(chmod_script_cmd)
                     await send_progress("✓ Auto-restart wrapper script deployed successfully")
             except Exception as e:
                 await send_progress(f"⚠ Warning: Could not deploy autorestart script: {str(e)}")

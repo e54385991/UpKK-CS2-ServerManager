@@ -22,6 +22,7 @@ from modules.models import (
 from modules.utils import get_current_time
 from services.compat import LateBoundModule
 from services.plugins.common import parse_dependency_ids
+from services.restart_protection import restart_protection_hours, restart_protection_window
 
 DiagnosticScope = Literal["metamod", "counterstrikesharp", "both"]
 host = LateBoundModule("services.plugin_diagnostic_service")
@@ -235,7 +236,10 @@ async def get_diagnostic_recommendation(
     server = await host.authorized_server(db, user, server_id)
     from services.server_monitor import server_monitor
 
-    restart_info = server_monitor.get_restart_info(server.id)
+    restart_info = server_monitor.get_restart_info(
+        server.id,
+        window=restart_protection_window(server),
+    )
     now = get_current_time()
     last_update = server.last_update_time
     if last_update is not None and last_update.tzinfo is None:
@@ -261,6 +265,11 @@ async def get_diagnostic_recommendation(
         "restart_count": restart_count,
         "max_restarts": int(restart_info["max_restarts"]),
         "window_minutes": 30,
+        "protection_window_hours": int(
+            restart_info.get("protection_window_hours")
+            or restart_protection_hours(getattr(server, "restart_protection_hours", None))
+        ),
+        "protection_minutes_remaining": int(restart_info.get("protection_minutes_remaining") or 0),
     }
 
 

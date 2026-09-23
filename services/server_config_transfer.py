@@ -44,6 +44,7 @@ TRANSFERABLE_SERVER_FIELDS = (
     "enable_panel_monitoring",
     "monitor_interval_seconds",
     "auto_restart_on_crash",
+    "restart_protection_hours",
     "a2s_query_host",
     "a2s_query_port",
     "enable_a2s_monitoring",

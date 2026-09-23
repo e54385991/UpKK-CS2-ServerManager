@@ -59,6 +59,7 @@ class ServerDetail(ServerSummary):
     enable_panel_monitoring: bool = False
     monitor_interval_seconds: int = 60
     auto_restart_on_crash: bool = True
+    restart_protection_hours: int = 2
     enable_a2s_monitoring: bool = False
     a2s_failure_threshold: int = 3
     a2s_check_interval_seconds: int = 60
@@ -217,6 +218,7 @@ class ServerUpdateRequest(ApiRequest):
     enable_panel_monitoring: bool | None = None
     monitor_interval_seconds: int | None = Field(default=None, ge=10, le=3600)
     auto_restart_on_crash: bool | None = None
+    restart_protection_hours: int | None = Field(default=None, ge=1, le=720)
     enable_a2s_monitoring: bool | None = None
     a2s_failure_threshold: int | None = Field(default=None, ge=1, le=10)
     a2s_check_interval_seconds: int | None = Field(default=None, ge=15, le=3600)

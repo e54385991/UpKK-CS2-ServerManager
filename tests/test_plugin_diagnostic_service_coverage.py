@@ -207,7 +207,11 @@ async def test_recommendation_and_path_move_console_and_step(monkeypatch):
     db = _Db()
     monkeypatch.setattr(module, "authorized_server", AsyncMock(return_value=server))
     monitor = SimpleNamespace(
-        get_restart_info=lambda _id: {"restart_count": 2, "can_restart": False, "max_restarts": 3}
+        get_restart_info=lambda _id, **_kwargs: {
+            "restart_count": 2,
+            "can_restart": False,
+            "max_restarts": 3,
+        }
     )
     monitor_module = SimpleNamespace(server_monitor=monitor)
     monkeypatch.setitem(__import__("sys").modules, "services.server_monitor", monitor_module)

@@ -93,6 +93,12 @@ class ServerUpdate(SQLModel):
     auto_restart_on_crash: Optional[bool] = Field(
         None, description="Auto-restart if process not found"
     )
+    restart_protection_hours: Optional[int] = Field(
+        None,
+        ge=1,
+        le=720,
+        description="Hours a crash burst keeps automatic restarts paused (1-720, default 2)",
+    )
 
     # A2S query configuration
     a2s_query_host: Optional[str] = Field(

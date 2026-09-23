@@ -511,7 +511,7 @@ async def test_diagnostic_recommendation_latest_restore_and_restart(monkeypatch)
     monkeypatch.setattr(diagnostics, "authorized_server", AsyncMock(return_value=server))
     monkeypatch.setattr(
         "services.server_monitor.server_monitor.get_restart_info",
-        lambda _id: {"restart_count": 0, "can_restart": True, "max_restarts": 3},
+        lambda _id, **_kwargs: {"restart_count": 0, "can_restart": True, "max_restarts": 3},
     )
     recommendation = await diagnostics.get_diagnostic_recommendation(
         SimpleNamespace(), SimpleNamespace(), 3
@@ -519,7 +519,7 @@ async def test_diagnostic_recommendation_latest_restore_and_restart(monkeypatch)
     assert recommendation["recommended"] is False
     monkeypatch.setattr(
         "services.server_monitor.server_monitor.get_restart_info",
-        lambda _id: {"restart_count": 3, "can_restart": False, "max_restarts": 3},
+        lambda _id, **_kwargs: {"restart_count": 3, "can_restart": False, "max_restarts": 3},
     )
     recommendation = await diagnostics.get_diagnostic_recommendation(
         SimpleNamespace(), SimpleNamespace(), 3

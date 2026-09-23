@@ -200,6 +200,8 @@ class PluginDiagnosticRecommendationView(V1Model):
     restart_count: int = 0
     max_restarts: int = 0
     window_minutes: int = 30
+    protection_window_hours: int = 2
+    protection_minutes_remaining: int = 0
 
 
 class PluginDiagnosticPlanBody(ApiRequest):

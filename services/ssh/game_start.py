@@ -7,7 +7,9 @@ from modules.server_startup import (
     normalize_default_map,
     resolved_game_mode,
 )
+from services.restart_protection import restart_protection_window
 
+from .autorestart_script import ensure_autorestart_script
 from .common import *
 
 
@@ -237,49 +239,30 @@ class GameStartMixin(SSHMixinBase):
             backend_url = server.backend_url or settings.BACKEND_URL
             api_key = server.api_key or ""
 
-            # Check if autorestart script exists (should have been deployed during deployment)
+            # Refresh the wrapper when the host copy is missing or older than the repo.
             autorestart_script_path = f"{server.game_directory}/cs2_autorestart.sh"
-            check_script_cmd = f"test -f {autorestart_script_path} && echo 'exists'"
-            script_exists_success, script_exists_stdout, _ = await self.execute_command(
-                check_script_cmd
-            )
-
-            # If script doesn't exist, deploy it now
-            if not script_exists_success or "exists" not in script_exists_stdout:
-                await send_progress("Auto-restart script not found, deploying now...")
-
-                # Read the autorestart script content
-                script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                local_script_path = os.path.join(script_dir, "scripts", "cs2_autorestart.sh")
-
-                try:
-                    async with await anyio.open_file(local_script_path, "r") as script_file:
-                        script_content = await script_file.read()
-
-                    # Create the script on remote server
-                    create_script_cmd = f"cat > {autorestart_script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
-                    success, stdout, stderr = await self.execute_command(
-                        create_script_cmd, timeout=10
-                    )
-
-                    if not success:
-                        await send_progress(
-                            f"⚠ Warning: Could not deploy autorestart script: {stderr}"
-                        )
-                        await send_progress("Server will start without auto-restart protection")
-                        use_autorestart = False
-                    else:
-                        # Make script executable
-                        chmod_script_cmd = f"chmod +x {autorestart_script_path}"
-                        await self.execute_command(chmod_script_cmd)
-                        await send_progress("✓ Auto-restart wrapper script deployed")
-                        use_autorestart = True
-                except Exception as e:
-                    await send_progress(f"⚠ Warning: Could not read autorestart script: {str(e)}")
-                    await send_progress("Server will start without auto-restart protection")
-                    use_autorestart = False
-            else:
+            try:
+                script_ready, script_status = await ensure_autorestart_script(
+                    self.execute_command,
+                    autorestart_script_path,
+                )
+            except Exception as e:
+                script_ready, script_status = False, str(e)
+            if not script_ready:
+                await send_progress(
+                    f"⚠ Warning: Could not deploy autorestart script: {script_status}"
+                )
+                await send_progress("Server will start without auto-restart protection")
+                use_autorestart = False
+            elif script_status == "current":
                 await send_progress("✓ Auto-restart script found")
+                use_autorestart = True
+            elif script_status.startswith("refresh failed"):
+                await send_progress(f"⚠ Warning: {script_status}")
+                await send_progress("✓ Auto-restart script found")
+                use_autorestart = True
+            else:
+                await send_progress("✓ Auto-restart wrapper script deployed")
                 use_autorestart = True
 
             # LGSM-style startup: Set working directory, library path, and redirect output
@@ -308,7 +291,9 @@ class GameStartMixin(SSHMixinBase):
                     )
 
             if use_autorestart and api_key:
+                protection_seconds = int(restart_protection_window(server).total_seconds())
                 payload = (
+                    f"TIME_WINDOW={protection_seconds} "
                     f"bash {shlex.quote(autorestart_script_path)} "
                     f"{server.id} {shlex.quote(api_key)} "
                     f"{shlex.quote(backend_url)} {shlex.quote(server.game_directory)} "
@@ -418,7 +403,11 @@ class GameStartMixin(SSHMixinBase):
                 _, immediate_log, _ = await self.execute_command(log_check, timeout=10)
 
                 # Check if auto-restart is available
-                can_restart, restart_msg = server_monitor.can_restart(server.id)
+                protection_window = restart_protection_window(server)
+                can_restart, restart_msg = server_monitor.can_restart(
+                    server.id,
+                    window=protection_window,
+                )
 
                 # Check for specific errors in the log
                 error_analysis = []
@@ -467,7 +456,7 @@ class GameStartMixin(SSHMixinBase):
                     await send_progress(f"Restart status: {restart_msg}")
                     await send_progress("=" * 60)
 
-                    server_monitor.record_restart(server.id)
+                    server_monitor.record_restart(server.id, window=protection_window)
 
                     # Log auto-restart to Redis for monitoring audit trail
                     # Local import to avoid circular dependency with services/__init__.py

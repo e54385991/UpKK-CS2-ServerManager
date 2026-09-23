@@ -120,6 +120,7 @@ async def to_detail(server: Server) -> ServerDetail:
         enable_panel_monitoring=bool(getattr(server, "enable_panel_monitoring", False)),
         monitor_interval_seconds=int(getattr(server, "monitor_interval_seconds", 60) or 60),
         auto_restart_on_crash=bool(getattr(server, "auto_restart_on_crash", True)),
+        restart_protection_hours=int(getattr(server, "restart_protection_hours", None) or 2),
         enable_a2s_monitoring=bool(getattr(server, "enable_a2s_monitoring", False)),
         a2s_failure_threshold=int(getattr(server, "a2s_failure_threshold", 3) or 3),
         a2s_check_interval_seconds=int(getattr(server, "a2s_check_interval_seconds", 60) or 60),

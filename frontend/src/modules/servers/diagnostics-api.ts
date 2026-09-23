@@ -13,6 +13,8 @@ export type DiagnosticRecommendation = {
   readonly restartCount: number;
   readonly maxRestarts: number;
   readonly windowMinutes: number;
+  readonly protectionWindowHours: number;
+  readonly protectionMinutesRemaining: number;
 };
 
 export type DiagnosticPlan = {
@@ -37,6 +39,8 @@ type RecommendationDto = {
   restart_count: number;
   max_restarts: number;
   window_minutes: number;
+  protection_window_hours?: number;
+  protection_minutes_remaining?: number;
 };
 
 type PlanDto = {
@@ -70,6 +74,8 @@ export async function getDiagnosticRecommendation(
       restartCount: result.data.restart_count,
       maxRestarts: result.data.max_restarts,
       windowMinutes: result.data.window_minutes,
+      protectionWindowHours: result.data.protection_window_hours ?? 2,
+      protectionMinutesRemaining: result.data.protection_minutes_remaining ?? 0,
     },
   };
 }

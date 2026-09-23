@@ -455,6 +455,10 @@ async def test_selfcheck_summary_and_session_preflight(monkeypatch):
     async def callback(message):
         progress.append(message)
 
+    from services.ssh.autorestart_script import local_autorestart_script_text, script_digest
+
+    script_path = "/srv/cs2/cs2_autorestart.sh"
+    digest = script_digest(local_autorestart_script_text())
     commands = {
         "test -f /srv/cs2/cs2/game/bin/linuxsteamrt64/cs2 && echo 'exists'": (True, "exists", ""),
         "chmod +x /srv/cs2/cs2/game/bin/linuxsteamrt64/cs2": (True, "", ""),
@@ -470,6 +474,7 @@ async def test_selfcheck_summary_and_session_preflight(monkeypatch):
             "exists",
             "",
         ),
+        f"sha256sum {script_path}": (True, f"{digest}  {script_path}\n", ""),
     }
 
     async def execute(command, **_kwargs):
