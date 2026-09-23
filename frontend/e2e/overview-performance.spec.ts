@@ -104,4 +104,6 @@ test("recent CS2 update notice opens a detail dialog", async ({ page, context })
   await expect(dialog).toContainText("1.42.0.2");
   await expect(dialog).toContainText("plugin");
   await expect(dialog).toContainText("disable");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
 });

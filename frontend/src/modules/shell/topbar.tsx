@@ -11,6 +11,7 @@ import type {
   CS2UpdateNotice,
 } from "@/modules/announcements/types";
 import { AnnouncementCenter } from "@/modules/announcements/announcement-center";
+import { CS2UpdateNoticePopover } from "@/modules/announcements/cs2-update-notice-popover";
 
 /**
  * Persistent top bar. Holds the mobile navigation trigger, a live gateway
@@ -42,8 +43,10 @@ export async function Topbar({
       <div className="ml-auto flex items-center gap-2">
         <AnnouncementCenter
           announcements={announcements}
-          cs2UpdateNotice={cs2UpdateNotice}
         />
+        {cs2UpdateNotice ? (
+          <CS2UpdateNoticePopover notice={cs2UpdateNotice} />
+        ) : null}
         <ActivityTray isAdmin={user.isAdmin} />
         <LanguageSwitcher />
         <UserMenu user={user} />
