@@ -19,13 +19,13 @@ paste the root Compose file so Next proxies to FastAPI on container port 8000
 
 - 1Panel 当前版本，已启用 Docker 和 `1panel-network`；
 - PostgreSQL 18.6（应用要求 PostgreSQL 18 或更高）；
-- Redis 8.10.1（Redis 7 及以上协议兼容）。
+- Redis 8.10.2（Redis 7 及以上协议兼容）。
 
-1Panel 应用商店当前提供 [PostgreSQL 18.6](https://github.com/1Panel-dev/appstore/tree/dev/apps/postgresql/18.6-alpine) 和 [Redis 8.10.1](https://github.com/1Panel-dev/appstore/tree/dev/apps/redis/8.10.1)。
+1Panel 应用商店当前提供 [PostgreSQL 18.6](https://github.com/1Panel-dev/appstore/tree/dev/apps/postgresql/18.6-alpine) 和 [Redis 8.10.2](https://github.com/1Panel-dev/appstore/tree/dev/apps/redis/8.10.2)。
 
 ### 1. 准备外部服务
 
-1. 在 1Panel 应用商店安装并启动 PostgreSQL 18.6 和 Redis 8.10.1。
+1. 在 1Panel 应用商店安装并启动 PostgreSQL 18.6 和 Redis 8.10.2。
 2. Redis 密码为必填。先在 1Panel 安装带密码的 Redis，再选择该实例。本地商店 Redis
    选中后通常会回填 `PANEL_REDIS_ROOT_PASSWORD`；没回填就从 **数据库 → Redis → 连接信息**
    复制。本包只复用已有 Redis 实例和 DB，不会创建 Redis 或 ACL 用户。不支持无密码 Redis。
@@ -135,13 +135,13 @@ docker exec <应用容器名> python -c \
 
 - A current 1Panel installation with Docker and the `1panel-network` network;
 - PostgreSQL 18.6 or newer;
-- Redis 8.10.1 (Redis 7-compatible commands are supported).
+- Redis 8.10.2 (Redis 7-compatible commands are supported).
 
-The 1Panel app store provides [PostgreSQL 18.6](https://github.com/1Panel-dev/appstore/tree/dev/apps/postgresql/18.6-alpine) and [Redis 8.10.1](https://github.com/1Panel-dev/appstore/tree/dev/apps/redis/8.10.1).
+The 1Panel app store provides [PostgreSQL 18.6](https://github.com/1Panel-dev/appstore/tree/dev/apps/postgresql/18.6-alpine) and [Redis 8.10.2](https://github.com/1Panel-dev/appstore/tree/dev/apps/redis/8.10.2).
 
 ### 1. Prepare the external services
 
-1. Install and start PostgreSQL 18.6 and Redis 8.10.1 from the 1Panel App Store.
+1. Install and start PostgreSQL 18.6 and Redis 8.10.2 from the 1Panel App Store.
 2. The Redis password is required. Install Redis in 1Panel with a password first, then select that instance. A local App Store Redis usually fills `PANEL_REDIS_ROOT_PASSWORD` when you pick it; otherwise copy the password from **Database → Redis → Connection info**. The package reuses the selected Redis instance and DB and does not create a Redis server or ACL user. Redis without a password is not supported by this package.
 3. Confirm that both services and the application will use 1Panel's `1panel-network`.
 

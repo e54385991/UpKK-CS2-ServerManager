@@ -2,7 +2,7 @@
 
 # This is NOT the Next.js you know
 
-This project uses **Next.js 16.3.5**, which has breaking changes versus older
+This project uses **Next.js 16.3.6**, which has breaking changes versus older
 Next.js — APIs, conventions, and file structure may differ from your training
 data. **When changing Next.js behavior** (for example routing, rendering,
 caching, or build/runtime configuration), read the relevant version-matched
@@ -26,13 +26,13 @@ backend through a same-origin proxy.
 
 | Area | Choice | Notes |
 | --- | --- | --- |
-| Framework | `next@16.3.5` (App Router, Turbopack) | Consult the matching bundled docs when changing Next.js behavior. |
+| Framework | `next@16.3.6` (App Router, Turbopack) | Consult the matching bundled docs when changing Next.js behavior. |
 | UI runtime | `react`/`react-dom@19.3.0` | React Compiler-era; the `react-hooks` lint rules are strict. |
 | Language | `typescript@6.0.3` | Deliberate compatibility pin: the current `typescript-eslint@8.70` toolchain supports TypeScript `<6.1`, so TypeScript 7 is not yet usable. |
 | Styling | `tailwindcss@4.3.3` + `@tailwindcss/postcss` | v4 engine; design tokens live in `src/app/globals.css` under `@theme`. |
-| Lint | `eslint@9.39.5` + `eslint-config-next@16.3.5` | Deliberate compatibility pin: the bundled React, import, and JSX accessibility plugins do not support ESLint 10 yet. |
+| Lint | `eslint@9.39.5` + `eslint-config-next@16.3.6` | React, import, and JSX accessibility plugins currently declare peer support through ESLint 9. |
 | Icons | `lucide-react` | Import per-icon; never pass an icon **component** across the server→client boundary (see RSC rules). |
-| Docker runtime | `node:26.9.0-alpine` | Production image + CI use Node 26 Current. |
+| Docker runtime | `node:26.10.0-alpine3.24` | Production image + CI use Node 26 Current. |
 
 Dependencies are pinned to exact versions and committed with `package-lock.json`.
 Do not broadly upgrade or rewrite the lockfile without a reason.

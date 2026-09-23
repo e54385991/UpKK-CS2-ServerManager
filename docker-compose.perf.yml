@@ -7,7 +7,7 @@ name: upkk-perf
 
 services:
   postgres:
-    image: postgres:18.6-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
+    image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     container_name: upkk_perf_postgres
     restart: "no"
     environment:
@@ -25,7 +25,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:8.10.1-alpine@sha256:bd999b5cfee25fb24b8320a31fddbd69f462df44c8138c66e369582937beebc0
+    image: redis:8.10.2-alpine3.23@sha256:72cedd9603038893af961e90ac5e1a1a0d8377d5e338dbdad8fe284ea25de18f
     container_name: upkk_perf_redis
     restart: "no"
     ports:

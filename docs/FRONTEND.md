@@ -1,6 +1,6 @@
 # Frontend console
 
-The operator console is the **Next.js 16.3.5** app in `frontend/`. It talks to
+The operator console is the **Next.js 16.3.6** app in `frontend/`. It talks to
 FastAPI through same-origin rewrites (`/api/*`, `/health`, `/static/*`).
 
 FastAPI no longer ships a Jinja/Bootstrap HTML console. Leftover HTML paths
