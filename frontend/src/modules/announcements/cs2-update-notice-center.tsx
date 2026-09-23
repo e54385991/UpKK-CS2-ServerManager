@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
-import { TriangleAlert } from "lucide-react";
 import type { CS2UpdateNotice } from "@/modules/announcements/types";
 import { Button } from "@/shared/ui/button";
 
@@ -47,7 +46,12 @@ export function CS2UpdateNoticeCenter({
         title={t("cs2UpdateNoticeButton")}
         className="gap-1.5 border-warn/40 bg-warn-muted/50 px-2 text-warn hover:bg-warn-muted sm:px-3"
       >
-        <TriangleAlert aria-hidden="true" />
+        <span
+          aria-hidden="true"
+          className="inline-flex size-4 items-center justify-center rounded-full border border-current text-[10px] font-bold leading-none"
+        >
+          !
+        </span>
         <span className="hidden sm:inline">{t("cs2UpdateNoticeButton")}</span>
       </Button>
       {open ? (
