@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -74,6 +74,48 @@ def test_protection_window_uses_the_server_duration():
     assert info["protection_window_hours"] == 3
     assert info["time_window_minutes"] == 180
     assert info["protection_minutes_remaining"] >= 179
+
+
+def test_restart_block_discord_waits_for_the_protection_window(monkeypatch):
+    service = monitor_module.ServerMonitor()
+    now = datetime(2026, 9, 23, 7, 0, tzinfo=timezone.utc)
+    clock = {"now": now}
+    monkeypatch.setattr(monitor_module, "get_current_time", lambda: clock["now"])
+    window = timedelta(hours=2)
+    for _ in range(5):
+        service.record_restart(4, window=window)
+    sent: list[dict] = []
+    monkeypatch.setattr(
+        monitor_module.discord_notification_service,
+        "queue_notify",
+        lambda *_args, **kwargs: sent.append(kwargs) or True,
+    )
+    server = _server(id=4, restart_protection_hours=2)
+
+    assert service._queue_restart_block_notification(
+        server, message="blocked", check_message="down"
+    )
+    assert (
+        service._queue_restart_block_notification(server, message="blocked", check_message="down")
+        is False
+    )
+    assert len(sent) == 1
+    assert sent[0]["rate_limit_scope"] == "restart_loop_protection"
+    assert sent[0]["rate_limit_minutes"] >= 119
+    assert sent[0]["details"]["Cooldown"] == "2 hour(s)"
+
+    clock["now"] = now + timedelta(minutes=30)
+    assert (
+        service._queue_restart_block_notification(server, message="blocked", check_message="down")
+        is False
+    )
+    service.reset_restart_history(4)
+    for _ in range(5):
+        service.record_restart(4, window=window)
+    assert service._queue_restart_block_notification(
+        server, message="blocked", check_message="down"
+    )
+    assert len(sent) == 2
 
 
 def test_restart_history_and_notification(monkeypatch):

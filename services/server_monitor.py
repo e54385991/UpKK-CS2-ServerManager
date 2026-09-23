@@ -48,6 +48,9 @@ class ServerMonitor:
         self.a2s_failure_count: Dict[int, int] = {}
         # Avoid repeating the same pause message on every monitoring interval.
         self.manual_stop_suppressed: set[int] = set()
+        # One Discord notice per protection episode. The 10-minute crash cooldown
+        # must not re-send "auto-restart blocked" while this window is still open.
+        self.restart_block_notified_until: Dict[int, datetime] = {}
 
     def can_restart(
         self,
@@ -112,6 +115,7 @@ class ServerMonitor:
         if server_id in self.restart_history:
             self.restart_history[server_id] = []
             logger.info(f"Reset restart history for server {server_id}")
+        self.restart_block_notified_until.pop(server_id, None)
         # Also reset A2S failure counter
         if server_id in self.a2s_failure_count:
             self.a2s_failure_count[server_id] = 0
@@ -161,11 +165,15 @@ class ServerMonitor:
         message: str,
         trigger: str,
         details=None,
+        cooldown_label: str | None = None,
+        rate_limit_minutes: int | None = None,
+        rate_limit_scope: str | None = None,
     ) -> bool:
         """Queue a rate-limited Discord notification for crash recovery events."""
+        interval = int(server.discord_crash_restart_min_interval_minutes or 10)
         notify_details = {
             "Trigger": trigger,
-            "Cooldown": f"{server.discord_crash_restart_min_interval_minutes or 10} minute(s)",
+            "Cooldown": cooldown_label or f"{interval} minute(s)",
         }
         if details:
             notify_details.update(details)
@@ -178,8 +186,49 @@ class ServerMonitor:
             message,
             title=title,
             details=notify_details,
-            rate_limit_minutes=server.discord_crash_restart_min_interval_minutes or 10,
-            rate_limit_scope="auto_restart",
+            rate_limit_minutes=interval if rate_limit_minutes is None else rate_limit_minutes,
+            rate_limit_scope=rate_limit_scope or "auto_restart",
+        )
+
+    def _claim_restart_block_notice(self, server_id: int, *, window: timedelta) -> int | None:
+        """Return silence minutes for one protection notice, or None while it is held.
+
+        The hold lasts until this episode expires. A manual restart clears it
+        immediately so the next loop can notify again.
+        """
+        now = get_current_time()
+        until = self.restart_block_notified_until.get(server_id)
+        if until is not None and now < until:
+            return None
+
+        info = self.get_restart_info(server_id, window=window)
+        remaining = int(info.get("protection_minutes_remaining") or 0)
+        if remaining <= 0:
+            remaining = max(1, int(window.total_seconds() // 60))
+        self.restart_block_notified_until[server_id] = now + timedelta(minutes=remaining)
+        return remaining
+
+    def _queue_restart_block_notification(
+        self,
+        server,
+        *,
+        message: str,
+        check_message: str,
+    ) -> bool:
+        window = restart_protection_window(server)
+        remaining = self._claim_restart_block_notice(server.id, window=window)
+        if remaining is None:
+            return False
+        return self.queue_restart_notification(
+            server,
+            success=False,
+            title="Auto-restart blocked",
+            message=message,
+            trigger="restart loop protection",
+            details={"Health Check": check_message},
+            cooldown_label=_window_label(window),
+            rate_limit_minutes=remaining,
+            rate_limit_scope="restart_loop_protection",
         )
 
     async def _perform_guarded_restart(
@@ -601,15 +650,10 @@ class ServerMonitor:
                                 logger.error(f"Failed to log restart error to Redis: {redis_e}")
                     else:
                         logger.warning(f"Cannot auto-restart server {server_id}: {reason}")
-                        self.queue_restart_notification(
+                        self._queue_restart_block_notification(
                             server,
-                            success=False,
-                            title="Auto-restart blocked",
                             message=reason,
-                            trigger="restart loop protection",
-                            details={
-                                "Health Check": check_message,
-                            },
+                            check_message=check_message,
                         )
 
                         async with async_session_maker() as db:
