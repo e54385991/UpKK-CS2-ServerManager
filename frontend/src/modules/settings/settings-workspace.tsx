@@ -9,12 +9,15 @@ import { SettingsTransferCard } from "@/modules/settings/settings-transfer-card"
 import { PerformanceDiagnosticsCard } from "@/modules/settings/diagnostics-card";
 import { SettingsSection } from "@/modules/settings/settings-section";
 import type { AiSystemSettings, SystemSettings } from "@/modules/settings/types";
+import { AnnouncementManager } from "@/modules/settings/announcement-manager";
+import type { Announcement } from "@/modules/announcements/types";
 import { cn } from "@/shared/lib/cn";
 
-type SectionKey = SettingsSectionKey | "download-cache" | "ai" | "transfer" | "performance";
+type SectionKey = SettingsSectionKey | "download-cache" | "ai" | "transfer" | "performance" | "announcements";
 
 const SECTIONS = [
   { id: "settings-performance", key: "performance" },
+  { id: "settings-announcements", key: "announcements" },
   { id: "settings-downloads", key: "downloads" },
   { id: "settings-download-cache", key: "downloadCache" },
   { id: "settings-notifications", key: "notifications" },
@@ -33,9 +36,13 @@ function keyFromHash(hash: string): SectionKey {
 export function SettingsWorkspace({
   settings,
   ai,
+  announcements,
+  announcementError,
 }: {
   settings: SystemSettings;
   ai: AiSystemSettings | null;
+  announcements: readonly Announcement[];
+  announcementError?: string;
 }) {
   const t = useTranslations("settings");
   const [active, setActive] = useState<SectionKey>(() =>
@@ -111,6 +118,19 @@ export function SettingsWorkspace({
             testId="settings-section-performance"
           >
             <PerformanceDiagnosticsCard />
+          </SettingsSection>
+        ) : null}
+        {active === "announcements" ? (
+          <SettingsSection
+            id="settings-announcements"
+            title={t("sections.announcements.title")}
+            description={t("sections.announcements.description")}
+            testId="settings-section-announcements"
+          >
+            <AnnouncementManager
+              initial={announcements}
+              loadError={announcementError}
+            />
           </SettingsSection>
         ) : null}
         <SettingsForm

@@ -2,6 +2,7 @@ import { getSession } from "@/modules/auth/render-session";
 import { ClientMessages } from "@/i18n/client-messages";
 import { CONSOLE_NAMESPACES } from "@/i18n/namespaces";
 import { ConsoleShell } from "@/modules/shell/console-shell";
+import { getPublishedAnnouncements } from "@/modules/announcements/api";
 
 /**
  * Keep the tutorial readable without a session, but restore the console
@@ -15,9 +16,15 @@ export default async function DeploymentTutorialLayout({
 }) {
   const session = await getSession();
   if (session) {
+    const announcements = await getPublishedAnnouncements();
     return (
       <ClientMessages namespaces={CONSOLE_NAMESPACES}>
-        <ConsoleShell user={session}>{children}</ConsoleShell>
+        <ConsoleShell
+          user={session}
+          announcements={announcements.ok ? announcements.data : []}
+        >
+          {children}
+        </ConsoleShell>
       </ClientMessages>
     );
   }

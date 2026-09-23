@@ -37,6 +37,8 @@
   },
   "shell": {
     "gatewayOnline": "Gateway online",
+    "announcementsTitle": "Announcements",
+    "announcementsClose": "Close announcements",
     "admin": "Administrator",
     "user": "Member",
     "profile": "Account",
@@ -1242,7 +1244,37 @@
     "title": "Settings",
     "description": "Panel-level configuration: download proxy, the global GitHub credential, outbound email, system AI, and system monitoring.",
     "forbidden": "Only administrators can view or change system settings.",
-    "fetchError": "Unable to load system settings ({status}).",
+  "fetchError": "Unable to load system settings ({status}).",
+  "announcements": {
+    "listTitle": "Announcement management",
+    "listHelp": "Manage drafts and published notices. Published announcements appear in every user's console top bar.",
+    "title": "Announcements",
+    "description": "Write Markdown announcements and save drafts or publish them immediately.",
+    "createTitle": "New announcement",
+    "editTitle": "Edit announcement",
+    "titleLabel": "Title",
+    "contentLabel": "Body (Markdown)",
+    "markdownPlaceholder": "Markdown headings, lists, links, code blocks, and tables are supported.",
+    "markdownHelp": "Up to 20,000 characters. HTML is sanitized before display.",
+    "preview": "Preview",
+    "publishNow": "Publish now (visible to all signed-in users)",
+    "new": "New",
+    "save": "Save announcement",
+    "saving": "Saving…",
+    "saved": "Announcement saved.",
+    "saveFailed": "Could not save the announcement.",
+    "loadFailed": "Could not load announcements.",
+    "delete": "Delete announcement “{title}”",
+    "edit": "Edit announcement “{title}”",
+    "deleteConfirm": "Delete announcement “{title}”? This cannot be undone.",
+    "deleteFailed": "Could not delete the announcement.",
+    "deleted": "Announcement deleted.",
+    "cancelEdit": "Cancel editing",
+    "published": "Published",
+    "draft": "Draft",
+    "empty": "There are no announcements yet.",
+    "listLimit": "Only the 200 most recently updated announcements are shown."
+  },
   "adminOnly": "Admin only",
   "categoryNavLabel": "System settings categories",
   "categories": {
@@ -1252,10 +1284,15 @@
     "security": "Security & access",
     "logging": "Logging",
     "performance": "System monitoring",
+    "announcements": "Announcements",
     "ai": "AI assistant",
     "transfer": "Migration"
   },
   "sections": {
+    "announcements": {
+      "title": "Announcement management",
+      "description": "Create and publish Markdown announcements that signed-in users can open from the console top bar."
+    },
     "downloads": {
       "title": "Resources & downloads",
       "description": "Configure GitHub access, global credentials, and download behavior."

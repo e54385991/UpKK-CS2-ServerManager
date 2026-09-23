@@ -1,5 +1,6 @@
 """Versioned transport contract modules."""
 
+from .announcements import *  # noqa: F401,F403
 from .assistant import *  # noqa: F401,F403
 from .cleanup import *  # noqa: F401,F403
 from .diagnostics import *  # noqa: F401,F403

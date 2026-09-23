@@ -1764,6 +1764,46 @@
     "methods": [
       "GET"
     ],
+    "name": "list_announcements",
+    "path": "/api/v1/announcements"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_admin_announcements_route",
+    "path": "/api/v1/announcements/admin"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_announcement_route",
+    "path": "/api/v1/announcements"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "update_announcement_route",
+    "path": "/api/v1/announcements/{announcement_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_announcement_route",
+    "path": "/api/v1/announcements/{announcement_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "list_registered_passkeys",
     "path": "/api/v1/auth/passkeys"
   },

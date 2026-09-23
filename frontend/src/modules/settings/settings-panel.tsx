@@ -1,12 +1,17 @@
 import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
+import { getAdminAnnouncements } from "@/modules/announcements/api";
 import { getAiSettings, getSettings } from "@/modules/settings/api";
 import { SettingsWorkspace } from "@/modules/settings/settings-workspace";
 import { Card } from "@/shared/ui/card";
 
 export async function SettingsPanel() {
   const t = await getTranslations("settings");
-  const [result, ai] = await Promise.all([getSettings(), getAiSettings()]);
+  const [result, ai, announcements] = await Promise.all([
+    getSettings(),
+    getAiSettings(),
+    getAdminAnnouncements(),
+  ]);
 
   if (!result.ok) {
     const forbidden = result.status === 403;
@@ -23,7 +28,11 @@ export async function SettingsPanel() {
   }
 
   return (
-    <SettingsWorkspace settings={result.data} ai={ai.ok ? ai.data : null} />
+    <SettingsWorkspace
+      settings={result.data}
+      ai={ai.ok ? ai.data : null}
+      announcements={announcements.ok ? announcements.data : []}
+      announcementError={announcements.ok ? undefined : announcements.error}
+    />
   );
 }
-

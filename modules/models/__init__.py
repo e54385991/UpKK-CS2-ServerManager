@@ -10,6 +10,7 @@ from .ai import (
     AIToolRun,
     UserAISettings,
 )
+from .announcements import Announcement
 from .audit import AuditLog
 from .common import *
 from .discord import (

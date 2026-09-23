@@ -37,8 +37,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_postgresql_models_and_static_baseline_are_the_schema_authority():
-    assert len(SQLModel.metadata.tables) == 33
-    assert code_heads() == ("0034_restart_protection_hours",)
+    assert len(SQLModel.metadata.tables) == 34
+    assert code_heads() == ("0035_announcements",)
     assert "create_all" not in (PROJECT_ROOT / "modules/database.py").read_text()
 
     revision = PROJECT_ROOT / "alembic/versions/0001_postgresql_baseline.py"
@@ -88,6 +88,7 @@ def test_models_use_jsonb_nonnative_enums_and_expected_query_indexes():
         "ix_audit_logs_category_created",
         "ix_audit_logs_actor_created",
         "ix_audit_logs_created_at",
+        "ix_announcements_published_at",
         "uq_users_username_ci",
         "uq_users_email_ci",
         "ix_webauthn_credentials_user_id",
@@ -108,6 +109,18 @@ def test_webauthn_credentials_match_revision_0033_column_contract():
     assert "'[]'::jsonb" in str(table.c.transports.server_default.arg)
     assert table.c.nickname.server_default is not None
     assert str(table.c.nickname.server_default.arg) in {"", "''"}
+
+
+def test_announcements_match_revision_0035_column_contract():
+    table = SQLModel.metadata.tables["announcements"]
+    assert table.c.title.type.length == 160
+    assert table.c.body_markdown.nullable is False
+    assert table.c.is_published.server_default is not None
+    assert table.c.created_at.type.timezone is True
+    assert table.c.updated_at.type.timezone is True
+    assert {
+        foreign_key.target_fullname for foreign_key in table.c.created_by_user_id.foreign_keys
+    } == {"users.id"}
 
 
 @pytest.mark.parametrize(

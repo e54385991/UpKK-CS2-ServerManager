@@ -6,13 +6,21 @@ import { StatusDot } from "@/shared/ui/badge";
 import { ActivityTray } from "@/modules/shell/activity-tray";
 import { SshPoolBadge } from "@/modules/shell/ssh-pool-badge";
 import type { SessionUser } from "@/modules/auth/session";
+import type { Announcement } from "@/modules/announcements/types";
+import { AnnouncementCenter } from "@/modules/announcements/announcement-center";
 
 /**
  * Persistent top bar. Holds the mobile navigation trigger, a live gateway
  * status indicator, the language switcher, and the user menu. Rendered once by
  * the console layout so it never unmounts during navigation.
  */
-export async function Topbar({ user }: { user: SessionUser }) {
+export async function Topbar({
+  user,
+  announcements,
+}: {
+  user: SessionUser;
+  announcements: readonly Announcement[];
+}) {
   const t = await getTranslations("shell");
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-canvas/80 px-4 backdrop-blur-md">
@@ -27,6 +35,7 @@ export async function Topbar({ user }: { user: SessionUser }) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <AnnouncementCenter announcements={announcements} />
         <ActivityTray isAdmin={user.isAdmin} />
         <LanguageSwitcher />
         <UserMenu user={user} />

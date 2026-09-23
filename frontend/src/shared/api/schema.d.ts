@@ -2056,6 +2056,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/announcements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Announcements
+         * @description Return published announcements to every active console user.
+         */
+        get: operations["list_announcements_api_v1_announcements_get"];
+        put?: never;
+        /** Create Announcement Route */
+        post: operations["create_announcement_route_api_v1_announcements_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/announcements/admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Admin Announcements Route
+         * @description Return drafts and published notices for administrators.
+         */
+        get: operations["list_admin_announcements_route_api_v1_announcements_admin_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/announcements/{announcement_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Announcement Route */
+        put: operations["update_announcement_route_api_v1_announcements__announcement_id__put"];
+        post?: never;
+        /** Delete Announcement Route */
+        delete: operations["delete_announcement_route_api_v1_announcements__announcement_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assistant": {
         parameters: {
             query?: never;
@@ -7934,6 +7993,46 @@ export interface components {
             enabled: boolean;
             /** Server Id */
             server_id: number;
+        };
+        /** AnnouncementListView */
+        AnnouncementListView: {
+            /** Items */
+            items: components["schemas"]["AnnouncementView"][];
+        };
+        /** AnnouncementView */
+        AnnouncementView: {
+            /** Body Markdown */
+            body_markdown: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: number;
+            /** Is Published */
+            is_published: boolean;
+            /** Published At */
+            published_at?: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AnnouncementWrite */
+        AnnouncementWrite: {
+            /** Body Markdown */
+            body_markdown: string;
+            /**
+             * Is Published
+             * @default false
+             */
+            is_published: boolean;
+            /** Title */
+            title: string;
         };
         /**
          * ApiKeyGenerate
@@ -21977,6 +22076,145 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_announcements_api_v1_announcements_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnouncementListView"];
+                };
+            };
+        };
+    };
+    create_announcement_route_api_v1_announcements_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnouncementWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnouncementView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_admin_announcements_route_api_v1_announcements_admin_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnouncementListView"];
+                };
+            };
+        };
+    };
+    update_announcement_route_api_v1_announcements__announcement_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                announcement_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnouncementWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnouncementView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_announcement_route_api_v1_announcements__announcement_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                announcement_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
                 };
             };
             /** @description Validation Error */

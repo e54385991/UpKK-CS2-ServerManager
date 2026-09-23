@@ -37,6 +37,8 @@
   },
   "shell": {
     "gatewayOnline": "网关在线",
+    "announcementsTitle": "公告",
+    "announcementsClose": "关闭公告",
     "admin": "管理员",
     "user": "普通用户",
     "profile": "个人中心",
@@ -1242,7 +1244,37 @@
     "title": "系统设置",
     "description": "面板级配置：下载代理、全局 GitHub 凭据、邮件投递、系统 AI 与系统监控。",
     "forbidden": "仅管理员可以查看或修改系统设置。",
-    "fetchError": "暂时无法获取系统设置（{status}）。",
+  "fetchError": "暂时无法获取系统设置（{status}）。",
+  "announcements": {
+    "listTitle": "公告管理",
+    "listHelp": "管理草稿和已发布公告；已发布内容会显示在所有用户的控制台顶部。",
+    "title": "公告",
+    "description": "撰写 Markdown 公告，保存为草稿或立即发布。",
+    "createTitle": "新建公告",
+    "editTitle": "编辑公告",
+    "titleLabel": "标题",
+    "contentLabel": "正文（Markdown）",
+    "markdownPlaceholder": "支持标题、列表、链接、代码块和表格等 Markdown 语法。",
+    "markdownHelp": "最多 20,000 个字符；HTML 会经过安全净化后再展示。",
+    "preview": "预览",
+    "publishNow": "立即发布（对所有登录用户可见）",
+    "new": "新建",
+    "save": "保存公告",
+    "saving": "保存中…",
+    "saved": "公告已保存。",
+    "saveFailed": "保存公告失败。",
+    "loadFailed": "无法加载公告列表。",
+    "delete": "删除公告「{title}」",
+    "edit": "编辑公告「{title}」",
+    "deleteConfirm": "确定删除公告「{title}」？此操作无法撤销。",
+    "deleteFailed": "删除公告失败。",
+    "deleted": "公告已删除。",
+    "cancelEdit": "取消编辑",
+    "published": "已发布",
+    "draft": "草稿",
+    "empty": "还没有公告。",
+    "listLimit": "这里只显示最近更新的 200 条公告。"
+  },
   "adminOnly": "仅管理员",
   "categoryNavLabel": "系统设置分类",
   "categories": {
@@ -1252,10 +1284,15 @@
     "security": "安全与访问",
     "logging": "日志",
     "performance": "系统监控",
+    "announcements": "公告管理",
     "ai": "AI 助手",
     "transfer": "迁移"
   },
   "sections": {
+    "announcements": {
+      "title": "公告管理",
+      "description": "创建并发布 Markdown 公告，登录用户可在控制台顶部打开阅读。"
+    },
     "downloads": {
       "title": "资源下载",
       "description": "配置 GitHub 资源的访问方式、全局凭据和下载行为。"
