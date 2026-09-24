@@ -8,6 +8,7 @@ from api.dependencies import ActiveUser, DatabaseSession
 from api.routes.actions.common import _store_task
 from services.audit_log_service import record_audit_event
 from services.maintenance_lock import maintenance_lock_service
+from services.restart_protection import clear_operator_crash_protection
 from services.server_compatibility import (
     maybe_clear_execstack_after_file_action,
     run_clear_execstack,
@@ -249,6 +250,14 @@ async def execute_server_action(  # noqa: C901
     async def progress_callback(message: str) -> None:
         await send_deployment_update(server_id, "output", message)
 
+    async def clear_crash_protection() -> None:
+        note = await clear_operator_crash_protection(ssh_manager, server)
+        await send_deployment_update(
+            server_id,
+            "output",
+            note or "✓ Crash-loop counter cleared for this manual action",
+        )
+
     try:
         if action == "restart":
             manager_ready, preflight_message = await ssh_manager.check_session_manager_available(
@@ -301,6 +310,7 @@ async def execute_server_action(  # noqa: C901
                 _store_task(asyncio.create_task(clear_deployment_progress_after_delay(server_id)))
         elif action == "start":
             await send_deployment_update(server_id, "status", "Starting server...")
+            await clear_crash_protection()
             success, message = await ssh_manager.start_server(server, progress_callback)
             if success:
                 server.status = ServerStatus.RUNNING
@@ -316,6 +326,7 @@ async def execute_server_action(  # noqa: C901
 
         elif action == "stop":
             await send_deployment_update(server_id, "status", "Stopping server...")
+            await clear_crash_protection()
             success, message = await ssh_manager.stop_server(server)
 
             if success:
@@ -332,45 +343,7 @@ async def execute_server_action(  # noqa: C901
         elif action == "restart":
             await send_deployment_update(server_id, "status", "Restarting server...")
 
-            should_clear_crash_history = False
-
-            if server.auto_clear_crash_hours and server.auto_clear_crash_hours > 0:
-                if server.last_status_check:
-                    offline_duration = get_current_time() - server.last_status_check
-                    offline_hours = offline_duration.total_seconds() / 3600
-
-                    if offline_hours >= server.auto_clear_crash_hours:
-                        should_clear_crash_history = True
-                        await send_deployment_update(
-                            server_id,
-                            "output",
-                            f"⏰ Server offline for {offline_hours:.1f} hours (threshold: {server.auto_clear_crash_hours}h)",
-                        )
-                else:
-                    should_clear_crash_history = True
-            else:
-                should_clear_crash_history = True
-
-            if should_clear_crash_history:
-                try:
-                    crash_log_path = f"{server.game_directory}/crash_history.log"
-                    cleanup_cmd = f"rm -f {crash_log_path}"
-                    await ssh_manager.connect(server)
-                    await ssh_manager.execute_command(cleanup_cmd)
-                    await ssh_manager.disconnect()
-                    await send_deployment_update(
-                        server_id, "output", "✓ Crash history cleared for fresh start"
-                    )
-                except Exception as e:
-                    await send_deployment_update(
-                        server_id, "output", f"Note: Could not clear crash history: {str(e)}"
-                    )
-            else:
-                await send_deployment_update(
-                    server_id,
-                    "output",
-                    f"ℹ Crash history retained (offline duration below {server.auto_clear_crash_hours}h threshold)",
-                )
+            await clear_crash_protection()
 
             success, message = await ssh_manager.stop_server(server)
 
@@ -452,6 +425,7 @@ async def execute_server_action(  # noqa: C901
 
         elif action == "update":
             await send_deployment_update(server_id, "status", "Updating server...")
+            await clear_crash_protection()
             if clear_execstack:
                 success, message = await ssh_manager.update_server(
                     server,

@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from api.routes.actions import deployment
 from modules.models import AuthType, Server, ServerStatus
 from modules.schemas import ServerAction
+from modules.utils import get_current_time
 
 
 def _server(**overrides) -> Server:
@@ -257,6 +258,32 @@ async def test_action_preflight_lock_and_exception_paths(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["start", "stop", "restart", "update"])
+async def test_manual_lifecycle_actions_clear_crash_protection(monkeypatch, action):
+    manager = _SSH()
+    server = _server(auto_clear_crash_hours=1, last_status_check=get_current_time())
+    _patch_common(monkeypatch, manager, locked_server=server)
+    monkeypatch.setattr(deployment.asyncio, "sleep", _no_op)
+    cleared: list[int] = []
+
+    async def clear(ssh_manager, current):
+        assert ssh_manager is manager
+        cleared.append(current.id)
+        return None
+
+    monkeypatch.setattr(deployment, "clear_operator_crash_protection", clear)
+    response = await deployment.execute_server_action(
+        server.id,
+        ServerAction(action=action),
+        _DB(),
+        SimpleNamespace(id=7),
+        server,
+    )
+    assert response.success is True
+    assert cleared == [server.id]
+
+
 async def test_restart_preflight_and_cleanup_variants(monkeypatch):
     server = _server(auto_clear_crash_hours=1, last_status_check=None)
     manager = _SSH()

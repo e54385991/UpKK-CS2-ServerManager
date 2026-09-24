@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from services.restart_protection import restart_protection_hours, restart_protection_window
+from services.restart_protection import (
+    clear_operator_crash_protection,
+    restart_protection_hours,
+    restart_protection_window,
+)
+from services.server_monitor import ServerMonitor
 from services.ssh.autorestart_script import (
     ensure_autorestart_script,
     local_autorestart_script_text,
@@ -22,6 +27,32 @@ def test_protection_hours_default_and_bounds():
     server = type("Server", (), {"restart_protection_hours": 12})()
     assert restart_protection_window(server).total_seconds() == 12 * 3600
     assert restart_protection_window(None).total_seconds() == 2 * 3600
+
+
+@pytest.mark.asyncio
+async def test_operator_action_clears_memory_and_host_crash_log(monkeypatch):
+    monitor = ServerMonitor()
+    for _ in range(5):
+        monitor.record_restart(9)
+    assert monitor.can_restart(9)[0] is False
+    monkeypatch.setattr("services.server_monitor.server_monitor", monitor)
+    removed: list[str] = []
+
+    class SSH:
+        async def connect(self, _server):
+            return True, "ok"
+
+        async def execute_command(self, command):
+            removed.append(command)
+            return True, "", ""
+
+        async def disconnect(self):
+            return None
+
+    server = type("Server", (), {"id": 9, "game_directory": "/srv/cs2"})()
+    assert await clear_operator_crash_protection(SSH(), server) is None
+    assert monitor.can_restart(9)[0] is True
+    assert removed == ["rm -f /srv/cs2/crash_history.log"]
 
 
 def test_wrapper_defaults_to_two_hours():

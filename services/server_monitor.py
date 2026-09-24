@@ -88,8 +88,8 @@ class ServerMonitor:
 
             return False, (
                 f"Server has crashed {restart_count} times in the last {window_label}. "
-                f"Auto-restart disabled to prevent restart loop. "
-                f"Manual restart will be available in {minutes_left} minute(s)."
+                f"Auto-restart stays disabled until this window expires in {minutes_left} minute(s). "
+                f"A manual start, stop, restart, or update clears this counter immediately."
             )
 
         return True, f"Auto-restart available ({restart_count}/{self.max_restarts} used)"
