@@ -112,7 +112,11 @@ def start_session_command(
         payload = f"taskset -c {shlex.quote(affinity)} {payload}"
 
     if manager == "tmux":
-        return f"{_tmux()} new-session -d -s {shlex.quote(name)} {payload}"
+        # tmux joins every argument with spaces and runs `$SHELL -c` without
+        # quoting. A bare `&&` then belongs to that shell, so the wrapper only
+        # receives `cd ...`, exits immediately, and restart-loops. One quoted
+        # argument keeps the payload intact.
+        return f"{_tmux()} new-session -d -s {shlex.quote(name)} {shlex.quote(payload)}"
     return f"screen -dmS {shlex.quote(name)} {payload}"
 
 

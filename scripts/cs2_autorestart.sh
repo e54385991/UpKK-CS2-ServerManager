@@ -149,8 +149,9 @@ until false; do
     # Start the server
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting CS2 server..."
     
-    # Execute the start command
-    eval $START_COMMAND
+    # Execute the start command. Quoted so spaces and globs stay in the command
+    # text until eval parses it.
+    eval "$START_COMMAND"
     EXIT_CODE=$?
     
     # Record the crash

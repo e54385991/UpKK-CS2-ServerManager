@@ -199,7 +199,10 @@ async def test_startup_preview_uses_selected_manager_and_masks_secrets(
             {
                 "available": "command -v tmux >/dev/null 2>&1",
                 "cleanup": None,
-                "start": f"{TMUX_PREFIX} new-session -d -s cs2server_7 bash /srv/run-server.sh",
+                "start": (
+                    f"{TMUX_PREFIX} new-session -d -s cs2server_7 "
+                    f"{shlex.quote('bash /srv/run-server.sh')}"
+                ),
                 "stop": f"{TMUX_PREFIX} kill-session -t =cs2server_7",
                 "attach": f"{TMUX_PREFIX} attach-session -t =cs2server_7",
             },
@@ -243,13 +246,27 @@ def test_cpu_affinity_is_applied_to_the_payload(manager):
         cpu_affinity="0-3, 6",
     )
     affinity_payload = f"taskset -c {shlex.quote('0-3, 6')} {payload}"
+    visible = shlex.quote(affinity_payload) if manager == "tmux" else affinity_payload
 
-    assert affinity_payload in command
+    assert visible in command
     assert not command.startswith("taskset ")
     if manager == "tmux":
         assert command.index("new-session") < command.index("taskset")
     else:
         assert command.index("screen -dmS") < command.index("taskset")
+
+
+def test_tmux_keeps_shell_operators_inside_the_wrapper_argument():
+    payload = (
+        "TIME_WINDOW=7200 bash /srv/cs2_autorestart.sh 2 'key' 'http://localhost:3001' "
+        "'/srv/cs2' 'cd /srv/bin && export LD_LIBRARY_PATH=/srv/bin:\"${LD_LIBRARY_PATH:-}\" "
+        "&& ./cs2 -dedicated'"
+    )
+    command = start_session_command("tmux", "cs2server_2", payload)
+
+    assert command.endswith(shlex.quote(payload))
+    outside = command[: -len(shlex.quote(payload))]
+    assert "&&" not in outside
 
 
 @pytest.mark.parametrize("manager", ["screen", "tmux"])
