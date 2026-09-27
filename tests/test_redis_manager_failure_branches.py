@@ -161,3 +161,33 @@ async def test_redis_getdel_uses_native_command_then_get_delete_fallback(monkeyp
 
     manager.client.get = AsyncMock(side_effect=RuntimeError("get down"))
     assert await manager.getdel("webauthn:challenge:err") is None
+
+
+@pytest.mark.asyncio
+async def test_unreachable_redis_fails_fast_after_one_reconnect(monkeypatch):
+    """redis-py's default policy retries a refused connect 10 times with backoff."""
+    import time
+
+    from redis.asyncio.connection import Connection
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
+    attempts = 0
+
+    async def refuse(_connection):
+        nonlocal attempts
+        attempts += 1
+        raise RedisConnectionError("Connection refused")
+
+    monkeypatch.setattr(Connection, "_connect", refuse)
+    manager = RedisManager()
+    try:
+        started = time.monotonic()
+        assert await manager.get("probe") is None
+        assert await manager.set("probe", "1", expire=5) is False
+        elapsed = time.monotonic() - started
+    finally:
+        await manager.client.aclose()
+
+    # One retry replaces a stale pooled socket; more only delays the cache-miss fallback.
+    assert attempts == 4
+    assert elapsed < 1.0

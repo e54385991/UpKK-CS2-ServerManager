@@ -11,6 +11,8 @@ from collections.abc import Sequence
 from typing import Any, Optional
 
 import redis.asyncio as aioredis
+from redis.asyncio.retry import Retry
+from redis.backoff import NoBackoff
 
 from modules.config import settings
 from modules.observability import is_monitor_io, record_redis
@@ -47,6 +49,11 @@ class RedisManager:
             health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
             socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
             socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+            # redis-py's default retries a failed connect/command 10 times with
+            # backoff, so an outage stalls every cache read for seconds (tens of
+            # seconds when the host is unreachable). Callers already fall back to
+            # a cache miss; one immediate retry still replaces a stale pooled socket.
+            retry=Retry(NoBackoff(), 1),
             decode_responses=True,
         )
 
