@@ -64,6 +64,8 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         self._failed: dict[int, list[str]] = {}
         self._completed: dict[int, list[str]] = {}
         self._runners: dict[str, Any] = {}
+        # Jobs created here whose caller has not registered a runner yet.
+        self._awaiting_runner: set[str] = set()
         self._events: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._queues: dict[str, set[asyncio.Queue]] = defaultdict(set)
         self._tasks: dict[str, asyncio.Task] = {}
@@ -155,39 +157,54 @@ class ServerOperationHub(ServerOperationHistoryMixin):
                         record[key] = value
             self._records[operation_id] = record
             self._events[operation_id] = []
+            self._awaiting_runner.add(operation_id)
             queued_behind = busy
             if not busy:
                 self._current[server_id] = operation_id
             else:
                 pending.append(operation_id)
                 self._pending[server_id] = pending
-        await self._persist_record(record)
-        if queued_behind:
-            await self._persist_pending(server_id)
-            position = len(pending)
-            ahead = str((current or {}).get("action") or "operation")
-            await self.emit(
-                operation_id,
-                "progress",
-                kind="status",
-                message=(
-                    f"Queued behind {ahead} (position {position})"
-                    + (f": {command}" if command else "")
-                ),
-            )
-        else:
-            await redis_manager.set(
-                self._current_key(server_id), operation_id, expire=OPERATION_TTL_SECONDS
-            )
-            await self.emit(
-                operation_id,
-                "progress",
-                kind="status",
-                message=f"Operation accepted: {action} (queued)"
-                + (f": {command}" if command else ""),
-            )
+        try:
+            await self._persist_record(record)
+            if queued_behind:
+                await self._persist_pending(server_id)
+                position = len(pending)
+                ahead = str((current or {}).get("action") or "operation")
+                await self.emit(
+                    operation_id,
+                    "progress",
+                    kind="status",
+                    message=(
+                        f"Queued behind {ahead} (position {position})"
+                        + (f": {command}" if command else "")
+                    ),
+                )
+            else:
+                await redis_manager.set(
+                    self._current_key(server_id), operation_id, expire=OPERATION_TTL_SECONDS
+                )
+                await self.emit(
+                    operation_id,
+                    "progress",
+                    kind="status",
+                    message=f"Operation accepted: {action} (queued)"
+                    + (f": {command}" if command else ""),
+                )
+        except BaseException:
+            await self._abandon_unscheduled(server_id, operation_id)
+            raise
         record_task("submitted")
         return dict(record)
+
+    async def _abandon_unscheduled(self, server_id: int, operation_id: str) -> None:
+        """Keep the FIFO moving when create() fails before its caller can schedule it."""
+        self._awaiting_runner.discard(operation_id)
+        if self._current.get(server_id) == operation_id and operation_id not in self._runners:
+            await self.finish(
+                operation_id,
+                success=False,
+                message="Operation could not be scheduled",
+            )
 
     async def get(self, operation_id: str) -> dict[str, Any] | None:
         record = self._records.get(operation_id)
@@ -231,8 +248,9 @@ class ServerOperationHub(ServerOperationHistoryMixin):
     async def schedule(self, operation_id: str, factory: Any) -> None:
         """Start the worker now if this job is current; otherwise wait in FIFO."""
         self._runners[operation_id] = factory
+        self._awaiting_runner.discard(operation_id)
         record = await self.get(operation_id)
-        if record is None:
+        if record is None or record.get("status") not in ACTIVE_STATUSES:
             return
         if self._current.get(int(record["server_id"])) == operation_id:
             self._start(operation_id, factory)
@@ -369,7 +387,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             return current
         self._tasks.pop(operation_id, None)
         completed = get_current_time()
-        record = await self._update(
+        record, applied = await self._finish_record(
             operation_id,
             status="completed" if success else "failed",
             success=success,
@@ -377,6 +395,11 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             server_status=server_status,
             completed_at=completed.isoformat(),
         )
+        if not applied:
+            # A concurrent finisher (for example a force-stop racing the worker's
+            # own completion) already recorded the outcome, emitted the terminal
+            # event and promoted the next job.
+            return record
         execution_started = _as_datetime((record or {}).get("execution_started_at"))
         execute_ms = (
             (completed - execution_started).total_seconds() * 1000 if execution_started else None
@@ -410,16 +433,26 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         return record
 
     async def _promote_next(self, server_id: int, finished_id: str) -> None:
-        if self._current.get(server_id) != finished_id:
-            return
-        next_id = await self._pop_pending(server_id)
-        if not next_id:
-            return
-        self._current[server_id] = next_id
+        # Pop the next job, move the current pointer and start its worker under
+        # one lock hold: cancel() then always finds the job either pending or
+        # current, and a job cannot be promoted twice.
+        async with self._lock:
+            if self._current.get(server_id) != finished_id:
+                return
+            pending = await self._pending_ids_unlocked(server_id)
+            if not pending:
+                return
+            next_id = pending.pop(0)
+            self._pending[server_id] = pending
+            self._current[server_id] = next_id
+            factory = self._runners.get(next_id)
+            awaiting_runner = next_id in self._awaiting_runner
+            if factory is not None:
+                self._start(next_id, factory)
+        await self._persist_pending(server_id)
         await redis_manager.set(self._current_key(server_id), next_id, expire=OPERATION_TTL_SECONDS)
-        factory = self._runners.get(next_id)
-        if factory is not None:
-            self._start(next_id, factory)
+        if factory is not None or awaiting_runner:
+            # A job whose create() is still returning is started by schedule().
             return
         await self.finish(
             next_id,
@@ -574,6 +607,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         self._records.pop(operation_id, None)
         self._events.pop(operation_id, None)
         self._runners.pop(operation_id, None)
+        self._awaiting_runner.discard(operation_id)
         self._tasks.pop(operation_id, None)
         try:
             await redis_manager.delete(self._record_key(operation_id))
@@ -598,16 +632,6 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             )
         except Exception as exc:
             logger.warning("Unable to persist pending operations for server %s: %s", server_id, exc)
-
-    async def _pop_pending(self, server_id: int) -> str | None:
-        async with self._lock:
-            pending = await self._pending_ids_unlocked(server_id)
-            if not pending:
-                return None
-            next_id = pending.pop(0)
-            self._pending[server_id] = pending
-        await self._persist_pending(server_id)
-        return next_id
 
     async def _read_current(self, server_id: int) -> dict[str, Any] | None:
         operation_id = self._current.get(server_id)
@@ -647,6 +671,30 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             snapshot = dict(record)
         await self._persist_record(snapshot)
         return snapshot
+
+    async def _finish_record(
+        self, operation_id: str, **changes: Any
+    ) -> tuple[dict[str, Any] | None, bool]:
+        """Apply the terminal transition once and report whether this call applied it.
+
+        The status check and the update share one lock hold, so only one of
+        several concurrent finishers emits the terminal event and promotes the
+        next job. An unknown operation keeps the previous best-effort path.
+        """
+        async with self._lock:
+            record = self._records.get(operation_id)
+            if record is None:
+                stored = await redis_manager.get(self._record_key(operation_id))
+                if not isinstance(stored, dict):
+                    return None, True
+                record = stored
+                self._records[operation_id] = record
+            if record.get("status") not in ACTIVE_STATUSES:
+                return dict(record), False
+            record.update(changes)
+            snapshot = dict(record)
+        await self._persist_record(snapshot)
+        return snapshot, True
 
     async def _persist_record(self, record: dict[str, Any]) -> None:
         try:
