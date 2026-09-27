@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -373,3 +374,40 @@ async def test_cancelled_create_does_not_leave_a_job_blocking_the_queue(hub, mon
     replacement = await hub.create(server_id=1, action="update", actor_user_id=1)
     current = await hub.get_current(1)
     assert current is not None and current["operation_id"] == replacement["operation_id"]
+
+
+@pytest.mark.asyncio
+async def test_finished_jobs_leave_process_memory_once_history_drops_them(hub, monkeypatch):
+    monkeypatch.setattr("services.server_operation_history.MAX_COMPLETED_PER_SERVER", 2)
+    started = _record_starts(hub)
+    finished: list[str] = []
+    try:
+        for action in ("start", "stop", "update"):
+            record = await hub.create(server_id=1, action=action, actor_user_id=1)
+            operation_id = record["operation_id"]
+            await hub.schedule(operation_id, lambda: None)
+            await hub.finish(operation_id, success=True, message=f"{action} done")
+            finished.append(operation_id)
+    finally:
+        await _cancel_started(started)
+
+    oldest, *retained = finished
+    assert oldest not in hub._records
+    assert oldest not in hub._events
+    assert all(operation_id in hub._records for operation_id in retained)
+    listed = await hub.list_completed_for_server(1)
+    assert {item["operation_id"] for item in listed} == set(retained)
+    assert hub._runners == {}  # a finished job's runner can never be started again
+
+
+@pytest.mark.asyncio
+async def test_expired_history_entries_are_released_from_memory(hub: ServerOperationHub):
+    record = await hub.create(server_id=1, action="start", actor_user_id=1)
+    operation_id = record["operation_id"]
+    await hub.finish(operation_id, success=False, message="extract failed")
+    expired = datetime.now(timezone.utc) - timedelta(days=8)
+    hub._records[operation_id]["completed_at"] = expired.isoformat()
+
+    assert await hub.list_failed_for_server(1) == []
+    assert operation_id not in hub._records
+    assert operation_id not in hub._events

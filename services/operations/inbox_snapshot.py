@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
@@ -52,6 +52,8 @@ class InboxHub(Protocol):
     async def _persist_failed(self, server_id: int) -> None: ...
 
     async def _persist_completed(self, server_id: int) -> None: ...
+
+    def _release_local(self, operation_ids: Iterable[str]) -> None: ...
 
 
 async def collect_hub_snapshot(hub: InboxHub, server_ids: Sequence[int]) -> HubInboxSnapshot:
@@ -427,6 +429,7 @@ async def _apply_plans(
             persister=hub._persist_failed,
             expired=plan.failed_expired,
             fallback=plan.failed_fallback,
+            release=hub._release_local,
         )
         await reconcile_retained_index(
             redis=hub._history_redis,
@@ -437,6 +440,7 @@ async def _apply_plans(
             persister=hub._persist_completed,
             expired=plan.completed_expired,
             fallback=plan.completed_fallback,
+            release=hub._release_local,
         )
         slices[plan.server_id] = ServerInboxSlice(
             active=_active_rows(plan.assembled, messages),

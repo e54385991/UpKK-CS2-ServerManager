@@ -8,7 +8,7 @@ import logging
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from modules.observability import bind_operation, record_error, record_task, reset_operation
@@ -400,6 +400,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             # own completion) already recorded the outcome, emitted the terminal
             # event and promoted the next job.
             return record
+        self._runners.pop(operation_id, None)
         execution_started = _as_datetime((record or {}).get("execution_started_at"))
         execute_ms = (
             (completed - execution_started).total_seconds() * 1000 if execution_started else None
@@ -614,6 +615,24 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             await redis_manager.delete(self._events_key(operation_id))
         except Exception as exc:
             logger.warning("Unable to delete operation %s: %s", operation_id, exc)
+
+    def _release_local(self, operation_ids: Iterable[str]) -> None:
+        """Drop in-process copies of finished jobs that left the retained history.
+
+        Their Redis record and events keep their own TTL, so direct lookups,
+        journals and replays still work; only process memory is released.
+        """
+        for operation_id in operation_ids:
+            record = self._records.get(operation_id)
+            if record is not None and record.get("status") in ACTIVE_STATUSES:
+                continue
+            if self._queues.get(operation_id):
+                continue
+            self._records.pop(operation_id, None)
+            self._events.pop(operation_id, None)
+            self._runners.pop(operation_id, None)
+            self._awaiting_runner.discard(operation_id)
+            self._tasks.pop(operation_id, None)
 
     async def _expire_events(self, operation_id: str, expire: int) -> None:
         try:

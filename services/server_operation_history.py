@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
@@ -17,6 +17,7 @@ MAX_COMPLETED_PER_SERVER = 100
 
 RetainedIdLoader = Callable[[int], Awaitable[list[str]]]
 RetainedPersister = Callable[[int], Awaitable[None]]
+LocalReleaser = Callable[[Iterable[str]], None]
 
 
 def ids_from_stored(stored: object) -> list[str]:
@@ -63,6 +64,7 @@ async def reconcile_retained_index(
     persister: RetainedPersister,
     expired: set[str],
     fallback: list[str],
+    release: LocalReleaser | None = None,
 ) -> None:
     """Drop known-expired IDs without wiping IDs added during the read."""
     if not expired:
@@ -77,6 +79,8 @@ async def reconcile_retained_index(
         persisted = ids_from_stored(stored) if stored is not None else []
         merged = merge_retained_ids(persisted, live, fallback)
         cache[server_id] = [item for item in merged if item not in expired]
+    if release is not None:
+        release(expired)
     if persist:
         await persister(server_id)
 
@@ -110,6 +114,8 @@ class HistoryHost(Protocol):
     def _current_key(self, server_id: int) -> str: ...
 
     async def _forget_operation(self, operation_id: str) -> None: ...
+
+    def _release_local(self, operation_ids: Iterable[str]) -> None: ...
 
     async def _persist_record(self, record: dict[str, Any]) -> None: ...
 
@@ -302,6 +308,7 @@ class ServerOperationHistoryMixin:
                 persister=ids_persister,
                 expired=set(operation_ids) - set(kept),
                 fallback=operation_ids,
+                release=self._release_local,
             )
         items.sort(
             key=lambda item: str(item.get("completed_at") or item.get("started_at") or ""),
@@ -424,10 +431,13 @@ class ServerOperationHistoryMixin:
             operation_ids = await ids_loader(server_id)
             if operation_id not in operation_ids:
                 operation_ids.append(operation_id)
+            retired = operation_ids[:-max_items]
             cache[server_id] = operation_ids[-max_items:]
         await ids_persister(server_id)
         await self._persist_record(record)
         await self._expire_events(operation_id, event_ttl)
+        # Jobs trimmed off the index are no longer listed; keep only their Redis copy.
+        self._release_local(retired)
 
     async def remember_failed(self: HistoryHost, record: dict[str, Any]) -> None:
         await self._remember_retained(
