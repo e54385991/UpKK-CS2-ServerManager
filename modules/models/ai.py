@@ -53,11 +53,14 @@ class AISystemSettings(SQLModel, table=True):
     tool_calling_tested: bool = Field(default=False)
     streaming_tested: bool = Field(default=False)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     @classmethod
@@ -97,11 +100,14 @@ class UserAISettings(SQLModel, table=True):
     tool_calling_tested: bool = Field(default=False)
     streaming_tested: bool = Field(default=False)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -136,11 +142,14 @@ class AIConversation(SQLModel, table=True):
     summary_message_id: Optional[int] = Field(default=None)
     summary_tokens: int = Field(default=0, sa_column_kwargs={"server_default": text("0")})
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -165,7 +174,9 @@ class AIMessage(SQLModel, table=True):
     tool_name: Optional[str] = Field(default=None, max_length=100)
     visible: bool = Field(default=True)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -196,13 +207,16 @@ class AIRun(SQLModel, table=True):
     external_actor_id: Optional[str] = Field(default=None, max_length=20)
     error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
-    completed_at: Optional[datetime] = Field(default=None)
+    completed_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
 
 
 class AIToolRun(SQLModel, table=True):
@@ -235,14 +249,18 @@ class AIToolRun(SQLModel, table=True):
     )
     approved_actor_type: Optional[str] = Field(default=None, max_length=16)
     approved_external_actor_id: Optional[str] = Field(default=None, max_length=20)
-    approved_at: Optional[datetime] = Field(default=None)
-    approval_expires_at: Optional[datetime] = Field(default=None, index=True)
+    approved_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
+    approval_expires_at: Optional[datetime] = Field(
+        default=None, index=True, sa_type=DateTime(timezone=False)
+    )
     plan_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
     progress_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
-    progress_updated_at: Optional[datetime] = Field(default=None)
+    progress_updated_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
     result: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
     error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
-    completed_at: Optional[datetime] = Field(default=None)
+    completed_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))

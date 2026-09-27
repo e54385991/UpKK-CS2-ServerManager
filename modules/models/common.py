@@ -8,6 +8,7 @@ from typing import ClassVar, List, Optional
 
 from sqlalchemy import (
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -67,6 +68,7 @@ __all__ = [
     "Optional",
     "ClassVar",
     "CheckConstraint",
+    "DateTime",
     "ForeignKey",
     "Index",
     "Integer",

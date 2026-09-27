@@ -43,11 +43,14 @@ class User(SQLModel, table=True):
         default=None, max_length=50
     )  # OAuth provider (google, etc.)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):
@@ -185,10 +188,12 @@ class PasswordResetToken(SQLModel, table=True):
     id: int = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     token: str = Field(max_length=64, unique=True, nullable=False, index=True)
-    expires_at: datetime = Field(nullable=False)
+    expires_at: datetime = Field(nullable=False, sa_type=DateTime(timezone=False))
     used: bool = Field(default=False)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": func.now()}
+        default=None,
+        sa_column_kwargs={"server_default": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):

@@ -14,7 +14,7 @@ from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, UTCDateTime
 
 import modules.models  # noqa: F401
 from alembic import command
@@ -131,6 +131,44 @@ def test_cs2_version_state_is_a_singleton_with_a_timezone_aware_change_time():
         isinstance(constraint, CheckConstraint) and "id = 1" in str(constraint.sqltext)
         for constraint in table.constraints
     )
+
+
+# Columns that migrations created as TIMESTAMP WITH TIME ZONE. Every other
+# datetime column stores naive UTC in TIMESTAMP WITHOUT TIME ZONE.
+TIMEZONE_AWARE_DATETIME_COLUMNS = {
+    "announcements.created_at",
+    "announcements.published_at",
+    "announcements.updated_at",
+    "cs2_version_state.version_changed_at",
+    "plugin_description_sync_jobs.completed_at",
+    "plugin_description_sync_jobs.created_at",
+    "plugin_description_sync_jobs.heartbeat_at",
+    "plugin_description_sync_jobs.started_at",
+    "plugin_import_jobs.completed_at",
+    "plugin_import_jobs.created_at",
+    "plugin_import_jobs.heartbeat_at",
+    "plugin_import_jobs.started_at",
+    "webauthn_credentials.created_at",
+    "webauthn_credentials.last_used_at",
+}
+
+
+def test_datetime_columns_keep_their_migrated_timezone_storage():
+    """SQLModel 0.0.45+ maps a bare ``datetime`` to a timezone-aware ``UTCDateTime``."""
+    aware_columns = set()
+    naive_columns = set()
+    for table in SQLModel.metadata.sorted_tables:
+        for column in table.columns:
+            name = f"{table.name}.{column.name}"
+            assert not isinstance(column.type, UTCDateTime), (
+                f"{name} needs an explicit sa_type=DateTime(timezone=False) or a "
+                "DateTime(timezone=True) column plus a migration"
+            )
+            if isinstance(column.type, DateTime):
+                (aware_columns if column.type.timezone else naive_columns).add(name)
+
+    assert aware_columns == TIMEZONE_AWARE_DATETIME_COLUMNS
+    assert {"servers.created_at", "audit_logs.created_at", "users.updated_at"} <= naive_columns
 
 
 @pytest.mark.parametrize(

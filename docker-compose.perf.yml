@@ -25,7 +25,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:8.10.2-alpine3.23@sha256:72cedd9603038893af961e90ac5e1a1a0d8377d5e338dbdad8fe284ea25de18f
+    image: redis:8.10.2-alpine3.23@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     container_name: upkk_perf_redis
     restart: "no"
     ports:

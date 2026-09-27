@@ -17,11 +17,14 @@ class SSHServerSudo(SQLModel, table=True):
     sudo_user: str = Field(max_length=100, nullable=False)
     sudo_password: str = Field(max_length=255, nullable=False)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):
@@ -171,10 +174,14 @@ class SystemSettings(SQLModel, table=True):
     smtp_use_tls: bool = Field(default=True)
 
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": func.now()}
+        default=None,
+        sa_column_kwargs={"server_default": func.now()},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": func.now(), "onupdate": func.now()}
+        default=None,
+        sa_column_kwargs={"server_default": func.now(), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):

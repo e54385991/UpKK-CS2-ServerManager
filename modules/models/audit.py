@@ -25,6 +25,7 @@ class AuditLog(SQLModel, table=True):
         default=None,
         index=True,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     category: str = Field(max_length=32)
     action: str = Field(max_length=100)

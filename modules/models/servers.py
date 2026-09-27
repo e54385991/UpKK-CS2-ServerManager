@@ -107,7 +107,7 @@ class Server(SQLModel, table=True):
 
     # Auto-cleanup configuration
     auto_clear_crash_hours: Optional[int] = Field(default=None)
-    last_status_check: Optional[datetime] = Field(default=None)
+    last_status_check: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
 
     # Web-based monitoring configuration
     enable_panel_monitoring: bool = Field(default=False)
@@ -139,15 +139,17 @@ class Server(SQLModel, table=True):
     update_check_interval_hours: float = Field(
         default=1.0
     )  # Support fractional hours (e.g., 0.0167 = 1 minute)
-    last_update_check: Optional[datetime] = Field(default=None)
-    last_update_time: Optional[datetime] = Field(default=None)
+    last_update_check: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
+    last_update_time: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
 
     # Plugin auto-update configuration
     enable_plugin_auto_update: bool = Field(default=False)
     plugin_update_check_interval_hours: float = Field(
         default=DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS
     )
-    last_plugin_update_check: Optional[datetime] = Field(default=None)
+    last_plugin_update_check: Optional[datetime] = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
     enable_plugin_post_update_commands: bool = Field(default=False)
     plugin_post_update_command_ids: List[int] = Field(
         default_factory=list, sa_column=Column(JSON, nullable=True)
@@ -194,8 +196,8 @@ class Server(SQLModel, table=True):
     discord_crash_restart_min_interval_minutes: int = Field(default=10)
 
     # SSH connection health tracking
-    last_ssh_success: Optional[datetime] = Field(default=None)
-    last_ssh_failure: Optional[datetime] = Field(default=None)
+    last_ssh_success: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
+    last_ssh_failure: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
     consecutive_ssh_failures: int = Field(default=0)
     is_ssh_down: bool = Field(default=False)
 
@@ -203,20 +205,25 @@ class Server(SQLModel, table=True):
     enable_ssh_health_monitoring: bool = Field(default=True)
     ssh_health_check_interval_hours: int = Field(default=2)  # Check every 2 hours
     ssh_health_failure_threshold: int = Field(default=84)  # 84 failures = 7 days @ 2 hours
-    last_ssh_health_check: Optional[datetime] = Field(default=None)
+    last_ssh_health_check: Optional[datetime] = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
     ssh_health_status: str = Field(
         default="unknown", max_length=50
     )  # unknown, healthy, degraded, down, completely_down
 
     # Additional info
     description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
-    last_deployed: Optional[datetime] = Field(default=None)
+    last_deployed: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):
@@ -401,7 +408,9 @@ class DeploymentLog(SQLModel, table=True):
     output: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     error_message: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):
@@ -433,7 +442,10 @@ class MonitoringLog(SQLModel, table=True):
     status: str = Field(max_length=50, nullable=False)
     message: str = Field(sa_column=Column(Text, nullable=False))
     created_at: Optional[datetime] = Field(
-        default=None, index=True, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        index=True,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):
@@ -467,18 +479,21 @@ class ScheduledTask(SQLModel, table=True):
     schedule_value: str = Field(max_length=255, nullable=False)
 
     # Execution tracking
-    last_run: Optional[datetime] = Field(default=None)
-    next_run: Optional[datetime] = Field(default=None)
+    last_run: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
+    next_run: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
     run_count: int = Field(default=0)
     last_status: Optional[str] = Field(default=None, max_length=50)
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
 
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):
@@ -549,11 +564,14 @@ class CustomCommand(SQLModel, table=True):
     target: str = Field(default="host", max_length=30, nullable=False)
     commands: str = Field(sa_column=Column(Text, nullable=False))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):
@@ -599,11 +617,14 @@ class InitializedServer(SQLModel, table=True):
     ssh_password: str = Field(max_length=255, nullable=False)
     game_directory: str = Field(default="/home/cs2server/cs2", max_length=500)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):

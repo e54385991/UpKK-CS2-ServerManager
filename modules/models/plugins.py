@@ -80,11 +80,14 @@ class PluginConflictRule(SQLModel, table=True):
     reason: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     is_enabled: bool = Field(default=True)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -143,11 +146,14 @@ class MarketPlugin(SQLModel, table=True):
     )
     install_count: int = Field(default=0)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
     def __repr__(self):
@@ -307,16 +313,19 @@ class ManagedPlugin(SQLModel, table=True):
     auto_update_enabled: bool = Field(default=False)
     backup_before_update: bool = Field(default=False)
     restart_after_update: bool = Field(default=False)
-    last_check_at: Optional[datetime] = Field(default=None)
-    last_update_at: Optional[datetime] = Field(default=None)
+    last_check_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
+    last_update_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
     last_status: Optional[str] = Field(default=None, max_length=30)
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -344,11 +353,14 @@ class GitHubInstallRecipe(SQLModel, table=True):
         sa_column=Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
     )
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -375,7 +387,9 @@ class ManagedPluginFile(SQLModel, table=True):
     file_role: str = Field(default="data", max_length=32)
     preserved: bool = Field(default=False)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -410,13 +424,16 @@ class PluginDiagnosticRun(SQLModel, table=True):
     start_attempts: int = Field(default=0)
     error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
-    completed_at: Optional[datetime] = Field(default=None)
+    completed_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
 
 
 class PluginDiagnosticStep(SQLModel, table=True):
@@ -441,7 +458,9 @@ class PluginDiagnosticStep(SQLModel, table=True):
     healthy: Optional[bool] = Field(default=None)
     evidence: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -468,9 +487,11 @@ class PluginQuarantineEntry(SQLModel, table=True):
     is_quarantined: bool = Field(default=False, index=True)
     is_culprit: bool = Field(default=False)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
-    restored_at: Optional[datetime] = Field(default=None)
+    restored_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
 
 
 class PluginConfigSource(SQLModel, table=True):
@@ -496,7 +517,9 @@ class PluginConfigSource(SQLModel, table=True):
     is_default: bool = Field(default=False)
     is_enabled: bool = Field(default=True)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
@@ -504,4 +527,5 @@ class PluginConfigSource(SQLModel, table=True):
             "server_default": text("CURRENT_TIMESTAMP"),
             "onupdate": func.now(),
         },
+        sa_type=DateTime(timezone=False),
     )

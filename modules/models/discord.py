@@ -53,14 +53,17 @@ class UserDiscordBot(SQLModel, table=True):
     username: Optional[str] = Field(default=None, max_length=100)
     discriminator: Optional[str] = Field(default=None, max_length=8)
     connection_status: str = Field(default="disabled", max_length=32)
-    last_connected_at: Optional[datetime] = Field(default=None)
+    last_connected_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -88,11 +91,14 @@ class ServerDiscordBinding(SQLModel, table=True):
     response_visibility: str = Field(default="public", max_length=16)
     invalid_reason: Optional[str] = Field(default=None, max_length=255)
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -110,11 +116,14 @@ class ServerAgentPolicy(SQLModel, table=True):
         sa_column=Column(JSON, nullable=False),
     )
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
 
 
@@ -153,13 +162,16 @@ class DiscordOperationRun(SQLModel, table=True):
     status: str = Field(default="pending", max_length=32, index=True)
     result: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
     error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
-    expires_at: datetime = Field(index=True)
-    confirmed_at: Optional[datetime] = Field(default=None)
-    completed_at: Optional[datetime] = Field(default=None)
+    expires_at: datetime = Field(index=True, sa_type=DateTime(timezone=False))
+    confirmed_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
+    completed_at: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=False))
     created_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")},
+        sa_type=DateTime(timezone=False),
     )
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+        sa_type=DateTime(timezone=False),
     )
