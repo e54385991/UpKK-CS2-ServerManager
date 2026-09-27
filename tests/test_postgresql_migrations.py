@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from alembic.migration import MigrationContext
-from sqlalchemy import Column, DateTime, String, func, select, text
+from sqlalchemy import CheckConstraint, Column, DateTime, String, func, select, text
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
@@ -127,7 +127,10 @@ def test_cs2_version_state_is_a_singleton_with_a_timezone_aware_change_time():
     table = SQLModel.metadata.tables["cs2_version_state"]
     assert table.c.advertised_version.type.length == 50
     assert table.c.version_changed_at.type.timezone is True
-    assert any("id = 1" in str(constraint.sqltext) for constraint in table.constraints)
+    assert any(
+        isinstance(constraint, CheckConstraint) and "id = 1" in str(constraint.sqltext)
+        for constraint in table.constraints
+    )
 
 
 @pytest.mark.parametrize(

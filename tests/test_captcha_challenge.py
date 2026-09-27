@@ -28,15 +28,29 @@ def test_captcha_challenge_returns_inline_image(monkeypatch):
     assert base64.b64decode(payload) == b"\x89PNG-fake"
 
 
-def test_captcha_challenge_is_unauthenticated():
+def test_captcha_challenge_is_unauthenticated(monkeypatch):
     """The login page must be able to load a challenge before a session exists."""
-    client = TestClient(create_app(lifespan=None))
-    # Rate limiter / Redis may be live; only assert the route is public.
-    response = client.get("/api/captcha/challenge")
-    assert response.status_code in {200, 429}
-    if response.status_code == 200:
-        assert "token" in response.json()
-        assert response.json()["image"].startswith("data:image/png;base64,")
+    # Stub the Redis-backed limiter and store so the result does not depend on
+    # a live Redis or on pooled connections left bound to another test's loop.
+    monkeypatch.setattr(
+        "api.routes.captcha.enforce_rate_limit",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "api.routes.captcha.captcha_is_enabled",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "api.routes.captcha.captcha_service.generate_captcha",
+        AsyncMock(return_value=("tok-public", b"\x89PNG-fake")),
+    )
+
+    # No session cookie or bearer token is sent: the route must stay public.
+    response = TestClient(create_app(lifespan=None)).get("/api/captcha/challenge")
+
+    assert response.status_code == 200
+    assert response.json()["token"] == "tok-public"
+    assert response.json()["image"].startswith("data:image/png;base64,")
 
 
 def test_captcha_challenge_reports_disabled_policy(monkeypatch):
