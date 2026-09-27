@@ -28,11 +28,12 @@ export function InstallOperationLog({
   const t = useTranslations("plugins");
   const router = useRouter();
   const [events, setEvents] = useState<OperationStreamEvent[]>([]);
+  const { serverId, operationId } = operation;
 
+  // Keyed on ids, not the operation object: onOperation replaces that object, and
+  // reopening the stream would replay the terminal event and loop.
   useEffect(() => {
-    const source = new EventSource(
-      operationEventsUrl(operation.serverId, operation.operationId),
-    );
+    const source = new EventSource(operationEventsUrl(serverId, operationId));
     const coalescer = createRenderCoalescer<OperationStreamEvent>((batch) => {
       setEvents((current) => mergeOperationEvents(current, batch));
     });
@@ -50,7 +51,10 @@ export function InstallOperationLog({
     source.addEventListener("progress", (message: MessageEvent<string>) => {
       ingest(message.data);
     });
+    // Nothing follows a terminal event; close before the browser reconnects and
+    // replays the whole log.
     source.addEventListener("operation_completed", (message: MessageEvent<string>) => {
+      source.close();
       const event = ingest(message.data);
       onOperation((current) => ({
         ...current,
@@ -61,6 +65,7 @@ export function InstallOperationLog({
       router.refresh();
     });
     source.addEventListener("operation_failed", (message: MessageEvent<string>) => {
+      source.close();
       const event = ingest(message.data);
       onOperation((current) => ({
         ...current,
@@ -73,7 +78,7 @@ export function InstallOperationLog({
       coalescer.dispose();
       source.close();
     };
-  }, [onOperation, operation, router]);
+  }, [onOperation, operationId, router, serverId]);
 
   return (
     <div

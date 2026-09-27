@@ -148,14 +148,14 @@ export function GitHubInstallForm({
     source.addEventListener("progress", (message: MessageEvent<string>) =>
       ingest(message.data),
     );
-    source.addEventListener(
-      "operation_completed",
-      (message: MessageEvent<string>) => ingest(message.data),
-    );
-    source.addEventListener(
-      "operation_failed",
-      (message: MessageEvent<string>) => ingest(message.data),
-    );
+    // Close on the terminal event so the browser does not reconnect and replay
+    // the finished log every few seconds.
+    const finish = (message: MessageEvent<string>) => {
+      source.close();
+      ingest(message.data);
+    };
+    source.addEventListener("operation_completed", finish);
+    source.addEventListener("operation_failed", finish);
     return () => {
       coalescer.dispose();
       source.close();

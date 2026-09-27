@@ -251,6 +251,26 @@ for (const locale of ['en-US', 'zh-CN']) {
   });
 }
 
+test('finished install on the plugin page stops streaming its log', async ({ page, context, request }) => {
+  const operationEvents = '/api/v1/servers/1/operations/00000000-0000-4000-8000-000000000001/events';
+  await request.post(`${mock}/__test__/reset`); await login(context);
+  await page.goto('/plugins/1');
+  await expect(page.locator('#install-version-1')).toHaveValue('0');
+  await page.getByRole('button', { name: en.plugins.checkPlan, exact: true }).click();
+  await page.getByRole('button', { name: en.plugins.install, exact: true }).click();
+  await page.getByRole('alertdialog', { name: en.plugins.frameworkMismatchTitle })
+    .getByRole('button', { name: en.plugins.install, exact: true }).click();
+  const log = page.getByTestId('market-install-log');
+  await expect(log).toContainText('Fixture install finished');
+  await expect(log).toContainText('completed');
+  const streams = async () => (await state(request)).requests.filter((r: { path: string }) => r.path === operationEvents).length;
+  const openedBeforeCompletion = await streams();
+  expect(openedBeforeCompletion).toBeGreaterThan(0);
+  // EventSource reconnects about 3 s after a server ends the stream; stay past that.
+  await page.waitForTimeout(4_500);
+  expect(await streams()).toBe(openedBeforeCompletion);
+});
+
 test('editing a listing sees fresh session and updated data after mutation', async ({ page, context, request }) => {
   await request.post(`${mock}/__test__/reset`); await login(context);
   await page.goto('/plugins');

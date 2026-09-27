@@ -129,6 +129,15 @@ const app = createServer(async (req, res) => {
   }
   if (path.endsWith('/files/rename')) return json({ success: true, message: 'Renamed' });
   if (path.endsWith('/files/archives/inspect')) return json({ folders: ['Plugin'], entries: [], total_entries: 1 });
+  if (path === '/api/v1/servers/1/operations/00000000-0000-4000-8000-000000000001/events') {
+    // Mirrors FastAPI: replay the finished install, then end the stream after its terminal event.
+    const base = { operation_id: '00000000-0000-4000-8000-000000000001', timestamp: stamp };
+    const frame = (sequence, type, kind, message) => `id: ${sequence}\nevent: ${type}\ndata: ${JSON.stringify({ ...base, sequence, type, kind, message })}\n\n`;
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write(frame('1', 'progress', 'status', 'Fixture install running'));
+    res.end(frame('2', 'operation_completed', 'complete', 'Fixture install finished'));
+    return;
+  }
   return json({ detail: `Unused fixture endpoint: ${path}` }, 404);
 });
 app.listen(port, '127.0.0.1', () => console.log(`Performance fixture :${port}`));
