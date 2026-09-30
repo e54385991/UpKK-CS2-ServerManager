@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { X } from "lucide-react";
 import { useFilesUploadSnapshot } from "@/modules/files/files-upload-store";
 import { formatTransferRate } from "@/modules/files/upload";
-import { formatFileSize } from "@/modules/files/types";
+import { formatFileSize } from "@/modules/files/display";
 import { Button } from "@/shared/ui/button";
 
 export function FilesUploadDock({

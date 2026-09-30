@@ -15,10 +15,9 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
+import { formatFileSize, highlightName } from "@/modules/files/display";
 import {
   archiveExtensionLabel,
-  formatFileSize,
-  highlightName,
   isArchiveFile,
   isTextFile,
   type FileEntry,
