@@ -1,5 +1,7 @@
 "use client";
 
+import { lazy, Suspense } from "react";
+import { useFilesUploadSnapshot } from "@/modules/files/files-upload-store";
 import { useTranslations } from "next-intl";
 import {
   ArrowUp,
@@ -34,8 +36,8 @@ import {
 import { Input, Label } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
 
-const FilesUploadDock = dynamic(() =>
-  import("@/modules/files/files-upload-dock").then((mod) => mod.FilesUploadDock),
+const FilesUploadDock = lazy(() =>
+  import("@/modules/files/files-upload-dock").then((mod) => ({ default: mod.FilesUploadDock })),
 );
 const FilesListing = dynamic(
   () => import("@/modules/files/files-listing").then((mod) => mod.FilesListing),
@@ -54,6 +56,7 @@ const FilesListing = dynamic(
 
 export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const t = useTranslations("files");
+  const { items: uploadItems } = useFilesUploadSnapshot();
   const {
     workspace,
     pending,
@@ -370,7 +373,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                 </Button>
               </div>
             ) : null}
-            <FilesUploadDock onCancel={cancelUpload} />
+            {uploadItems.length > 0 ? <Suspense fallback={null}><FilesUploadDock onCancel={cancelUpload} /></Suspense> : null}
             <div className="flex flex-wrap items-center gap-1">
               {FILE_KIND_FILTERS.map((id) => (
                 <Button

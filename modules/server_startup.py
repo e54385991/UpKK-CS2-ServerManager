@@ -85,6 +85,25 @@ def normalize_game_type(value: str) -> str:
     return normalized
 
 
+def _validate_additional_option_tokens(tokens: list[str]) -> None:
+    saw_option = False
+    for token in tokens:
+        if len(token) > 512:
+            raise ValueError("Each additional startup argument must be at most 512 characters")
+        if _OPTION_NAME.fullmatch(token):
+            saw_option = True
+            if token[1:].casefold() in MANAGED_STARTUP_OPTIONS:
+                raise ValueError(
+                    f"{token} is managed by a dedicated server setting and cannot be duplicated"
+                )
+
+            continue
+        if not saw_option:
+            raise ValueError(
+                "Additional startup parameters must begin with a +parameter or -parameter"
+            )
+
+
 def normalize_additional_parameters(value: str | None) -> str | None:
     """Return a shell-safe, deterministic Source-style option string."""
     if value is None:
@@ -108,21 +127,7 @@ def normalize_additional_parameters(value: str | None) -> str | None:
     if not tokens or len(tokens) > 128:
         raise ValueError("Additional startup parameters must contain between 1 and 128 tokens")
 
-    saw_option = False
-    for token in tokens:
-        if len(token) > 512:
-            raise ValueError("Each additional startup argument must be at most 512 characters")
-        if _OPTION_NAME.fullmatch(token):
-            saw_option = True
-            if token[1:].casefold() in MANAGED_STARTUP_OPTIONS:
-                raise ValueError(
-                    f"{token} is managed by a dedicated server setting and cannot be duplicated"
-                )
-            continue
-        if not saw_option:
-            raise ValueError(
-                "Additional startup parameters must begin with a +parameter or -parameter"
-            )
+    _validate_additional_option_tokens(tokens)
 
     return shlex.join(tokens)
 

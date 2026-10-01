@@ -6,28 +6,172 @@ import logging
 import shlex
 import uuid
 
-from modules import GitHubPluginInstallResponse
+from modules import GitHubPluginInstallRequest, GitHubPluginInstallResponse
 from services.plugins.github_install.context import GithubInstallContext, host
 from services.plugins.install_mapping import stage_mapping
 
 logger = logging.getLogger(__name__)
 
 
-async def deploy_plugin_archive(  # noqa: C901
-    ctx: GithubInstallContext,
-    archive_file: str,
-    archive_type: str,
-) -> GitHubPluginInstallResponse:
-    request = ctx.request
+async def _prepare_rollback(ctx: GithubInstallContext, request: GitHubPluginInstallRequest, source: str, target: str) -> str | None:
     server = ctx.server
+    ssh_manager = ctx.ssh_manager
+    progress = ctx.progress
+    if not request.installation_plan_hash:
+        return None
+    backup_root = posix_backup = (
+        f"{server.game_directory.rstrip('/')}/.upkk/backups/github/"
+        f"{request.installation_plan_hash[:16]}-{uuid.uuid4().hex[:12]}"
+    )
+    await progress("Backing up files affected by the approved plan...")
+    backed_up, backup_output, backup_error = await ssh_manager.execute_command(
+        host._build_backup_command(source, target, posix_backup), timeout=120
+    )
+    if not backed_up:
+        raise RuntimeError(
+            backup_error or backup_output or "Unable to create the installation backup"
+        )
+
+    return backup_root
+
+
+async def _rollback_install(ctx: GithubInstallContext, target: str, backup_root: str | None) -> str | None:
+    ssh_manager = ctx.ssh_manager
+    if backup_root is None:
+        return None
+    rolled_back, rollback_output, rollback_error = await ssh_manager.execute_command(
+        host._build_rollback_command(target, backup_root), timeout=120
+    )
+    if rolled_back:
+        return "The affected files were restored from backup"
+    return f"Rollback failed: {rollback_error or rollback_output}"
+
+
+async def _exclusion_patterns(ctx: GithubInstallContext, request: GitHubPluginInstallRequest) -> list[str]:
+    progress = ctx.progress
+    exclude_raw_patterns = []
+
+    # Exclude specified files (new preferred method)
+    for exclude_file in request.exclude_files:
+        # Sanitize file path
+        safe_file = exclude_file.strip().strip("/")
+        if safe_file and ".." not in safe_file:
+            exclude_raw_patterns.append(safe_file)
+
+    # Also support excluding directories for backward compatibility
+    for exclude_dir in request.exclude_dirs:
+        # Sanitize directory name
+        safe_dir = exclude_dir.strip().strip("/")
+        if safe_dir and ".." not in safe_dir:
+            exclude_raw_patterns.append(safe_dir)
+            exclude_raw_patterns.append(f"{safe_dir}/")
+            exclude_raw_patterns.append(f"{safe_dir}/*")
+
+    if exclude_raw_patterns:
+        exclude_count = len(request.exclude_files) + len(request.exclude_dirs)
+        await progress(f"Excluding {exclude_count} item(s) from installation")
+
+    return exclude_raw_patterns
+
+
+async def _install_custom_tree(ctx: GithubInstallContext, request: GitHubPluginInstallRequest, requested_source_dir: str) -> GitHubPluginInstallResponse:
     ssh_manager = ctx.ssh_manager
     remote_temp_dir = ctx.remote_temp_dir
     progress = ctx.progress
     notify_install_result = ctx.notify_install_result
     record_installation = ctx.record_installation
     csgo_dir = ctx.csgo_dir
+    safe_custom_path = request.custom_install_path.strip().strip("/")
 
-    # Create extraction directory
+    # Validate custom path to prevent path traversal
+    if ".." in safe_custom_path or safe_custom_path.startswith("/"):
+        await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
+        error_msg = "Invalid custom install path specified"
+        await progress(error_msg, "error")
+        await notify_install_result(False, error_msg)
+        return GitHubPluginInstallResponse(success=False, message=error_msg)
+
+    # Build exclusion patterns for files and directories
+    exclude_raw_patterns = await _exclusion_patterns(ctx, request)
+
+    # Create the target directory structure
+    target_custom_dir = f"{csgo_dir}/{safe_custom_path}"
+    mkdir_cmd = f"mkdir -p {target_custom_dir}"
+    await ssh_manager.execute_command(mkdir_cmd)
+    backup_root = await _prepare_rollback(ctx, request, requested_source_dir, target_custom_dir)
+
+    # Copy with exclusions
+    rsync_check = "command -v rsync"
+    success_check, rsync_path, _ = await ssh_manager.execute_command(rsync_check)
+
+    if rsync_path.strip():
+        # Use rsync for better control
+        if exclude_raw_patterns:
+            await progress(f"Applying {len(exclude_raw_patterns)} exclusion pattern(s)")
+        copy_cmd = host._build_plugin_copy_command(
+            requested_source_dir,
+            target_custom_dir,
+            exclude_raw_patterns,
+            use_rsync=True,
+        )
+    else:
+        # Fallback to cp with tar for exclusions
+        if exclude_raw_patterns:
+            await progress(
+                f"Using tar with {len(exclude_raw_patterns)} exclusion pattern(s)"
+            )
+        copy_cmd = host._build_plugin_copy_command(
+            requested_source_dir,
+            target_custom_dir,
+            exclude_raw_patterns,
+            use_rsync=False,
+        )
+
+    logger.info(f"Custom path copy command: {copy_cmd}")
+    success, _, stderr = await ssh_manager.execute_command(copy_cmd)
+
+    if not success:
+        rollback_message = await _rollback_install(ctx, target_custom_dir, backup_root)
+        await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
+        error_msg = f"Failed to copy files to custom path: {stderr}"
+        if rollback_message:
+            error_msg = f"{error_msg}. {rollback_message}"
+        await progress(error_msg, "error")
+        await notify_install_result(False, error_msg)
+        return GitHubPluginInstallResponse(success=False, message=error_msg)
+
+    await progress(f"Extracted to custom path: {safe_custom_path}")
+
+    # Cleanup and return success
+    await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
+
+    # Count files after installation
+    count_after_cmd = f"find {csgo_dir}/addons -type f 2>/dev/null | wc -l"
+    _, count_after, _ = await ssh_manager.execute_command(count_after_cmd)
+    count_after = int(count_after.strip()) if count_after.strip().isdigit() else 0
+
+    await progress(
+        f"Installation complete! Custom path used: {safe_custom_path}", "success"
+    )
+    await notify_install_result(
+        True,
+        f"Plugin installed successfully to custom path: {safe_custom_path}",
+        count_after,
+    )
+    await record_installation()
+
+    return GitHubPluginInstallResponse(
+        success=True,
+        message=f"Plugin installed successfully to custom path: {safe_custom_path}",
+        installed_files=count_after,
+    )
+
+
+async def _extract_archive(ctx: GithubInstallContext, archive_file: str, archive_type: str) -> str | GitHubPluginInstallResponse:
+    ssh_manager = ctx.ssh_manager
+    remote_temp_dir = ctx.remote_temp_dir
+    progress = ctx.progress
+    notify_install_result = ctx.notify_install_result
     extract_dir = f"{remote_temp_dir}/extracted"
     await ssh_manager.execute_command(f"mkdir -p {extract_dir}")
 
@@ -58,6 +202,14 @@ async def deploy_plugin_archive(  # noqa: C901
 
     await progress("Extraction complete, analyzing archive structure...")
 
+    return extract_dir
+
+
+async def _stage_approved_tree(ctx: GithubInstallContext, request: GitHubPluginInstallRequest, extract_dir: str) -> tuple[GitHubPluginInstallRequest, str] | GitHubPluginInstallResponse:
+    ssh_manager = ctx.ssh_manager
+    remote_temp_dir = ctx.remote_temp_dir
+    progress = ctx.progress
+    notify_install_result = ctx.notify_install_result
     if request.archive_mappings:
         extract_dir = await stage_mapping(
             ssh_manager, extract_dir, f"{remote_temp_dir}/mapped-tree", request.archive_mappings
@@ -109,34 +261,35 @@ async def deploy_plugin_archive(  # noqa: C901
             return GitHubPluginInstallResponse(success=False, message=error_msg)
         requested_source_dir = install_tree
 
+    return request, requested_source_dir
+
+
+async def deploy_plugin_archive(  # noqa: C901
+    ctx: GithubInstallContext,
+    archive_file: str,
+    archive_type: str,
+) -> GitHubPluginInstallResponse:
+    request = ctx.request
+    ssh_manager = ctx.ssh_manager
+    remote_temp_dir = ctx.remote_temp_dir
+    progress = ctx.progress
+    notify_install_result = ctx.notify_install_result
+    record_installation = ctx.record_installation
+    csgo_dir = ctx.csgo_dir
+
+    # Create extraction directory
+    extract_dir = await _extract_archive(ctx, archive_file, archive_type)
+    if isinstance(extract_dir, GitHubPluginInstallResponse):
+        return extract_dir
+
+    staged = await _stage_approved_tree(ctx, request, extract_dir)
+    if isinstance(staged, GitHubPluginInstallResponse):
+        return staged
+    request, requested_source_dir = staged
+
     backup_root: str | None = None
 
-    async def prepare_rollback(source: str, target: str) -> None:
-        nonlocal backup_root
-        if not request.installation_plan_hash:
-            return
-        backup_root = posix_backup = (
-            f"{server.game_directory.rstrip('/')}/.upkk/backups/github/"
-            f"{request.installation_plan_hash[:16]}-{uuid.uuid4().hex[:12]}"
-        )
-        await progress("Backing up files affected by the approved plan...")
-        backed_up, backup_output, backup_error = await ssh_manager.execute_command(
-            host._build_backup_command(source, target, posix_backup), timeout=120
-        )
-        if not backed_up:
-            raise RuntimeError(
-                backup_error or backup_output or "Unable to create the installation backup"
-            )
 
-    async def rollback_install(target: str) -> str | None:
-        if backup_root is None:
-            return None
-        rolled_back, rollback_output, rollback_error = await ssh_manager.execute_command(
-            host._build_rollback_command(target, backup_root), timeout=120
-        )
-        if rolled_back:
-            return "The affected files were restored from backup"
-        return f"Rollback failed: {rollback_error or rollback_output}"
 
     # Check if addons directory exists in extracted content
     addons_check = f"test -d {shlex.quote(f'{requested_source_dir}/addons')} && echo 'addons_found'"
@@ -165,110 +318,7 @@ async def deploy_plugin_archive(  # noqa: C901
         elif request.custom_install_path:
             # No addons directory found, but custom install path is specified
             # Extract to the custom path (e.g., 'addons')
-            safe_custom_path = request.custom_install_path.strip().strip("/")
-
-            # Validate custom path to prevent path traversal
-            if ".." in safe_custom_path or safe_custom_path.startswith("/"):
-                await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
-                error_msg = "Invalid custom install path specified"
-                await progress(error_msg, "error")
-                await notify_install_result(False, error_msg)
-                return GitHubPluginInstallResponse(success=False, message=error_msg)
-
-            # Build exclusion patterns for files and directories
-            exclude_raw_patterns = []
-
-            # Exclude specified files (new preferred method)
-            for exclude_file in request.exclude_files:
-                # Sanitize file path
-                safe_file = exclude_file.strip().strip("/")
-                if safe_file and ".." not in safe_file:
-                    exclude_raw_patterns.append(safe_file)
-
-            # Also support excluding directories for backward compatibility
-            for exclude_dir in request.exclude_dirs:
-                # Sanitize directory name
-                safe_dir = exclude_dir.strip().strip("/")
-                if safe_dir and ".." not in safe_dir:
-                    exclude_raw_patterns.append(safe_dir)
-                    exclude_raw_patterns.append(f"{safe_dir}/")
-                    exclude_raw_patterns.append(f"{safe_dir}/*")
-
-            if exclude_raw_patterns:
-                exclude_count = len(request.exclude_files) + len(request.exclude_dirs)
-                await progress(f"Excluding {exclude_count} item(s) from installation")
-
-            # Create the target directory structure
-            target_custom_dir = f"{csgo_dir}/{safe_custom_path}"
-            mkdir_cmd = f"mkdir -p {target_custom_dir}"
-            await ssh_manager.execute_command(mkdir_cmd)
-            await prepare_rollback(requested_source_dir, target_custom_dir)
-
-            # Copy with exclusions
-            rsync_check = "command -v rsync"
-            success_check, rsync_path, _ = await ssh_manager.execute_command(rsync_check)
-
-            if rsync_path.strip():
-                # Use rsync for better control
-                if exclude_raw_patterns:
-                    await progress(f"Applying {len(exclude_raw_patterns)} exclusion pattern(s)")
-                copy_cmd = host._build_plugin_copy_command(
-                    requested_source_dir,
-                    target_custom_dir,
-                    exclude_raw_patterns,
-                    use_rsync=True,
-                )
-            else:
-                # Fallback to cp with tar for exclusions
-                if exclude_raw_patterns:
-                    await progress(
-                        f"Using tar with {len(exclude_raw_patterns)} exclusion pattern(s)"
-                    )
-                copy_cmd = host._build_plugin_copy_command(
-                    requested_source_dir,
-                    target_custom_dir,
-                    exclude_raw_patterns,
-                    use_rsync=False,
-                )
-
-            logger.info(f"Custom path copy command: {copy_cmd}")
-            success, _, stderr = await ssh_manager.execute_command(copy_cmd)
-
-            if not success:
-                rollback_message = await rollback_install(target_custom_dir)
-                await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
-                error_msg = f"Failed to copy files to custom path: {stderr}"
-                if rollback_message:
-                    error_msg = f"{error_msg}. {rollback_message}"
-                await progress(error_msg, "error")
-                await notify_install_result(False, error_msg)
-                return GitHubPluginInstallResponse(success=False, message=error_msg)
-
-            await progress(f"Extracted to custom path: {safe_custom_path}")
-
-            # Cleanup and return success
-            await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
-
-            # Count files after installation
-            count_after_cmd = f"find {csgo_dir}/addons -type f 2>/dev/null | wc -l"
-            _, count_after, _ = await ssh_manager.execute_command(count_after_cmd)
-            count_after = int(count_after.strip()) if count_after.strip().isdigit() else 0
-
-            await progress(
-                f"Installation complete! Custom path used: {safe_custom_path}", "success"
-            )
-            await notify_install_result(
-                True,
-                f"Plugin installed successfully to custom path: {safe_custom_path}",
-                count_after,
-            )
-            await record_installation()
-
-            return GitHubPluginInstallResponse(
-                success=True,
-                message=f"Plugin installed successfully to custom path: {safe_custom_path}",
-                installed_files=count_after,
-            )
+            return await _install_custom_tree(ctx, request, requested_source_dir)
         else:
             # No addons directory found - reject installation
             await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
@@ -278,27 +328,7 @@ async def deploy_plugin_archive(  # noqa: C901
             return GitHubPluginInstallResponse(success=False, message=error_msg)
 
     # Build exclusion patterns for files and directories
-    exclude_raw_patterns = []
-
-    # Exclude specified files (new preferred method)
-    for exclude_file in request.exclude_files:
-        # Sanitize file path
-        safe_file = exclude_file.strip().strip("/")
-        if safe_file and ".." not in safe_file:
-            exclude_raw_patterns.append(safe_file)
-
-    # Also support excluding directories for backward compatibility
-    for exclude_dir in request.exclude_dirs:
-        # Sanitize directory name
-        safe_dir = exclude_dir.strip().strip("/")
-        if safe_dir and ".." not in safe_dir:
-            exclude_raw_patterns.append(safe_dir)
-            exclude_raw_patterns.append(f"{safe_dir}/")
-            exclude_raw_patterns.append(f"{safe_dir}/*")
-
-    if exclude_raw_patterns:
-        exclude_count = len(request.exclude_files) + len(request.exclude_dirs)
-        await progress(f"Excluding {exclude_count} item(s) from installation")
+    exclude_raw_patterns = await _exclusion_patterns(ctx, request)
 
     # Count files before copy
     count_before_cmd = f"find {csgo_dir}/addons -type f 2>/dev/null | wc -l"
@@ -306,7 +336,7 @@ async def deploy_plugin_archive(  # noqa: C901
     count_before = int(count_before.strip()) if count_before.strip().isdigit() else 0
 
     await progress("Installing plugin files...")
-    await prepare_rollback(source_dir, csgo_dir)
+    backup_root = await _prepare_rollback(ctx, request, source_dir, csgo_dir)
 
     # Copy files using rsync for better control
     rsync_check = "command -v rsync"
@@ -344,7 +374,7 @@ async def deploy_plugin_archive(  # noqa: C901
     installed_files = count_after - count_before if count_after > count_before else 0
 
     if not success:
-        rollback_message = await rollback_install(csgo_dir)
+        rollback_message = await _rollback_install(ctx, csgo_dir, backup_root)
         failure_message = f"Failed to copy files: {stderr}"
         if rollback_message:
             failure_message = f"{failure_message}. {rollback_message}"

@@ -12,10 +12,379 @@ from sqlmodel import col, select
 from modules.models import ManagedPlugin, Server, User
 from services.compat import LateBoundModule
 from services.discord_notification_service import EVENT_PLUGIN_UPDATE
+from services.linux_runtime_service import LinuxRuntimeProfile
 from services.plugins.auto_update.types import AutoUpdateServiceProtocol
 
 logger = logging.getLogger("services.plugin_auto_update_service")
 host = LateBoundModule("services.plugin_auto_update_service")
+
+
+async def _load_update_configuration(self: AutoUpdateServiceProtocol, server_id: int, force: bool, plugin_id: int | None) -> tuple[Server, User | None, bool, list[int], list[ManagedPlugin]] | Dict[str, Any]:
+    async with host.async_session_maker() as db:
+        from services.plugins.diagnostic_policy import has_diagnostic_blocker
+
+        if await has_diagnostic_blocker(server_id, db):
+            return {
+                "success": False,
+                "message": "Plugin diagnostic quarantine requires attention",
+            }
+        server = await db.get(Server, server_id)
+        if not server:
+            await self._publish_status(
+                server_id,
+                state="failed",
+                phase="failed",
+                message="Server not found",
+                log="Server not found",
+            )
+            return {"success": False, "message": "Server not found"}
+        if not force and not server.enable_plugin_auto_update:
+            await self._publish_status(
+                server_id,
+                state="completed",
+                phase="disabled",
+                message="Plugin auto-update is disabled",
+                log="Scheduled check skipped because the server-level switch is disabled",
+            )
+            return {"success": False, "message": "Plugin auto-update is disabled"}
+        user = await db.get(User, server.user_id)
+        post_update_commands_enabled = bool(
+            getattr(server, "enable_plugin_post_update_commands", False)
+        )
+        post_update_command_ids = self._normalize_command_ids(
+            getattr(server, "plugin_post_update_command_ids", None)
+        )
+        item_filters = [col(ManagedPlugin.server_id) == server_id]
+        if plugin_id is None:
+            item_filters.append(col(ManagedPlugin.auto_update_enabled).is_(True))
+        else:
+            item_filters.append(col(ManagedPlugin.id) == plugin_id)
+        result = await db.execute(select(ManagedPlugin).where(*item_filters))
+        items = list(result.scalars().all())
+        # A manual per-item test must not postpone the next scheduled
+        # server-wide check.
+        if plugin_id is None:
+            await db.execute(
+                sql_update(Server)
+                .where(col(Server.id) == server_id)
+                .values(last_plugin_update_check=host.get_current_time())
+            )
+        await db.commit()
+
+    return server, user, post_update_commands_enabled, post_update_command_ids, items
+
+
+async def _resolve_update_candidates(self: AutoUpdateServiceProtocol, server_id: int, server: Server, user: User, items: list[ManagedPlugin], linux_runtime_profile: LinuxRuntimeProfile) -> tuple[List[Tuple[ManagedPlugin, Dict[str, Any]]], List[Tuple[ManagedPlugin, str]]]:
+    candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]] = []
+    resolve_failures: List[Tuple[ManagedPlugin, str]] = []
+    await self._publish_status(
+        server_id,
+        phase="checking_releases",
+        message=f"Checking {len(items)} selected plugin(s)",
+        current=0,
+        total=len(items),
+        log=f"Found {len(items)} selected plugin(s)",
+    )
+    for item_index, item in enumerate(items, start=1):
+        await self._publish_status(
+            server_id,
+            phase="checking_releases",
+            message=f"Requesting latest release for {item.display_name}",
+            current=item_index - 1,
+            total=len(items),
+            log=f"Requesting release metadata: {item.display_name}",
+        )
+        try:
+            if item.framework_key == "metamod":
+                ok, latest, error = await self._latest_metamod(server)
+            else:
+                ok, latest, error = await self._latest_github_release(
+                    item,
+                    user,
+                    linux_runtime_profile,
+                )
+        except Exception as exc:
+            logger.exception(
+                "Failed to resolve latest release for managed plugin %s", item.id
+            )
+            ok, latest, error = False, None, str(exc)
+        same_release = bool(
+            ok
+            and latest
+            and (
+                item.installed_release_id == latest["release_id"]
+                or item.installed_version == latest["version"]
+            )
+        )
+        selected_asset_name = str(latest["asset"].get("name") or "") if latest else ""
+        same_asset = bool(
+            not item.installed_asset_name
+            or item.installed_asset_name == selected_asset_name
+        )
+        if not item.installed_asset_name and item.asset_glob:
+            same_asset = fnmatch.fnmatchcase(selected_asset_name, item.asset_glob)
+        is_current = same_release and same_asset
+        async with host.async_session_maker() as db:
+            saved = await db.get(ManagedPlugin, item.id)
+            if saved:
+                saved.last_check_at = host.get_current_time()
+                saved.latest_version = latest["version"] if latest else None
+                if not ok:
+                    saved.last_status = "failed"
+                    saved.last_error = error
+                elif is_current:
+                    saved.last_status = "up_to_date"
+                    saved.last_error = None
+                db.add(saved)
+                await db.commit()
+        if not ok or not latest:
+            resolve_failures.append((item, error))
+            await self._publish_status(
+                server_id,
+                current=item_index,
+                log=f"Release check failed for {item.display_name}: {error}",
+            )
+        elif not is_current:
+            candidates.append((item, latest))
+            await self._publish_status(
+                server_id,
+                current=item_index,
+                log=f"Update available for {item.display_name}: {item.installed_version} -> {latest['version']}",
+            )
+        else:
+            await self._publish_status(
+                server_id, current=item_index, log=f"{item.display_name} is up to date"
+            )
+
+    return candidates, resolve_failures
+
+
+async def _finish_empty_check(self: AutoUpdateServiceProtocol, server_id: int, server: Server, items: list[ManagedPlugin], resolve_failures: List[Tuple[ManagedPlugin, str]]) -> Dict[str, Any]:
+    if resolve_failures:
+        host.discord_notification_service.queue_notify(
+            server,
+            EVENT_PLUGIN_UPDATE,
+            "plugin_auto_update",
+            False,
+            "One or more plugin update checks failed; no files were changed.",
+            title="Plugin automatic update check failed",
+            details={
+                "Failures": "\n".join(
+                    f"{item.display_name}: {error}" for item, error in resolve_failures
+                )
+            },
+        )
+    terminal_success = not resolve_failures
+    terminal_message = (
+        "No plugin updates available"
+        if terminal_success
+        else "Plugin update checks failed"
+    )
+    await self._publish_status(
+        server_id,
+        state="completed" if terminal_success else "failed",
+        phase="completed" if terminal_success else "failed",
+        message=terminal_message,
+        current=len(items),
+        total=len(items),
+        log=terminal_message,
+    )
+    return {
+        "success": not resolve_failures,
+        "message": terminal_message,
+        "failures": [
+            f"{item.display_name}: {error}" for item, error in resolve_failures
+        ],
+    }
+
+
+async def _backup_update_candidates(self: AutoUpdateServiceProtocol, server_id: int, server: Server, candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]]) -> tuple[List[Tuple[ManagedPlugin, Dict[str, Any]]], bool, str, set[int | None]]:
+    backup_items = [
+        (item, latest) for item, latest in candidates if item.backup_before_update
+    ]
+    backup_success = True
+    backup_message = "Not requested"
+    backup_blocked_ids = set()
+    if backup_items:
+        await self._publish_status(
+            server_id,
+            phase="backup",
+            message="Creating local backup for selected plugins",
+            current=0,
+            total=len(candidates),
+            log="Backup requested by: "
+            + ", ".join(item.display_name for item, _ in backup_items),
+        )
+        backup_success, backup_message = await host._ssh_manager().backup_plugins(server)
+    if backup_items and not backup_success:
+        message = (
+            f"Plugin backup failed; plugins requiring backup were skipped: {backup_message}"
+        )
+        backup_blocked_ids = {item.id for item, _ in backup_items}
+        async with host.async_session_maker() as db:
+            for item, _ in backup_items:
+                saved = await db.get(ManagedPlugin, item.id)
+                if saved:
+                    saved.last_status = "failed"
+                    saved.last_error = message
+                    db.add(saved)
+            await db.commit()
+        await self._publish_status(
+            server_id,
+            phase="backup_failed",
+            message=message,
+            current=0,
+            total=len(candidates),
+            log=message,
+        )
+
+    return backup_items, backup_success, backup_message, backup_blocked_ids
+
+
+async def _apply_update_candidates(self: AutoUpdateServiceProtocol, server_id: int, server: Server, user: User, candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]], backup_items: List[Tuple[ManagedPlugin, Dict[str, Any]]], backup_success: bool, backup_message: str, backup_blocked_ids: set[int | None]) -> List[Dict[str, Any]]:
+    results: List[Dict[str, Any]] = []
+    if backup_items and backup_success:
+        update_start_message = "Selected-plugin backup completed; starting plugin updates"
+        update_start_log = f"Backup completed: {backup_message}"
+    elif backup_items:
+        update_start_message = "Continuing plugins that do not require backup"
+        update_start_log = (
+            "Backup-required plugins were skipped; continuing unprotected plugins"
+        )
+    else:
+        update_start_message = "No plugin backups requested; starting plugin updates"
+        update_start_log = "Backup skipped because no selected plugin enabled it"
+    await self._publish_status(
+        server_id, phase="updating", message=update_start_message, log=update_start_log
+    )
+    for update_index, (item, latest) in enumerate(candidates, start=1):
+        if item.id in backup_blocked_ids:
+            message = f"Skipped because the requested backup failed: {backup_message}"
+            results.append(
+                {
+                    "name": item.display_name,
+                    "success": False,
+                    "message": message,
+                    "version": latest["version"],
+                    "restart_after_update": item.restart_after_update,
+                    "source_type": item.source_type,
+                }
+            )
+            await self._publish_status(
+                server_id,
+                current=update_index,
+                total=len(candidates),
+                log=f"Skipped {item.display_name}: requested backup failed",
+            )
+            continue
+        await self._publish_status(
+            server_id,
+            phase="updating",
+            message=f"Updating {item.display_name}",
+            current=update_index - 1,
+            total=len(candidates),
+            log=f"Updating {item.display_name} to {latest['version']}",
+        )
+        try:
+            success, message = await self._install_item(server, user, item, latest)
+        except Exception as exc:
+            logger.exception("Managed plugin update failed for item %s", item.id)
+            success, message = False, str(exc)
+        async with host.async_session_maker() as db:
+            saved = await db.get(ManagedPlugin, item.id)
+            if saved:
+                saved.last_status = "success" if success else "failed"
+                saved.last_error = None if success else message
+                if success:
+                    saved.installed_release_id = latest["release_id"]
+                    saved.installed_version = latest["version"]
+                    saved.installed_asset_name = latest["asset"].get("name")
+                    saved.asset_glob = host.derive_asset_glob(
+                        latest["asset"].get("name"), latest["version"]
+                    )
+                    saved.last_update_at = host.get_current_time()
+                db.add(saved)
+                await db.commit()
+        results.append(
+            {
+                "name": item.display_name,
+                "success": success,
+                "message": message,
+                "version": latest["version"],
+                "asset_name": latest["asset"].get("name"),
+                "restart_after_update": item.restart_after_update,
+                "source_type": item.source_type,
+            }
+        )
+        await self._publish_status(
+            server_id,
+            current=update_index,
+            log=f"{'Completed' if success else 'Failed'} {item.display_name}: {message}",
+        )
+
+    return results
+
+
+async def _restart_after_batch(self: AutoUpdateServiceProtocol, server_id: int, server: Server, candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]], results: List[Dict[str, Any]], status_check_ok: bool, was_running: bool) -> tuple[bool, str]:
+    successful_restart_items = [
+        result for result in results if result["success"] and result["restart_after_update"]
+    ]
+    restart_success = True
+    restart_message = "Not requested"
+    if successful_restart_items:
+        if not status_check_ok:
+            restart_success = False
+            restart_message = "Automatic restart requested, but the pre-update server state could not be determined"
+        elif not was_running:
+            restart_message = "Skipped because the server was stopped before the update"
+        else:
+            await self._publish_status(
+                server_id,
+                phase="restarting",
+                message="Restarting server once after plugin update batch",
+                current=len(candidates),
+                total=len(candidates),
+                log="Batch restart policy triggered one server restart",
+            )
+            restart_manager = host._ssh_manager()
+            (
+                manager_ready,
+                preflight_message,
+            ) = await restart_manager.check_session_manager_available(server)
+            if not manager_ready:
+                restart_success = False
+                restart_message = (
+                    f"Restart aborted before stopping: {preflight_message}. "
+                    "The existing game session was left untouched."
+                )
+                await self._publish_status(server_id, log=restart_message)
+            else:
+                stop_success, stop_message = await restart_manager.stop_server(server)
+                await self._publish_status(server_id, log=f"Stop result: {stop_message}")
+                if not stop_success:
+                    # Never issue start after a failed stop: that could
+                    # create a second process in another managed session.
+                    restart_success = False
+                    restart_message = (
+                        f"Restart failed while stopping server: {stop_message}"
+                    )
+                    await self._publish_status(server_id, log=restart_message)
+                else:
+                    await host.asyncio.sleep(0.5)
+                    start_success, start_message = await restart_manager.start_server(
+                        server
+                    )
+                    restart_success = start_success
+                    restart_message = (
+                        start_message
+                        if start_success
+                        else f"Restart failed: {start_message}"
+                    )
+                    await self._publish_status(
+                        server_id, log=f"Start result: {restart_message}"
+                    )
+
+    return restart_success, restart_message
 
 
 class AutoUpdateCheckMixin:
@@ -43,56 +412,10 @@ class AutoUpdateCheckMixin:
                 total=0,
                 log=f"{run_label} started",
             )
-            async with host.async_session_maker() as db:
-                from services.plugins.diagnostic_policy import has_diagnostic_blocker
-
-                if await has_diagnostic_blocker(server_id, db):
-                    return {
-                        "success": False,
-                        "message": "Plugin diagnostic quarantine requires attention",
-                    }
-                server = await db.get(Server, server_id)
-                if not server:
-                    await self._publish_status(
-                        server_id,
-                        state="failed",
-                        phase="failed",
-                        message="Server not found",
-                        log="Server not found",
-                    )
-                    return {"success": False, "message": "Server not found"}
-                if not force and not server.enable_plugin_auto_update:
-                    await self._publish_status(
-                        server_id,
-                        state="completed",
-                        phase="disabled",
-                        message="Plugin auto-update is disabled",
-                        log="Scheduled check skipped because the server-level switch is disabled",
-                    )
-                    return {"success": False, "message": "Plugin auto-update is disabled"}
-                user = await db.get(User, server.user_id)
-                post_update_commands_enabled = bool(
-                    getattr(server, "enable_plugin_post_update_commands", False)
-                )
-                post_update_command_ids = self._normalize_command_ids(
-                    getattr(server, "plugin_post_update_command_ids", None)
-                )
-                item_filters = [col(ManagedPlugin.server_id) == server_id]
-                if plugin_id is None:
-                    item_filters.append(col(ManagedPlugin.auto_update_enabled).is_(True))
-                else:
-                    item_filters.append(col(ManagedPlugin.id) == plugin_id)
-                result = await db.execute(select(ManagedPlugin).where(*item_filters))
-                items = list(result.scalars().all())
-                # A manual per-item test must not postpone the next scheduled
-                # server-wide check.
-                if plugin_id is None:
-                    await db.execute(
-                        sql_update(Server)
-                        .where(col(Server.id) == server_id)
-                        .values(last_plugin_update_check=host.get_current_time())
-                    )
-                await db.commit()
+            configuration = await _load_update_configuration(self, server_id, force, plugin_id)
+            if isinstance(configuration, dict):
+                return configuration
+            server, user, post_update_commands_enabled, post_update_command_ids, items = configuration
 
             from services.linux_runtime_service import detect_linux_runtime_profile
 
@@ -115,124 +438,10 @@ class AutoUpdateCheckMixin:
                 )
                 return {"success": False, "message": "Server owner not found"}
 
-            candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]] = []
-            resolve_failures: List[Tuple[ManagedPlugin, str]] = []
-            await self._publish_status(
-                server_id,
-                phase="checking_releases",
-                message=f"Checking {len(items)} selected plugin(s)",
-                current=0,
-                total=len(items),
-                log=f"Found {len(items)} selected plugin(s)",
-            )
-            for item_index, item in enumerate(items, start=1):
-                await self._publish_status(
-                    server_id,
-                    phase="checking_releases",
-                    message=f"Requesting latest release for {item.display_name}",
-                    current=item_index - 1,
-                    total=len(items),
-                    log=f"Requesting release metadata: {item.display_name}",
-                )
-                try:
-                    if item.framework_key == "metamod":
-                        ok, latest, error = await self._latest_metamod(server)
-                    else:
-                        ok, latest, error = await self._latest_github_release(
-                            item,
-                            user,
-                            linux_runtime_profile,
-                        )
-                except Exception as exc:
-                    logger.exception(
-                        "Failed to resolve latest release for managed plugin %s", item.id
-                    )
-                    ok, latest, error = False, None, str(exc)
-                same_release = bool(
-                    ok
-                    and latest
-                    and (
-                        item.installed_release_id == latest["release_id"]
-                        or item.installed_version == latest["version"]
-                    )
-                )
-                selected_asset_name = str(latest["asset"].get("name") or "") if latest else ""
-                same_asset = bool(
-                    not item.installed_asset_name
-                    or item.installed_asset_name == selected_asset_name
-                )
-                if not item.installed_asset_name and item.asset_glob:
-                    same_asset = fnmatch.fnmatchcase(selected_asset_name, item.asset_glob)
-                is_current = same_release and same_asset
-                async with host.async_session_maker() as db:
-                    saved = await db.get(ManagedPlugin, item.id)
-                    if saved:
-                        saved.last_check_at = host.get_current_time()
-                        saved.latest_version = latest["version"] if latest else None
-                        if not ok:
-                            saved.last_status = "failed"
-                            saved.last_error = error
-                        elif is_current:
-                            saved.last_status = "up_to_date"
-                            saved.last_error = None
-                        db.add(saved)
-                        await db.commit()
-                if not ok or not latest:
-                    resolve_failures.append((item, error))
-                    await self._publish_status(
-                        server_id,
-                        current=item_index,
-                        log=f"Release check failed for {item.display_name}: {error}",
-                    )
-                elif not is_current:
-                    candidates.append((item, latest))
-                    await self._publish_status(
-                        server_id,
-                        current=item_index,
-                        log=f"Update available for {item.display_name}: {item.installed_version} -> {latest['version']}",
-                    )
-                else:
-                    await self._publish_status(
-                        server_id, current=item_index, log=f"{item.display_name} is up to date"
-                    )
+            candidates, resolve_failures = await _resolve_update_candidates(self, server_id, server, user, items, linux_runtime_profile)
 
             if not candidates:
-                if resolve_failures:
-                    host.discord_notification_service.queue_notify(
-                        server,
-                        EVENT_PLUGIN_UPDATE,
-                        "plugin_auto_update",
-                        False,
-                        "One or more plugin update checks failed; no files were changed.",
-                        title="Plugin automatic update check failed",
-                        details={
-                            "Failures": "\n".join(
-                                f"{item.display_name}: {error}" for item, error in resolve_failures
-                            )
-                        },
-                    )
-                terminal_success = not resolve_failures
-                terminal_message = (
-                    "No plugin updates available"
-                    if terminal_success
-                    else "Plugin update checks failed"
-                )
-                await self._publish_status(
-                    server_id,
-                    state="completed" if terminal_success else "failed",
-                    phase="completed" if terminal_success else "failed",
-                    message=terminal_message,
-                    current=len(items),
-                    total=len(items),
-                    log=terminal_message,
-                )
-                return {
-                    "success": not resolve_failures,
-                    "message": terminal_message,
-                    "failures": [
-                        f"{item.display_name}: {error}" for item, error in resolve_failures
-                    ],
-                }
+                return await _finish_empty_check(self, server_id, server, items, resolve_failures)
 
             candidates.sort(
                 key=lambda pair: {"metamod": 0, "counterstrikesharp": 1}.get(
@@ -284,182 +493,11 @@ class AutoUpdateCheckMixin:
                 state="in_progress",
             )
 
-            backup_items = [
-                (item, latest) for item, latest in candidates if item.backup_before_update
-            ]
-            backup_success = True
-            backup_message = "Not requested"
-            backup_blocked_ids = set()
-            if backup_items:
-                await self._publish_status(
-                    server_id,
-                    phase="backup",
-                    message="Creating local backup for selected plugins",
-                    current=0,
-                    total=len(candidates),
-                    log="Backup requested by: "
-                    + ", ".join(item.display_name for item, _ in backup_items),
-                )
-                backup_success, backup_message = await host._ssh_manager().backup_plugins(server)
-            if backup_items and not backup_success:
-                message = (
-                    f"Plugin backup failed; plugins requiring backup were skipped: {backup_message}"
-                )
-                backup_blocked_ids = {item.id for item, _ in backup_items}
-                async with host.async_session_maker() as db:
-                    for item, _ in backup_items:
-                        saved = await db.get(ManagedPlugin, item.id)
-                        if saved:
-                            saved.last_status = "failed"
-                            saved.last_error = message
-                            db.add(saved)
-                    await db.commit()
-                await self._publish_status(
-                    server_id,
-                    phase="backup_failed",
-                    message=message,
-                    current=0,
-                    total=len(candidates),
-                    log=message,
-                )
+            backup_items, backup_success, backup_message, backup_blocked_ids = await _backup_update_candidates(self, server_id, server, candidates)
 
-            results: List[Dict[str, Any]] = []
-            if backup_items and backup_success:
-                update_start_message = "Selected-plugin backup completed; starting plugin updates"
-                update_start_log = f"Backup completed: {backup_message}"
-            elif backup_items:
-                update_start_message = "Continuing plugins that do not require backup"
-                update_start_log = (
-                    "Backup-required plugins were skipped; continuing unprotected plugins"
-                )
-            else:
-                update_start_message = "No plugin backups requested; starting plugin updates"
-                update_start_log = "Backup skipped because no selected plugin enabled it"
-            await self._publish_status(
-                server_id, phase="updating", message=update_start_message, log=update_start_log
-            )
-            for update_index, (item, latest) in enumerate(candidates, start=1):
-                if item.id in backup_blocked_ids:
-                    message = f"Skipped because the requested backup failed: {backup_message}"
-                    results.append(
-                        {
-                            "name": item.display_name,
-                            "success": False,
-                            "message": message,
-                            "version": latest["version"],
-                            "restart_after_update": item.restart_after_update,
-                            "source_type": item.source_type,
-                        }
-                    )
-                    await self._publish_status(
-                        server_id,
-                        current=update_index,
-                        total=len(candidates),
-                        log=f"Skipped {item.display_name}: requested backup failed",
-                    )
-                    continue
-                await self._publish_status(
-                    server_id,
-                    phase="updating",
-                    message=f"Updating {item.display_name}",
-                    current=update_index - 1,
-                    total=len(candidates),
-                    log=f"Updating {item.display_name} to {latest['version']}",
-                )
-                try:
-                    success, message = await self._install_item(server, user, item, latest)
-                except Exception as exc:
-                    logger.exception("Managed plugin update failed for item %s", item.id)
-                    success, message = False, str(exc)
-                async with host.async_session_maker() as db:
-                    saved = await db.get(ManagedPlugin, item.id)
-                    if saved:
-                        saved.last_status = "success" if success else "failed"
-                        saved.last_error = None if success else message
-                        if success:
-                            saved.installed_release_id = latest["release_id"]
-                            saved.installed_version = latest["version"]
-                            saved.installed_asset_name = latest["asset"].get("name")
-                            saved.asset_glob = host.derive_asset_glob(
-                                latest["asset"].get("name"), latest["version"]
-                            )
-                            saved.last_update_at = host.get_current_time()
-                        db.add(saved)
-                        await db.commit()
-                results.append(
-                    {
-                        "name": item.display_name,
-                        "success": success,
-                        "message": message,
-                        "version": latest["version"],
-                        "asset_name": latest["asset"].get("name"),
-                        "restart_after_update": item.restart_after_update,
-                        "source_type": item.source_type,
-                    }
-                )
-                await self._publish_status(
-                    server_id,
-                    current=update_index,
-                    log=f"{'Completed' if success else 'Failed'} {item.display_name}: {message}",
-                )
+            results = await _apply_update_candidates(self, server_id, server, user, candidates, backup_items, backup_success, backup_message, backup_blocked_ids)
 
-            successful_restart_items = [
-                result for result in results if result["success"] and result["restart_after_update"]
-            ]
-            restart_success = True
-            restart_message = "Not requested"
-            if successful_restart_items:
-                if not status_check_ok:
-                    restart_success = False
-                    restart_message = "Automatic restart requested, but the pre-update server state could not be determined"
-                elif not was_running:
-                    restart_message = "Skipped because the server was stopped before the update"
-                else:
-                    await self._publish_status(
-                        server_id,
-                        phase="restarting",
-                        message="Restarting server once after plugin update batch",
-                        current=len(candidates),
-                        total=len(candidates),
-                        log="Batch restart policy triggered one server restart",
-                    )
-                    restart_manager = host._ssh_manager()
-                    (
-                        manager_ready,
-                        preflight_message,
-                    ) = await restart_manager.check_session_manager_available(server)
-                    if not manager_ready:
-                        restart_success = False
-                        restart_message = (
-                            f"Restart aborted before stopping: {preflight_message}. "
-                            "The existing game session was left untouched."
-                        )
-                        await self._publish_status(server_id, log=restart_message)
-                    else:
-                        stop_success, stop_message = await restart_manager.stop_server(server)
-                        await self._publish_status(server_id, log=f"Stop result: {stop_message}")
-                        if not stop_success:
-                            # Never issue start after a failed stop: that could
-                            # create a second process in another managed session.
-                            restart_success = False
-                            restart_message = (
-                                f"Restart failed while stopping server: {stop_message}"
-                            )
-                            await self._publish_status(server_id, log=restart_message)
-                        else:
-                            await host.asyncio.sleep(0.5)
-                            start_success, start_message = await restart_manager.start_server(
-                                server
-                            )
-                            restart_success = start_success
-                            restart_message = (
-                                start_message
-                                if start_success
-                                else f"Restart failed: {start_message}"
-                            )
-                            await self._publish_status(
-                                server_id, log=f"Start result: {restart_message}"
-                            )
+            restart_success, restart_message = await _restart_after_batch(self, server_id, server, candidates, results, status_check_ok, was_running)
 
             post_update_success = True
             post_update_message = "Not requested"

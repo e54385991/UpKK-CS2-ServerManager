@@ -16,7 +16,23 @@ from redis.backoff import NoBackoff
 
 from modules.config import settings
 from modules.observability import is_monitor_io, record_redis
-from services.bounded_output import truncate_utf8_tail
+from services.bounded_output import truncate_utf8_tail as truncate_utf8_tail
+
+from .redis_event_cache import append_monitoring_log as _delegated_append_monitoring_log
+from .redis_event_cache import clear_monitoring_logs as _delegated_clear_monitoring_logs
+from .redis_event_cache import get_batch_action_meta as _delegated_get_batch_action_meta
+from .redis_event_cache import get_batch_action_status as _delegated_get_batch_action_status
+from .redis_event_cache import get_monitoring_logs as _delegated_get_monitoring_logs
+from .redis_event_cache import set_batch_action_meta as _delegated_set_batch_action_meta
+from .redis_event_cache import set_batch_action_status as _delegated_set_batch_action_status
+from .redis_event_cache import set_batch_action_statuses as _delegated_set_batch_action_statuses
+from .redis_server_cache import append_deployment_progress as _delegated_append_deployment_progress
+from .redis_server_cache import clear_deployment_progress as _delegated_clear_deployment_progress
+from .redis_server_cache import delete_initialized_server as _delegated_delete_initialized_server
+from .redis_server_cache import get_deployment_progress as _delegated_get_deployment_progress
+from .redis_server_cache import get_initialized_server as _delegated_get_initialized_server
+from .redis_server_cache import get_initialized_servers as _delegated_get_initialized_servers
+from .redis_server_cache import set_initialized_server as _delegated_set_initialized_server
 
 logger = logging.getLogger(__name__)
 
@@ -344,64 +360,19 @@ class RedisManager:
         Store initialized server data for a user with 30-day expiration
         Returns: server_key (unique identifier for this server)
         """
-        if expire is None:
-            expire = self.INITIALIZED_SERVER_CACHE_TTL
-        server_key = f"initialized_server:{user_id}:{int(time.time() * 1000)}"
-        success = await self.set(server_key, server_data, expire)
-
-        if not success:
-            raise Exception("Failed to store server data in Redis")
-
-        # Also maintain a list of server keys for this user
-        list_key = self.prefixed_key(f"user:{user_id}:initialized_servers")
-        try:
-            await self.client.rpush(list_key, server_key)
-            await self.client.expire(list_key, expire)
-        except Exception as e:
-            # If list update fails, clean up the server data to maintain consistency
-            await self.delete(server_key)
-            raise Exception(f"Failed to update server list in Redis: {e}") from e
-
-        return server_key
+        return await _delegated_set_initialized_server(self, user_id, server_data, expire)
 
     async def get_initialized_servers(self, user_id: int) -> list:
         """Get all initialized servers for a user"""
-        list_key = self.prefixed_key(f"user:{user_id}:initialized_servers")
-        try:
-            server_keys = await self.client.lrange(list_key, 0, -1)
-            servers = []
-
-            for raw_server_key in server_keys:
-                server_key = (
-                    raw_server_key.decode()
-                    if isinstance(raw_server_key, bytes)
-                    else str(raw_server_key)
-                )
-                server_data = await self.get(server_key)
-                if server_data:  # Only include if not expired
-                    server_data["key"] = server_key  # Add key for later retrieval
-                    servers.append(server_data)
-
-            return servers
-        except Exception as e:
-            print(f"Redis get initialized servers error: {e}")
-            return []
+        return await _delegated_get_initialized_servers(self, user_id)
 
     async def get_initialized_server(self, server_key: str) -> Optional[dict]:
         """Get a specific initialized server by key"""
-        return await self.get(server_key)
+        return await _delegated_get_initialized_server(self, server_key)
 
     async def delete_initialized_server(self, user_id: int, server_key: str) -> bool:
         """Delete an initialized server"""
-        # Remove from user's list
-        list_key = self.prefixed_key(f"user:{user_id}:initialized_servers")
-        try:
-            await self.client.lrem(list_key, 1, server_key)
-        except Exception as e:
-            print(f"Redis list remove error: {e}")
-
-        # Delete the server data
-        return await self.delete(server_key)
+        return await _delegated_delete_initialized_server(self, user_id, server_key)
 
     # Deployment progress methods
     MAX_DEPLOYMENT_PROGRESS_ENTRIES = 300
@@ -422,29 +393,9 @@ class RedisManager:
         Returns:
             bool: Success status
         """
-        key = self.prefixed_key(f"deployment_progress:{server_id}")
-        try:
-            message = truncate_utf8_tail(
-                message,
-                self.MAX_DEPLOYMENT_PROGRESS_MESSAGE_BYTES,
-            )
-            # Store as JSON for structured data
-            progress_entry = json.dumps(
-                {"type": msg_type, "message": message, "timestamp": timestamp},
-                ensure_ascii=False,
-            )
-            # One batched round trip appends, bounds retained history, and refreshes the
-            # two-hour expiry. Long-running SteamCMD jobs can emit thousands of
-            # lines, so TTL alone is not a memory bound while a job is active.
-            async with self.client.pipeline(transaction=False) as pipeline:
-                pipeline.rpush(key, progress_entry)
-                pipeline.ltrim(key, -self.MAX_DEPLOYMENT_PROGRESS_ENTRIES, -1)
-                pipeline.expire(key, 7200)
-                await pipeline.execute()
-            return True
-        except Exception as e:
-            print(f"Redis append deployment progress error: {e}")
-            return False
+        return await _delegated_append_deployment_progress(
+            self, server_id, msg_type, message, timestamp
+        )
 
     async def get_deployment_progress(self, server_id: int) -> list:
         """
@@ -456,17 +407,7 @@ class RedisManager:
         Returns:
             list: List of progress message dicts
         """
-        key = self.prefixed_key(f"deployment_progress:{server_id}")
-        try:
-            progress_entries = await self.client.lrange(
-                key,
-                -self.MAX_DEPLOYMENT_PROGRESS_ENTRIES,
-                -1,
-            )
-            return [json.loads(entry) for entry in progress_entries]
-        except Exception as e:
-            print(f"Redis get deployment progress error: {e}")
-            return []
+        return await _delegated_get_deployment_progress(self, server_id)
 
     async def clear_deployment_progress(self, server_id: int) -> bool:
         """
@@ -478,8 +419,7 @@ class RedisManager:
         Returns:
             bool: Success status
         """
-        key = f"deployment_progress:{server_id}"
-        return await self.delete(key)
+        return await _delegated_clear_deployment_progress(self, server_id)
 
     # Batch action methods
     async def set_batch_action_status(
@@ -498,13 +438,9 @@ class RedisManager:
         Returns:
             bool: Success status
         """
-        key = self.prefixed_key(f"batch_action:{batch_id}:{server_id}")
-        try:
-            data = json.dumps({"status": status, "message": message, "timestamp": time.time()})
-            return await self._set_with_expiry(key, data, expire)
-        except Exception as e:
-            print(f"Redis set batch action status error: {e}")
-            return False
+        return await _delegated_set_batch_action_status(
+            self, batch_id, server_id, status, message, expire
+        )
 
     async def set_batch_action_statuses(
         self,
@@ -515,26 +451,9 @@ class RedisManager:
         expire: int = 3600,
     ) -> bool:
         """Initialize a batch in one non-transactional Redis pipeline."""
-        timestamp = time.time()
-        try:
-            async with self.client.pipeline(transaction=False) as pipeline:
-                for server_id in server_ids:
-                    key = self.prefixed_key(f"batch_action:{batch_id}:{server_id}")
-                    data = json.dumps(
-                        {"status": status, "message": message, "timestamp": timestamp}
-                    )
-                    setter = getattr(pipeline, "set", None)
-                    if setter is not None:
-                        setter(key, data, ex=expire)
-                    else:
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore", DeprecationWarning)
-                            pipeline.setex(key, expire, data)
-                await pipeline.execute()
-            return True
-        except Exception as e:
-            print(f"Redis set batch action statuses error: {e}")
-            return False
+        return await _delegated_set_batch_action_statuses(
+            self, batch_id, server_ids, status, message, expire
+        )
 
     async def get_batch_action_status(self, batch_id: str) -> dict:
         """
@@ -548,28 +467,7 @@ class RedisManager:
         Returns:
             dict: Dictionary of server_id -> status data
         """
-        pattern = self.prefixed_key(f"batch_action:{batch_id}:*")
-        try:
-            results = {}
-            cursor = 0
-            while True:
-                cursor, keys = await self.client.scan(cursor, match=pattern, count=100)
-                values = await self.client.mget(keys) if keys else []
-                for key, value in zip(keys, values, strict=True):
-                    if not value:
-                        continue
-                    normalized_key = key.decode() if isinstance(key, bytes) else key
-                    server_id = normalized_key.rsplit(":", 1)[-1]
-                    try:
-                        results[server_id] = json.loads(value)
-                    except TypeError, json.JSONDecodeError:
-                        results[server_id] = value
-                if cursor == 0:
-                    break
-            return results
-        except Exception as e:
-            print(f"Redis get batch action status error: {e}")
-            return {}
+        return await _delegated_get_batch_action_status(self, batch_id)
 
     async def set_batch_action_meta(
         self,
@@ -580,30 +478,13 @@ class RedisManager:
         expire: int = 3600,
     ) -> bool:
         """Store the actor and action for a batch journal (separate from per-server keys)."""
-        key = self.prefixed_key(f"batch_meta:{batch_id}")
-        try:
-            data = json.dumps(
-                {"actor_user_id": actor_user_id, "action": action, "timestamp": time.time()}
-            )
-            return await self._set_with_expiry(key, data, expire)
-        except Exception as e:
-            print(f"Redis set batch action meta error: {e}")
-            return False
+        return await _delegated_set_batch_action_meta(
+            self, batch_id, actor_user_id=actor_user_id, action=action, expire=expire
+        )
 
     async def get_batch_action_meta(self, batch_id: str) -> dict | None:
         """Return actor metadata for a batch, or None when expired/missing."""
-        key = self.prefixed_key(f"batch_meta:{batch_id}")
-        try:
-            value = await self.client.get(key)
-            if not value:
-                return None
-            parsed = json.loads(value)
-            return parsed if isinstance(parsed, dict) else None
-        except TypeError, json.JSONDecodeError:
-            return None
-        except Exception as e:
-            print(f"Redis get batch action meta error: {e}")
-            return None
+        return await _delegated_get_batch_action_meta(self, batch_id)
 
     # Monitoring log methods - uses Redis list with max 50 entries
     MONITORING_LOG_MAX_ENTRIES = 50
@@ -625,36 +506,7 @@ class RedisManager:
         Returns:
             bool: Success status
         """
-        key = self.prefixed_key(f"monitoring_logs:{server_id}:{event_type}")
-        try:
-            # Create log entry with timestamp
-            log_entry = json.dumps(
-                {
-                    "id": int(time.time() * 1000),  # Use timestamp as unique ID
-                    "server_id": server_id,
-                    "event_type": event_type,
-                    "status": status,
-                    "message": message,
-                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                }
-            )
-
-            # Push to the left (newest first)
-            await self.client.lpush(key, log_entry)
-
-            # Trim to keep only the last 50 entries
-            await self.client.ltrim(key, 0, self.MONITORING_LOG_MAX_ENTRIES - 1)
-
-            # Set expiration
-            await self.client.expire(key, self.MONITORING_LOG_TTL)
-
-            logger.debug(
-                f"Appended monitoring log: server={server_id}, type={event_type}, status={status}"
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Redis append monitoring log error: {e}")
-            return False
+        return await _delegated_append_monitoring_log(self, server_id, event_type, status, message)
 
     async def get_monitoring_logs(
         self, server_id: int, event_type: str | None = None, limit: int = 50
@@ -670,40 +522,7 @@ class RedisManager:
         Returns:
             list: List of log entry dicts, newest first
         """
-        try:
-            if event_type:
-                # Get logs for specific event type
-                key = self.prefixed_key(f"monitoring_logs:{server_id}:{event_type}")
-                log_entries = await self.client.lrange(key, 0, limit - 1)
-                logger.debug(
-                    f"Retrieved {len(log_entries)} logs for server={server_id}, type={event_type}"
-                )
-                return [json.loads(entry) for entry in log_entries]
-            else:
-                # Get all event types and merge
-                event_types = [
-                    "status_check",
-                    "auto_restart",
-                    "monitoring_start",
-                    "monitoring_stop",
-                    "a2s_check",
-                ]
-                all_logs = []
-
-                for etype in event_types:
-                    key = self.prefixed_key(f"monitoring_logs:{server_id}:{etype}")
-                    log_entries = await self.client.lrange(key, 0, limit - 1)
-                    for entry in log_entries:
-                        all_logs.append(json.loads(entry))
-
-                # Sort by created_at descending
-                all_logs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-
-                logger.debug(f"Retrieved {len(all_logs)} total logs for server={server_id}")
-                return all_logs[:limit]
-        except Exception as e:
-            logger.error(f"Redis get monitoring logs error: {e}")
-            return []
+        return await _delegated_get_monitoring_logs(self, server_id, event_type, limit)
 
     async def clear_monitoring_logs(self, server_id: int, event_type: str | None = None) -> bool:
         """
@@ -716,29 +535,7 @@ class RedisManager:
         Returns:
             bool: Success status
         """
-        try:
-            if event_type:
-                key = self.prefixed_key(f"monitoring_logs:{server_id}:{event_type}")
-                await self.client.delete(key)
-            else:
-                # Clear all event types
-                event_types = [
-                    "status_check",
-                    "auto_restart",
-                    "monitoring_start",
-                    "monitoring_stop",
-                    "a2s_check",
-                ]
-                for etype in event_types:
-                    key = self.prefixed_key(f"monitoring_logs:{server_id}:{etype}")
-                    await self.client.delete(key)
-            logger.debug(
-                f"Cleared monitoring logs for server={server_id}, type={event_type or 'all'}"
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Redis clear monitoring logs error: {e}")
-            return False
+        return await _delegated_clear_monitoring_logs(self, server_id, event_type)
 
 
 # Global Redis manager instance

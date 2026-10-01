@@ -3,55 +3,60 @@ GitHub Plugin Installation routes
 Provides endpoints for fetching GitHub releases and installing plugins from them
 """
 
-import asyncio
-import logging
-import os
-import posixpath
-import shlex
-from typing import Optional
-from urllib.parse import unquote, urlsplit
+import asyncio as asyncio
+import logging as logging
+import os as os
+import posixpath as posixpath
+import shlex as shlex
+from typing import Optional as Optional
+from urllib.parse import unquote as unquote
+from urllib.parse import urlsplit as urlsplit
 
-from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter as APIRouter
+from fastapi import HTTPException as HTTPException
+from fastapi import Query as Query
+from fastapi import status as status
+from sqlalchemy.ext.asyncio import AsyncSession as AsyncSession
 
-from api.dependencies import (
-    ActiveUser,
-    DatabaseSession,
-    LockedServerOperation,
-)
-from modules import (
-    ArchiveAnalysisResponse,
-    ArchiveContentItem,
-    GitHubInstallRecipeCreate,
-    GitHubPluginInspectRequest,
-    GitHubPluginInspectResponse,
-    GitHubPluginInstallExecuteRequest,
-    GitHubPluginInstallPlanRequest,
-    GitHubPluginInstallPlanResponse,
-    GitHubPluginInstallRequest,
-    GitHubPluginInstallResponse,
-    GitHubPluginSearchResponse,
-    GitHubRelease,
-    GitHubReleaseAsset,
-    GitHubReleasesResponse,
-    PluginUninstallRequest,
-    PluginUninstallResponse,
-    Server,
-    User,
-)
-from modules.http_helper import http_helper
-from services import SSHManager
-from services.ai_access import AgentAccessDenied, enforce_agent_rate_limit
-from services.github_credentials import get_effective_github_token
+from api.dependencies import ActiveUser as ActiveUser
+from api.dependencies import DatabaseSession as DatabaseSession
+from api.dependencies import LockedServerOperation as LockedServerOperation
+from modules import ArchiveAnalysisResponse as ArchiveAnalysisResponse
+from modules import ArchiveContentItem as ArchiveContentItem
+from modules import GitHubInstallRecipeCreate as GitHubInstallRecipeCreate
+from modules import GitHubPluginInspectRequest as GitHubPluginInspectRequest
+from modules import GitHubPluginInspectResponse as GitHubPluginInspectResponse
+from modules import GitHubPluginInstallExecuteRequest as GitHubPluginInstallExecuteRequest
+from modules import GitHubPluginInstallPlanRequest as GitHubPluginInstallPlanRequest
+from modules import GitHubPluginInstallPlanResponse as GitHubPluginInstallPlanResponse
+from modules import GitHubPluginInstallRequest as GitHubPluginInstallRequest
+from modules import GitHubPluginInstallResponse as GitHubPluginInstallResponse
+from modules import GitHubPluginSearchResponse as GitHubPluginSearchResponse
+from modules import GitHubRelease as GitHubRelease
+from modules import GitHubReleaseAsset as GitHubReleaseAsset
+from modules import GitHubReleasesResponse as GitHubReleasesResponse
+from modules import PluginUninstallRequest as PluginUninstallRequest
+from modules import PluginUninstallResponse as PluginUninstallResponse
+from modules import Server as Server
+from modules import User as User
+from modules.http_helper import http_helper as http_helper
+from services import SSHManager as SSHManager
+from services.ai_access import AgentAccessDenied as AgentAccessDenied
+from services.ai_access import enforce_agent_rate_limit as enforce_agent_rate_limit
+from services.github_credentials import get_effective_github_token as get_effective_github_token
+from services.github_plugin_plan_service import GitHubPlanError as GitHubPlanError
+from services.github_plugin_plan_service import _archive_entries as _archive_entries
+from services.github_plugin_plan_service import _download_release_asset as _download_release_asset
+from services.github_plugin_plan_service import _validate_download_url as _validate_download_url
 from services.github_plugin_plan_service import (
-    GitHubPlanError,
-    _archive_entries,
-    _download_release_asset,
-    _validate_download_url,
-    _validate_release_contents,
-    build_github_install_plan,
-    create_install_recipe,
-    execute_github_install_plan,
+    _validate_release_contents as _validate_release_contents,
+)
+from services.github_plugin_plan_service import (
+    build_github_install_plan as build_github_install_plan,
+)
+from services.github_plugin_plan_service import create_install_recipe as create_install_recipe
+from services.github_plugin_plan_service import (
+    execute_github_install_plan as execute_github_install_plan,
 )
 from services.github_plugin_plan_service import (
     inspect_github_plugin as inspect_github_plugin_service,
@@ -59,7 +64,7 @@ from services.github_plugin_plan_service import (
 from services.github_plugin_plan_service import (
     search_github_plugins as search_github_plugins_service,
 )
-from services.github_url import parse_github_url
+from services.github_url import parse_github_url as parse_github_url
 
 router = APIRouter(prefix="/api/github-plugins", tags=["github-plugins"])
 
@@ -304,158 +309,7 @@ async def get_server_and_verify_ownership(db: AsyncSession, server_id: int, user
     return await get_server_for_user(server_id, db, user)
 
 
-@router.get("/releases")
-async def get_github_releases(
-    repo_url: str,
-    count: int = 5,
-    server_id: Optional[int] = None,
-    *,
-    db: DatabaseSession,
-    current_user: ActiveUser,
-) -> GitHubReleasesResponse:
-    """
-    Fetch recent releases from a GitHub repository.
-
-    Args:
-        repo_url: GitHub repository URL (e.g., https://github.com/Source2ZE/CS2Fixes)
-        count: Number of releases to fetch (default: 5, max: 10)
-        server_id: Optional server ID to use server's GitHub proxy configuration
-
-    Returns:
-        List of releases with their assets
-    """
-    try:
-        owner, repo = parse_github_url(repo_url)
-    except ValueError as e:
-        return GitHubReleasesResponse(success=False, error=str(e), releases=[])
-
-    # A server context is authorization-only. GitHub credentials are never sent
-    # through a user-configured proxy.
-    github_proxy = None
-    server = None
-    if server_id:
-        from services.ai_access import authorized_server
-
-        server = await authorized_server(db, current_user, server_id)
-
-    linux_runtime_profile: dict[str, object] | None = None
-    if server is not None:
-        from services.linux_runtime_service import detect_linux_runtime_profile
-
-        linux_runtime_profile = await detect_linux_runtime_profile(server)
-
-    # Limit count to prevent abuse
-    count = min(count, 10)
-
-    # Fetch releases from GitHub API
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"}
-
-    # Prefer the user's token and use the system credential only as a fallback.
-    github_token = await get_effective_github_token(db, current_user)
-
-    success, data, error = await http_helper.get(
-        api_url,
-        headers=headers,
-        params={"per_page": count},
-        timeout=30,
-        proxy=github_proxy,
-        github_token=github_token,
-    )
-
-    if not success:
-        return GitHubReleasesResponse(
-            success=False,
-            error=f"Failed to fetch releases: {error}",
-            releases=[],
-            repo_owner=owner,
-            repo_name=repo,
-        )
-
-    if not isinstance(data, list):
-        return GitHubReleasesResponse(
-            success=False,
-            error="Unexpected response format from GitHub API",
-            releases=[],
-            repo_owner=owner,
-            repo_name=repo,
-        )
-
-    # Parse releases
-    releases: list[GitHubRelease] = []
-    for raw_release in data:
-        if not isinstance(raw_release, dict):
-            continue
-        release_data: dict[str, object] = raw_release
-        if release_data.get("draft") or release_data.get("prerelease"):
-            continue
-        asset_payloads = []
-        raw_assets = release_data.get("assets", [])
-        assets_data = raw_assets if isinstance(raw_assets, list) else []
-        for raw_asset in assets_data:
-            if not isinstance(raw_asset, dict):
-                continue
-            asset_data: dict[str, object] = raw_asset
-            asset_name = str(asset_data.get("name") or "")
-            asset_name_lower = asset_name.lower()
-
-            # Skip Windows-specific archives (filename contains 'windows' or 'win')
-            if (
-                "windows" in asset_name_lower
-                or "-win-" in asset_name_lower
-                or "_win_" in asset_name_lower
-                or asset_name_lower.endswith("-win.zip")
-            ):
-                continue
-
-            # Only include archive files that could be plugins (including 7z)
-            if any(
-                asset_name_lower.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]
-            ):
-                asset_payloads.append(
-                    {
-                        "name": asset_name,
-                        "browser_download_url": asset_data.get("browser_download_url", ""),
-                        "size": asset_data.get("size", 0),
-                        "content_type": asset_data.get("content_type"),
-                    }
-                )
-
-        from services.linux_runtime_service import annotate_runtime_assets
-
-        assets = [
-            GitHubReleaseAsset.model_validate(item)
-            for item in annotate_runtime_assets(asset_payloads, linux_runtime_profile)
-        ]
-
-        # Only include releases that have downloadable assets
-        if assets:
-            releases.append(
-                GitHubRelease(
-                    id=str(release_data.get("id") or ""),
-                    tag_name=release_data.get("tag_name", ""),
-                    name=release_data.get("name"),
-                    published_at=release_data.get("published_at"),
-                    prerelease=release_data.get("prerelease", False),
-                    assets=assets,
-                )
-            )
-            if len(releases) >= count:
-                break
-
-    from modules import LinuxRuntimeProfile
-
-    return GitHubReleasesResponse(
-        success=True,
-        releases=releases,
-        repo_owner=owner,
-        repo_name=repo,
-        linux_runtime_profile=(
-            LinuxRuntimeProfile.model_validate(linux_runtime_profile)
-            if linux_runtime_profile is not None
-            else None
-        ),
-    )
+from .github_releases import get_github_releases as get_github_releases  # noqa: E402
 
 
 @router.get("/servers/{server_id}/analyze-archive")

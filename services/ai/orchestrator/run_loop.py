@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from modules.models import (
@@ -18,11 +19,259 @@ from modules.models import (
     AIRun,
     AIToolRun,
     User,
+    Server,
 )
 from services.compat import LateBoundModule
 
 host = LateBoundModule("services.ai_orchestrator")
 logger = logging.getLogger(__name__)
+
+
+async def _normalize_tool_call(db: AsyncSession, server: Server | None, raw_call: dict[str, Any], seen_ids: set[str], signatures: Counter[tuple[str, str]], duplicate_read_calls: dict[str, tuple[str, str]]) -> tuple[dict[str, Any], str, dict[str, Any], str]:
+    call_id = str(raw_call.get("id") or "")
+    function = raw_call.get("function")
+    if (
+        not call_id
+        or len(call_id) > 100
+        or call_id in seen_ids
+        or not isinstance(function, dict)
+    ):
+        raise host.AIProviderError("AI provider returned an invalid tool call ID")
+    seen_ids.add(call_id)
+    name = str(function.get("name") or "")
+    spec = host.TOOLS_BY_NAME.get(name)
+    if spec is None:
+        raise host.AIProviderError(f"AI provider requested unknown tool: {name}")
+    try:
+        arguments = json.loads(function.get("arguments") or "{}")
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise host.AIProviderError(
+            f"AI provider supplied invalid JSON for {name}"
+        ) from exc
+    if not isinstance(arguments, dict):
+        raise host.AIProviderError(f"Tool arguments for {name} must be an object")
+    try:
+        validated = spec.input_model.model_validate(arguments)
+    except ValidationError as exc:
+        raise host.AIProviderError(
+            f"Invalid arguments for {name}: {exc.errors(include_url=False)}"
+        ) from exc
+    clean_arguments = validated.model_dump(mode="json")
+    if spec.requires_server and server is not None and server.id is not None:
+        await host.require_agent_capabilities(
+            db,
+            server.id,
+            spec.required_capabilities(clean_arguments),
+        )
+    _, arguments_hash = host.canonical_arguments(clean_arguments)
+    signatures[(name, arguments_hash)] += 1
+    if signatures[(name, arguments_hash)] > host.MAX_REPEATED_CALLS:
+        if spec.risk != "read":
+            raise host.AIProviderError(
+                f"Repeated tool-call loop detected for {name}"
+            )
+        duplicate_read_calls[call_id] = (name, arguments_hash)
+
+    return raw_call, name, clean_arguments, arguments_hash
+
+
+async def _normalize_tool_batch(db: AsyncSession, server: Server | None, calls: list[dict[str, Any]], signatures: Counter[tuple[str, str]]) -> tuple[list[tuple[dict[str, Any], str, dict[str, Any], str]], dict[str, tuple[str, str]]]:
+    normalized_calls: list[tuple[dict[str, Any], str, dict[str, Any], str]] = []
+    duplicate_read_calls: dict[str, tuple[str, str]] = {}
+    seen_ids: set[str] = set()
+    for raw_call in calls:
+        if not isinstance(raw_call, dict):
+            raise host.AIProviderError("AI provider returned an invalid tool call")
+        normalized_calls.append(await _normalize_tool_call(db, server, raw_call, seen_ids, signatures, duplicate_read_calls))
+
+    host._validate_write_tool_batch([item[1] for item in normalized_calls])
+
+    return normalized_calls, duplicate_read_calls
+
+
+async def _persist_tool_batch(db: AsyncSession, run: AIRun, conversation: AIConversation, calls: list[dict[str, Any]], normalized_calls: list[tuple[dict[str, Any], str, dict[str, Any], str]], content: str, round_index: int) -> list[AIToolRun]:
+    assistant_turn = AIMessage(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=content or None,
+        tool_calls=calls,
+        visible=bool(content.strip()),
+    )
+    db.add(assistant_turn)
+    created: list[AIToolRun] = []
+    for raw_call, name, arguments, arguments_hash in normalized_calls:
+        spec = host.TOOLS_BY_NAME[name]
+        item = AIToolRun(
+            run_id=run.id,
+            tool_call_id=str(raw_call["id"]),
+            tool_name=name,
+            arguments=arguments,
+            arguments_hash=arguments_hash,
+            risk=spec.risk,
+            requires_approval=spec.risk == "write",
+            status="pending_approval" if spec.risk == "write" else "pending",
+            approval_expires_at=(
+                host.get_current_time() + timedelta(minutes=15)
+                if spec.risk == "write"
+                else None
+            ),
+        )
+        db.add(item)
+        created.append(item)
+    await db.commit()
+    await db.refresh(assistant_turn)
+    for item in created:
+        await db.refresh(item)
+    if content.strip():
+        await host._emit(
+            run.id,
+            "assistant_message",
+            {
+                "message_id": assistant_turn.id,
+                "round": round_index,
+                "content": content,
+            },
+        )
+
+    return created
+
+
+async def _prepare_tool_approval(db: AsyncSession, run: AIRun, item: AIToolRun, user: User, server: Server | None) -> None:
+    async def approval_event(event_type: str, payload: dict[str, Any]) -> None:
+        await host._emit(run.id, event_type, payload)
+
+    try:
+        summary = await host.build_approval_summary(
+            item.tool_name,
+            item.arguments,
+            host.ToolContext(
+                db=db,
+                user=user,
+                server=server,
+                emit=approval_event,
+            ),
+        )
+    except Exception as exc:
+        safe_error = host.redact_sensitive_text(str(exc), limit=2000)
+        host.audit_security_event(
+            "approval_plan_rejected",
+            user_id=user.id,
+            server_id=server.id if server is not None else None,
+            operation=item.tool_name,
+            detail=safe_error,
+        )
+        item.status = "failed"
+        item.error = safe_error
+        item.result = {"success": False, "error": safe_error}
+        item.completed_at = host.get_current_time()
+        db.add(item)
+        db.add(
+            AIMessage(
+                conversation_id=run.conversation_id,
+                role="tool",
+                content=json.dumps(item.result, ensure_ascii=False),
+                tool_call_id=item.tool_call_id,
+                tool_name=item.tool_name,
+                visible=False,
+            )
+        )
+        await db.commit()
+        await host._emit(
+            run.id,
+            "tool_failed",
+            {
+                "tool_run_id": item.id,
+                "tool_name": item.tool_name,
+                "result": item.result,
+            },
+        )
+        return
+    item.plan_snapshot, item.progress_snapshot = host._build_plan_snapshots(
+        item.tool_name, summary
+    )
+    item.progress_updated_at = host.get_current_time()
+    db.add(item)
+    await db.commit()
+    await host._emit(
+        run.id,
+        "tool_approval_required",
+        {
+            "tool_run_id": item.id,
+            "tool_name": item.tool_name,
+            "arguments": host.sanitize_tool_result(item.arguments),
+            "arguments_hash": item.arguments_hash,
+            "risk": item.risk,
+            "summary": host.sanitize_tool_result(summary),
+        },
+    )
+
+
+async def _process_tool_batch(db: AsyncSession, run: AIRun, created: list[AIToolRun], user: User, server: Server | None, duplicate_read_calls: dict[str, tuple[str, str]], previous_results: dict[tuple[str, str], dict[str, Any]]) -> None:
+    for item in created:
+        if item.requires_approval:
+
+            await _prepare_tool_approval(db, run, item, user, server)
+        else:
+            signature = duplicate_read_calls.get(item.tool_call_id)
+            if signature is None:
+                await host._execute_tool_run(db, run, item, user, server)
+                if isinstance(item.result, dict):
+                    previous_results[(item.tool_name, item.arguments_hash)] = (
+                        item.result
+                    )
+                continue
+            reused_result = {
+                "success": True,
+                "duplicate_call": True,
+                "message": (
+                    "This identical read-only tool call was already completed. "
+                    "Use the previous result, change the search arguments, or answer "
+                    "the user; do not repeat the same call again."
+                ),
+                "previous_result": host.sanitize_tool_result(
+                    previous_results.get(signature)
+                ),
+            }
+            await host._execute_tool_run(
+                db,
+                run,
+                item,
+                user,
+                server,
+                precomputed_result=reused_result,
+            )
+
+
+async def _complete_text_turn(db: AsyncSession, run: AIRun, conversation: AIConversation, content: str, round_index: int) -> None:
+    if not content.strip():
+        raise host.AIProviderError(
+            "AI provider returned neither text nor tool calls"
+        )
+    assistant = AIMessage(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=content,
+        visible=True,
+    )
+    db.add(assistant)
+    conversation.updated_at = host.get_current_time()
+    run.status = "completed"
+    run.completed_at = host.get_current_time()
+    db.add(conversation)
+    db.add(run)
+    await db.commit()
+    await db.refresh(assistant)
+    await host._emit(
+        run.id,
+        "assistant_message",
+        {
+            "message_id": assistant.id,
+            "round": round_index,
+            "content": content,
+        },
+    )
+    await host._emit(run.id, "run_completed", {"status": run.status})
+    return
 
 
 async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration state machine.
@@ -190,235 +439,18 @@ async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration sta
                 )
                 calls = response.get("tool_calls")
                 if not calls:
-                    if not content.strip():
-                        raise host.AIProviderError(
-                            "AI provider returned neither text nor tool calls"
-                        )
-                    assistant = AIMessage(
-                        conversation_id=conversation.id,
-                        role="assistant",
-                        content=content,
-                        visible=True,
-                    )
-                    db.add(assistant)
-                    conversation.updated_at = host.get_current_time()
-                    run.status = "completed"
-                    run.completed_at = host.get_current_time()
-                    db.add(conversation)
-                    db.add(run)
-                    await db.commit()
-                    await db.refresh(assistant)
-                    await host._emit(
-                        run.id,
-                        "assistant_message",
-                        {
-                            "message_id": assistant.id,
-                            "round": round_index,
-                            "content": content,
-                        },
-                    )
-                    await host._emit(run.id, "run_completed", {"status": run.status})
+                    await _complete_text_turn(db, run, conversation, content, round_index)
                     return
                 if not isinstance(calls, list) or len(calls) > max_tool_calls_per_round:
                     raise host.AIProviderError(
                         f"Tool-call limit exceeded ({max_tool_calls_per_round} per round)"
                     )
 
-                normalized_calls: list[tuple[dict[str, Any], str, dict[str, Any], str]] = []
-                duplicate_read_calls: dict[str, tuple[str, str]] = {}
-                seen_ids: set[str] = set()
-                for raw_call in calls:
-                    if not isinstance(raw_call, dict):
-                        raise host.AIProviderError("AI provider returned an invalid tool call")
-                    call_id = str(raw_call.get("id") or "")
-                    function = raw_call.get("function")
-                    if (
-                        not call_id
-                        or len(call_id) > 100
-                        or call_id in seen_ids
-                        or not isinstance(function, dict)
-                    ):
-                        raise host.AIProviderError("AI provider returned an invalid tool call ID")
-                    seen_ids.add(call_id)
-                    name = str(function.get("name") or "")
-                    spec = host.TOOLS_BY_NAME.get(name)
-                    if spec is None:
-                        raise host.AIProviderError(f"AI provider requested unknown tool: {name}")
-                    try:
-                        arguments = json.loads(function.get("arguments") or "{}")
-                    except (TypeError, json.JSONDecodeError) as exc:
-                        raise host.AIProviderError(
-                            f"AI provider supplied invalid JSON for {name}"
-                        ) from exc
-                    if not isinstance(arguments, dict):
-                        raise host.AIProviderError(f"Tool arguments for {name} must be an object")
-                    try:
-                        validated = spec.input_model.model_validate(arguments)
-                    except ValidationError as exc:
-                        raise host.AIProviderError(
-                            f"Invalid arguments for {name}: {exc.errors(include_url=False)}"
-                        ) from exc
-                    clean_arguments = validated.model_dump(mode="json")
-                    if spec.requires_server and server is not None and server.id is not None:
-                        await host.require_agent_capabilities(
-                            db,
-                            server.id,
-                            spec.required_capabilities(clean_arguments),
-                        )
-                    _, arguments_hash = host.canonical_arguments(clean_arguments)
-                    signatures[(name, arguments_hash)] += 1
-                    if signatures[(name, arguments_hash)] > host.MAX_REPEATED_CALLS:
-                        if spec.risk != "read":
-                            raise host.AIProviderError(
-                                f"Repeated tool-call loop detected for {name}"
-                            )
-                        duplicate_read_calls[call_id] = (name, arguments_hash)
-                    normalized_calls.append((raw_call, name, clean_arguments, arguments_hash))
+                normalized_calls, duplicate_read_calls = await _normalize_tool_batch(db, server, calls, signatures)
 
-                host._validate_write_tool_batch([item[1] for item in normalized_calls])
+                created = await _persist_tool_batch(db, run, conversation, calls, normalized_calls, content, round_index)
 
-                assistant_turn = AIMessage(
-                    conversation_id=conversation.id,
-                    role="assistant",
-                    content=content or None,
-                    tool_calls=calls,
-                    visible=bool(content.strip()),
-                )
-                db.add(assistant_turn)
-                created: list[AIToolRun] = []
-                for raw_call, name, arguments, arguments_hash in normalized_calls:
-                    spec = host.TOOLS_BY_NAME[name]
-                    item = AIToolRun(
-                        run_id=run.id,
-                        tool_call_id=str(raw_call["id"]),
-                        tool_name=name,
-                        arguments=arguments,
-                        arguments_hash=arguments_hash,
-                        risk=spec.risk,
-                        requires_approval=spec.risk == "write",
-                        status="pending_approval" if spec.risk == "write" else "pending",
-                        approval_expires_at=(
-                            host.get_current_time() + timedelta(minutes=15)
-                            if spec.risk == "write"
-                            else None
-                        ),
-                    )
-                    db.add(item)
-                    created.append(item)
-                await db.commit()
-                await db.refresh(assistant_turn)
-                for item in created:
-                    await db.refresh(item)
-                if content.strip():
-                    await host._emit(
-                        run.id,
-                        "assistant_message",
-                        {
-                            "message_id": assistant_turn.id,
-                            "round": round_index,
-                            "content": content,
-                        },
-                    )
-
-                for item in created:
-                    if item.requires_approval:
-
-                        async def approval_event(event_type: str, payload: dict[str, Any]) -> None:
-                            await host._emit(run.id, event_type, payload)
-
-                        try:
-                            summary = await host.build_approval_summary(
-                                item.tool_name,
-                                item.arguments,
-                                host.ToolContext(
-                                    db=db,
-                                    user=user,
-                                    server=server,
-                                    emit=approval_event,
-                                ),
-                            )
-                        except Exception as exc:
-                            safe_error = host.redact_sensitive_text(str(exc), limit=2000)
-                            host.audit_security_event(
-                                "approval_plan_rejected",
-                                user_id=user.id,
-                                server_id=server.id if server is not None else None,
-                                operation=item.tool_name,
-                                detail=safe_error,
-                            )
-                            item.status = "failed"
-                            item.error = safe_error
-                            item.result = {"success": False, "error": safe_error}
-                            item.completed_at = host.get_current_time()
-                            db.add(item)
-                            db.add(
-                                AIMessage(
-                                    conversation_id=run.conversation_id,
-                                    role="tool",
-                                    content=json.dumps(item.result, ensure_ascii=False),
-                                    tool_call_id=item.tool_call_id,
-                                    tool_name=item.tool_name,
-                                    visible=False,
-                                )
-                            )
-                            await db.commit()
-                            await host._emit(
-                                run.id,
-                                "tool_failed",
-                                {
-                                    "tool_run_id": item.id,
-                                    "tool_name": item.tool_name,
-                                    "result": item.result,
-                                },
-                            )
-                            continue
-                        item.plan_snapshot, item.progress_snapshot = host._build_plan_snapshots(
-                            item.tool_name, summary
-                        )
-                        item.progress_updated_at = host.get_current_time()
-                        db.add(item)
-                        await db.commit()
-                        await host._emit(
-                            run.id,
-                            "tool_approval_required",
-                            {
-                                "tool_run_id": item.id,
-                                "tool_name": item.tool_name,
-                                "arguments": host.sanitize_tool_result(item.arguments),
-                                "arguments_hash": item.arguments_hash,
-                                "risk": item.risk,
-                                "summary": host.sanitize_tool_result(summary),
-                            },
-                        )
-                    else:
-                        signature = duplicate_read_calls.get(item.tool_call_id)
-                        if signature is None:
-                            await host._execute_tool_run(db, run, item, user, server)
-                            if isinstance(item.result, dict):
-                                previous_results[(item.tool_name, item.arguments_hash)] = (
-                                    item.result
-                                )
-                            continue
-                        reused_result = {
-                            "success": True,
-                            "duplicate_call": True,
-                            "message": (
-                                "This identical read-only tool call was already completed. "
-                                "Use the previous result, change the search arguments, or answer "
-                                "the user; do not repeat the same call again."
-                            ),
-                            "previous_result": host.sanitize_tool_result(
-                                previous_results.get(signature)
-                            ),
-                        }
-                        await host._execute_tool_run(
-                            db,
-                            run,
-                            item,
-                            user,
-                            server,
-                            precomputed_result=reused_result,
-                        )
+                await _process_tool_batch(db, run, created, user, server, duplicate_read_calls, previous_results)
 
                 if any(item.status == "pending_approval" for item in created):
                     run.status = "waiting_approval"

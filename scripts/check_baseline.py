@@ -101,9 +101,15 @@ def main() -> None:
                 "tests/test_ai_streaming_unit.py",
                 "tests/test_ai_streaming.py",
                 "tests/test_ai_assistant_security.py",
+                "tests/test_ai_provider_chat_contracts.py",
+                "tests/test_ai_provider_responses_contracts.py",
                 "tests/test_ai_domain_units.py",
                 "tests/test_ai_import_usage.py",
                 "tests/test_discord_bot_agent_policy.py",
+                "tests/test_discord_menu_authorization.py",
+                "tests/test_discord_agent_message_lifecycle.py",
+                "tests/test_discord_binding_template_policy.py",
+                "tests/test_discord_menu_operations_policy.py",
                 "tests/test_batch_performance_contracts.py",
                 "tests/test_telemetry_batches.py",
                 "--cov=services.ai",
@@ -149,6 +155,12 @@ def main() -> None:
     for label, command in checks:
         if not run(label, command):
             failures.append(label)
+
+    # Advisory measurements never replace or weaken a failed quality gate.
+    run(
+        "Advisory baseline headroom",
+        [sys.executable, "scripts/report_baseline_headroom.py", "--include-bundles"],
+    )
 
     if failures:
         print("\nBaseline checks failed:")

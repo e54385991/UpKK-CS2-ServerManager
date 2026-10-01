@@ -2,85 +2,81 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any as Any
 
-from fastapi import (
-    APIRouter,
-    HTTPException,
-    Query,
-    status,
-)
-from sqlalchemy import func
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, select
+from fastapi import APIRouter as APIRouter
+from fastapi import HTTPException as HTTPException
+from fastapi import Query as Query
+from fastapi import status as status
+from sqlalchemy import func as func
+from sqlalchemy.ext.asyncio import AsyncSession as AsyncSession
+from sqlmodel import col as col
+from sqlmodel import select as select
 
-from api.dependencies import ActiveUser, AdminUser, DatabaseSession
-from modules import (
-    AIConversation,
-    AIConversationCreate,
-    AIConversationDetail,
-    AIConversationResponse,
-    AIMessage,
-    AIMessageCreate,
-    AIMessageResponse,
-    AIProviderTestRequest,
-    AIProviderTestResponse,
-    AIRun,
-    AIRunResponse,
-    AISystemSettings,
-    AISystemSettingsResponse,
-    AISystemSettingsUpdate,
-    AIToolDecisionRequest,
-    AIToolRun,
-    AIToolRunResponse,
-    Server,
-    User,
-    UserAISettingsResponse,
-    UserAISettingsUpdate,
-)
-from modules.schemas.ai import AIBackgroundTaskResponse, AIBackgroundTaskToolResponse
-from modules.utils import get_current_time
-from services.agent_policy_service import (
-    AgentCapabilityDenied,
-    get_effective_agent_policy,
-    require_agent_capabilities,
-)
-from services.ai_access import audit_security_event
+from api.dependencies import ActiveUser as ActiveUser
+from api.dependencies import AdminUser as AdminUser
+from api.dependencies import DatabaseSession as DatabaseSession
+from modules import AIConversation as AIConversation
+from modules import AIConversationCreate as AIConversationCreate
+from modules import AIConversationDetail as AIConversationDetail
+from modules import AIConversationResponse as AIConversationResponse
+from modules import AIMessage as AIMessage
+from modules import AIMessageCreate as AIMessageCreate
+from modules import AIMessageResponse as AIMessageResponse
+from modules import AIProviderTestRequest as AIProviderTestRequest
+from modules import AIProviderTestResponse as AIProviderTestResponse
+from modules import AIRun as AIRun
+from modules import AIRunResponse as AIRunResponse
+from modules import AISystemSettings as AISystemSettings
+from modules import AISystemSettingsResponse as AISystemSettingsResponse
+from modules import AISystemSettingsUpdate as AISystemSettingsUpdate
+from modules import AIToolDecisionRequest as AIToolDecisionRequest
+from modules import AIToolRun as AIToolRun
+from modules import AIToolRunResponse as AIToolRunResponse
+from modules import Server as Server
+from modules import User as User
+from modules import UserAISettingsResponse as UserAISettingsResponse
+from modules import UserAISettingsUpdate as UserAISettingsUpdate
+from modules.schemas.ai import AIBackgroundTaskResponse as AIBackgroundTaskResponse
+from modules.schemas.ai import AIBackgroundTaskToolResponse as AIBackgroundTaskToolResponse
+from modules.utils import get_current_time as get_current_time
+from services.agent_policy_service import AgentCapabilityDenied as AgentCapabilityDenied
+from services.agent_policy_service import get_effective_agent_policy as get_effective_agent_policy
+from services.agent_policy_service import require_agent_capabilities as require_agent_capabilities
+from services.ai_access import audit_security_event as audit_security_event
+from services.ai_orchestrator import ACTIVE_RUN_STATUSES as ACTIVE_RUN_STATUSES
+from services.ai_orchestrator import cleanup_expired_ai_runs as cleanup_expired_ai_runs
+from services.ai_orchestrator import interrupt_conversation_run as interrupt_conversation_run
+from services.ai_orchestrator import process_ai_run as process_ai_run
 from services.ai_orchestrator import (
-    ACTIVE_RUN_STATUSES,
-    cleanup_expired_ai_runs,
-    interrupt_conversation_run,
-    process_ai_run,
-    reconcile_stale_ai_server_lock,
-    reconcile_waiting_approval_runs,
+    reconcile_stale_ai_server_lock as reconcile_stale_ai_server_lock,
 )
-from services.ai_provider import test_provider
-from services.ai_security import (
-    AIConfigurationError,
-    AIProviderConfig,
-    credential_encryption_available,  # noqa: F401
-    decrypt_credential,
-    encrypt_credential,
-    get_effective_provider,
-    normalize_base_url,
+from services.ai_orchestrator import (
+    reconcile_waiting_approval_runs as reconcile_waiting_approval_runs,
 )
-from services.task_registry import ai_task_registry
+from services.ai_provider import test_provider as test_provider
+from services.ai_security import AIConfigurationError as AIConfigurationError
+from services.ai_security import AIProviderConfig as AIProviderConfig
+from services.ai_security import credential_encryption_available as credential_encryption_available
+from services.ai_security import decrypt_credential as decrypt_credential
+from services.ai_security import encrypt_credential as encrypt_credential
+from services.ai_security import get_effective_provider as get_effective_provider
+from services.ai_security import normalize_base_url as normalize_base_url
+from services.task_registry import ai_task_registry as ai_task_registry
 
-from .ai_helpers import (  # noqa: F401
-    _MODEL_PARAMETER_NAMES,
-    _apply_model_parameters,
-    _apply_saved_provider_test_flags,
-    _apply_system_enabled,
-    _apply_system_provider_fields,
-    _apply_system_runtime_limits,
-    _configuration_error,
-    _get_user_settings,
-    _is_saved_provider_test,
-    _system_ready_to_enable,
-    _system_response,
-    _test_model_parameters,
-    _user_response,
-)
+from .ai_helpers import _MODEL_PARAMETER_NAMES as _MODEL_PARAMETER_NAMES
+from .ai_helpers import _apply_model_parameters as _apply_model_parameters
+from .ai_helpers import _apply_saved_provider_test_flags as _apply_saved_provider_test_flags
+from .ai_helpers import _apply_system_enabled as _apply_system_enabled
+from .ai_helpers import _apply_system_provider_fields as _apply_system_provider_fields
+from .ai_helpers import _apply_system_runtime_limits as _apply_system_runtime_limits
+from .ai_helpers import _configuration_error as _configuration_error
+from .ai_helpers import _get_user_settings as _get_user_settings
+from .ai_helpers import _is_saved_provider_test as _is_saved_provider_test
+from .ai_helpers import _system_ready_to_enable as _system_ready_to_enable
+from .ai_helpers import _system_response as _system_response
+from .ai_helpers import _test_model_parameters as _test_model_parameters
+from .ai_helpers import _user_response as _user_response
 
 router = APIRouter(tags=["ai-assistant"])
 
@@ -93,206 +89,13 @@ async def get_system_ai_settings(
     return _system_response(await AISystemSettings.get_or_create(db))
 
 
-@router.put("/api/system/ai-settings", response_model=AISystemSettingsResponse)
-async def update_system_ai_settings(
-    request: AISystemSettingsUpdate,
-    db: DatabaseSession,
-    current_user: AdminUser,
-) -> AISystemSettingsResponse:
-    item = await AISystemSettings.get_or_create(db)
-    changed_provider = _apply_system_provider_fields(item, request)
-    _apply_system_runtime_limits(item, request)
-    if changed_provider:
-        item.provider_tested = False
-        item.tool_calling_tested = False
-        item.streaming_tested = False
-    _apply_system_enabled(item, request)
-    db.add(item)
-    await db.commit()
-    await db.refresh(item)
-    return _system_response(item)
-
-
-@router.post("/api/system/ai-settings/test", response_model=AIProviderTestResponse)
-async def test_system_ai_settings(
-    request: AIProviderTestRequest,
-    db: DatabaseSession,
-    current_user: AdminUser,
-) -> AIProviderTestResponse:
-    item = await AISystemSettings.get_or_create(db)
-    try:
-        base_url = normalize_base_url(request.base_url or item.base_url or "")
-        model = (request.model or item.model or "").strip()
-        api_key = request.api_key or decrypt_credential(item.api_key_encrypted)
-        if not model or not api_key:
-            raise AIConfigurationError("Base URL, model, and API key are required")
-        candidate = AIProviderConfig(
-            base_url=base_url,
-            model=model,
-            api_key=api_key,
-            timeout_seconds=item.request_timeout_seconds,
-            allowlist=tuple(item.private_endpoint_allowlist or []),
-            source="global",
-            api_protocol=request.api_protocol or item.api_protocol,
-            admin_prompt=item.admin_prompt or "",
-            context_window_tokens=getattr(item, "context_window_tokens", 262_144),
-            requests_per_minute=getattr(item, "requests_per_minute", 60),
-            **_test_model_parameters(request, item),
-        )
-        # RPM waits and provider I/O must not keep a database transaction open.
-        await db.commit()
-        text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
-    except (AIConfigurationError, ValueError) as exc:
-        text_ok, tool_ok, streaming_ok, message = False, False, False, str(exc)
-    if _is_saved_provider_test(request, item):
-        _apply_saved_provider_test_flags(
-            item,
-            text_ok=text_ok,
-            tool_ok=tool_ok,
-            streaming_ok=streaming_ok,
-        )
-        db.add(item)
-        await db.commit()
-    return AIProviderTestResponse(
-        success=text_ok and tool_ok and streaming_ok,
-        text_response_ok=text_ok,
-        tool_calling_ok=tool_ok,
-        streaming_ok=streaming_ok,
-        message=message,
-    )
-
-
-@router.get("/api/auth/ai-settings", response_model=UserAISettingsResponse)
-async def get_user_ai_settings(
-    db: DatabaseSession,
-    current_user: ActiveUser,
-) -> UserAISettingsResponse:
-    return await _user_response(db, current_user, await _get_user_settings(db, current_user.id))
-
-
-@router.put("/api/auth/ai-settings", response_model=UserAISettingsResponse)
-async def update_user_ai_settings(
-    request: UserAISettingsUpdate,
-    db: DatabaseSession,
-    current_user: ActiveUser,
-) -> UserAISettingsResponse:
-    item = await _get_user_settings(db, current_user.id)
-    changed_provider = request.mode != item.mode
-    item.mode = request.mode
-    try:
-        if "base_url" in request.model_fields_set:
-            normalized = normalize_base_url(request.base_url) if request.base_url else None
-            changed_provider |= normalized != item.base_url
-            item.base_url = normalized
-        if "model" in request.model_fields_set:
-            model = (request.model or "").strip() or None
-            changed_provider |= model != item.model
-            item.model = model
-        if "api_protocol" in request.model_fields_set and request.api_protocol is not None:
-            changed_provider |= request.api_protocol != item.api_protocol
-            item.api_protocol = request.api_protocol
-        if request.api_key:
-            item.api_key_encrypted = encrypt_credential(request.api_key)
-            changed_provider = True
-        elif request.clear_api_key:
-            item.api_key_encrypted = None
-            changed_provider = True
-        changed_provider |= _apply_model_parameters(request, item)
-    except (AIConfigurationError, ValueError) as exc:
-        raise _configuration_error(exc) from exc
-    if changed_provider:
-        item.provider_tested = False
-        item.tool_calling_tested = False
-        item.streaming_tested = False
-    db.add(item)
-    await db.commit()
-    await db.refresh(item)
-    return await _user_response(db, current_user, item)
-
-
-@router.post("/api/auth/ai-settings/test", response_model=AIProviderTestResponse)
-async def test_user_ai_settings(
-    request: AIProviderTestRequest,
-    db: DatabaseSession,
-    current_user: ActiveUser,
-) -> AIProviderTestResponse:
-    item = await _get_user_settings(db, current_user.id)
-    system = await AISystemSettings.get_or_create(db)
-    if item.mode != "custom":
-        return AIProviderTestResponse(
-            success=False,
-            text_response_ok=False,
-            tool_calling_ok=False,
-            streaming_ok=False,
-            message="Switch to a custom provider before testing personal settings",
-        )
-    try:
-        base_url = normalize_base_url(request.base_url or item.base_url or "")
-        model = (request.model or item.model or "").strip()
-        api_key = request.api_key or decrypt_credential(item.api_key_encrypted)
-        if not model or not api_key:
-            raise AIConfigurationError("Base URL, model, and API key are required")
-        candidate = AIProviderConfig(
-            base_url=base_url,
-            model=model,
-            api_key=api_key,
-            timeout_seconds=system.request_timeout_seconds,
-            allowlist=tuple(system.private_endpoint_allowlist or []),
-            source="custom",
-            api_protocol=request.api_protocol or item.api_protocol,
-            admin_prompt=system.admin_prompt or "",
-            context_window_tokens=getattr(system, "context_window_tokens", 262_144),
-            requests_per_minute=getattr(system, "requests_per_minute", 60),
-            **_test_model_parameters(request, item),
-        )
-        # RPM waits and provider I/O must not keep a database transaction open.
-        await db.commit()
-        text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
-    except (AIConfigurationError, ValueError) as exc:
-        text_ok, tool_ok, streaming_ok, message = False, False, False, str(exc)
-    if _is_saved_provider_test(request, item):
-        _apply_saved_provider_test_flags(
-            item,
-            text_ok=text_ok,
-            tool_ok=tool_ok,
-            streaming_ok=streaming_ok,
-        )
-        db.add(item)
-        await db.commit()
-    return AIProviderTestResponse(
-        success=text_ok and tool_ok and streaming_ok,
-        text_response_ok=text_ok,
-        tool_calling_ok=tool_ok,
-        streaming_ok=streaming_ok,
-        message=message,
-    )
-
-
-async def _server_for_user(db: AsyncSession, user: User, server_id: int) -> Server:
-    server = (
-        await Server.get_by_id(db, server_id)
-        if user.is_admin
-        else await Server.get_by_id_and_user(db, server_id, user.id)
-    )
-    if server is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
-    return server
-
-
-async def _conversation_for_user(
-    db: AsyncSession, user: User, conversation_id: str
-) -> AIConversation:
-    result = await db.execute(
-        select(AIConversation).where(
-            AIConversation.id == conversation_id,
-            AIConversation.user_id == user.id,
-            AIConversation.source == "web",
-        )
-    )
-    conversation = result.scalar_one_or_none()
-    if conversation is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    return conversation
+from .ai_settings import _conversation_for_user as _conversation_for_user
+from .ai_settings import _server_for_user as _server_for_user
+from .ai_settings import get_user_ai_settings as get_user_ai_settings
+from .ai_settings import test_system_ai_settings as test_system_ai_settings
+from .ai_settings import test_user_ai_settings as test_user_ai_settings
+from .ai_settings import update_system_ai_settings as update_system_ai_settings  # noqa: E402
+from .ai_settings import update_user_ai_settings as update_user_ai_settings
 
 
 async def _require_enabled_provider(db: DatabaseSession, user) -> None:
@@ -721,9 +524,6 @@ async def decide_ai_tool(
     return {"status": item.status}
 
 
-from . import ai_stream_routes as _ai_stream_routes  # noqa: E402,F401
-from .ai_stream_routes import (  # noqa: E402,F401
-    _encode_sse_event,
-    ai_run_event_stream,
-    ai_run_events,
-)
+from .ai_stream_routes import _encode_sse_event as _encode_sse_event  # noqa: E402
+from .ai_stream_routes import ai_run_event_stream as ai_run_event_stream
+from .ai_stream_routes import ai_run_events as ai_run_events

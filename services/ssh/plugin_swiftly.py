@@ -3,8 +3,166 @@
 # ruff: noqa: F403,F405
 
 from .common import *
-from .common import _cleanup_local_download_dir
 from .gameinfo import ensure_remote_gameinfo_search_paths, gameinfo_progress_detail
+from .swiftly_transfer import _download_swiftly_panel, _download_swiftly_remote
+
+
+async def _ensure_swiftly_unzip(
+    self: SSHMixinBase, server: Server, temp_dir: str, send_progress
+) -> tuple[bool, str] | None:
+    check_unzip = "command -v unzip"
+    unzip_success, _, _ = await self.execute_command(check_unzip)
+
+    if not unzip_success:
+        await send_progress("⚠ Warning: unzip not found. Attempting to install...")
+
+        # Check package manager
+        check_apt = "command -v apt-get > /dev/null && echo 'apt' || echo 'none'"
+        _, pkg_mgr, _ = await self.execute_command(check_apt)
+
+        if "apt" in pkg_mgr:
+            install_cmd = "apt-get update && apt-get install -y unzip"
+            success, stdout, stderr = await self.execute_command(install_cmd, timeout=120)
+
+            if not success:
+                if server.sudo_password:
+                    await send_progress("Trying to install unzip with sudo...")
+                    install_cmd = f"echo '{server.sudo_password}' | sudo -S apt-get update && echo '{server.sudo_password}' | sudo -S apt-get install -y unzip"
+                    success, stdout, stderr = await self.execute_command(install_cmd, timeout=120)
+
+                    if success:
+                        await send_progress("✓ unzip installed successfully")
+                    else:
+                        await self.execute_command(f"rm -rf {temp_dir}")
+                        return (
+                            False,
+                            f"Could not install unzip. Please run: sudo apt-get install unzip\nError: {stderr[:200]}",
+                        )
+                else:
+                    await self.execute_command(f"rm -rf {temp_dir}")
+                    return (
+                        False,
+                        "unzip not found and no sudo password provided. Please install unzip: sudo apt-get install unzip",
+                    )
+            else:
+                await send_progress("✓ unzip installed successfully")
+
+            # Verify unzip is now available
+            unzip_success, _, _ = await self.execute_command(check_unzip)
+            if not unzip_success:
+                await self.execute_command(f"rm -rf {temp_dir}")
+                return (
+                    False,
+                    "unzip installation completed but command still not found. Please check system PATH.",
+                )
+        else:
+            await self.execute_command(f"rm -rf {temp_dir}")
+            return (
+                False,
+                "unzip not found and package manager not detected. Please install unzip manually.",
+            )
+    else:
+        await send_progress("✓ unzip is available")
+    return None
+
+
+async def _extract_and_verify_swiftly(
+    self: SSHMixinBase, cs2_dir: str, temp_dir: str, send_progress
+) -> tuple[bool, str]:
+    csgo_dir = f"{cs2_dir}/game/csgo"
+    extract_dir = f"{temp_dir}/extracted"
+    await send_progress("Extracting SwiftlyS2...")
+    extract_cmd = f"mkdir -p {extract_dir} && unzip -o {temp_dir}/swiftly.zip -d {extract_dir}"
+    success, stdout, stderr = await self.execute_command(extract_cmd, timeout=120)
+
+    if not success:
+        await self.execute_command(f"rm -rf {temp_dir}")
+        return False, f"SwiftlyS2 extraction failed: {stderr if stderr else 'unzip failed'}"
+
+    # Find the addons directory inside the extracted content
+    # maxdepth 2: addons/ may be at root or inside one top-level dir (e.g. swiftlys2-linux-vX/addons/)
+    find_addons_cmd = (
+        f"find {shlex.quote(extract_dir)} -maxdepth 2 -type d -name 'addons' | head -1"
+    )
+    _, addons_path, _ = await self.execute_command(find_addons_cmd)
+    addons_path = addons_path.strip()
+
+    if not addons_path or "/addons" not in addons_path:
+        await self.execute_command(f"rm -rf {temp_dir}")
+        return False, "SwiftlyS2 extraction failed: 'addons' directory not found in archive"
+
+    # Official archives ship addons/swiftlys2 (the Loader). Copy only that
+    # tree so a leftover addons/metamod in an older zip cannot overwrite a
+    # panel-installed Metamod.
+    swiftly_src = f"{addons_path.rstrip('/')}/swiftlys2"
+    check_src = f"test -d {shlex.quote(swiftly_src)} && echo 'found'"
+    src_ok, src_out, _ = await self.execute_command(check_src)
+    if not src_ok or "found" not in src_out:
+        await self.execute_command(f"rm -rf {temp_dir}")
+        return False, "SwiftlyS2 extraction failed: addons/swiftlys2 not found in archive"
+
+    await send_progress(f"Copying SwiftlyS2 Loader to {csgo_dir}/addons/swiftlys2...")
+    copy_cmd = (
+        f"mkdir -p {shlex.quote(csgo_dir + '/addons')} && "
+        f"cp -rf {shlex.quote(swiftly_src)} {shlex.quote(csgo_dir + '/addons/')}"
+    )
+    success, stdout, stderr = await self.execute_command(copy_cmd, timeout=120)
+
+    # Check if extraction actually succeeded by checking the directory
+    verify_extract = f"test -d {csgo_dir}/addons/swiftlys2 && echo 'extracted'"
+    verify_success, verify_out, _ = await self.execute_command(verify_extract)
+
+    if not verify_success or "extracted" not in verify_out:
+        await self.execute_command(f"rm -rf {temp_dir}")
+        return (
+            False,
+            "SwiftlyS2 extraction failed: addons/swiftlys2 directory not created after copy",
+        )
+
+    await send_progress("✓ SwiftlyS2 extracted successfully")
+
+    # Clean up temp directory
+    await self.execute_command(f"rm -rf {temp_dir}")
+
+    # Verify installation
+    swiftly_dir = f"{csgo_dir}/addons/swiftlys2"
+    verify_cmd = f"test -d {swiftly_dir} && echo 'installed'"
+    verify_success, verify_stdout, _ = await self.execute_command(verify_cmd)
+
+    if verify_success and "installed" in verify_stdout:
+        gameinfo_path = f"{csgo_dir}/gameinfo.gi"
+        await send_progress("Updating gameinfo.gi for the SwiftlyS2 Loader...")
+        gi_ok, gi_msg, gi_result = await ensure_remote_gameinfo_search_paths(
+            self.execute_command,
+            gameinfo_path,
+            include_swiftly=True,
+            detect_metamod_dir=f"{csgo_dir}/addons/metamod",
+        )
+        if not gi_ok:
+            return False, gi_msg
+        if gi_msg == "already configured":
+            await send_progress("✓ SwiftlyS2 already configured in gameinfo.gi")
+        else:
+            await send_progress(f"✓ gameinfo.gi updated ({gameinfo_progress_detail(gi_result)})")
+            if gi_result is not None and gi_result.has_metamod:
+                await send_progress(
+                    "✓ Existing Metamod SearchPath kept first so both loaders coexist"
+                )
+        await send_progress("=" * 60)
+        await send_progress("✓ SwiftlyS2 installed successfully!")
+        await send_progress("=" * 60)
+        await send_progress("NOTE: You need to restart your server for changes to take effect.")
+        await send_progress(
+            "SwiftlyS2 uses its own Loader (Game csgo/addons/swiftlys2). "
+            "It does not require Metamod."
+        )
+        await send_progress(
+            "After restart, use 'sw' in console to verify SwiftlyS2. "
+            "If Metamod is also installed, use 'meta list' to verify it."
+        )
+        return True, "SwiftlyS2 installed successfully"
+    else:
+        return False, "SwiftlyS2 installation verification failed"
 
 
 class SwiftlyMixin(SSHMixinBase):
@@ -84,297 +242,25 @@ class SwiftlyMixin(SSHMixinBase):
 
             # Check if panel proxy mode is enabled
             if server.use_panel_proxy:
-                # Panel Proxy Mode: Download to panel server first, then upload via SFTP
-                await send_progress("Using panel server proxy mode for SwiftlyS2 download...")
-
-                panel_archive_path = None
-                try:
-                    # Create temp directory on panel server
-                    panel_temp_dir = os.path.join(
-                        tempfile.gettempdir(), f"cs2_panel_proxy_swiftly_{server.user_id}"
-                    )
-                    os.makedirs(panel_temp_dir, exist_ok=True)
-
-                    # Create unique subdirectory
-                    download_id = str(uuid.uuid4())
-                    download_dir = os.path.join(panel_temp_dir, download_id)
-                    os.makedirs(download_dir, exist_ok=True)
-
-                    panel_archive_path = os.path.join(download_dir, "swiftly.zip")
-
-                    # Download to panel server, reusing the local archive cache
-                    from services.plugins.download_reuse import cached_download
-
-                    last_progress = 0
-
-                    async def download_progress_callback(bytes_downloaded, total_bytes):
-                        nonlocal last_progress
-                        if total_bytes > 0:
-                            percent = int((bytes_downloaded / total_bytes) * 100)
-                            if percent >= last_progress + 10 or percent == 100:
-                                last_progress = percent
-                                size_mb = bytes_downloaded / (1024 * 1024)
-                                total_mb = total_bytes / (1024 * 1024)
-                                await send_progress(
-                                    f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
-                                )
-
-                    success_download, error = await cached_download(
-                        swiftly_url,
-                        panel_archive_path,
-                        scope="framework-swiftly",
-                        timeout=300,
-                        progress_callback=download_progress_callback,
-                    )
-
-                    if not success_download:
-                        raise Exception(f"Failed to download SwiftlyS2: {error}")
-
-                    # Verify file size
-                    file_size = os.path.getsize(panel_archive_path)
-                    if file_size < 10000:
-                        raise Exception(f"Downloaded file is too small ({file_size} bytes)")
-
-                    await send_progress(
-                        f"Download complete ({file_size / (1024 * 1024):.2f} MB), uploading to server..."
-                    )
-
-                    # Upload to remote server via SFTP
-                    remote_archive_path = f"{temp_dir}/swiftly.zip"
-
-                    last_upload = 0
-
-                    async def upload_progress_callback(bytes_uploaded, total_bytes):
-                        nonlocal last_upload
-                        if total_bytes > 0:
-                            percent = int((bytes_uploaded / total_bytes) * 100)
-                            if percent >= last_upload + 10 or percent == 100:
-                                last_upload = percent
-                                size_mb = bytes_uploaded / (1024 * 1024)
-                                total_mb = total_bytes / (1024 * 1024)
-                                await send_progress(
-                                    f"Upload progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
-                                )
-
-                    success_upload, error = await self.upload_file_with_progress(
-                        panel_archive_path,
-                        remote_archive_path,
-                        server,
-                        progress_callback=upload_progress_callback,
-                    )
-
-                    if not success_upload:
-                        raise Exception(f"Failed to upload SwiftlyS2: {error}")
-
-                    await send_progress("✓ SwiftlyS2 uploaded successfully")
-
-                finally:
-                    # Clean up panel temp directory
-                    if panel_archive_path:
-                        await _cleanup_local_download_dir(download_dir, panel_temp_dir)
-            else:
-                # Original Mode: Download directly on remote server (use GitHub proxy if configured)
-                actual_download_url = swiftly_url
-                if server.github_proxy and server.github_proxy.strip():
-                    proxy_base = server.github_proxy.strip().rstrip("/")
-                    actual_download_url = f"{proxy_base}/{swiftly_url}"
-                    await send_progress("Using GitHub proxy for download")
-
-                # Download SwiftlyS2
-                await send_progress("Downloading SwiftlyS2...")
-                download_cmd = f"curl -L -o {temp_dir}/swiftly.zip {actual_download_url} || wget --no-check-certificate -O {temp_dir}/swiftly.zip {actual_download_url}"
-                success, stdout, stderr = await self.execute_command_streaming(
-                    download_cmd,
-                    output_callback=send_progress,
-                    timeout=300,  # 5 minutes for larger download
+                download_failure = await _download_swiftly_panel(
+                    self, server, temp_dir, swiftly_url, send_progress
                 )
-
-                # Verify the file was downloaded
-                check_cmd = f"test -f {temp_dir}/swiftly.zip && echo 'exists'"
-                check_success, check_stdout, _ = await self.execute_command(check_cmd)
-
-                if not check_success or "exists" not in check_stdout:
-                    await self.execute_command(f"rm -rf {temp_dir}")
-                    error_detail = (
-                        f"Download failed. stderr: {stderr[:500] if stderr else 'No error output'}"
-                    )
-                    return False, f"SwiftlyS2 download failed: {error_detail}"
-
-                # Check file size
-                size_cmd = f"stat -f%z {temp_dir}/swiftly.zip 2>/dev/null || stat -c%s {temp_dir}/swiftly.zip 2>/dev/null"
-                size_success, size_out, _ = await self.execute_command(size_cmd)
-                if size_success and size_out.strip():
-                    file_size = int(size_out.strip())
-                    if file_size < 10000:  # Less than 10KB is probably an error
-                        await self.execute_command(f"rm -rf {temp_dir}")
-                        return (
-                            False,
-                            f"Downloaded file is too small ({file_size} bytes). Download may have failed.",
-                        )
-                    await send_progress(f"✓ Downloaded {file_size} bytes")
-
-                await send_progress("✓ SwiftlyS2 downloaded successfully")
+            else:
+                download_failure = await _download_swiftly_remote(
+                    self, server, temp_dir, swiftly_url, send_progress
+                )
+            if download_failure is not None:
+                return download_failure
 
             # Check if unzip is available and try to install if missing
-            check_unzip = "command -v unzip"
-            unzip_success, _, _ = await self.execute_command(check_unzip)
-
-            if not unzip_success:
-                await send_progress("⚠ Warning: unzip not found. Attempting to install...")
-
-                # Check package manager
-                check_apt = "command -v apt-get > /dev/null && echo 'apt' || echo 'none'"
-                _, pkg_mgr, _ = await self.execute_command(check_apt)
-
-                if "apt" in pkg_mgr:
-                    install_cmd = "apt-get update && apt-get install -y unzip"
-                    success, stdout, stderr = await self.execute_command(install_cmd, timeout=120)
-
-                    if not success:
-                        if server.sudo_password:
-                            await send_progress("Trying to install unzip with sudo...")
-                            install_cmd = f"echo '{server.sudo_password}' | sudo -S apt-get update && echo '{server.sudo_password}' | sudo -S apt-get install -y unzip"
-                            success, stdout, stderr = await self.execute_command(
-                                install_cmd, timeout=120
-                            )
-
-                            if success:
-                                await send_progress("✓ unzip installed successfully")
-                            else:
-                                await self.execute_command(f"rm -rf {temp_dir}")
-                                return (
-                                    False,
-                                    f"Could not install unzip. Please run: sudo apt-get install unzip\nError: {stderr[:200]}",
-                                )
-                        else:
-                            await self.execute_command(f"rm -rf {temp_dir}")
-                            return (
-                                False,
-                                "unzip not found and no sudo password provided. Please install unzip: sudo apt-get install unzip",
-                            )
-                    else:
-                        await send_progress("✓ unzip installed successfully")
-
-                    # Verify unzip is now available
-                    unzip_success, _, _ = await self.execute_command(check_unzip)
-                    if not unzip_success:
-                        await self.execute_command(f"rm -rf {temp_dir}")
-                        return (
-                            False,
-                            "unzip installation completed but command still not found. Please check system PATH.",
-                        )
-                else:
-                    await self.execute_command(f"rm -rf {temp_dir}")
-                    return (
-                        False,
-                        "unzip not found and package manager not detected. Please install unzip manually.",
-                    )
-            else:
-                await send_progress("✓ unzip is available")
+            unzip_failure = await _ensure_swiftly_unzip(self, server, temp_dir, send_progress)
+            if unzip_failure is not None:
+                return unzip_failure
 
             # Extract SwiftlyS2 to CS2 directory
             # The zip contains a version-named top-level directory (e.g. swiftlys2-linux-v1.2.0-with-runtimes/addons/...)
             # We need to strip that top-level directory and copy the contents into csgo/
-            csgo_dir = f"{cs2_dir}/game/csgo"
-            extract_dir = f"{temp_dir}/extracted"
-            await send_progress("Extracting SwiftlyS2...")
-            extract_cmd = (
-                f"mkdir -p {extract_dir} && unzip -o {temp_dir}/swiftly.zip -d {extract_dir}"
-            )
-            success, stdout, stderr = await self.execute_command(extract_cmd, timeout=120)
-
-            if not success:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                return False, f"SwiftlyS2 extraction failed: {stderr if stderr else 'unzip failed'}"
-
-            # Find the addons directory inside the extracted content
-            # maxdepth 2: addons/ may be at root or inside one top-level dir (e.g. swiftlys2-linux-vX/addons/)
-            find_addons_cmd = (
-                f"find {shlex.quote(extract_dir)} -maxdepth 2 -type d -name 'addons' | head -1"
-            )
-            _, addons_path, _ = await self.execute_command(find_addons_cmd)
-            addons_path = addons_path.strip()
-
-            if not addons_path or "/addons" not in addons_path:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                return False, "SwiftlyS2 extraction failed: 'addons' directory not found in archive"
-
-            # Official archives ship addons/swiftlys2 (the Loader). Copy only that
-            # tree so a leftover addons/metamod in an older zip cannot overwrite a
-            # panel-installed Metamod.
-            swiftly_src = f"{addons_path.rstrip('/')}/swiftlys2"
-            check_src = f"test -d {shlex.quote(swiftly_src)} && echo 'found'"
-            src_ok, src_out, _ = await self.execute_command(check_src)
-            if not src_ok or "found" not in src_out:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                return False, "SwiftlyS2 extraction failed: addons/swiftlys2 not found in archive"
-
-            await send_progress(f"Copying SwiftlyS2 Loader to {csgo_dir}/addons/swiftlys2...")
-            copy_cmd = (
-                f"mkdir -p {shlex.quote(csgo_dir + '/addons')} && "
-                f"cp -rf {shlex.quote(swiftly_src)} {shlex.quote(csgo_dir + '/addons/')}"
-            )
-            success, stdout, stderr = await self.execute_command(copy_cmd, timeout=120)
-
-            # Check if extraction actually succeeded by checking the directory
-            verify_extract = f"test -d {csgo_dir}/addons/swiftlys2 && echo 'extracted'"
-            verify_success, verify_out, _ = await self.execute_command(verify_extract)
-
-            if not verify_success or "extracted" not in verify_out:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                return (
-                    False,
-                    "SwiftlyS2 extraction failed: addons/swiftlys2 directory not created after copy",
-                )
-
-            await send_progress("✓ SwiftlyS2 extracted successfully")
-
-            # Clean up temp directory
-            await self.execute_command(f"rm -rf {temp_dir}")
-
-            # Verify installation
-            swiftly_dir = f"{csgo_dir}/addons/swiftlys2"
-            verify_cmd = f"test -d {swiftly_dir} && echo 'installed'"
-            verify_success, verify_stdout, _ = await self.execute_command(verify_cmd)
-
-            if verify_success and "installed" in verify_stdout:
-                gameinfo_path = f"{csgo_dir}/gameinfo.gi"
-                await send_progress("Updating gameinfo.gi for the SwiftlyS2 Loader...")
-                gi_ok, gi_msg, gi_result = await ensure_remote_gameinfo_search_paths(
-                    self.execute_command,
-                    gameinfo_path,
-                    include_swiftly=True,
-                    detect_metamod_dir=f"{csgo_dir}/addons/metamod",
-                )
-                if not gi_ok:
-                    return False, gi_msg
-                if gi_msg == "already configured":
-                    await send_progress("✓ SwiftlyS2 already configured in gameinfo.gi")
-                else:
-                    await send_progress(
-                        f"✓ gameinfo.gi updated ({gameinfo_progress_detail(gi_result)})"
-                    )
-                    if gi_result is not None and gi_result.has_metamod:
-                        await send_progress(
-                            "✓ Existing Metamod SearchPath kept first so both loaders coexist"
-                        )
-                await send_progress("=" * 60)
-                await send_progress("✓ SwiftlyS2 installed successfully!")
-                await send_progress("=" * 60)
-                await send_progress(
-                    "NOTE: You need to restart your server for changes to take effect."
-                )
-                await send_progress(
-                    "SwiftlyS2 uses its own Loader (Game csgo/addons/swiftlys2). "
-                    "It does not require Metamod."
-                )
-                await send_progress(
-                    "After restart, use 'sw' in console to verify SwiftlyS2. "
-                    "If Metamod is also installed, use 'meta list' to verify it."
-                )
-                return True, "SwiftlyS2 installed successfully"
-            else:
-                return False, "SwiftlyS2 installation verification failed"
+            return await _extract_and_verify_swiftly(self, cs2_dir, temp_dir, send_progress)
 
         except Exception as e:
             await send_progress(f"Installation error: {str(e)}")

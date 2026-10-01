@@ -79,6 +79,26 @@ def _read_key_file(path: Path) -> str:
     return value
 
 
+def _write_staged_key(descriptor: int, temporary: Path, generated: bytes) -> None:
+    write_error: OSError | None = None
+    try:
+        payload = generated + b"\n"
+        offset = 0
+        while offset < len(payload):
+            offset += os.write(descriptor, payload[offset:])
+        os.fsync(descriptor)
+    except OSError as exc:
+        write_error = exc
+    finally:
+        os.close(descriptor)
+    if write_error is not None:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise AIConfigurationError("Unable to persist AI credential key file") from write_error
+
+
 def _load_or_create_key_file(path: Path | None = None) -> str:
     path = path or CREDENTIAL_KEY_FILE
     if path.parent.is_symlink():
@@ -100,23 +120,7 @@ def _load_or_create_key_file(path: Path | None = None) -> str:
         descriptor = os.open(temporary, flags, 0o600)
     except OSError as exc:
         raise AIConfigurationError(f"Unable to stage AI credential key file: {path}") from exc
-    write_error: OSError | None = None
-    try:
-        payload = generated + b"\n"
-        offset = 0
-        while offset < len(payload):
-            offset += os.write(descriptor, payload[offset:])
-        os.fsync(descriptor)
-    except OSError as exc:
-        write_error = exc
-    finally:
-        os.close(descriptor)
-    if write_error is not None:
-        try:
-            temporary.unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise AIConfigurationError("Unable to persist AI credential key file") from write_error
+    _write_staged_key(descriptor, temporary, generated)
     created = False
     try:
         os.link(temporary, path, follow_symlinks=False)

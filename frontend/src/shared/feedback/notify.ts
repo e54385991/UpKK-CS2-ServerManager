@@ -1,25 +1,13 @@
 "use client";
 
-import { toast } from "sonner";
+import { publishNotification } from "./notification-store";
 
 /** App-wide toast API. Use for action results, not form-field validation. */
 export const notify = {
-  success(message: string) {
-    toast.success(message);
-  },
-  error(message: string) {
-    toast.error(message, { duration: 6000 });
-  },
-  warning(message: string) {
-    toast.warning(message);
-  },
-  info(message: string) {
-    toast.info(message);
-  },
-  message(message: string) {
-    toast(message);
-  },
-  dismiss(id?: string | number) {
-    toast.dismiss(id);
-  },
+  success(message: string) { publishNotification({ kind: "success", message }); },
+  error(message: string) { publishNotification({ kind: "error", message }); },
+  warning(message: string) { publishNotification({ kind: "warning", message }); },
+  info(message: string) { publishNotification({ kind: "info", message }); },
+  message(message: string) { publishNotification({ kind: "message", message }); },
+  dismiss(id?: string | number) { publishNotification({ kind: "dismiss", id }); },
 };

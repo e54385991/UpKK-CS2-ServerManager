@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ListTodo, LoaderCircle } from "lucide-react";
 import {
@@ -8,7 +8,7 @@ import {
   openActivityTray,
   useActivityTray,
 } from "@/modules/servers/activity-store";
-import { ActivityTrayPanel } from "@/modules/shell/activity-tray-panel";
+const ActivityTrayPanel = lazy(() => import("@/modules/shell/activity-tray-panel").then((module) => ({ default: module.ActivityTrayPanel })));
 import {
   countActiveMarketTasks,
   countFailedMarketTasks,
@@ -23,6 +23,7 @@ import { cn } from "@/shared/lib/cn";
 
 export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
   const t = useTranslations("shell");
+  const feedback = useTranslations("feedback");
   const { open, selectedId, overlay, dismissedIds } = useActivityTray();
   const { inbox, setInbox } = useActivityInbox();
   const [tab, setTab] = useState<TrayTab>("queue");
@@ -126,6 +127,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
       </Button>
 
       {open ? (
+        <Suspense fallback={<div role="status" className="absolute right-0 z-50 mt-2 rounded-lg border border-line bg-surface p-4 shadow-panel">{feedback("loading")}</div>}>
         <ActivityTrayPanel
           isAdmin={isAdmin}
           hasVisibleMarketTasks={hasVisibleMarketTasks}
@@ -147,6 +149,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
           onForceStop={commands.forceStopOne}
           onDismiss={commands.dismissTerminalOne}
         />
+        </Suspense>
       ) : null}
     </div>
   );

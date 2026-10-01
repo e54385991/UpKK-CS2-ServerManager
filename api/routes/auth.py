@@ -2,50 +2,55 @@
 Authentication routes for user registration and login
 """
 
-import logging
-from datetime import timedelta
+import logging as logging
+from datetime import timedelta as timedelta
 
-from anyio import to_thread
-from fastapi import APIRouter, HTTPException, Request, Response, status
-from google.auth.transport import requests
-from google.oauth2 import id_token
-from sqlmodel import select
+from anyio import to_thread as to_thread
+from fastapi import APIRouter as APIRouter
+from fastapi import HTTPException as HTTPException
+from fastapi import Request as Request
+from fastapi import Response as Response
+from fastapi import status as status
+from google.auth.transport import requests as requests
+from google.oauth2 import id_token as id_token
+from sqlmodel import select as select
 
-from api.dependencies import ActiveUser, DatabaseSession
-from api.registration import ensure_registration_enabled, register_user
-from modules import (
-    ApiKeyGenerate,
-    ApiKeyResponse,
-    ForgotPasswordRequest,
-    GenerateServerTokenRequest,
-    GenerateServerTokenResponse,
-    GitHubTokenStatusResponse,
-    GoogleOAuthRequest,
-    PasswordReset,
-    ResetPasswordRequest,
-    S3SettingsResponse,
-    S3SettingsUpdate,
-    SteamApiKeyResponse,
-    Token,
-    User,
-    UserCreate,
-    UserLogin,
-    UserProfileUpdate,
-    UserResponse,
-    clear_web_session_cookie,
-    create_access_token,
-    generate_api_key,
-    get_password_hash_async,
-    set_web_session_cookie,
-    settings,
-    verify_password_async,
-)
-from services.audit_log_service import INVALID_CREDENTIALS_DETAILS, record_audit_event
-from services.captcha_policy import require_captcha
-from services.google_oauth import resolve_google_client_id
-from services.rate_limit import enforce_rate_limit
-from services.s3_backup_service import s3_backup_service
-from services.steam_api_service import steam_api_service
+from api.dependencies import ActiveUser as ActiveUser
+from api.dependencies import DatabaseSession as DatabaseSession
+from api.registration import ensure_registration_enabled as ensure_registration_enabled
+from api.registration import register_user as register_user
+from modules import ApiKeyGenerate as ApiKeyGenerate
+from modules import ApiKeyResponse as ApiKeyResponse
+from modules import ForgotPasswordRequest as ForgotPasswordRequest
+from modules import GenerateServerTokenRequest as GenerateServerTokenRequest
+from modules import GenerateServerTokenResponse as GenerateServerTokenResponse
+from modules import GitHubTokenStatusResponse as GitHubTokenStatusResponse
+from modules import GoogleOAuthRequest as GoogleOAuthRequest
+from modules import PasswordReset as PasswordReset
+from modules import ResetPasswordRequest as ResetPasswordRequest
+from modules import S3SettingsResponse as S3SettingsResponse
+from modules import S3SettingsUpdate as S3SettingsUpdate
+from modules import SteamApiKeyResponse as SteamApiKeyResponse
+from modules import Token as Token
+from modules import User as User
+from modules import UserCreate as UserCreate
+from modules import UserLogin as UserLogin
+from modules import UserProfileUpdate as UserProfileUpdate
+from modules import UserResponse as UserResponse
+from modules import clear_web_session_cookie as clear_web_session_cookie
+from modules import create_access_token as create_access_token
+from modules import generate_api_key as generate_api_key
+from modules import get_password_hash_async as get_password_hash_async
+from modules import set_web_session_cookie as set_web_session_cookie
+from modules import settings as settings
+from modules import verify_password_async as verify_password_async
+from services.audit_log_service import INVALID_CREDENTIALS_DETAILS as INVALID_CREDENTIALS_DETAILS
+from services.audit_log_service import record_audit_event as record_audit_event
+from services.captcha_policy import require_captcha as require_captcha
+from services.google_oauth import resolve_google_client_id as resolve_google_client_id
+from services.rate_limit import enforce_rate_limit as enforce_rate_limit
+from services.s3_backup_service import s3_backup_service as s3_backup_service
+from services.steam_api_service import steam_api_service as steam_api_service
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
@@ -541,169 +546,7 @@ async def reset_password_with_token(
     )
 
 
-@router.post("/google-oauth", response_model=Token)
-async def google_oauth_login(
-    oauth_data: GoogleOAuthRequest,
-    request: Request,
-    response: Response,
-    db: DatabaseSession,
-):
-    """
-    Google OAuth login/register endpoint
-
-    If user exists with this Google ID, log them in.
-    If user doesn't exist, register a new user with username and password from request.
-    Email is auto-bound from Google account.
-    """
-    logger = logging.getLogger(__name__)
-    await enforce_rate_limit(request, "google_oauth", limit=10, window=60)
-
-    try:
-        # Verify the Google ID token
-        try:
-            # Verify with Google Client ID if configured
-            client_id = await resolve_google_client_id(db)
-            if not client_id:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Google OAuth is not configured. Set the client ID in Settings or GOOGLE_CLIENT_ID.",
-                )
-
-            idinfo = await to_thread.run_sync(
-                id_token.verify_oauth2_token,
-                oauth_data.id_token,
-                requests.Request(),
-                client_id,
-            )
-
-            # Get user info from token
-            google_user_id = idinfo["sub"]
-            email = idinfo.get("email")
-
-            if not email:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Email not provided by Google. Please ensure email permission is granted.",
-                )
-
-        except ValueError as e:
-            logger.error(f"Invalid Google token: {e}")
-            await record_audit_event(
-                category="auth",
-                action="google_oauth",
-                status="failure",
-                request=request,
-                details={"reason": "invalid_token"},
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google ID token"
-            ) from e
-
-        # Check if user exists with this Google ID
-        user = await User.get_by_google_id(db, google_user_id)
-
-        if user:
-            # User exists, log them in
-            if not user.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail="User account is inactive"
-                )
-
-            # Create access token
-            access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-            access_token = create_access_token(
-                data={"sub": str(user.id), "username": user.username},
-                expires_delta=access_token_expires,
-            )
-            set_web_session_cookie(request, response, access_token)
-            await record_audit_event(
-                category="auth",
-                action="google_oauth",
-                status="success",
-                user=user,
-                request=request,
-                details={"flow": "login"},
-            )
-
-            return {"access_token": access_token, "token_type": "bearer"}
-
-        else:
-            # User doesn't exist, need to register
-            if not oauth_data.username or not oauth_data.password:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Username and password required for new Google account registration",
-                )
-
-            await ensure_registration_enabled(db)
-
-            # Check if username already exists
-            existing_user = await User.get_by_username(db, oauth_data.username)
-            if existing_user:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Username already taken. Please choose a different username.",
-                )
-
-            # Check if email already exists (from non-Google registration)
-            existing_email = await User.get_by_email(db, email)
-            if existing_email:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        "An account with this email already exists. "
-                        "Sign in with your password, then bind Google in your profile."
-                    ),
-                )
-
-            await db.commit()
-            # Create new user with Google OAuth
-            hashed_password = await get_password_hash_async(oauth_data.password)
-            new_user = User(
-                username=oauth_data.username,
-                email=email,
-                hashed_password=hashed_password,
-                google_id=google_user_id,
-                oauth_provider="google",
-                is_active=True,
-            )
-            db.add(new_user)
-            await db.commit()
-            await db.refresh(new_user)
-
-            # Create access token for the new user
-            access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-            access_token = create_access_token(
-                data={"sub": str(new_user.id), "username": new_user.username},
-                expires_delta=access_token_expires,
-            )
-            set_web_session_cookie(request, response, access_token)
-            await record_audit_event(
-                category="auth",
-                action="google_oauth",
-                status="success",
-                user=new_user,
-                request=request,
-                details={"flow": "register"},
-            )
-
-            return {"access_token": access_token, "token_type": "bearer"}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in Google OAuth login: {e}", exc_info=True)
-        await record_audit_event(
-            category="auth",
-            action="google_oauth",
-            status="failure",
-            request=request,
-            details={"reason": "oauth_error"},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Google OAuth login failed: {str(e)}",
-        ) from e
+from .auth_google import google_oauth_login as google_oauth_login  # noqa: E402
 
 
 @router.post("/logout")

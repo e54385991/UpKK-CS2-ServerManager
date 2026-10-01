@@ -1,8 +1,16 @@
 "use client";
 
-import { Toaster } from "sonner";
+import { useEffect } from "react";
+import { Toaster, toast } from "sonner";
+import { registerNotificationRenderer } from "./notification-store";
 
 export function AppToaster() {
+  useEffect(() => registerNotificationRenderer((notification) => {
+    if (notification.kind === "dismiss") toast.dismiss(notification.id);
+    else if (notification.kind === "message") toast(notification.message);
+    else if (notification.kind === "error") toast.error(notification.message, { duration: 6000 });
+    else toast[notification.kind](notification.message);
+  }), []);
   return (
     <Toaster
       theme="dark"

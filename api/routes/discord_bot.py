@@ -2,64 +2,69 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal as Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
-from sqlalchemy import or_
-from sqlmodel import col, select
+from fastapi import APIRouter as APIRouter
+from fastapi import HTTPException as HTTPException
+from fastapi import Query as Query
+from fastapi import Request as Request
+from fastapi import status as status
+from sqlalchemy import or_ as or_
+from sqlmodel import col as col
+from sqlmodel import select as select
 
-from api.dependencies import ActiveUser, DatabaseSession, require_server_access
-from modules import (
-    AgentPolicyResponse,
-    AgentPolicyUpdate,
-    DiscordBindingResponse,
-    DiscordBindingUpdate,
-    DiscordBotOptionsResponse,
-    DiscordBotSettingsResponse,
-    DiscordBotSettingsUpdate,
-    DiscordBotTestRequest,
-    DiscordBotTestResponse,
-    DiscordCapability,
-    DiscordChannelOption,
-    DiscordGlobalBindingResponse,
-    DiscordGlobalBindingUpdate,
-    DiscordGuildOption,
-    DiscordMenuPushOptionsResponse,
-    DiscordMenuPushRequest,
-    DiscordMenuPushResponse,
-    DiscordRoleOption,
-    Server,
-    ServerAgentPolicy,
-    ServerDiscordBinding,
-    User,
-    UserDiscordBot,
-)
-from services.agent_policy_service import get_effective_agent_policy
-from services.ai_security import (
-    AIConfigurationError,
-    decrypt_credential,
-    encrypt_credential,
-    get_effective_provider,
-)
-from services.audit_log_service import record_audit_event
+from api.dependencies import ActiveUser as ActiveUser
+from api.dependencies import DatabaseSession as DatabaseSession
+from api.dependencies import require_server_access as require_server_access
+from modules import AgentPolicyResponse as AgentPolicyResponse
+from modules import AgentPolicyUpdate as AgentPolicyUpdate
+from modules import DiscordBindingResponse as DiscordBindingResponse
+from modules import DiscordBindingUpdate as DiscordBindingUpdate
+from modules import DiscordBotOptionsResponse as DiscordBotOptionsResponse
+from modules import DiscordBotSettingsResponse as DiscordBotSettingsResponse
+from modules import DiscordBotSettingsUpdate as DiscordBotSettingsUpdate
+from modules import DiscordBotTestRequest as DiscordBotTestRequest
+from modules import DiscordBotTestResponse as DiscordBotTestResponse
+from modules import DiscordCapability as DiscordCapability
+from modules import DiscordChannelOption as DiscordChannelOption
+from modules import DiscordGlobalBindingResponse as DiscordGlobalBindingResponse
+from modules import DiscordGlobalBindingUpdate as DiscordGlobalBindingUpdate
+from modules import DiscordGuildOption as DiscordGuildOption
+from modules import DiscordMenuPushOptionsResponse as DiscordMenuPushOptionsResponse
+from modules import DiscordMenuPushRequest as DiscordMenuPushRequest
+from modules import DiscordMenuPushResponse as DiscordMenuPushResponse
+from modules import DiscordRoleOption as DiscordRoleOption
+from modules import Server as Server
+from modules import ServerAgentPolicy as ServerAgentPolicy
+from modules import ServerDiscordBinding as ServerDiscordBinding
+from modules import User as User
+from modules import UserDiscordBot as UserDiscordBot
+from services.agent_policy_service import get_effective_agent_policy as get_effective_agent_policy
+from services.ai_security import AIConfigurationError as AIConfigurationError
+from services.ai_security import decrypt_credential as decrypt_credential
+from services.ai_security import encrypt_credential as encrypt_credential
+from services.ai_security import get_effective_provider as get_effective_provider
+from services.audit_log_service import record_audit_event as record_audit_event
+from services.discord_binding_template_service import global_binding_counts as global_binding_counts
 from services.discord_binding_template_service import (
-    global_binding_counts,
-    sync_global_discord_binding,
+    sync_global_discord_binding as sync_global_discord_binding,
 )
 from services.discord_bot_service import (
-    DISCORD_COMMAND_CHANNEL_TYPES,
-    DISCORD_MENU_PUSH_CHANNEL_TYPES,
-    DiscordBotAPIError,
-    build_invite_url,
-    delete_menu_launcher_after,
-    get_guild_locale,
-    get_guild_options,
-    list_guilds,
-    send_menu_launcher,
-    test_bot_token,
+    DISCORD_COMMAND_CHANNEL_TYPES as DISCORD_COMMAND_CHANNEL_TYPES,
 )
-from services.redis_manager import redis_manager
-from services.task_registry import discord_menu_task_registry
+from services.discord_bot_service import (
+    DISCORD_MENU_PUSH_CHANNEL_TYPES as DISCORD_MENU_PUSH_CHANNEL_TYPES,
+)
+from services.discord_bot_service import DiscordBotAPIError as DiscordBotAPIError
+from services.discord_bot_service import build_invite_url as build_invite_url
+from services.discord_bot_service import delete_menu_launcher_after as delete_menu_launcher_after
+from services.discord_bot_service import get_guild_locale as get_guild_locale
+from services.discord_bot_service import get_guild_options as get_guild_options
+from services.discord_bot_service import list_guilds as list_guilds
+from services.discord_bot_service import send_menu_launcher as send_menu_launcher
+from services.discord_bot_service import test_bot_token as test_bot_token
+from services.redis_manager import redis_manager as redis_manager
+from services.task_registry import discord_menu_task_registry as discord_menu_task_registry
 
 router = APIRouter(tags=["discord-bot"])
 
@@ -82,316 +87,18 @@ async def _notify_manager(user_id: int) -> None:
     await discord_bot_manager.reconcile_user(user_id)
 
 
-async def _load_discord_options(
-    user_id: int, token: str, guild_id: str | None = None
-) -> tuple[list[dict], list[dict], list[dict]]:
-    """Prefer the connected Gateway cache, with Discord REST as a safe fallback."""
-
-    from services.discord_bot_manager import discord_bot_manager
-
-    cached = discord_bot_manager.configuration_options(user_id, guild_id)
-    if cached is not None:
-        if cached.get("guild_missing"):
-            raise DiscordBotAPIError("The Bot is not a member of the selected Guild")
-        return cached["guilds"], cached["channels"], cached["roles"]
-    guilds = await list_guilds(token)
-    if guild_id is None:
-        return guilds, [], []
-    channels, roles = await get_guild_options(token, guild_id)
-    return guilds, channels, roles
-
-
-def _bot_response(bot: UserDiscordBot | None) -> DiscordBotSettingsResponse:
-    mode = _trigger_mode(bot.message_trigger_mode if bot is not None else None)
-    return DiscordBotSettingsResponse(
-        enabled=bool(bot and bot.enabled),
-        token_configured=bool(bot and bot.token_encrypted),
-        message_trigger_mode=mode,
-        application_id=bot.application_id if bot else None,
-        bot_user_id=bot.bot_user_id if bot else None,
-        username=bot.username if bot else None,
-        discriminator=bot.discriminator if bot else None,
-        connection_status=bot.connection_status if bot else "not_configured",
-        last_connected_at=bot.last_connected_at if bot else None,
-        last_error=bot.last_error if bot else None,
-        invite_url=build_invite_url(bot.application_id if bot else None),
-    )
-
-
-async def _stored_token(db: DatabaseSession, user_id: int) -> tuple[UserDiscordBot, str]:
-    bot = await db.get(UserDiscordBot, user_id)
-    if bot is None or not bot.token_encrypted:
-        raise HTTPException(status_code=409, detail="Discord Bot Token is not configured")
-    token = decrypt_credential(bot.token_encrypted)
-    if not token:
-        raise HTTPException(status_code=409, detail="Discord Bot Token is unavailable")
-    return bot, token
-
-
-async def _connected_bot_token(db: DatabaseSession, user_id: int) -> tuple[UserDiscordBot, str]:
-    bot, token = await _stored_token(db, user_id)
-    if not bot.enabled or bot.connection_status != "connected":
-        raise HTTPException(
-            status_code=409,
-            detail="Discord Bot must be enabled and connected before pushing a menu",
-        )
-    return bot, token
-
-
-async def _bound_menu_push_channels(db: DatabaseSession, user_id: int) -> dict[str, set[str]]:
-    result = await db.execute(
-        select(ServerDiscordBinding, Server)
-        .join(Server, col(Server.id) == col(ServerDiscordBinding.server_id))
-        .where(
-            ServerDiscordBinding.user_id == user_id,
-            col(ServerDiscordBinding.enabled).is_(True),
-            Server.user_id == user_id,
-        )
-    )
-    known_capabilities = {item.value for item in DiscordCapability}
-    channels_by_guild: dict[str, set[str]] = {}
-    for binding, server in result.all():
-        if (
-            server.user_id != user_id
-            or binding.user_id != user_id
-            or not binding.guild_id
-            or binding.invalid_reason is not None
-            or not known_capabilities.intersection(binding.capabilities or [])
-        ):
-            continue
-        channels_by_guild.setdefault(binding.guild_id, set()).update(binding.channel_ids or [])
-    bot = await db.get(UserDiscordBot, user_id)
-    if (
-        bot is not None
-        and bot.global_binding_configured is True
-        and bot.global_binding_enabled is True
-        and isinstance(bot.global_guild_id, str)
-        and bot.global_guild_id
-        and known_capabilities.intersection(bot.global_capabilities or [])
-    ):
-        channels_by_guild.setdefault(bot.global_guild_id, set()).update(
-            str(item) for item in (bot.global_channel_ids or []) if item
-        )
-    return channels_by_guild
-
-
-async def _validate_binding_selection(
-    user_id: int,
-    token: str,
-    *,
-    guild_id: str | None,
-    channel_ids: list[str],
-    role_ids: list[str],
-) -> None:
-    if guild_id is None:
-        return
-    try:
-        _guilds, channels, roles = await _load_discord_options(user_id, token, guild_id)
-    except DiscordBotAPIError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    valid_channels = {
-        str(item["id"])
-        for item in channels
-        if int(item.get("type", -1)) in DISCORD_COMMAND_CHANNEL_TYPES
-    }
-    valid_roles = {str(item["id"]) for item in roles if str(item["id"]) != guild_id}
-    if set(channel_ids) - valid_channels:
-        raise HTTPException(status_code=422, detail="One or more channels are invalid")
-    if set(role_ids) - valid_roles:
-        raise HTTPException(status_code=422, detail="One or more roles are invalid")
-
-
-async def _discord_options_response(
-    user_id: int, token: str, guild_id: str | None
-) -> DiscordBotOptionsResponse:
-    try:
-        guild_payload, channels, roles = await _load_discord_options(user_id, token, guild_id)
-    except DiscordBotAPIError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    guilds = [
-        DiscordGuildOption(
-            id=str(item["id"]), name=str(item.get("name") or item["id"]), icon=item.get("icon")
-        )
-        for item in guild_payload
-    ]
-    if guild_id is None:
-        return DiscordBotOptionsResponse(guilds=guilds)
-    return DiscordBotOptionsResponse(
-        guilds=guilds,
-        channels=[
-            DiscordChannelOption(
-                id=str(item["id"]),
-                guild_id=guild_id,
-                name=str(item.get("name") or item["id"]),
-                type=int(item.get("type", 0)),
-            )
-            for item in channels
-            if int(item.get("type", -1)) in DISCORD_COMMAND_CHANNEL_TYPES
-        ],
-        roles=[
-            DiscordRoleOption(
-                id=str(item["id"]),
-                guild_id=guild_id,
-                name=str(item.get("name") or item["id"]),
-                position=int(item.get("position", 0)),
-            )
-            for item in roles
-            if str(item["id"]) != guild_id
-        ],
-    )
-
-
-async def _global_binding_response(
-    db: DatabaseSession,
-    bot: UserDiscordBot,
-    *,
-    synced_server_count: int = 0,
-) -> DiscordGlobalBindingResponse:
-    server_count, matching_server_count = await global_binding_counts(db, bot)
-    return DiscordGlobalBindingResponse(
-        configured=bot.global_binding_configured,
-        enabled=bot.global_binding_enabled,
-        guild_id=bot.global_guild_id,
-        channel_ids=list(bot.global_channel_ids or []),
-        role_ids=list(bot.global_role_ids or []),
-        user_ids=list(bot.global_user_ids or []),
-        allow_channel_managers=bot.global_allow_channel_managers,
-        allow_server_administrators=bot.global_allow_server_administrators,
-        capabilities=[
-            capability
-            for value in bot.global_capabilities or []
-            if (capability := _discord_capability(value)) is not None
-        ],
-        server_count=server_count,
-        matching_server_count=matching_server_count,
-        synced_server_count=synced_server_count,
-    )
-
-
-@router.get("/api/auth/discord-bot", response_model=DiscordBotSettingsResponse)
-async def get_discord_bot(
-    db: DatabaseSession, current_user: ActiveUser
-) -> DiscordBotSettingsResponse:
-    return _bot_response(await db.get(UserDiscordBot, current_user.id))
-
-
-@router.put("/api/auth/discord-bot", response_model=DiscordBotSettingsResponse)
-async def update_discord_bot(
-    request: DiscordBotSettingsUpdate,
-    db: DatabaseSession,
-    current_user: ActiveUser,
-    http_request: Request,
-) -> DiscordBotSettingsResponse:
-    bot = await db.get(UserDiscordBot, current_user.id)
-    if bot is None:
-        bot = UserDiscordBot(user_id=current_user.id)
-    if request.token is not None:
-        try:
-            identity = await test_bot_token(request.token)
-        except DiscordBotAPIError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        duplicate = await db.execute(
-            select(UserDiscordBot).where(
-                UserDiscordBot.user_id != current_user.id,
-                or_(
-                    col(UserDiscordBot.application_id) == identity.application_id,
-                    col(UserDiscordBot.bot_user_id) == identity.bot_user_id,
-                ),
-            )
-        )
-        if duplicate.scalar_one_or_none() is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="This Discord Bot is already configured by another panel user",
-            )
-        bot.token_encrypted = encrypt_credential(request.token)
-        bot.application_id = identity.application_id
-        bot.bot_user_id = identity.bot_user_id
-        bot.username = identity.username
-        bot.discriminator = identity.discriminator
-        bot.last_error = None
-        bot.connection_status = "configured"
-    if request.enabled is not None:
-        if request.enabled and not bot.token_encrypted:
-            raise HTTPException(status_code=409, detail="Configure a Bot Token before enabling")
-        bot.enabled = request.enabled
-        if not request.enabled:
-            bot.connection_status = "disabled"
-    if request.message_trigger_mode is not None:
-        bot.message_trigger_mode = request.message_trigger_mode
-    db.add(bot)
-    await db.commit()
-    await db.refresh(bot)
-    await _notify_manager(current_user.id)
-    await record_audit_event(
-        category="settings",
-        action="discord.bot.update",
-        status="success",
-        user=current_user,
-        request=http_request,
-        details={
-            "token_updated": request.token is not None,
-            "enabled": request.enabled,
-            "message_trigger_mode": request.message_trigger_mode,
-        },
-    )
-    return _bot_response(bot)
-
-
-@router.delete("/api/auth/discord-bot", response_model=DiscordBotSettingsResponse)
-async def delete_discord_bot(
-    db: DatabaseSession,
-    current_user: ActiveUser,
-    request: Request,
-) -> DiscordBotSettingsResponse:
-    bot = await db.get(UserDiscordBot, current_user.id)
-    if bot is None:
-        return _bot_response(None)
-    bot.token_encrypted = None
-    bot.enabled = False
-    bot.application_id = None
-    bot.bot_user_id = None
-    bot.connection_status = "not_configured"
-    bot.last_error = None
-    result = await db.execute(
-        select(ServerDiscordBinding).where(ServerDiscordBinding.user_id == current_user.id)
-    )
-    for binding in result.scalars().all():
-        binding.invalid_reason = "bot_token_missing"
-        db.add(binding)
-    db.add(bot)
-    await db.commit()
-    await _notify_manager(current_user.id)
-    await record_audit_event(
-        category="settings",
-        action="discord.bot.delete",
-        status="success",
-        user=current_user,
-        request=request,
-    )
-    return _bot_response(bot)
-
-
-@router.post("/api/auth/discord-bot/test", response_model=DiscordBotTestResponse)
-async def test_discord_bot(
-    request: DiscordBotTestRequest,
-    db: DatabaseSession,
-    current_user: ActiveUser,
-) -> DiscordBotTestResponse:
-    token = request.token
-    if token is None:
-        _bot, token = await _stored_token(db, current_user.id)
-    try:
-        identity = await test_bot_token(token)
-    except DiscordBotAPIError as exc:
-        return DiscordBotTestResponse(success=False, message=str(exc))
-    return DiscordBotTestResponse(
-        success=True,
-        application_id=identity.application_id,
-        bot_user_id=identity.bot_user_id,
-        username=identity.username,
-        message="Discord Bot Token is valid",
-    )
+from .discord_bot_settings import _bot_response as _bot_response
+from .discord_bot_settings import _bound_menu_push_channels as _bound_menu_push_channels
+from .discord_bot_settings import _connected_bot_token as _connected_bot_token
+from .discord_bot_settings import _discord_options_response as _discord_options_response
+from .discord_bot_settings import _global_binding_response as _global_binding_response
+from .discord_bot_settings import _load_discord_options as _load_discord_options  # noqa: E402
+from .discord_bot_settings import _stored_token as _stored_token
+from .discord_bot_settings import _validate_binding_selection as _validate_binding_selection
+from .discord_bot_settings import delete_discord_bot as delete_discord_bot
+from .discord_bot_settings import get_discord_bot as get_discord_bot
+from .discord_bot_settings import test_discord_bot as test_discord_bot
+from .discord_bot_settings import update_discord_bot as update_discord_bot
 
 
 @router.get("/api/auth/discord-bot/guilds", response_model=list[DiscordGuildOption])

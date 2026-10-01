@@ -51,16 +51,15 @@ def _approval_step_label(step: Any) -> str:
         return f"Install {step.get('framework') or 'framework'}"
     if action == "install_market_plugin":
         return f"Install {step.get('title') or 'plugin'}"
-    if action == "restart_server":
-        return "Restart server"
-    if action == "validate_startup_revision":
-        return "Validate startup configuration revision"
-    if action == "save_startup_settings":
-        return "Save startup settings"
-    if action == "verify_server":
-        return "Verify process and A2S"
-    if action == "patch_plugin_config":
-        return "Update MapChooser configuration"
+    fixed_labels = {
+        "restart_server": "Restart server",
+        "validate_startup_revision": "Validate startup configuration revision",
+        "save_startup_settings": "Save startup settings",
+        "verify_server": "Verify process and A2S",
+        "patch_plugin_config": "Update MapChooser configuration",
+    }
+    if action in fixed_labels:
+        return fixed_labels[action]
     if action == "append_map":
         return f"Add map {step.get('name') or step.get('workshop_id') or ''}".strip()
     if action == "verify":

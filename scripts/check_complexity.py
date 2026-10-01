@@ -10,6 +10,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TARGETS = ("api", "modules", "services", "scripts")
+MAX_COMPLEXITY = 15
 
 
 def main() -> int:
@@ -23,7 +24,7 @@ def main() -> int:
         "--select",
         "C901",
         "--config",
-        "lint.mccabe.max-complexity=15",
+        f"lint.mccabe.max-complexity={MAX_COMPLEXITY}",
         "--output-format",
         "concise",
     ]

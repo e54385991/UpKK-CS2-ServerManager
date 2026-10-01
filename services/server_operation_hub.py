@@ -22,6 +22,15 @@ from services.server_operation_history import (
 )
 from services.server_operation_history import _as_datetime as _history_as_datetime
 
+from .server_operation_persistence import _expire_events as _delegated_expire_events
+from .server_operation_persistence import _finish_record as _delegated_finish_record
+from .server_operation_persistence import _load_events as _delegated_load_events
+from .server_operation_persistence import _persist_event as _delegated_persist_event
+from .server_operation_persistence import _persist_pending as _delegated_persist_pending
+from .server_operation_persistence import _persist_record as _delegated_persist_record
+from .server_operation_persistence import _read_current as _delegated_read_current
+from .server_operation_persistence import _update as _delegated_update
+
 _as_datetime = _history_as_datetime
 
 logger = logging.getLogger(__name__)
@@ -635,39 +644,13 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             self._tasks.pop(operation_id, None)
 
     async def _expire_events(self, operation_id: str, expire: int) -> None:
-        try:
-            await redis_manager.client.expire(
-                redis_manager.prefixed_key(self._events_key(operation_id)), expire
-            )
-        except Exception as exc:
-            logger.warning("Unable to refresh event TTL for %s: %s", operation_id, exc)
+        return await _delegated_expire_events(self, operation_id, expire)
 
     async def _persist_pending(self, server_id: int) -> None:
-        try:
-            await redis_manager.set(
-                self._pending_key(server_id),
-                list(self._pending.get(server_id) or []),
-                expire=OPERATION_TTL_SECONDS,
-            )
-        except Exception as exc:
-            logger.warning("Unable to persist pending operations for server %s: %s", server_id, exc)
+        return await _delegated_persist_pending(self, server_id)
 
     async def _read_current(self, server_id: int) -> dict[str, Any] | None:
-        operation_id = self._current.get(server_id)
-        if operation_id is None:
-            stored = await redis_manager.get(self._current_key(server_id))
-            if isinstance(stored, str) and stored:
-                operation_id = stored
-                self._current[server_id] = stored
-        if not operation_id:
-            return None
-        record = self._records.get(operation_id)
-        if record is None:
-            stored_record = await redis_manager.get(self._record_key(operation_id))
-            if isinstance(stored_record, dict):
-                self._records[operation_id] = stored_record
-                record = stored_record
-        return dict(record) if record else None
+        return await _delegated_read_current(self, server_id)
 
     async def patch(self, operation_id: str, **changes: Any) -> dict[str, Any] | None:
         """Persist extra file-job fields such as a resolved download path."""
@@ -678,18 +661,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         return await self._update(operation_id, **filtered)
 
     async def _update(self, operation_id: str, **changes: Any) -> dict[str, Any] | None:
-        async with self._lock:
-            record = self._records.get(operation_id)
-            if record is None:
-                stored = await redis_manager.get(self._record_key(operation_id))
-                if not isinstance(stored, dict):
-                    return None
-                record = stored
-                self._records[operation_id] = record
-            record.update(changes)
-            snapshot = dict(record)
-        await self._persist_record(snapshot)
-        return snapshot
+        return await _delegated_update(self, operation_id, **changes)
 
     async def _finish_record(
         self, operation_id: str, **changes: Any
@@ -700,60 +672,16 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         several concurrent finishers emits the terminal event and promotes the
         next job. An unknown operation keeps the previous best-effort path.
         """
-        async with self._lock:
-            record = self._records.get(operation_id)
-            if record is None:
-                stored = await redis_manager.get(self._record_key(operation_id))
-                if not isinstance(stored, dict):
-                    return None, True
-                record = stored
-                self._records[operation_id] = record
-            if record.get("status") not in ACTIVE_STATUSES:
-                return dict(record), False
-            record.update(changes)
-            snapshot = dict(record)
-        await self._persist_record(snapshot)
-        return snapshot, True
+        return await _delegated_finish_record(self, operation_id, **changes)
 
     async def _persist_record(self, record: dict[str, Any]) -> None:
-        try:
-            await redis_manager.set(
-                self._record_key(str(record["operation_id"])),
-                record,
-                expire=_record_ttl(record),
-            )
-        except Exception as exc:
-            logger.warning(
-                "Unable to persist server operation %s: %s", record.get("operation_id"), exc
-            )
+        return await _delegated_persist_record(self, record)
 
     async def _persist_event(self, operation_id: str, event: dict[str, Any]) -> None:
-        key = redis_manager.prefixed_key(self._events_key(operation_id))
-        try:
-            encoded = json.dumps(event, ensure_ascii=False, default=str)
-            pipeline = redis_manager.client.pipeline(transaction=False)
-            pipeline.rpush(key, encoded)
-            pipeline.ltrim(key, -EVENT_LIMIT, -1)
-            pipeline.expire(key, OPERATION_TTL_SECONDS)
-            await pipeline.execute()
-        except Exception as exc:
-            logger.warning("Unable to persist operation event %s: %s", operation_id, exc)
+        return await _delegated_persist_event(self, operation_id, event)
 
     async def _load_events(self, operation_id: str) -> list[dict[str, Any]]:
-        try:
-            values = await redis_manager.client.lrange(
-                redis_manager.prefixed_key(self._events_key(operation_id)), 0, -1
-            )
-        except Exception as exc:
-            logger.warning("Unable to load operation events %s: %s", operation_id, exc)
-            return []
-        events: list[dict[str, Any]] = []
-        for value in values:
-            try:
-                events.append(json.loads(value))
-            except TypeError, json.JSONDecodeError:
-                continue
-        return _trim_events(events)
+        return await _delegated_load_events(self, operation_id)
 
 
 server_operation_hub = ServerOperationHub()

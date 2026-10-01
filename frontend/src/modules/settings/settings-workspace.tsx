@@ -1,17 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { SettingsForm, type SettingsSectionKey } from "@/modules/settings/settings-form";
-import { DownloadCacheCard } from "@/modules/settings/download-cache-card";
-import { AiSettingsForm } from "@/modules/settings/ai-settings-form";
-import { SettingsTransferCard } from "@/modules/settings/settings-transfer-card";
-import { PerformanceDiagnosticsCard } from "@/modules/settings/diagnostics-card";
+import type { SettingsSectionKey } from "@/modules/settings/settings-form-parts";
+
+
+
+
 import { SettingsSection } from "@/modules/settings/settings-section";
 import type { AiSystemSettings, SystemSettings } from "@/modules/settings/types";
-import { AnnouncementManager } from "@/modules/settings/announcement-manager";
+
 import type { Announcement } from "@/modules/announcements/types";
 import { cn } from "@/shared/lib/cn";
+
+const DownloadCacheCard = lazy(() => import("@/modules/settings/download-cache-card").then((module) => ({ default: module.DownloadCacheCard })));
+const AiSettingsForm = lazy(() => import("@/modules/settings/ai-settings-form").then((module) => ({ default: module.AiSettingsForm })));
+const SettingsTransferCard = lazy(() => import("@/modules/settings/settings-transfer-card").then((module) => ({ default: module.SettingsTransferCard })));
+const PerformanceDiagnosticsCard = lazy(() => import("@/modules/settings/diagnostics-card").then((module) => ({ default: module.PerformanceDiagnosticsCard })));
+const AnnouncementManager = lazy(() => import("@/modules/settings/announcement-manager").then((module) => ({ default: module.AnnouncementManager })));
+const SettingsForm = lazy(() => import("@/modules/settings/settings-form").then((module) => ({ default: module.SettingsForm })));
 
 type SectionKey = SettingsSectionKey | "download-cache" | "ai" | "transfer" | "performance" | "announcements";
 
@@ -45,16 +52,22 @@ export function SettingsWorkspace({
   announcementError?: string;
 }) {
   const t = useTranslations("settings");
+  const feedback = useTranslations("feedback");
   const [active, setActive] = useState<SectionKey>(() =>
     typeof window === "undefined" ? "performance" : keyFromHash(window.location.hash),
   );
+  const [visited, setVisited] = useState<ReadonlySet<SectionKey>>(() => new Set([active]));
   const [dirty, setDirty] = useState<ReadonlySet<SectionKey>>(() => new Set());
 
   useEffect(() => {
     if (!window.location.hash) {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#settings-performance`);
     }
-    const onHash = () => setActive(keyFromHash(window.location.hash));
+    const onHash = () => {
+      const next = keyFromHash(window.location.hash);
+      setActive(next);
+      setVisited((current) => new Set(current).add(next));
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -75,6 +88,7 @@ export function SettingsWorkspace({
   function select(section: (typeof SECTIONS)[number]) {
     const next = section.key === "downloadCache" ? "download-cache" : (section.key as SectionKey);
     setActive(next);
+    setVisited((current) => new Set(current).add(next));
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${section.id}`);
   }
 
@@ -110,8 +124,10 @@ export function SettingsWorkspace({
       </nav>
 
       <div className="min-w-0">
-        {active === "performance" ? (
+        <Suspense fallback={<div role="status" className="p-4">{feedback("loading")}</div>}>
+        {visited.has("performance") ? (
           <SettingsSection
+            className={active === "performance" ? undefined : "hidden"}
             id="settings-performance"
             title={t("sections.performance.title")}
             description={t("sections.performance.description")}
@@ -120,8 +136,9 @@ export function SettingsWorkspace({
             <PerformanceDiagnosticsCard />
           </SettingsSection>
         ) : null}
-        {active === "announcements" ? (
+        {visited.has("announcements") ? (
           <SettingsSection
+            className={active === "announcements" ? undefined : "hidden"}
             id="settings-announcements"
             title={t("sections.announcements.title")}
             description={t("sections.announcements.description")}
@@ -133,7 +150,7 @@ export function SettingsWorkspace({
             />
           </SettingsSection>
         ) : null}
-        <SettingsForm
+        {["downloads", "notifications", "security", "logging"].some((key) => visited.has(key as SectionKey)) ? <SettingsForm
           initial={settings}
           activeSection={mainSection}
           onDirty={() => {
@@ -143,16 +160,17 @@ export function SettingsWorkspace({
           onSaved={() => {
             clearDirty(mainSection);
           }}
-        />
-        <div data-testid="settings-section-download-cache" className={cn(active === "download-cache" ? "" : "hidden")}>
+        /> : null}
+        {visited.has("download-cache") ? <div data-testid="settings-section-download-cache" className={cn(active === "download-cache" ? "" : "hidden")}>
           <DownloadCacheCard initial={settings} onDirty={() => markDirty("download-cache")} onSaved={() => clearDirty("download-cache")} />
-        </div>
-        <div data-testid="settings-section-ai" className={cn(active === "ai" ? "" : "hidden")}>
+        </div> : null}
+        {visited.has("ai") ? <div data-testid="settings-section-ai" className={cn(active === "ai" ? "" : "hidden")}>
           <AiSettingsForm initial={ai} onDirty={() => markDirty("ai")} onSaved={() => clearDirty("ai")} />
-        </div>
-        <div data-testid="settings-section-transfer" className={cn(active === "transfer" ? "" : "hidden")}>
+        </div> : null}
+        {visited.has("transfer") ? <div data-testid="settings-section-transfer" className={cn(active === "transfer" ? "" : "hidden")}>
           <SettingsTransferCard />
-        </div>
+        </div> : null}
+        </Suspense>
       </div>
     </div>
   );

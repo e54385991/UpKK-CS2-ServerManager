@@ -5,7 +5,122 @@
 from services.plugins.counterstrikesharp_core import apply_counterstrikesharp_core_defaults
 
 from .common import *
-from .common import _cleanup_local_download_dir
+from .counterstrikesharp_transfer import (
+    _download_counterstrikesharp_panel,
+    _download_counterstrikesharp_remote,
+)
+
+
+async def _ensure_counterstrikesharp_unzip(
+    self: SSHMixinBase, server: Server, temp_dir: str, send_progress
+) -> tuple[bool, str] | None:
+    check_unzip = "command -v unzip"
+    unzip_success, _, _ = await self.execute_command(check_unzip)
+
+    if not unzip_success:
+        await send_progress("⚠ Warning: unzip not found. Attempting to install...")
+
+        # Check package manager
+        check_apt = "command -v apt-get > /dev/null && echo 'apt' || echo 'none'"
+        _, pkg_mgr, _ = await self.execute_command(check_apt)
+
+        if "apt" in pkg_mgr:
+            # Try to install without sudo first
+            install_cmd = "apt-get update && apt-get install -y unzip"
+            success, stdout, stderr = await self.execute_command(install_cmd, timeout=120)
+
+            if not success:
+                # Try with sudo if available
+                if server.sudo_password:
+                    await send_progress("Trying to install unzip with sudo...")
+                    install_cmd = f"echo '{server.sudo_password}' | sudo -S apt-get update && echo '{server.sudo_password}' | sudo -S apt-get install -y unzip"
+                    success, stdout, stderr = await self.execute_command(install_cmd, timeout=120)
+
+                    if success:
+                        await send_progress("✓ unzip installed successfully")
+                    else:
+                        await self.execute_command(f"rm -rf {temp_dir}")
+                        return (
+                            False,
+                            f"Could not install unzip. Please run: sudo apt-get install unzip\nError: {stderr[:200]}",
+                        )
+                else:
+                    await self.execute_command(f"rm -rf {temp_dir}")
+                    return (
+                        False,
+                        "unzip not found and no sudo password provided. Please install unzip: sudo apt-get install unzip",
+                    )
+            else:
+                await send_progress("✓ unzip installed successfully")
+
+            # Verify unzip is now available
+            unzip_success, _, _ = await self.execute_command(check_unzip)
+            if not unzip_success:
+                await self.execute_command(f"rm -rf {temp_dir}")
+                return (
+                    False,
+                    "unzip installation completed but command still not found. Please check system PATH.",
+                )
+        else:
+            await self.execute_command(f"rm -rf {temp_dir}")
+            return (
+                False,
+                "unzip not found and package manager not detected. Please install unzip manually.",
+            )
+    else:
+        await send_progress("✓ unzip is available")
+    return None
+
+
+async def _extract_and_verify_counterstrikesharp(
+    self: SSHMixinBase, server: Server, cs2_dir: str, temp_dir: str, send_progress
+) -> tuple[bool, str]:
+    await send_progress("Extracting CounterStrikeSharp...")
+    extract_cmd = f"unzip -o {temp_dir}/counterstrikesharp.zip -d {cs2_dir}/game/csgo/"
+    success, stdout, stderr = await self.execute_command(extract_cmd, timeout=120)
+
+    if not success:
+        await self.execute_command(f"rm -rf {temp_dir}")
+        extraction_error = stderr or stdout or "unzip returned a non-zero status"
+        return False, f"CounterStrikeSharp extraction failed: {extraction_error}"
+
+    # Check if extraction actually succeeded by checking the directory
+    verify_extract = f"test -d {cs2_dir}/game/csgo/addons/counterstrikesharp && echo 'extracted'"
+    verify_success, verify_out, _ = await self.execute_command(verify_extract)
+
+    if not verify_success or "extracted" not in verify_out:
+        await self.execute_command(f"rm -rf {temp_dir}")
+        return (
+            False,
+            f"CounterStrikeSharp extraction failed: {stderr if stderr else 'Directory not created'}",
+        )
+
+    await send_progress("✓ CounterStrikeSharp extracted successfully")
+
+    # Clean up temp directory
+    await self.execute_command(f"rm -rf {temp_dir}")
+
+    # Verify installation
+    css_dir = f"{cs2_dir}/game/csgo/addons/counterstrikesharp"
+    verify_cmd = f"test -d {css_dir} && echo 'installed'"
+    verify_success, verify_stdout, _ = await self.execute_command(verify_cmd)
+
+    if verify_success and "installed" in verify_stdout:
+        # Community plugins need the guidelines gate off, and a fresh
+        # install has no core.json until the first launch writes one.
+        await apply_counterstrikesharp_core_defaults(
+            self.execute_command,
+            f"{cs2_dir}/game/csgo",
+            report=send_progress,
+        )
+        await send_progress("=" * 60)
+        await send_progress("✓ CounterStrikeSharp installed successfully!")
+        await send_progress("=" * 60)
+        await send_progress("NOTE: You need to restart your server for changes to take effect.")
+        await send_progress("After restart, use 'meta list' and 'css_plugins list' to verify.")
+        return True, "CounterStrikeSharp installed successfully"
+    else:
+        return False, "CounterStrikeSharp installation verification failed"
 
 
 class CounterStrikeSharpMixin(SSHMixinBase):
@@ -178,265 +293,28 @@ class CounterStrikeSharpMixin(SSHMixinBase):
 
             # Check if panel proxy mode is enabled
             if server.use_panel_proxy:
-                # Panel Proxy Mode: Download to panel server first, then upload via SFTP
-                await send_progress(
-                    "Using panel server proxy mode for CounterStrikeSharp download..."
+                download_failure = await _download_counterstrikesharp_panel(
+                    self, server, temp_dir, css_url, send_progress
                 )
-
-                panel_archive_path = None
-                try:
-                    # Create temp directory on panel server
-                    panel_temp_dir = os.path.join(
-                        tempfile.gettempdir(), f"cs2_panel_proxy_css_{server.user_id}"
-                    )
-                    os.makedirs(panel_temp_dir, exist_ok=True)
-
-                    # Create unique subdirectory
-                    download_id = str(uuid.uuid4())
-                    download_dir = os.path.join(panel_temp_dir, download_id)
-                    os.makedirs(download_dir, exist_ok=True)
-
-                    panel_archive_path = os.path.join(download_dir, "counterstrikesharp.zip")
-
-                    # Download to panel server, reusing the local archive cache
-                    from services.plugins.download_reuse import cached_download
-
-                    async def download_event_callback(progress: dict[str, Any]):
-                        percent = progress.get("percent")
-                        transferred = float(progress.get("bytes_transferred") or 0)
-                        total = float(progress.get("total_bytes") or 0)
-                        message = (
-                            f"Downloading CounterStrikeSharp: {percent:.1f}% "
-                            f"({transferred / (1024 * 1024):.1f}/{total / (1024 * 1024):.1f} MB)"
-                            if percent is not None
-                            else f"Downloading CounterStrikeSharp ({transferred / (1024 * 1024):.1f} MB)"
-                        )
-                        retry_count = int(progress.get("retry_count") or 0)
-                        if retry_count:
-                            message = (
-                                f"Retrying CounterStrikeSharp download (attempt {retry_count + 1})"
-                            )
-                        await send_progress(message, metadata={"transfer": progress})
-
-                    async def download_progress_callback(_bytes_downloaded, _total_bytes):
-                        return None
-
-                    download_progress_callback.progress_event_callback = download_event_callback
-
-                    success_download, error = await cached_download(
-                        css_url,
-                        panel_archive_path,
-                        scope="framework-counterstrikesharp",
-                        timeout=300,
-                        progress_callback=download_progress_callback,
-                    )
-
-                    if not success_download:
-                        raise Exception(f"Failed to download CounterStrikeSharp: {error}")
-
-                    # Verify file size
-                    file_size = os.path.getsize(panel_archive_path)
-                    if file_size < 10000:
-                        raise Exception(f"Downloaded file is too small ({file_size} bytes)")
-
-                    await send_progress(
-                        f"Download complete ({file_size / (1024 * 1024):.2f} MB), uploading to server..."
-                    )
-
-                    # Upload to remote server via SFTP
-                    remote_archive_path = f"{temp_dir}/counterstrikesharp.zip"
-
-                    async def upload_event_callback(progress: dict[str, Any]):
-                        percent = progress.get("percent")
-                        transferred = float(progress.get("bytes_transferred") or 0)
-                        total = float(progress.get("total_bytes") or 0)
-                        message = (
-                            f"Uploading CounterStrikeSharp: {percent:.1f}% "
-                            f"({transferred / (1024 * 1024):.1f}/{total / (1024 * 1024):.1f} MB)"
-                            if percent is not None
-                            else f"Uploading CounterStrikeSharp ({transferred / (1024 * 1024):.1f} MB)"
-                        )
-                        await send_progress(message, metadata={"transfer": progress})
-
-                    async def upload_progress_callback(_bytes_uploaded, _total_bytes):
-                        return None
-
-                    upload_progress_callback.progress_event_callback = upload_event_callback
-
-                    success_upload, error = await self.upload_file_with_progress(
-                        panel_archive_path,
-                        remote_archive_path,
-                        server,
-                        progress_callback=upload_progress_callback,
-                    )
-
-                    if not success_upload:
-                        raise Exception(f"Failed to upload CounterStrikeSharp: {error}")
-
-                    await send_progress("✓ CounterStrikeSharp uploaded successfully")
-
-                finally:
-                    # Clean up panel temp directory
-                    if panel_archive_path:
-                        await _cleanup_local_download_dir(download_dir, panel_temp_dir)
             else:
-                # Original Mode: Download directly on remote server (use GitHub proxy if configured)
-                # Apply GitHub proxy to download URL if configured
-                actual_download_url = css_url
-                if server.github_proxy and server.github_proxy.strip():
-                    proxy_base = server.github_proxy.strip().rstrip("/")
-                    actual_download_url = f"{proxy_base}/{css_url}"
-                    await send_progress("Using GitHub proxy for download")
-
-                # Download CounterStrikeSharp
-                await send_progress("Downloading CounterStrikeSharp...")
-                # Use curl as fallback if wget doesn't work well
-                download_cmd = f"curl -L -o {temp_dir}/counterstrikesharp.zip {actual_download_url} || wget --no-check-certificate -O {temp_dir}/counterstrikesharp.zip {actual_download_url}"
-                success, stdout, stderr = await self.execute_command_streaming(
-                    download_cmd,
-                    output_callback=send_progress,
-                    timeout=300,  # 5 minutes for larger download
+                download_failure = await _download_counterstrikesharp_remote(
+                    self, server, temp_dir, css_url, send_progress
                 )
-
-                # Always verify the file was downloaded
-                check_cmd = f"test -f {temp_dir}/counterstrikesharp.zip && echo 'exists'"
-                check_success, check_stdout, _ = await self.execute_command(check_cmd)
-
-                if not check_success or "exists" not in check_stdout:
-                    await self.execute_command(f"rm -rf {temp_dir}")
-                    error_detail = (
-                        f"Download failed. stderr: {stderr[:500] if stderr else 'No error output'}"
-                    )
-                    return False, f"CounterStrikeSharp download failed: {error_detail}"
-
-                # Check file size
-                size_cmd = f"stat -f%z {temp_dir}/counterstrikesharp.zip 2>/dev/null || stat -c%s {temp_dir}/counterstrikesharp.zip 2>/dev/null"
-                size_success, size_out, _ = await self.execute_command(size_cmd)
-                if size_success and size_out.strip():
-                    file_size = int(size_out.strip())
-                    if file_size < 10000:  # Less than 10KB is probably an error
-                        await self.execute_command(f"rm -rf {temp_dir}")
-                        return (
-                            False,
-                            f"Downloaded file is too small ({file_size} bytes). Download may have failed.",
-                        )
-                    await send_progress(f"✓ Downloaded {file_size} bytes")
-
-                await send_progress("✓ CounterStrikeSharp downloaded successfully")
+            if download_failure is not None:
+                return download_failure
 
             # Check if unzip is available and try to install if missing
-            check_unzip = "command -v unzip"
-            unzip_success, _, _ = await self.execute_command(check_unzip)
-
-            if not unzip_success:
-                await send_progress("⚠ Warning: unzip not found. Attempting to install...")
-
-                # Check package manager
-                check_apt = "command -v apt-get > /dev/null && echo 'apt' || echo 'none'"
-                _, pkg_mgr, _ = await self.execute_command(check_apt)
-
-                if "apt" in pkg_mgr:
-                    # Try to install without sudo first
-                    install_cmd = "apt-get update && apt-get install -y unzip"
-                    success, stdout, stderr = await self.execute_command(install_cmd, timeout=120)
-
-                    if not success:
-                        # Try with sudo if available
-                        if server.sudo_password:
-                            await send_progress("Trying to install unzip with sudo...")
-                            install_cmd = f"echo '{server.sudo_password}' | sudo -S apt-get update && echo '{server.sudo_password}' | sudo -S apt-get install -y unzip"
-                            success, stdout, stderr = await self.execute_command(
-                                install_cmd, timeout=120
-                            )
-
-                            if success:
-                                await send_progress("✓ unzip installed successfully")
-                            else:
-                                await self.execute_command(f"rm -rf {temp_dir}")
-                                return (
-                                    False,
-                                    f"Could not install unzip. Please run: sudo apt-get install unzip\nError: {stderr[:200]}",
-                                )
-                        else:
-                            await self.execute_command(f"rm -rf {temp_dir}")
-                            return (
-                                False,
-                                "unzip not found and no sudo password provided. Please install unzip: sudo apt-get install unzip",
-                            )
-                    else:
-                        await send_progress("✓ unzip installed successfully")
-
-                    # Verify unzip is now available
-                    unzip_success, _, _ = await self.execute_command(check_unzip)
-                    if not unzip_success:
-                        await self.execute_command(f"rm -rf {temp_dir}")
-                        return (
-                            False,
-                            "unzip installation completed but command still not found. Please check system PATH.",
-                        )
-                else:
-                    await self.execute_command(f"rm -rf {temp_dir}")
-                    return (
-                        False,
-                        "unzip not found and package manager not detected. Please install unzip manually.",
-                    )
-            else:
-                await send_progress("✓ unzip is available")
+            unzip_failure = await _ensure_counterstrikesharp_unzip(
+                self, server, temp_dir, send_progress
+            )
+            if unzip_failure is not None:
+                return unzip_failure
 
             # Extract CounterStrikeSharp to CS2 directory
             # The zip contains an 'addons' folder that should merge with the existing addons
-            await send_progress("Extracting CounterStrikeSharp...")
-            extract_cmd = f"unzip -o {temp_dir}/counterstrikesharp.zip -d {cs2_dir}/game/csgo/"
-            success, stdout, stderr = await self.execute_command(extract_cmd, timeout=120)
-
-            if not success:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                extraction_error = stderr or stdout or "unzip returned a non-zero status"
-                return False, f"CounterStrikeSharp extraction failed: {extraction_error}"
-
-            # Check if extraction actually succeeded by checking the directory
-            verify_extract = (
-                f"test -d {cs2_dir}/game/csgo/addons/counterstrikesharp && echo 'extracted'"
+            return await _extract_and_verify_counterstrikesharp(
+                self, server, cs2_dir, temp_dir, send_progress
             )
-            verify_success, verify_out, _ = await self.execute_command(verify_extract)
-
-            if not verify_success or "extracted" not in verify_out:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                return (
-                    False,
-                    f"CounterStrikeSharp extraction failed: {stderr if stderr else 'Directory not created'}",
-                )
-
-            await send_progress("✓ CounterStrikeSharp extracted successfully")
-
-            # Clean up temp directory
-            await self.execute_command(f"rm -rf {temp_dir}")
-
-            # Verify installation
-            css_dir = f"{cs2_dir}/game/csgo/addons/counterstrikesharp"
-            verify_cmd = f"test -d {css_dir} && echo 'installed'"
-            verify_success, verify_stdout, _ = await self.execute_command(verify_cmd)
-
-            if verify_success and "installed" in verify_stdout:
-                # Community plugins need the guidelines gate off, and a fresh
-                # install has no core.json until the first launch writes one.
-                await apply_counterstrikesharp_core_defaults(
-                    self.execute_command,
-                    f"{cs2_dir}/game/csgo",
-                    report=send_progress,
-                )
-                await send_progress("=" * 60)
-                await send_progress("✓ CounterStrikeSharp installed successfully!")
-                await send_progress("=" * 60)
-                await send_progress(
-                    "NOTE: You need to restart your server for changes to take effect."
-                )
-                await send_progress(
-                    "After restart, use 'meta list' and 'css_plugins list' to verify."
-                )
-                return True, "CounterStrikeSharp installed successfully"
-            else:
-                return False, "CounterStrikeSharp installation verification failed"
 
         except Exception as e:
             await send_progress(f"Installation error: {str(e)}")
