@@ -65,6 +65,7 @@ from services.redis_manager import redis_manager
 from services.server_compatibility import effective_clear_execstack
 from services.ssh_manager import SSHManager
 
+from services.game_mode_types import PlanReport
 from services.compat import LateBoundModule
 
 host = LateBoundModule('services.game_mode_install_service')

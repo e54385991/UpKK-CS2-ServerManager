@@ -30,9 +30,7 @@ from .game_mode_install_phases import _install_mode_plugins as _install_mode_plu
 from .game_mode_install_phases import _restart_mode_server as _restart_mode_server
 from .game_mode_configure import _configure_mode_server as _configure_mode_server
 
-ProgressCallback = Callable[..., Awaitable[None]]
-class PlanReport(Protocol):
-    async def __call__(self, step_id: str, step_status: str, message: str, metadata: dict[str, Any] | None = None) -> None: ...
+from services.game_mode_types import PlanReport as PlanReport, ProgressCallback as ProgressCallback
 
 __all__ = [
     "GameModePlanError",
@@ -351,6 +349,31 @@ async def _save_launch_args(db: AsyncSession, server: Server, value: str | None)
 
 
 
+async def _validate_mode_execution(db: AsyncSession, server: Server, user: User, mode_id: str, wipe_addons: bool, expected_plan_hash: str, acknowledged_warning_rule_ids: Iterable[int]) -> tuple[Server, dict[str, Any], set[int], GameModeRecipe]:
+    current_server = (
+        await Server.get_by_id(db, server.id)
+        if user.is_admin
+        else await Server.get_by_id_and_user(db, server.id, user.id)
+    )
+    if current_server is None:
+        raise GameModePlanError("Server permission changed before execution")
+    plan = await build_game_mode_plan(db, current_server, mode_id, wipe_addons=wipe_addons)
+    if plan["blocked"]:
+        raise GameModePlanError("; ".join(plan["blocking_reasons"]))
+    if plan["plan_hash"] != expected_plan_hash:
+        raise GameModePlanError("Game-mode plan changed; review and approve the new plan")
+    acknowledged = {int(item) for item in acknowledged_warning_rule_ids}
+    required = {int(item["rule_id"]) for item in plan["warnings"]}
+    if required - acknowledged:
+        raise GameModePlanError(
+            "Missing warning acknowledgement(s): "
+            + ", ".join(map(str, sorted(required - acknowledged)))
+        )
+    recipe: GameModeRecipe = get_recipe(mode_id)
+
+    return current_server, plan, acknowledged, recipe
+
+
 async def execute_game_mode_plan(  # noqa: C901
     db: AsyncSession,
     server: Server,
@@ -384,26 +407,7 @@ async def execute_game_mode_plan(  # noqa: C901
     async with maintenance_lock_service.get(
         server.id, operation="game_mode_install", wait=False, ttl=7200
     ):
-        current_server = (
-            await Server.get_by_id(db, server.id)
-            if user.is_admin
-            else await Server.get_by_id_and_user(db, server.id, user.id)
-        )
-        if current_server is None:
-            raise GameModePlanError("Server permission changed before execution")
-        plan = await build_game_mode_plan(db, current_server, mode_id, wipe_addons=wipe_addons)
-        if plan["blocked"]:
-            raise GameModePlanError("; ".join(plan["blocking_reasons"]))
-        if plan["plan_hash"] != expected_plan_hash:
-            raise GameModePlanError("Game-mode plan changed; review and approve the new plan")
-        acknowledged = {int(item) for item in acknowledged_warning_rule_ids}
-        required = {int(item["rule_id"]) for item in plan["warnings"]}
-        if required - acknowledged:
-            raise GameModePlanError(
-                "Missing warning acknowledgement(s): "
-                + ", ".join(map(str, sorted(required - acknowledged)))
-            )
-        recipe: GameModeRecipe = get_recipe(mode_id)
+        current_server, plan, acknowledged, recipe = await _validate_mode_execution(db, server, user, mode_id, wipe_addons, expected_plan_hash, acknowledged_warning_rule_ids)
         try:
             if wipe_addons:
                 current_server = await _wipe_mode_addons(db, current_server, user, plan, completed, report, server)

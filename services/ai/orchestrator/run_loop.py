@@ -274,35 +274,44 @@ async def _complete_text_turn(db: AsyncSession, run: AIRun, conversation: AIConv
     return
 
 
+async def _load_run_context(db: AsyncSession, run: AIRun) -> tuple[AIConversation, User, Server | None, EffectiveProvider] | None:
+    conversation = await db.get(AIConversation, run.conversation_id)
+    user = await db.get(User, run.user_id)
+    if conversation is None or user is None or conversation.user_id != user.id:
+        await host._fail_run(db, run, "Conversation owner is unavailable")
+        return None
+    server = None
+    if run.server_id is not None:
+        server = (
+            await host.Server.get_by_id(db, run.server_id)
+            if user.is_admin
+            else await host.Server.get_by_id_and_user(db, run.server_id, user.id)
+        )
+        if server is None:
+            await host._fail_run(db, run, "Selected server is no longer available")
+            return None
+    try:
+        provider = await host.get_effective_provider(db, user)
+    except host.AIConfigurationError as exc:
+        await host._fail_run(db, run, str(exc))
+        return None
+    if provider is None:
+        await host._fail_run(db, run, "No AI provider is enabled")
+        return None
+
+    return conversation, user, server, provider
+
+
 async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration state machine.
     """Run or resume one conversation job. Exceptions become persisted failures."""
     async with host.async_session_maker() as db:
         run = await db.get(AIRun, run_id)
         if run is None or run.status not in host.ACTIVE_RUN_STATUSES:
             return
-        conversation = await db.get(AIConversation, run.conversation_id)
-        user = await db.get(User, run.user_id)
-        if conversation is None or user is None or conversation.user_id != user.id:
-            await host._fail_run(db, run, "Conversation owner is unavailable")
+        context = await _load_run_context(db, run)
+        if context is None:
             return
-        server = None
-        if run.server_id is not None:
-            server = (
-                await host.Server.get_by_id(db, run.server_id)
-                if user.is_admin
-                else await host.Server.get_by_id_and_user(db, run.server_id, user.id)
-            )
-            if server is None:
-                await host._fail_run(db, run, "Selected server is no longer available")
-                return
-        try:
-            provider = await host.get_effective_provider(db, user)
-        except host.AIConfigurationError as exc:
-            await host._fail_run(db, run, str(exc))
-            return
-        if provider is None:
-            await host._fail_run(db, run, "No AI provider is enabled")
-            return
+        conversation, user, server, provider = context
 
         settings = await host.AISystemSettings.get_or_create(db)
         max_rounds = min(
