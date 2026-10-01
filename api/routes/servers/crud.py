@@ -15,6 +15,7 @@ from services.captcha_policy import require_captcha
 from services.discord_binding_template_service import inherit_global_discord_binding
 from services.host_initialization import (
     AsyncsshHostRunner,
+    HostDependencyResult,
     attach_host_initialization,
     ensure_steamcmd_packages,
 )
@@ -31,6 +32,39 @@ from .common import *
 collection_router = APIRouter(prefix="/servers", tags=["servers"])
 item_router = APIRouter(prefix="/servers", tags=["servers"])
 mutation_router = APIRouter(prefix="/servers", tags=["servers"])
+
+
+async def _prepare_validated_game_directory(
+    conn: asyncssh.SSHClientConnection, server_data: ServerCreate
+) -> None:
+    game_dir_quoted = shlex.quote(server_data.game_directory)
+    result = await conn.run(f"mkdir -p {game_dir_quoted}", check=False)
+    if result.exit_status != 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to create game directory {server_data.game_directory}. Please check permissions and path.",
+        )
+    result = await conn.run(f"chmod 755 {game_dir_quoted}", check=False)
+    if result.exit_status != 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to set permissions on game directory {server_data.game_directory}. Please check user permissions.",
+        )
+
+
+async def _attach_validation_release(
+    conn: asyncssh.SSHClientConnection, host_init: HostDependencyResult
+) -> None:
+    try:
+        release_result = await conn.run(OS_RELEASE_COMMAND, check=False)
+        release = parse_linux_release(getattr(release_result, "stdout", "") or "")
+        if release is not None:
+            object.__setattr__(host_init, "os_id", release.os_id)
+            object.__setattr__(host_init, "os_version", release.version_id)
+    except Exception:
+        # Package initialization remains valid when an old/mock host does
+        # not expose the optional release probe.
+        pass
 
 
 async def _validate_server_connection(server_data: ServerCreate):
@@ -75,19 +109,7 @@ async def _validate_server_connection(server_data: ServerCreate):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"SSH connection succeeded but command execution failed. Please verify that user {server_data.ssh_user} has proper shell access and permissions.",
             )
-        game_dir_quoted = shlex.quote(server_data.game_directory)
-        result = await conn.run(f"mkdir -p {game_dir_quoted}", check=False)
-        if result.exit_status != 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to create game directory {server_data.game_directory}. Please check permissions and path.",
-            )
-        result = await conn.run(f"chmod 755 {game_dir_quoted}", check=False)
-        if result.exit_status != 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to set permissions on game directory {server_data.game_directory}. Please check user permissions.",
-            )
+        await _prepare_validated_game_directory(conn, server_data)
         sudo_password = getattr(server_data, "sudo_password", None) or server_data.ssh_password
         preferred_mirror = normalize_apt_mirror(getattr(server_data, "apt_mirror", None))
         host_init = await ensure_steamcmd_packages(
@@ -98,16 +120,7 @@ async def _validate_server_connection(server_data: ServerCreate):
         )
         if not host_init.architecture_supported:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=host_init.message)
-        try:
-            release_result = await conn.run(OS_RELEASE_COMMAND, check=False)
-            release = parse_linux_release(getattr(release_result, "stdout", "") or "")
-            if release is not None:
-                object.__setattr__(host_init, "os_id", release.os_id)
-                object.__setattr__(host_init, "os_version", release.version_id)
-        except Exception:
-            # Package initialization remains valid when an old/mock host does
-            # not expose the optional release probe.
-            pass
+        await _attach_validation_release(conn, host_init)
         return host_init
     except HTTPException:
         raise
@@ -130,6 +143,28 @@ async def create_server(
 ):
     """Create a new CS2 server"""
     return await create_server_record(server_data, db, current_user, request)
+
+
+def _apply_default_server_proxy(
+    server_dict: dict[str, object],
+    system_settings: SystemSettings | None,
+    apply_system_defaults: bool,
+) -> None:
+    if (
+        apply_system_defaults
+        and not server_dict.get("use_panel_proxy")
+        and not server_dict.get("github_proxy")
+    ):
+        if system_settings and system_settings.default_proxy_mode == "panel":
+            server_dict["use_panel_proxy"] = True
+            server_dict["github_proxy"] = None
+        elif (
+            system_settings
+            and system_settings.default_proxy_mode == "github_url"
+            and system_settings.github_proxy_url
+        ):
+            server_dict["use_panel_proxy"] = False
+            server_dict["github_proxy"] = system_settings.github_proxy_url
 
 
 async def create_server_record(
@@ -190,22 +225,8 @@ async def create_server_record(
         await SystemSettings.get_or_create_settings(db) if apply_system_defaults else None
     )
     # If user hasn't explicitly set proxy mode, apply system defaults.
-    if (
-        apply_system_defaults
-        and not server_dict.get("use_panel_proxy")
-        and not server_dict.get("github_proxy")
-    ):
-        if system_settings and system_settings.default_proxy_mode == "panel":
-            server_dict["use_panel_proxy"] = True
-            server_dict["github_proxy"] = None
-        elif (
-            system_settings
-            and system_settings.default_proxy_mode == "github_url"
-            and system_settings.github_proxy_url
-        ):
-            server_dict["use_panel_proxy"] = False
-            server_dict["github_proxy"] = system_settings.github_proxy_url
-        # else: default_proxy_mode is 'direct', keep both as None/False
+    _apply_default_server_proxy(server_dict, system_settings, apply_system_defaults)
+    # else: default_proxy_mode is 'direct', keep both as None/False
 
     if host_init is not None and host_init.apt_mirror:
         server_dict["apt_mirror"] = host_init.apt_mirror

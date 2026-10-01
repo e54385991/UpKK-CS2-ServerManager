@@ -324,22 +324,48 @@ async def stream_server_operation_events(
     )
 
 
+def _new_operation_events(pending: list[dict[str, Any]], sequence: int) -> list[dict[str, Any]]:
+    pending.sort(key=lambda item: _event_sequence(item))
+    seen: set[int] = set()
+
+    events = []
+    for event in pending:
+        event_sequence = _event_sequence(event)
+        if event_sequence <= sequence or event_sequence in seen:
+            continue
+        seen.add(event_sequence)
+        events.append(event)
+    return events
+
+
+async def _terminal_operation_replay(
+    op_id: str, sequence: int, pending: list[dict[str, Any]]
+) -> bool:
+    pending.extend(await server_operation_hub.replay(op_id, sequence))
+    if not pending:
+        return False
+
+    return True
+
+
+async def _waiting_for_worker_output(op_id: str, replayed: list[dict[str, Any]]) -> bool:
+    if replayed:
+        return False
+    current = await server_operation_hub.get(op_id)
+    return bool(current and current.get("status") in ACTIVE_STATUSES)
+
+
 async def _operation_event_source(request: Request, op_id: str, after: int):
     queue = await server_operation_hub.subscribe_queue(op_id)
     sequence = after
     try:
         yield ": connected\n\n"
         replayed = await server_operation_hub.replay(op_id, sequence)
-        if not replayed:
-            current = await server_operation_hub.get(op_id)
-            if current and current.get("status") in ACTIVE_STATUSES:
-                # Keep connection diagnostics as SSE comments. Persisting them as
-                # operation events makes every reconnect look like new work.
-                yield ": waiting for worker output\n\n"
-        for event in replayed:
+        if await _waiting_for_worker_output(op_id, replayed):
+            # Connection diagnostics remain comments rather than persisted work.
+            yield ": waiting for worker output\n\n"
+        for event in _new_operation_events(replayed, sequence):
             event_sequence = _event_sequence(event)
-            if event_sequence <= sequence:
-                continue
             sequence = event_sequence
             yield _encode_sse_event(event)
             if event.get("type") in TERMINAL_EVENT_TYPES:
@@ -356,19 +382,14 @@ async def _operation_event_source(request: Request, op_id: str, after: int):
                     yield ": keep-alive\n\n"
                 current = await server_operation_hub.get(op_id)
                 if current and current.get("status") in {"completed", "failed"}:
-                    pending.extend(await server_operation_hub.replay(op_id, sequence))
-                    if not pending:
+                    if not await _terminal_operation_replay(op_id, sequence, pending):
                         return
             else:
                 idle_ticks = 0
             pending.extend(await server_operation_hub.replay(op_id, sequence))
-            pending.sort(key=lambda item: _event_sequence(item))
-            seen: set[int] = set()
+            pending = _new_operation_events(pending, sequence)
             for event in pending:
                 event_sequence = _event_sequence(event)
-                if event_sequence <= sequence or event_sequence in seen:
-                    continue
-                seen.add(event_sequence)
                 sequence = event_sequence
                 yield _encode_sse_event(event)
                 if event.get("type") in TERMINAL_EVENT_TYPES:

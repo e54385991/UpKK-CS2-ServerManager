@@ -3,74 +3,30 @@
 # ruff: noqa: F403,F405
 
 from __future__ import annotations
-from collections.abc import Awaitable, Callable, Iterable
-from typing import Any, Protocol
-from sqlalchemy import delete
+
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, select
-from modules import ManagedPlugin, Server, ServerStatus, User
-from services.game_mode_execstack import (
-    append_execstack_step,
-    run_planned_execstack_step,
-)
-from services.game_mode_launch import upsert_additional_parameters
-from services.game_mode_planning import (
-    GameModePlanError,
-    _config_needs_patch,
-    _jsonable_dict,
-    _map_already_present,
-    _market_restart_required,
-    _plan_hash,
-    _read_text,
-    find_market_plugin_by_title,
-)
-from services.game_mode_planning import (
-    catalog_for_server as _catalog_for_server,
-)
+
+from modules import Server, User
+from services.compat import LateBoundModule
 from services.game_mode_recipes import (
     GameModeRecipe,
-    UnknownGameModeError,
-    get_recipe,
 )
-from services.game_mode_remote import (
-    connect,
-    inspect_game_mode_state,
-    read_linux_release,
-    remote_paths,
-    replace_remote_file,
-    resolve_addons_directory,
-    wait_file_paths,
-    wait_for_remote_files,
-    wipe_addons_directory,
-)
-from services.maintenance_lock import maintenance_lock_service
-from services.map_management_service import (
-    DEFAULT_MAPS_CONFIG,
-    DEFAULT_PLUGIN_CONFIG_CONTENT,
-    MAX_MAPS_CONFIG_BYTES,
-    MAX_PLUGIN_CONFIG_BYTES,
-    append_map_to_config,
-    parse_plugin_config,
-    update_plugin_config,
-)
-from services.plugin_auto_update_service import record_framework_installation
-from services.plugin_conflict_service import (
-    PluginPlanError,
-    _emit_plan_progress,
-    build_plugin_install_plan,
-    execute_plugin_install_plan,
-    validate_plugin_plan_acknowledgements,
-)
-from services.redis_manager import redis_manager
-from services.server_compatibility import effective_clear_execstack
-from services.ssh_manager import SSHManager
-
 from services.game_mode_types import PlanReport
-from services.compat import LateBoundModule
 
-host = LateBoundModule('services.game_mode_install_service')
+host = LateBoundModule("services.game_mode_install_service")
 
-async def _wipe_mode_addons(db: AsyncSession, current_server: Server, user: User, plan: dict[str, Any], completed: list[dict[str, Any]], report: PlanReport, server: Server) -> Server:
+
+async def _wipe_mode_addons(
+    db: AsyncSession,
+    current_server: Server,
+    user: User,
+    plan: dict[str, Any],
+    completed: list[dict[str, Any]],
+    report: PlanReport,
+    server: Server,
+) -> Server:
     await report("wipe_addons", "running", f"Wiping {plan['addons_path']}")
     restart_manager = host.SSHManager()
     stopped, stop_message = await restart_manager.stop_server(current_server)
@@ -84,9 +40,7 @@ async def _wipe_mode_addons(db: AsyncSession, current_server: Server, user: User
     finally:
         await manager.disconnect()
     cleared = await host._clear_managed_plugins(db, int(current_server.id))
-    completed.append(
-        {"action": "wipe_addons", "success": True, "cleared_tracking": cleared}
-    )
+    completed.append({"action": "wipe_addons", "success": True, "cleared_tracking": cleared})
     await report("wipe_addons", "completed", "Addons directory wiped")
     current_server = (
         await host.Server.get_by_id(db, server.id)
@@ -99,7 +53,14 @@ async def _wipe_mode_addons(db: AsyncSession, current_server: Server, user: User
     return current_server
 
 
-async def _install_mode_framework(db: AsyncSession, current_server: Server, user: User, plan: dict[str, Any], completed: list[dict[str, Any]], report: PlanReport) -> None:
+async def _install_mode_framework(
+    db: AsyncSession,
+    current_server: Server,
+    user: User,
+    plan: dict[str, Any],
+    completed: list[dict[str, Any]],
+    report: PlanReport,
+) -> None:
     async def css_progress(
         message: str,
         _kind: str = "status",
@@ -131,7 +92,18 @@ async def _install_mode_framework(db: AsyncSession, current_server: Server, user
     )
 
 
-async def _install_mode_plugins(db: AsyncSession, current_server: Server, user: User, plan: dict[str, Any], completed: list[dict[str, Any]], report: PlanReport, recipe: GameModeRecipe, wipe_addons: bool, acknowledged: set[int], operation_id: str | None) -> None:
+async def _install_mode_plugins(
+    db: AsyncSession,
+    current_server: Server,
+    user: User,
+    plan: dict[str, Any],
+    completed: list[dict[str, Any]],
+    report: PlanReport,
+    recipe: GameModeRecipe,
+    wipe_addons: bool,
+    acknowledged: set[int],
+    operation_id: str | None,
+) -> None:
     for title in recipe.market_plugin_titles:
         plugin_plan = plan["plugin_plans"].get(title)
         if plugin_plan is None:
@@ -143,9 +115,7 @@ async def _install_mode_plugins(db: AsyncSession, current_server: Server, user: 
             elif title == "CS2-Upkk-PanelPLG-Mapchooser":
                 present = bool(plan["current"].get("mapchooser"))
         if present:
-            completed.append(
-                {"action": f"install:{title}", "success": True, "skipped": True}
-            )
+            completed.append({"action": f"install:{title}", "success": True, "skipped": True})
             continue
 
         async def plugin_progress(
@@ -176,13 +146,19 @@ async def _install_mode_plugins(db: AsyncSession, current_server: Server, user: 
         )
         completed.append({"action": f"install:{title}", "result": result})
         if not result.get("success"):
-            raise host.GameModePlanError(
-                str(result.get("message") or f"Failed to install {title}")
-            )
+            raise host.GameModePlanError(str(result.get("message") or f"Failed to install {title}"))
         await report(f"install:{title}", "completed", f"Installed {title}")
 
 
-async def _restart_mode_server(db: AsyncSession, current_server: Server, user: User, plan: dict[str, Any], completed: list[dict[str, Any]], report: PlanReport, recipe: GameModeRecipe) -> None:
+async def _restart_mode_server(
+    db: AsyncSession,
+    current_server: Server,
+    user: User,
+    plan: dict[str, Any],
+    completed: list[dict[str, Any]],
+    report: PlanReport,
+    recipe: GameModeRecipe,
+) -> None:
     await report(
         "restart_and_wait",
         "running",
@@ -205,9 +181,7 @@ async def _restart_mode_server(db: AsyncSession, current_server: Server, user: U
     # freshly installed libraries are not mapped by a running
     # process, so patchelf can rewrite them in place.
     await host.run_planned_execstack_step(plan, current_server, report)
-    started, start_message = await restart_manager.start_server(
-        current_server, restart_progress
-    )
+    started, start_message = await restart_manager.start_server(current_server, restart_progress)
     if not started:
         current_server.status = host.ServerStatus.ERROR
         db.add(current_server)
@@ -234,5 +208,3 @@ async def _restart_mode_server(db: AsyncSession, current_server: Server, user: U
         "completed",
         "Restarted and found generated MapChooser configs",
     )
-
-

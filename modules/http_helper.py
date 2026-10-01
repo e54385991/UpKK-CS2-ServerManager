@@ -8,6 +8,7 @@ import inspect
 import logging
 import os
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any, Dict, Optional, Tuple
 
 import anyio
@@ -78,6 +79,41 @@ async def _emit_retry_progress(
         retry_count=retry_count,
         force=True,
     )
+
+
+def _proxied_request_url(url: str, proxy: str | None) -> str:
+    request_url = url
+    if proxy and proxy.strip():
+        proxy_base = proxy.strip().rstrip("/")
+        # Only proxy GitHub file downloads, not API requests
+        # Proxy services don't support API endpoints
+        if url.startswith(GITHUB_PREFIX) and GITHUB_DOWNLOAD_PATTERN in url:
+            request_url = f"{proxy_base}/{url}"
+            logger.debug(f"Using GitHub proxy for download: {proxy_base}")
+        elif url.startswith(GITHUB_API_PREFIX):
+            logger.debug("Skipping proxy for GitHub API request (proxy only works for downloads)")
+
+    return request_url
+
+
+async def _notify_download_progress(
+    progress_callback: Callable[[int, int], Awaitable[None] | None],
+    bytes_downloaded: int,
+    total_bytes: int,
+) -> None:
+    if inspect.iscoroutinefunction(progress_callback):
+        await progress_callback(bytes_downloaded, total_bytes)
+    else:
+        progress_callback(bytes_downloaded, total_bytes)
+
+
+def _download_content_length(response: httpx.Response) -> int:
+    try:
+        total_bytes = int(response.headers.get("Content-Length", 0))
+    except TypeError, ValueError:
+        total_bytes = 0
+
+    return total_bytes
 
 
 class HTTPHelper:
@@ -163,18 +199,7 @@ class HTTPHelper:
                 # Apply proxy to URL if provided
                 # IMPORTANT: GitHub proxy services like ghfast.top only work for file downloads,
                 # NOT for API requests (api.github.com). Only proxy actual file downloads.
-                request_url = url
-                if proxy and proxy.strip():
-                    proxy_base = proxy.strip().rstrip("/")
-                    # Only proxy GitHub file downloads, not API requests
-                    # Proxy services don't support API endpoints
-                    if url.startswith(GITHUB_PREFIX) and GITHUB_DOWNLOAD_PATTERN in url:
-                        request_url = f"{proxy_base}/{url}"
-                        logger.debug(f"Using GitHub proxy for download: {proxy_base}")
-                    elif url.startswith(GITHUB_API_PREFIX):
-                        logger.debug(
-                            "Skipping proxy for GitHub API request (proxy only works for downloads)"
-                        )
+                request_url = _proxied_request_url(url, proxy)
 
                 logger.debug(
                     f"Making {method} request to {request_url} (attempt {attempt + 1}/{attempts})"
@@ -417,10 +442,7 @@ class HTTPHelper:
                         "GET", url, headers=headers, timeout=request_timeout, follow_redirects=True
                     ) as response:
                         if response.status_code >= 200 and response.status_code < 300:
-                            try:
-                                total_bytes = int(response.headers.get("Content-Length", 0))
-                            except TypeError, ValueError:
-                                total_bytes = 0
+                            total_bytes = _download_content_length(response)
                             bytes_downloaded = 0
                             parent_directory = os.path.dirname(local_path)
                             if parent_directory:
@@ -432,10 +454,9 @@ class HTTPHelper:
                                     await f.write(chunk)
                                     bytes_downloaded += len(chunk)
                                     if progress_callback:
-                                        if inspect.iscoroutinefunction(progress_callback):
-                                            await progress_callback(bytes_downloaded, total_bytes)
-                                        else:
-                                            progress_callback(bytes_downloaded, total_bytes)
+                                        await _notify_download_progress(
+                                            progress_callback, bytes_downloaded, total_bytes
+                                        )
                                     last_event_at = await _emit_transfer_progress(
                                         progress_event_callback,
                                         started_at=started_at,

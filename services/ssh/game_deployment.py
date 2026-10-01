@@ -55,7 +55,7 @@ class GameDeploymentMixin(SSHMixinBase):
             server.apt_mirror = result.apt_mirror
         return result.success, result.message
 
-    async def deploy_cs2_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:  # noqa: C901 - deployment protocol.
+    async def deploy_cs2_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """
         Deploy CS2 server on Ubuntu 24.04+ without requiring sudo
         Similar to LinuxGSM approach - works entirely in user space

@@ -2,20 +2,20 @@
 
 import { createServerAction } from "@/modules/servers/actions";
 import {
-isCs2Username
+  isCs2Username
 } from "@/modules/servers/cs2-username";
 import {
-rememberInitializedHost
+  rememberInitializedHost
 } from "@/modules/servers/initialized-hosts";
 import {
-deleteInitializedHostAction,
-getManualSetupScriptAction,
-listInitializedHostsAction,
+  deleteInitializedHostAction,
+  getManualSetupScriptAction,
+  listInitializedHostsAction,
 } from "@/modules/servers/setup-actions";
 import type {
-AutoSetupResult,
-InitializedHost,
-ManualSetupScript,
+  AutoSetupResult,
+  InitializedHost,
+  ManualSetupScript,
 } from "@/modules/servers/setup-api";
 import { runAutoSetupFromBrowser } from "@/modules/servers/setup-client";
 import { alertDialog } from "@/shared/feedback/alert-store";
@@ -27,11 +27,11 @@ import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
-useCallback,
-useEffect,
-useRef,
-useState,
-type FormEvent
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent
 } from "react";
 
 import { type Captcha, type Mode, openSetupProgressSocket, waitForSocket } from "./setup-wizard-parts";
@@ -268,7 +268,6 @@ export function useSetupWizard({
     }
   }
 
-  
   return {
     t,
     setupFormRef,

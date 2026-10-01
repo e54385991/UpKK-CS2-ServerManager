@@ -2,43 +2,26 @@
 
 from __future__ import annotations
 
-import fnmatch
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-from sqlalchemy import update as sql_update
-from sqlmodel import col, select
-
-from modules.models import ManagedPlugin, Server, User
 from services.compat import LateBoundModule
 from services.discord_notification_service import EVENT_PLUGIN_UPDATE
 from services.plugins.auto_update.types import AutoUpdateServiceProtocol
 
+from .batch_apply import _apply_update_candidates as _apply_update_candidates
+from .batch_apply import _backup_update_candidates as _backup_update_candidates
+from .batch_apply import _restart_after_batch as _restart_after_batch
+from .release_checks import _finish_empty_check as _finish_empty_check
 from .release_checks import _load_update_configuration as _load_update_configuration
 from .release_checks import _resolve_update_candidates as _resolve_update_candidates
-from .release_checks import _finish_empty_check as _finish_empty_check
-from .batch_apply import _backup_update_candidates as _backup_update_candidates
-from .batch_apply import _apply_update_candidates as _apply_update_candidates
-from .batch_apply import _restart_after_batch as _restart_after_batch
 
 logger = logging.getLogger("services.plugin_auto_update_service")
 host = LateBoundModule("services.plugin_auto_update_service")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 class AutoUpdateCheckMixin:
-    async def _check_server(  # noqa: C901
+    async def _check_server(
         self: AutoUpdateServiceProtocol,
         server_id: int,
         force: bool = False,
@@ -65,7 +48,9 @@ class AutoUpdateCheckMixin:
             configuration = await _load_update_configuration(self, server_id, force, plugin_id)
             if isinstance(configuration, dict):
                 return configuration
-            server, user, post_update_commands_enabled, post_update_command_ids, items = configuration
+            server, user, post_update_commands_enabled, post_update_command_ids, items = (
+                configuration
+            )
 
             from services.linux_runtime_service import detect_linux_runtime_profile
 
@@ -88,7 +73,9 @@ class AutoUpdateCheckMixin:
                 )
                 return {"success": False, "message": "Server owner not found"}
 
-            candidates, resolve_failures = await _resolve_update_candidates(self, server_id, server, user, items, linux_runtime_profile)
+            candidates, resolve_failures = await _resolve_update_candidates(
+                self, server_id, server, user, items, linux_runtime_profile
+            )
 
             if not candidates:
                 return await _finish_empty_check(self, server_id, server, items, resolve_failures)
@@ -143,11 +130,28 @@ class AutoUpdateCheckMixin:
                 state="in_progress",
             )
 
-            backup_items, backup_success, backup_message, backup_blocked_ids = await _backup_update_candidates(self, server_id, server, candidates)
+            (
+                backup_items,
+                backup_success,
+                backup_message,
+                backup_blocked_ids,
+            ) = await _backup_update_candidates(self, server_id, server, candidates)
 
-            results = await _apply_update_candidates(self, server_id, server, user, candidates, backup_items, backup_success, backup_message, backup_blocked_ids)
+            results = await _apply_update_candidates(
+                self,
+                server_id,
+                server,
+                user,
+                candidates,
+                backup_items,
+                backup_success,
+                backup_message,
+                backup_blocked_ids,
+            )
 
-            restart_success, restart_message = await _restart_after_batch(self, server_id, server, candidates, results, status_check_ok, was_running)
+            restart_success, restart_message = await _restart_after_batch(
+                self, server_id, server, candidates, results, status_check_ok, was_running
+            )
 
             post_update_success = True
             post_update_message = "Not requested"

@@ -2,57 +2,59 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import time
 from typing import TYPE_CHECKING, Dict, List
 
 from modules.models import Server
-from services.compat import LateBoundModule
 from services.ssh_pool_types import PooledConnection
 
 if TYPE_CHECKING:
     from .ssh_connection_pool import SSHConnectionPool
 
 
-host = LateBoundModule("services.ssh_connection_pool")
+logger = logging.getLogger("services.ssh_connection_pool")
 
 
 async def _cleanup_loop(self: SSHConnectionPool):
     """Background task to clean up stale connections"""
     while True:
         try:
-            await host.asyncio.sleep(self.cleanup_interval)
+            await asyncio.sleep(self.cleanup_interval)
             await self._cleanup_stale_connections()
-        except host.asyncio.CancelledError:
+        except asyncio.CancelledError:
             break
         except Exception as e:
-            host.logger.error(f"Error in cleanup loop: {e}")
+            logger.error(f"Error in cleanup loop: {e}")
 
 
 async def _cleanup_stale_connections(self: SSHConnectionPool):
     """Remove stale, idle, or dead connections"""
     stale_connections: list[PooledConnection] = []
     async with self.pool_lock:
-        now = host.time.time()
+        now = time.time()
         to_remove: list[PooledConnection] = []
 
         for key, pooled_conn in list(self.connections.items()):
             # Check if connection is dead
             if not pooled_conn.is_alive():
                 to_remove.append(pooled_conn)
-                host.logger.debug(f"Removing dead connection: {key}")
+                logger.debug(f"Removing dead connection: {key}")
                 continue
 
             # Check idle timeout
             idle_time = now - pooled_conn.last_used
             if pooled_conn.in_use_count == 0 and idle_time > self.idle_timeout:
                 to_remove.append(pooled_conn)
-                host.logger.debug(f"Removing idle connection (idle {idle_time:.1f}s): {key}")
+                logger.debug(f"Removing idle connection (idle {idle_time:.1f}s): {key}")
                 continue
 
             # Check max lifetime
             age = now - pooled_conn.created_at
             if age > self.max_lifetime:
                 to_remove.append(pooled_conn)
-                host.logger.debug(f"Removing old connection (age {age:.1f}s): {key}")
+                logger.debug(f"Removing old connection (age {age:.1f}s): {key}")
                 continue
 
         # Retire stale connections. Active leases keep their exact generation
@@ -63,7 +65,7 @@ async def _cleanup_stale_connections(self: SSHConnectionPool):
                 stale_connections.append(close_candidate)
 
         if to_remove:
-            host.logger.info(
+            logger.info(
                 f"Cleaned up {len(to_remove)} stale connection(s). Active: {len(self.connections)}"
             )
 
@@ -79,13 +81,13 @@ async def _close_connections_safely(
     if not unique_connections:
         return
 
-    close_future = host.asyncio.gather(
+    close_future = asyncio.gather(
         *(connection.close() for connection in unique_connections),
         return_exceptions=True,
     )
     try:
-        await host.asyncio.shield(close_future)
-    except host.asyncio.CancelledError:
+        await asyncio.shield(close_future)
+    except asyncio.CancelledError:
         await close_future
         raise
 
@@ -129,7 +131,7 @@ async def get_connection_info(self: SSHConnectionPool, server: Server) -> dict:
     async with self.pool_lock:
         if key in self.connections:
             pooled_conn = self.connections[key]
-            now = host.time.time()
+            now = time.time()
             window_start = now - self.max_lifetime
 
             # Count recent reconnection attempts

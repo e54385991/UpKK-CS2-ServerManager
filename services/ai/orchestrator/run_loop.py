@@ -18,24 +18,27 @@ from modules.models import (
     AIMessage,
     AIRun,
     AIToolRun,
-    User,
     Server,
+    User,
 )
+from services.ai_security import AIProviderConfig
 from services.compat import LateBoundModule
 
 host = LateBoundModule("services.ai_orchestrator")
 logger = logging.getLogger(__name__)
 
 
-async def _normalize_tool_call(db: AsyncSession, server: Server | None, raw_call: dict[str, Any], seen_ids: set[str], signatures: Counter[tuple[str, str]], duplicate_read_calls: dict[str, tuple[str, str]]) -> tuple[dict[str, Any], str, dict[str, Any], str]:
+async def _normalize_tool_call(
+    db: AsyncSession,
+    server: Server | None,
+    raw_call: dict[str, Any],
+    seen_ids: set[str],
+    signatures: Counter[tuple[str, str]],
+    duplicate_read_calls: dict[str, tuple[str, str]],
+) -> tuple[dict[str, Any], str, dict[str, Any], str]:
     call_id = str(raw_call.get("id") or "")
     function = raw_call.get("function")
-    if (
-        not call_id
-        or len(call_id) > 100
-        or call_id in seen_ids
-        or not isinstance(function, dict)
-    ):
+    if not call_id or len(call_id) > 100 or call_id in seen_ids or not isinstance(function, dict):
         raise host.AIProviderError("AI provider returned an invalid tool call ID")
     seen_ids.add(call_id)
     name = str(function.get("name") or "")
@@ -45,9 +48,7 @@ async def _normalize_tool_call(db: AsyncSession, server: Server | None, raw_call
     try:
         arguments = json.loads(function.get("arguments") or "{}")
     except (TypeError, json.JSONDecodeError) as exc:
-        raise host.AIProviderError(
-            f"AI provider supplied invalid JSON for {name}"
-        ) from exc
+        raise host.AIProviderError(f"AI provider supplied invalid JSON for {name}") from exc
     if not isinstance(arguments, dict):
         raise host.AIProviderError(f"Tool arguments for {name} must be an object")
     try:
@@ -67,29 +68,44 @@ async def _normalize_tool_call(db: AsyncSession, server: Server | None, raw_call
     signatures[(name, arguments_hash)] += 1
     if signatures[(name, arguments_hash)] > host.MAX_REPEATED_CALLS:
         if spec.risk != "read":
-            raise host.AIProviderError(
-                f"Repeated tool-call loop detected for {name}"
-            )
+            raise host.AIProviderError(f"Repeated tool-call loop detected for {name}")
         duplicate_read_calls[call_id] = (name, arguments_hash)
 
     return raw_call, name, clean_arguments, arguments_hash
 
 
-async def _normalize_tool_batch(db: AsyncSession, server: Server | None, calls: list[dict[str, Any]], signatures: Counter[tuple[str, str]]) -> tuple[list[tuple[dict[str, Any], str, dict[str, Any], str]], dict[str, tuple[str, str]]]:
+async def _normalize_tool_batch(
+    db: AsyncSession,
+    server: Server | None,
+    calls: list[dict[str, Any]],
+    signatures: Counter[tuple[str, str]],
+) -> tuple[list[tuple[dict[str, Any], str, dict[str, Any], str]], dict[str, tuple[str, str]]]:
     normalized_calls: list[tuple[dict[str, Any], str, dict[str, Any], str]] = []
     duplicate_read_calls: dict[str, tuple[str, str]] = {}
     seen_ids: set[str] = set()
     for raw_call in calls:
         if not isinstance(raw_call, dict):
             raise host.AIProviderError("AI provider returned an invalid tool call")
-        normalized_calls.append(await _normalize_tool_call(db, server, raw_call, seen_ids, signatures, duplicate_read_calls))
+        normalized_calls.append(
+            await _normalize_tool_call(
+                db, server, raw_call, seen_ids, signatures, duplicate_read_calls
+            )
+        )
 
     host._validate_write_tool_batch([item[1] for item in normalized_calls])
 
     return normalized_calls, duplicate_read_calls
 
 
-async def _persist_tool_batch(db: AsyncSession, run: AIRun, conversation: AIConversation, calls: list[dict[str, Any]], normalized_calls: list[tuple[dict[str, Any], str, dict[str, Any], str]], content: str, round_index: int) -> list[AIToolRun]:
+async def _persist_tool_batch(
+    db: AsyncSession,
+    run: AIRun,
+    conversation: AIConversation,
+    calls: list[dict[str, Any]],
+    normalized_calls: list[tuple[dict[str, Any], str, dict[str, Any], str]],
+    content: str,
+    round_index: int,
+) -> list[AIToolRun]:
     assistant_turn = AIMessage(
         conversation_id=conversation.id,
         role="assistant",
@@ -111,9 +127,7 @@ async def _persist_tool_batch(db: AsyncSession, run: AIRun, conversation: AIConv
             requires_approval=spec.risk == "write",
             status="pending_approval" if spec.risk == "write" else "pending",
             approval_expires_at=(
-                host.get_current_time() + timedelta(minutes=15)
-                if spec.risk == "write"
-                else None
+                host.get_current_time() + timedelta(minutes=15) if spec.risk == "write" else None
             ),
         )
         db.add(item)
@@ -136,7 +150,9 @@ async def _persist_tool_batch(db: AsyncSession, run: AIRun, conversation: AIConv
     return created
 
 
-async def _prepare_tool_approval(db: AsyncSession, run: AIRun, item: AIToolRun, user: User, server: Server | None) -> None:
+async def _prepare_tool_approval(
+    db: AsyncSession, run: AIRun, item: AIToolRun, user: User, server: Server | None
+) -> None:
     async def approval_event(event_type: str, payload: dict[str, Any]) -> None:
         await host._emit(run.id, event_type, payload)
 
@@ -186,9 +202,7 @@ async def _prepare_tool_approval(db: AsyncSession, run: AIRun, item: AIToolRun, 
             },
         )
         return
-    item.plan_snapshot, item.progress_snapshot = host._build_plan_snapshots(
-        item.tool_name, summary
-    )
+    item.plan_snapshot, item.progress_snapshot = host._build_plan_snapshots(item.tool_name, summary)
     item.progress_updated_at = host.get_current_time()
     db.add(item)
     await db.commit()
@@ -206,19 +220,24 @@ async def _prepare_tool_approval(db: AsyncSession, run: AIRun, item: AIToolRun, 
     )
 
 
-async def _process_tool_batch(db: AsyncSession, run: AIRun, created: list[AIToolRun], user: User, server: Server | None, duplicate_read_calls: dict[str, tuple[str, str]], previous_results: dict[tuple[str, str], dict[str, Any]]) -> None:
+async def _process_tool_batch(
+    db: AsyncSession,
+    run: AIRun,
+    created: list[AIToolRun],
+    user: User,
+    server: Server | None,
+    duplicate_read_calls: dict[str, tuple[str, str]],
+    previous_results: dict[tuple[str, str], dict[str, Any]],
+) -> None:
     for item in created:
         if item.requires_approval:
-
             await _prepare_tool_approval(db, run, item, user, server)
         else:
             signature = duplicate_read_calls.get(item.tool_call_id)
             if signature is None:
                 await host._execute_tool_run(db, run, item, user, server)
                 if isinstance(item.result, dict):
-                    previous_results[(item.tool_name, item.arguments_hash)] = (
-                        item.result
-                    )
+                    previous_results[(item.tool_name, item.arguments_hash)] = item.result
                 continue
             reused_result = {
                 "success": True,
@@ -228,9 +247,7 @@ async def _process_tool_batch(db: AsyncSession, run: AIRun, created: list[AITool
                     "Use the previous result, change the search arguments, or answer "
                     "the user; do not repeat the same call again."
                 ),
-                "previous_result": host.sanitize_tool_result(
-                    previous_results.get(signature)
-                ),
+                "previous_result": host.sanitize_tool_result(previous_results.get(signature)),
             }
             await host._execute_tool_run(
                 db,
@@ -242,11 +259,11 @@ async def _process_tool_batch(db: AsyncSession, run: AIRun, created: list[AITool
             )
 
 
-async def _complete_text_turn(db: AsyncSession, run: AIRun, conversation: AIConversation, content: str, round_index: int) -> None:
+async def _complete_text_turn(
+    db: AsyncSession, run: AIRun, conversation: AIConversation, content: str, round_index: int
+) -> None:
     if not content.strip():
-        raise host.AIProviderError(
-            "AI provider returned neither text nor tool calls"
-        )
+        raise host.AIProviderError("AI provider returned neither text nor tool calls")
     assistant = AIMessage(
         conversation_id=conversation.id,
         role="assistant",
@@ -274,7 +291,9 @@ async def _complete_text_turn(db: AsyncSession, run: AIRun, conversation: AIConv
     return
 
 
-async def _load_run_context(db: AsyncSession, run: AIRun) -> tuple[AIConversation, User, Server | None, EffectiveProvider] | None:
+async def _load_run_context(
+    db: AsyncSession, run: AIRun
+) -> tuple[AIConversation, User, Server | None, AIProviderConfig] | None:
     conversation = await db.get(AIConversation, run.conversation_id)
     user = await db.get(User, run.user_id)
     if conversation is None or user is None or conversation.user_id != user.id:
@@ -302,7 +321,18 @@ async def _load_run_context(db: AsyncSession, run: AIRun) -> tuple[AIConversatio
     return conversation, user, server, provider
 
 
-async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration state machine.
+async def _round_capabilities(db: AsyncSession, server: Server | None) -> list[str] | None:
+    allowed_capabilities = None
+    if server is not None and server.id is not None:
+        effective_policy = await host.get_effective_agent_policy(db, server.id)
+        if not effective_policy.enabled:
+            raise host.AgentCapabilityDenied("AI Agent is disabled for this server")
+        allowed_capabilities = effective_policy.capabilities
+
+    return allowed_capabilities
+
+
+async def process_ai_run(run_id: str) -> None:
     """Run or resume one conversation job. Exceptions become persisted failures."""
     async with host.async_session_maker() as db:
         run = await db.get(AIRun, run_id)
@@ -403,12 +433,7 @@ async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration sta
                         "estimated": True,
                     },
                 )
-                allowed_capabilities = None
-                if server is not None and server.id is not None:
-                    effective_policy = await host.get_effective_agent_policy(db, server.id)
-                    if not effective_policy.enabled:
-                        raise host.AgentCapabilityDenied("AI Agent is disabled for this server")
-                    allowed_capabilities = effective_policy.capabilities
+                allowed_capabilities = await _round_capabilities(db, server)
                 response = await host._create_provider_response_with_retry(
                     provider,
                     messages,
@@ -455,11 +480,17 @@ async def process_ai_run(run_id: str) -> None:  # noqa: C901 - orchestration sta
                         f"Tool-call limit exceeded ({max_tool_calls_per_round} per round)"
                     )
 
-                normalized_calls, duplicate_read_calls = await _normalize_tool_batch(db, server, calls, signatures)
+                normalized_calls, duplicate_read_calls = await _normalize_tool_batch(
+                    db, server, calls, signatures
+                )
 
-                created = await _persist_tool_batch(db, run, conversation, calls, normalized_calls, content, round_index)
+                created = await _persist_tool_batch(
+                    db, run, conversation, calls, normalized_calls, content, round_index
+                )
 
-                await _process_tool_batch(db, run, created, user, server, duplicate_read_calls, previous_results)
+                await _process_tool_batch(
+                    db, run, created, user, server, duplicate_read_calls, previous_results
+                )
 
                 if any(item.status == "pending_approval" for item in created):
                     run.status = "waiting_approval"

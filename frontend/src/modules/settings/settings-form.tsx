@@ -2,42 +2,42 @@
 
 import { GitHubTokenCheck } from "@/modules/settings/github-token-check";
 import {
-AuditRetentionCard,
-ClientIpCard,
-GoogleLoginCard,
-LoggingCard
+  AuditRetentionCard,
+  ClientIpCard,
+  GoogleLoginCard,
+  LoggingCard
 } from "@/modules/settings/runtime-cards";
-import { Field,GmailSetupGuide } from "@/modules/settings/settings-fields";
+import { Field, GmailSetupGuide } from "@/modules/settings/settings-fields";
 import { SettingsSection } from "@/modules/settings/settings-section";
 import {
-type EmailProvider,
-type ProxyMode,
-type SystemSettings
+  type EmailProvider,
+  type ProxyMode,
+  type SystemSettings
 } from "@/modules/settings/types";
 import { cn } from "@/shared/lib/cn";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
-Card,
-CardContent,
-CardDescription,
-CardHeader,
-CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/shared/ui/card";
-import { Input,Label } from "@/shared/ui/input";
+import { Input, Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 import { Textarea } from "@/shared/ui/textarea";
 import {
-CloudDownload,
-KeyRound,
-Mail,
-Save,
-Send,
-ShieldCheck,
-TriangleAlert,
-Upload,
-UserPlus,
+  CloudDownload,
+  KeyRound,
+  Mail,
+  Save,
+  Send,
+  ShieldCheck,
+  TriangleAlert,
+  Upload,
+  UserPlus,
 } from "lucide-react";
 
 import { type SettingsSectionKey } from "./settings-form-parts";
@@ -120,11 +120,11 @@ export function SettingsForm({
           className={cn(
             "flex items-start gap-2 rounded-md border px-4 py-3 text-sm",
             banner.tone === "ok" &&
-              "border-ok/30 bg-ok-muted/40 text-ok",
+            "border-ok/30 bg-ok-muted/40 text-ok",
             banner.tone === "warn" &&
-              "border-warn/30 bg-warn-muted/40 text-warn",
+            "border-warn/30 bg-warn-muted/40 text-warn",
             banner.tone === "danger" &&
-              "border-danger/30 bg-danger-muted/40 text-danger",
+            "border-danger/30 bg-danger-muted/40 text-danger",
           )}
         >
           {banner.tone === "ok" ? (
@@ -140,7 +140,7 @@ export function SettingsForm({
         className={cn(
           "sticky top-4 z-10 flex items-center justify-between gap-3 border border-line bg-surface/95 px-3 py-2 backdrop-blur",
           !["downloads", "notifications", "security", "logging"].includes(activeSection) &&
-            "hidden",
+          "hidden",
         )}
       >
         <span className="text-xs text-fg-subtle">

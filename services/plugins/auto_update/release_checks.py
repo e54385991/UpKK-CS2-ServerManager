@@ -1,23 +1,27 @@
 """Lifecycle phases sharing the original domain facade and explicit inputs."""
 
 from __future__ import annotations
+
 import fnmatch
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
+
 from sqlalchemy import update as sql_update
 from sqlmodel import col, select
+
 from modules.models import ManagedPlugin, Server, User
 from services.compat import LateBoundModule
 from services.discord_notification_service import EVENT_PLUGIN_UPDATE
 from services.plugins.auto_update.types import AutoUpdateServiceProtocol
-
 
 logger = logging.getLogger("services.plugin_auto_update_service")
 
 host = LateBoundModule("services.plugin_auto_update_service")
 
 
-async def _load_update_configuration(self: AutoUpdateServiceProtocol, server_id: int, force: bool, plugin_id: int | None) -> tuple[Server, User | None, bool, list[int], list[ManagedPlugin]] | Dict[str, Any]:
+async def _load_update_configuration(
+    self: AutoUpdateServiceProtocol, server_id: int, force: bool, plugin_id: int | None
+) -> tuple[Server, User | None, bool, list[int], list[ManagedPlugin]] | Dict[str, Any]:
     async with host.async_session_maker() as db:
         from services.plugins.diagnostic_policy import has_diagnostic_blocker
 
@@ -72,7 +76,14 @@ async def _load_update_configuration(self: AutoUpdateServiceProtocol, server_id:
     return server, user, post_update_commands_enabled, post_update_command_ids, items
 
 
-async def _resolve_update_candidates(self: AutoUpdateServiceProtocol, server_id: int, server: Server, user: User, items: list[ManagedPlugin], linux_runtime_profile: Dict[str, Any]) -> tuple[List[Tuple[ManagedPlugin, Dict[str, Any]]], List[Tuple[ManagedPlugin, str]]]:
+async def _resolve_update_candidates(
+    self: AutoUpdateServiceProtocol,
+    server_id: int,
+    server: Server,
+    user: User,
+    items: list[ManagedPlugin],
+    linux_runtime_profile: Dict[str, Any],
+) -> tuple[List[Tuple[ManagedPlugin, Dict[str, Any]]], List[Tuple[ManagedPlugin, str]]]:
     candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]] = []
     resolve_failures: List[Tuple[ManagedPlugin, str]] = []
     await self._publish_status(
@@ -102,9 +113,7 @@ async def _resolve_update_candidates(self: AutoUpdateServiceProtocol, server_id:
                     linux_runtime_profile,
                 )
         except Exception as exc:
-            logger.exception(
-                "Failed to resolve latest release for managed plugin %s", item.id
-            )
+            logger.exception("Failed to resolve latest release for managed plugin %s", item.id)
             ok, latest, error = False, None, str(exc)
         same_release = bool(
             ok
@@ -116,8 +125,7 @@ async def _resolve_update_candidates(self: AutoUpdateServiceProtocol, server_id:
         )
         selected_asset_name = str(latest["asset"].get("name") or "") if latest else ""
         same_asset = bool(
-            not item.installed_asset_name
-            or item.installed_asset_name == selected_asset_name
+            not item.installed_asset_name or item.installed_asset_name == selected_asset_name
         )
         if not item.installed_asset_name and item.asset_glob:
             same_asset = fnmatch.fnmatchcase(selected_asset_name, item.asset_glob)
@@ -157,7 +165,13 @@ async def _resolve_update_candidates(self: AutoUpdateServiceProtocol, server_id:
     return candidates, resolve_failures
 
 
-async def _finish_empty_check(self: AutoUpdateServiceProtocol, server_id: int, server: Server, items: list[ManagedPlugin], resolve_failures: List[Tuple[ManagedPlugin, str]]) -> Dict[str, Any]:
+async def _finish_empty_check(
+    self: AutoUpdateServiceProtocol,
+    server_id: int,
+    server: Server,
+    items: list[ManagedPlugin],
+    resolve_failures: List[Tuple[ManagedPlugin, str]],
+) -> Dict[str, Any]:
     if resolve_failures:
         host.discord_notification_service.queue_notify(
             server,
@@ -174,9 +188,7 @@ async def _finish_empty_check(self: AutoUpdateServiceProtocol, server_id: int, s
         )
     terminal_success = not resolve_failures
     terminal_message = (
-        "No plugin updates available"
-        if terminal_success
-        else "Plugin update checks failed"
+        "No plugin updates available" if terminal_success else "Plugin update checks failed"
     )
     await self._publish_status(
         server_id,
@@ -190,9 +202,5 @@ async def _finish_empty_check(self: AutoUpdateServiceProtocol, server_id: int, s
     return {
         "success": not resolve_failures,
         "message": terminal_message,
-        "failures": [
-            f"{item.display_name}: {error}" for item, error in resolve_failures
-        ],
+        "failures": [f"{item.display_name}: {error}" for item, error in resolve_failures],
     }
-
-

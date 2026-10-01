@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import shlex
 from collections.abc import Awaitable, Callable, Iterable, Sequence
-from dataclasses import dataclass
-from typing import Literal, Protocol
+from functools import partial
+from typing import Literal
 
 from services.apt_mirrors import (
     OS_RELEASE_COMMAND,
+    OsRelease,
     apply_apt_mirror_command,
     is_apt_source_failure,
     mirror_label,
@@ -30,57 +31,11 @@ from services.system_dependencies import (
     steamcmd_architecture_supported,
 )
 
+from .host_initialization_types import HostCommandRunner as HostCommandRunner
+from .host_initialization_types import HostDependencyResult as HostDependencyResult
+
 Privilege = Literal["root", "sudo", "none"]
 ProgressCallback = Callable[[str], Awaitable[None] | None]
-
-
-class HostCommandRunner(Protocol):
-    async def run(self, command: str, *, timeout: float = 60) -> tuple[int, str, str]: ...
-
-    async def run_privileged(
-        self, command: str, *, timeout: float = 600
-    ) -> tuple[int, str, str]: ...
-
-    async def resolve_privilege(self) -> Privilege: ...
-
-
-@dataclass(frozen=True)
-class HostDependencyResult:
-    success: bool
-    architecture_supported: bool
-    architecture: str
-    missing_before: tuple[str, ...]
-    missing_after: tuple[str, ...]
-    installed: bool
-    privilege: Privilege
-    message: str
-    manual_install_command: str | None
-    logs: tuple[str, ...]
-    apt_mirror: str | None = None
-    failed_mirrors: tuple[str, ...] = ()
-    os_id: str | None = None
-    os_version: str | None = None
-
-    @staticmethod
-    def ready(
-        *,
-        architecture: str,
-        logs: Sequence[str] = (),
-        apt_mirror: str | None = None,
-    ) -> HostDependencyResult:
-        return HostDependencyResult(
-            success=True,
-            architecture_supported=True,
-            architecture=architecture,
-            missing_before=(),
-            missing_after=(),
-            installed=False,
-            privilege="root",
-            message="SteamCMD host dependencies are installed and verified.",
-            manual_install_command=None,
-            logs=tuple(logs),
-            apt_mirror=apt_mirror,
-        )
 
 
 class AsyncsshHostRunner:
@@ -401,6 +356,27 @@ async def _finish_package_install(
     )
 
 
+async def _attempt_package_mirror(
+    runner: HostCommandRunner,
+    missing: Sequence[str],
+    os_release: OsRelease | None,
+    progress: ProgressCallback | None,
+    logs: list[str],
+    tried: list[str],
+    failed_mirrors: list[str],
+    mirror: str | None,
+) -> tuple[int, str, str, str]:
+    if mirror and os_release is not None:
+        applied, _ = await _apply_apt_mirror(
+            runner, os_release, mirror, progress=progress, logs=logs
+        )
+        tried.append(mirror)
+        if not applied:
+            failed_mirrors.append(mirror)
+            return 1, "", "mirror apply failed", "update"
+    return await _update_and_install(runner, missing, progress=progress, logs=logs)
+
+
 async def _install_packages_with_fallback(
     runner: HostCommandRunner,
     packages: Sequence[str],
@@ -418,16 +394,9 @@ async def _install_packages_with_fallback(
     failed_mirrors: list[str] = []
     tried: list[str] = []
 
-    async def attempt(mirror: str | None) -> tuple[int, str, str, str]:
-        if mirror and os_release is not None:
-            applied, _ = await _apply_apt_mirror(
-                runner, os_release, mirror, progress=progress, logs=logs
-            )
-            tried.append(mirror)
-            if not applied:
-                failed_mirrors.append(mirror)
-                return 1, "", "mirror apply failed", "update"
-        return await _update_and_install(runner, missing, progress=progress, logs=logs)
+    attempt = partial(
+        _attempt_package_mirror, runner, missing, os_release, progress, logs, tried, failed_mirrors
+    )
 
     if preferred and (apply_preferred_first or preferred) and os_release is not None:
         active_mirror = preferred

@@ -74,7 +74,13 @@ const app = createServer(async (req, res) => {
   if (path === '/api/v1/overview/host-system-info') {
     return json({ servers: [], timestamp: stamp });
   }
-  if (path === '/api/v1/setup/initialized-servers') return json([]);
+  if (path === '/api/captcha/challenge') return json({ enabled: false });
+  if (path === '/api/v1/setup/manual-script') return json({ cs2_username: 'cs2server', password: 'fixture-only', script: '# fixture manual setup' });
+  if (path === '/api/v1/setup/initialized-servers/fixture/credentials') return json({ key: 'fixture', name: 'Fixture host', host: 'fixture.invalid', ssh_port: 22, ssh_user: 'cs2server', ssh_password: 'fixture-only', game_directory: '/srv/cs2', created_at: stamp });
+  if (path.endsWith('/cleanup/policy')) return json({ enabled: false, retain_days: 7, schedule_value: '03:00', targets: [], has_sudo_password: false, last_run: null, next_run: null, last_status: null, last_error: null, run_count: 0, privilege: 'sudo', manual_execute: [], manual_setup: [], message: null });
+  if (path.endsWith('/game-updates')) return json({ installed_source: 'unknown', steam_check_ok: false, enable_auto_update: false, update_check_interval_hours: 6 });
+  if (path.endsWith('/plugin-updates')) return json({ enable_plugin_auto_update: false, plugin_update_check_interval_hours: 6, enable_plugin_post_update_commands: false, plugin_post_update_command_ids: [], plugins: [] });
+  if (path === '/api/v1/setup/initialized-servers') return json([{ key: 'fixture', name: 'Fixture host', host: 'fixture.invalid', ssh_port: 22, ssh_user: 'cs2server', game_directory: '/srv/cs2', created_at: Date.parse(stamp) / 1000, suggested_game_port: 27015 }]);
   if (path === '/api/v1/servers') return json([server(1), server(2)]);
   if (/^\/api\/v1\/servers\/\d+$/.test(path)) {
     const id = Number(path.split('/').at(-1));

@@ -18,6 +18,42 @@ host = LateBoundModule("api.routes.github_plugins")
 router = host.router
 
 
+def _release_asset_payloads(release_data: dict[str, object]) -> list[dict[str, object]]:
+    asset_payloads = []
+    raw_assets = release_data.get("assets", [])
+    assets_data = raw_assets if isinstance(raw_assets, list) else []
+    for raw_asset in assets_data:
+        if not isinstance(raw_asset, dict):
+            continue
+        asset_data: dict[str, object] = raw_asset
+        asset_name = str(asset_data.get("name") or "")
+        asset_name_lower = asset_name.lower()
+
+        # Skip Windows-specific archives (filename contains 'windows' or 'win')
+        if (
+            "windows" in asset_name_lower
+            or "-win-" in asset_name_lower
+            or "_win_" in asset_name_lower
+            or asset_name_lower.endswith("-win.zip")
+        ):
+            continue
+
+        # Only include archive files that could be plugins (including 7z)
+        if any(
+            asset_name_lower.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]
+        ):
+            asset_payloads.append(
+                {
+                    "name": asset_name,
+                    "browser_download_url": asset_data.get("browser_download_url", ""),
+                    "size": asset_data.get("size", 0),
+                    "content_type": asset_data.get("content_type"),
+                }
+            )
+
+    return asset_payloads
+
+
 @router.get("/releases")
 async def get_github_releases(
     repo_url: str,
@@ -103,37 +139,7 @@ async def get_github_releases(
         release_data: dict[str, object] = raw_release
         if release_data.get("draft") or release_data.get("prerelease"):
             continue
-        asset_payloads = []
-        raw_assets = release_data.get("assets", [])
-        assets_data = raw_assets if isinstance(raw_assets, list) else []
-        for raw_asset in assets_data:
-            if not isinstance(raw_asset, dict):
-                continue
-            asset_data: dict[str, object] = raw_asset
-            asset_name = str(asset_data.get("name") or "")
-            asset_name_lower = asset_name.lower()
-
-            # Skip Windows-specific archives (filename contains 'windows' or 'win')
-            if (
-                "windows" in asset_name_lower
-                or "-win-" in asset_name_lower
-                or "_win_" in asset_name_lower
-                or asset_name_lower.endswith("-win.zip")
-            ):
-                continue
-
-            # Only include archive files that could be plugins (including 7z)
-            if any(
-                asset_name_lower.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]
-            ):
-                asset_payloads.append(
-                    {
-                        "name": asset_name,
-                        "browser_download_url": asset_data.get("browser_download_url", ""),
-                        "size": asset_data.get("size", 0),
-                        "content_type": asset_data.get("content_type"),
-                    }
-                )
+        asset_payloads = _release_asset_payloads(release_data)
 
         from services.linux_runtime_service import annotate_runtime_assets
 

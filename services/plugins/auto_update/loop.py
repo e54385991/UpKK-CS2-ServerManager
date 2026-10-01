@@ -22,6 +22,17 @@ logger = logging.getLogger("services.plugin_auto_update_service")
 host = LateBoundModule("services.plugin_auto_update_service")
 
 
+def _update_status_state(status: Dict[str, Any], state: str) -> None:
+    previous_state = status.get("state")
+    status["state"] = state
+    if state == "running" and previous_state != "running":
+        status["started_at"] = host.get_current_time().isoformat()
+        status["finished_at"] = None
+        status["logs"] = []
+    elif state in {"completed", "failed"}:
+        status["finished_at"] = host.get_current_time().isoformat()
+
+
 class AutoUpdateLoopMixin:
     CHECK_LOOP_SECONDS = 60
 
@@ -57,14 +68,7 @@ class AutoUpdateLoopMixin:
             }
         )
         if state:
-            previous_state = status.get("state")
-            status["state"] = state
-            if state == "running" and previous_state != "running":
-                status["started_at"] = host.get_current_time().isoformat()
-                status["finished_at"] = None
-                status["logs"] = []
-            elif state in {"completed", "failed"}:
-                status["finished_at"] = host.get_current_time().isoformat()
+            _update_status_state(status, state)
         if phase is not None:
             status["phase"] = phase
         if message is not None:

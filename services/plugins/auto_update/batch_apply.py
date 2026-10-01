@@ -1,26 +1,26 @@
 """Lifecycle phases sharing the original domain facade and explicit inputs."""
 
 from __future__ import annotations
-import fnmatch
+
 import logging
-from typing import Any, Dict, List, Optional, Tuple
-from sqlalchemy import update as sql_update
-from sqlmodel import col, select
+from typing import Any, Dict, List, Tuple
+
 from modules.models import ManagedPlugin, Server, User
 from services.compat import LateBoundModule
-from services.discord_notification_service import EVENT_PLUGIN_UPDATE
 from services.plugins.auto_update.types import AutoUpdateServiceProtocol
-
 
 logger = logging.getLogger("services.plugin_auto_update_service")
 
 host = LateBoundModule("services.plugin_auto_update_service")
 
 
-async def _backup_update_candidates(self: AutoUpdateServiceProtocol, server_id: int, server: Server, candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]]) -> tuple[List[Tuple[ManagedPlugin, Dict[str, Any]]], bool, str, set[int | None]]:
-    backup_items = [
-        (item, latest) for item, latest in candidates if item.backup_before_update
-    ]
+async def _backup_update_candidates(
+    self: AutoUpdateServiceProtocol,
+    server_id: int,
+    server: Server,
+    candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]],
+) -> tuple[List[Tuple[ManagedPlugin, Dict[str, Any]]], bool, str, set[int]]:
+    backup_items = [(item, latest) for item, latest in candidates if item.backup_before_update]
     backup_success = True
     backup_message = "Not requested"
     backup_blocked_ids = set()
@@ -31,14 +31,11 @@ async def _backup_update_candidates(self: AutoUpdateServiceProtocol, server_id: 
             message="Creating local backup for selected plugins",
             current=0,
             total=len(candidates),
-            log="Backup requested by: "
-            + ", ".join(item.display_name for item, _ in backup_items),
+            log="Backup requested by: " + ", ".join(item.display_name for item, _ in backup_items),
         )
         backup_success, backup_message = await host._ssh_manager().backup_plugins(server)
     if backup_items and not backup_success:
-        message = (
-            f"Plugin backup failed; plugins requiring backup were skipped: {backup_message}"
-        )
+        message = f"Plugin backup failed; plugins requiring backup were skipped: {backup_message}"
         backup_blocked_ids = {item.id for item, _ in backup_items}
         async with host.async_session_maker() as db:
             for item, _ in backup_items:
@@ -60,16 +57,24 @@ async def _backup_update_candidates(self: AutoUpdateServiceProtocol, server_id: 
     return backup_items, backup_success, backup_message, backup_blocked_ids
 
 
-async def _apply_update_candidates(self: AutoUpdateServiceProtocol, server_id: int, server: Server, user: User, candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]], backup_items: List[Tuple[ManagedPlugin, Dict[str, Any]]], backup_success: bool, backup_message: str, backup_blocked_ids: set[int | None]) -> List[Dict[str, Any]]:
+async def _apply_update_candidates(
+    self: AutoUpdateServiceProtocol,
+    server_id: int,
+    server: Server,
+    user: User,
+    candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]],
+    backup_items: List[Tuple[ManagedPlugin, Dict[str, Any]]],
+    backup_success: bool,
+    backup_message: str,
+    backup_blocked_ids: set[int],
+) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     if backup_items and backup_success:
         update_start_message = "Selected-plugin backup completed; starting plugin updates"
         update_start_log = f"Backup completed: {backup_message}"
     elif backup_items:
         update_start_message = "Continuing plugins that do not require backup"
-        update_start_log = (
-            "Backup-required plugins were skipped; continuing unprotected plugins"
-        )
+        update_start_log = "Backup-required plugins were skipped; continuing unprotected plugins"
     else:
         update_start_message = "No plugin backups requested; starting plugin updates"
         update_start_log = "Backup skipped because no selected plugin enabled it"
@@ -144,7 +149,15 @@ async def _apply_update_candidates(self: AutoUpdateServiceProtocol, server_id: i
     return results
 
 
-async def _restart_after_batch(self: AutoUpdateServiceProtocol, server_id: int, server: Server, candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]], results: List[Dict[str, Any]], status_check_ok: bool, was_running: bool) -> tuple[bool, str]:
+async def _restart_after_batch(
+    self: AutoUpdateServiceProtocol,
+    server_id: int,
+    server: Server,
+    candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]],
+    results: List[Dict[str, Any]],
+    status_check_ok: bool,
+    was_running: bool,
+) -> tuple[bool, str]:
     successful_restart_items = [
         result for result in results if result["success"] and result["restart_after_update"]
     ]
@@ -184,25 +197,15 @@ async def _restart_after_batch(self: AutoUpdateServiceProtocol, server_id: int, 
                     # Never issue start after a failed stop: that could
                     # create a second process in another managed session.
                     restart_success = False
-                    restart_message = (
-                        f"Restart failed while stopping server: {stop_message}"
-                    )
+                    restart_message = f"Restart failed while stopping server: {stop_message}"
                     await self._publish_status(server_id, log=restart_message)
                 else:
                     await host.asyncio.sleep(0.5)
-                    start_success, start_message = await restart_manager.start_server(
-                        server
-                    )
+                    start_success, start_message = await restart_manager.start_server(server)
                     restart_success = start_success
                     restart_message = (
-                        start_message
-                        if start_success
-                        else f"Restart failed: {start_message}"
+                        start_message if start_success else f"Restart failed: {start_message}"
                     )
-                    await self._publish_status(
-                        server_id, log=f"Start result: {restart_message}"
-                    )
+                    await self._publish_status(server_id, log=f"Start result: {restart_message}")
 
     return restart_success, restart_message
-
-

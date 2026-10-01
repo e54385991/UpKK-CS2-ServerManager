@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# Leaf routes register here in their original position after router initialization.
+# ruff: noqa: E402
 from typing import Literal as Literal
 
 from fastapi import APIRouter as APIRouter
@@ -87,18 +89,40 @@ async def _notify_manager(user_id: int) -> None:
     await discord_bot_manager.reconcile_user(user_id)
 
 
-from .discord_bot_settings import _bot_response as _bot_response
-from .discord_bot_settings import _bound_menu_push_channels as _bound_menu_push_channels
-from .discord_bot_settings import _connected_bot_token as _connected_bot_token
-from .discord_bot_settings import _discord_options_response as _discord_options_response
-from .discord_bot_settings import _global_binding_response as _global_binding_response
-from .discord_bot_settings import _load_discord_options as _load_discord_options  # noqa: E402
-from .discord_bot_settings import _stored_token as _stored_token
-from .discord_bot_settings import _validate_binding_selection as _validate_binding_selection
-from .discord_bot_settings import delete_discord_bot as delete_discord_bot
-from .discord_bot_settings import get_discord_bot as get_discord_bot
-from .discord_bot_settings import test_discord_bot as test_discord_bot
-from .discord_bot_settings import update_discord_bot as update_discord_bot
+from .discord_bot_settings import (
+    _bot_response as _bot_response,
+)
+from .discord_bot_settings import (
+    _bound_menu_push_channels as _bound_menu_push_channels,
+)
+from .discord_bot_settings import (
+    _connected_bot_token as _connected_bot_token,
+)
+from .discord_bot_settings import (
+    _discord_options_response as _discord_options_response,
+)
+from .discord_bot_settings import (
+    _global_binding_response as _global_binding_response,
+)
+from .discord_bot_settings import _load_discord_options as _load_discord_options
+from .discord_bot_settings import (
+    _stored_token as _stored_token,
+)
+from .discord_bot_settings import (
+    _validate_binding_selection as _validate_binding_selection,
+)
+from .discord_bot_settings import (
+    delete_discord_bot as delete_discord_bot,
+)
+from .discord_bot_settings import (
+    get_discord_bot as get_discord_bot,
+)
+from .discord_bot_settings import (
+    test_discord_bot as test_discord_bot,
+)
+from .discord_bot_settings import (
+    update_discord_bot as update_discord_bot,
+)
 
 
 @router.get("/api/auth/discord-bot/guilds", response_model=list[DiscordGuildOption])

@@ -79,7 +79,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
         className={cn(
           "relative gap-2 overflow-visible",
           remaining > 0 &&
-            "shadow-[0_0_0_1px_rgb(34_211_238/0.55),0_0_22px_rgb(34_211_238/0.28)]",
+          "shadow-[0_0_0_1px_rgb(34_211_238/0.55),0_0_22px_rgb(34_211_238/0.28)]",
         )}
         onClick={() => {
           if (open) {
@@ -128,27 +128,27 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
 
       {open ? (
         <Suspense fallback={<div role="status" className="absolute right-0 z-50 mt-2 rounded-lg border border-line bg-surface p-4 shadow-panel">{feedback("loading")}</div>}>
-        <ActivityTrayPanel
-          isAdmin={isAdmin}
-          hasVisibleMarketTasks={hasVisibleMarketTasks}
-          marketTasks={marketTasks}
-          activeTab={activeTab}
-          remaining={remaining}
-          completedCount={completedCount}
-          failedCount={failedCount}
-          allFailedCount={allFailedCount}
-          queue={queue}
-          completed={completed}
-          failed={failed}
-          visible={visible}
-          selected={selected}
-          cancellingId={commands.cancellingId}
-          onTab={setTab}
-          onClearCompleted={() => void commands.clearCompleted()}
-          onClearFailed={() => void commands.clearFailed()}
-          onForceStop={commands.forceStopOne}
-          onDismiss={commands.dismissTerminalOne}
-        />
+          <ActivityTrayPanel
+            isAdmin={isAdmin}
+            hasVisibleMarketTasks={hasVisibleMarketTasks}
+            marketTasks={marketTasks}
+            activeTab={activeTab}
+            remaining={remaining}
+            completedCount={completedCount}
+            failedCount={failedCount}
+            allFailedCount={allFailedCount}
+            queue={queue}
+            completed={completed}
+            failed={failed}
+            visible={visible}
+            selected={selected}
+            cancellingId={commands.cancellingId}
+            onTab={setTab}
+            onClearCompleted={() => void commands.clearCompleted()}
+            onClearFailed={() => void commands.clearFailed()}
+            onForceStop={commands.forceStopOne}
+            onDismiss={commands.dismissTerminalOne}
+          />
         </Suspense>
       ) : null}
     </div>

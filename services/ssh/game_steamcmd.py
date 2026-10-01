@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from functools import partial
+
 from services.steamcmd_guard import (
     STEAMCMD_FORCE_TERMINATED,
     steamcmd_pgrep_command,
@@ -20,6 +22,7 @@ from services.steamcmd_session import (
 )
 
 from .common import *
+from .progress_callbacks import send_text_progress
 
 
 async def _legacy_cancel_requested(server_id):
@@ -32,6 +35,62 @@ async def _legacy_resolve_max_retries(user_id):
     from . import game as legacy_game
 
     return await legacy_game.resolve_steamcmd_max_retries(user_id)
+
+
+async def _completion_is_verified(
+    server: Server,
+    completion_check: Callable[[], Awaitable[bool]] | None,
+    send_progress: Callable[[str], Awaitable[None]],
+) -> bool | None:
+    if completion_check is None:
+        return None
+    try:
+        return bool(await completion_check())
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "SteamCMD completion check failed for server %s: %s",
+            server.id,
+            exc,
+        )
+        await send_progress(f"⚠ Could not verify SteamCMD completion: {exc}")
+        return False
+
+
+async def _ended_steamcmd_session(
+    self: SSHMixinBase, server: Server, captured_chunks: list[str]
+) -> tuple[bool, str, str] | None:
+    exit_code = await self._read_steamcmd_exit_code(server)
+    if exit_code is not None:
+        return (
+            exit_code == 0,
+            "\n".join(captured_chunks),
+            "" if exit_code == 0 else f"SteamCMD exited {exit_code}",
+        )
+    pids = await self._list_steamcmd_pids(server)
+    if not pids:
+        return (
+            False,
+            "\n".join(captured_chunks),
+            "SteamCMD session ended unexpectedly",
+        )
+
+    return None
+
+
+async def _report_steamcmd_capture(
+    last_capture: str,
+    capture: str,
+    captured_chunks: list[str],
+    send_progress: Callable[[str], Awaitable[None]],
+) -> str:
+    for line in incremental_console_lines(last_capture, capture or ""):
+        captured_chunks.append(line)
+        await send_progress(line)
+    last_capture = capture or last_capture
+
+    return last_capture
 
 
 class GameSteamcmdMixin(SSHMixinBase):
@@ -184,26 +243,14 @@ class GameSteamcmdMixin(SSHMixinBase):
                     timeout=15,
                 )
                 if capture_ok:
-                    for line in incremental_console_lines(last_capture, capture or ""):
-                        captured_chunks.append(line)
-                        await send_progress(line)
-                    last_capture = capture or last_capture
+                    last_capture = await _report_steamcmd_capture(
+                        last_capture, capture, captured_chunks, send_progress
+                    )
 
                 if active is None:
-                    exit_code = await self._read_steamcmd_exit_code(server)
-                    if exit_code is not None:
-                        return (
-                            exit_code == 0,
-                            "\n".join(captured_chunks),
-                            "" if exit_code == 0 else f"SteamCMD exited {exit_code}",
-                        )
-                    pids = await self._list_steamcmd_pids(server)
-                    if not pids:
-                        return (
-                            False,
-                            "\n".join(captured_chunks),
-                            "SteamCMD session ended unexpectedly",
-                        )
+                    ended = await _ended_steamcmd_session(self, server, captured_chunks)
+                    if ended is not None:
+                        return ended
                 elif time.monotonic() - last_heartbeat >= 20:
                     last_heartbeat = time.monotonic()
                     # Do not `du` a 70GB tree mid-download — it blocks pane
@@ -434,29 +481,11 @@ class GameSteamcmdMixin(SSHMixinBase):
         else:
             max_retries = clamp_steamcmd_max_retries(max_retries)
 
-        async def send_progress(message: str):
-            """Helper to send progress updates"""
-            if progress_callback:
-                if inspect.iscoroutinefunction(progress_callback):
-                    await progress_callback(message)
-                else:
-                    progress_callback(message)
+        send_progress = partial(send_text_progress, progress_callback)
 
-        async def completion_is_verified() -> Optional[bool]:
-            if completion_check is None:
-                return None
-            try:
-                return bool(await completion_check())
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.warning(
-                    "SteamCMD completion check failed for server %s: %s",
-                    server.id,
-                    exc,
-                )
-                await send_progress(f"⚠ Could not verify SteamCMD completion: {exc}")
-                return False
+        completion_is_verified = partial(
+            _completion_is_verified, server, completion_check, send_progress
+        )
 
         # Attempt counter (0 = initial attempt, 1+ = retries)
         for attempt in range(max_retries + 1):

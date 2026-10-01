@@ -2,29 +2,29 @@
 
 import type { CustomCommand } from "@/modules/commands/types";
 import {
-PLUGIN_UPDATE_INTERVAL_MAX,
-PLUGIN_UPDATE_INTERVAL_MIN
+  PLUGIN_UPDATE_INTERVAL_MAX,
+  PLUGIN_UPDATE_INTERVAL_MIN
 } from "@/modules/updates/intervals";
 import { PluginRunStatus } from "@/modules/updates/plugin-run-status";
 import {
-addPostUpdateCommand,
-movePostUpdateCommand,
-removePostUpdateCommand
+  addPostUpdateCommand,
+  movePostUpdateCommand,
+  removePostUpdateCommand
 } from "@/modules/updates/post-commands";
 import { PluginRegisterForm } from "@/modules/updates/register-form";
 import type {
-PluginUpdates,
-RegisterMarketOption
+  PluginUpdates,
+  RegisterMarketOption
 } from "@/modules/updates/types";
 import { Button } from "@/shared/ui/button";
 import {
-Card,
-CardContent,
-CardDescription,
-CardHeader,
-CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/shared/ui/card";
-import { Input,Label } from "@/shared/ui/input";
+import { Input, Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 import { Textarea } from "@/shared/ui/textarea";

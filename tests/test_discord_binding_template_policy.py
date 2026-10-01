@@ -29,13 +29,13 @@ from services.discord_binding_template_service import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-from tests.discord_bot_agent_policy_fakes import (
+from tests.discord_bot_agent_policy_fakes import (  # noqa: E402 - preserves initialization and registration order
     _auth_fixtures as _auth_fixtures,
 )
-from tests.discord_bot_agent_policy_fakes import (
+from tests.discord_bot_agent_policy_fakes import (  # noqa: E402 - preserves initialization and registration order
     _discord_http_error as _discord_http_error,
 )
-from tests.discord_bot_agent_policy_fakes import (
+from tests.discord_bot_agent_policy_fakes import (  # noqa: E402 - preserves initialization and registration order
     _global_bot as _global_bot,
 )
 

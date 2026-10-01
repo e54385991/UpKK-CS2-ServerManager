@@ -160,6 +160,25 @@ def _native_mapping(entries: list[dict[str, Any]]) -> list[dict[str, str]]:
     return rules
 
 
+def _validate_mapping_coverage(
+    entries: list[dict[str, Any]], sources: set[str], targets: set[str]
+) -> None:
+    payload = {
+        str(item["path"])
+        for item in entries
+        if not item.get("is_dir")
+        and str(item["path"]).endswith(
+            (".dll", ".so", ".vdf", ".json", ".jsonc", ".cfg", ".ini", ".yaml", ".toml")
+        )
+    }
+    if payload - sources:
+        raise GitHubPlanError("Installation mapping omits runtime files or configuration")
+    # Avoid a file being copied over a directory created by another mapping.
+    for target in targets:
+        if any(parent.casefold() in targets for parent in _parents([target]) if parent):
+            raise GitHubPlanError("Installation mapping has file/directory target collisions")
+
+
 def validate_mapping(
     entries: list[dict[str, Any]], mapping: list[dict[str, str]]
 ) -> list[dict[str, str]]:
@@ -194,18 +213,5 @@ def validate_mapping(
             matched += 1
         if not matched:
             raise GitHubPlanError("Installation mapping source is absent from the release archive")
-    payload = {
-        str(item["path"])
-        for item in entries
-        if not item.get("is_dir")
-        and str(item["path"]).endswith(
-            (".dll", ".so", ".vdf", ".json", ".jsonc", ".cfg", ".ini", ".yaml", ".toml")
-        )
-    }
-    if payload - sources:
-        raise GitHubPlanError("Installation mapping omits runtime files or configuration")
-    # Avoid a file being copied over a directory created by another mapping.
-    for target in targets:
-        if any(parent.casefold() in targets for parent in _parents([target]) if parent):
-            raise GitHubPlanError("Installation mapping has file/directory target collisions")
+    _validate_mapping_coverage(entries, sources, targets)
     return rules

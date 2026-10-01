@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 import uuid
@@ -22,9 +21,16 @@ from services.server_operation_history import (
 )
 from services.server_operation_history import _as_datetime as _history_as_datetime
 
+from .server_operation_dependencies import OperationDependencies
+from .server_operation_events import latest_message as _delegated_latest_message
+from .server_operation_events import replay as _delegated_replay
+from .server_operation_events import subscribe_queue as _delegated_subscribe_queue
+from .server_operation_events import unsubscribe_queue as _delegated_unsubscribe_queue
+from .server_operation_events import wait_until_terminal as _delegated_wait_until_terminal
 from .server_operation_persistence import _expire_events as _delegated_expire_events
 from .server_operation_persistence import _finish_record as _delegated_finish_record
 from .server_operation_persistence import _load_events as _delegated_load_events
+from .server_operation_persistence import _pending_ids_unlocked as _delegated_pending_ids_unlocked
 from .server_operation_persistence import _persist_event as _delegated_persist_event
 from .server_operation_persistence import _persist_pending as _delegated_persist_pending
 from .server_operation_persistence import _persist_record as _delegated_persist_record
@@ -79,6 +85,19 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         self._queues: dict[str, set[asyncio.Queue]] = defaultdict(set)
         self._tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
+
+    def _helper_dependencies(self) -> OperationDependencies:
+        return OperationDependencies(
+            redis_manager,
+            logger,
+            OPERATION_TTL_SECONDS,
+            EVENT_LIMIT,
+            SUBSCRIBER_QUEUE_LIMIT,
+            ACTIVE_STATUSES,
+            TERMINAL_EVENT_TYPES,
+            _trim_events,
+            _record_ttl,
+        )
 
     @property
     def _history_redis(self) -> Any:
@@ -320,20 +339,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         return await collect_hub_snapshot(self, server_ids)
 
     async def latest_message(self, operation_id: str) -> str | None:
-        from services.operations.inbox_messages import last_event_text, read_latest_messages
-
-        message = last_event_text(self._events.get(operation_id))
-        if message:
-            return message
-        stored = await read_latest_messages(
-            redis_manager, {operation_id: self._events_key(operation_id)}
-        )
-        if stored.get(operation_id):
-            return stored[operation_id]
-        record = await self.get(operation_id)
-        if record and record.get("message"):
-            return str(record["message"]).strip() or None
-        return None
+        return await _delegated_latest_message(self, self._helper_dependencies(), operation_id)
 
     async def abort(self, server_id: int, *, message: str) -> dict[str, Any] | None:
         """Cancel the current operation and mark it failed."""
@@ -525,37 +531,17 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         )
 
     async def replay(self, operation_id: str, after_sequence: int = 0) -> list[dict[str, Any]]:
-        events = list(self._events.get(operation_id) or [])
-        if not events:
-            events = await self._load_events(operation_id)
-            if events:
-                async with self._lock:
-                    if not self._events.get(operation_id):
-                        self._events[operation_id] = _trim_events(events)
-        replayed: list[dict[str, Any]] = []
-        for event in events:
-            try:
-                sequence = int(event.get("sequence") or 0)
-            except TypeError, ValueError:
-                continue
-            if sequence > after_sequence:
-                replayed.append(event)
-        return replayed
+        return await _delegated_replay(
+            self, self._helper_dependencies(), operation_id, after_sequence
+        )
 
     async def subscribe_queue(self, operation_id: str) -> asyncio.Queue:
-        queue: asyncio.Queue = asyncio.Queue(maxsize=SUBSCRIBER_QUEUE_LIMIT)
-        async with self._lock:
-            self._queues[operation_id].add(queue)
-        return queue
+        return await _delegated_subscribe_queue(self, self._helper_dependencies(), operation_id)
 
     async def unsubscribe_queue(self, operation_id: str, queue: asyncio.Queue) -> None:
-        async with self._lock:
-            queues = self._queues.get(operation_id)
-            if queues is None:
-                return
-            queues.discard(queue)
-            if not queues:
-                self._queues.pop(operation_id, None)
+        return await _delegated_unsubscribe_queue(
+            self, self._helper_dependencies(), operation_id, queue
+        )
 
     async def wait_until_terminal(
         self, operation_id: str, *, timeout: float | None = None
@@ -566,52 +552,12 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         then wait here so their own status records stay accurate without
         holding the maintenance lock.
         """
-        record = await self.get(operation_id)
-        if record is None:
-            raise LookupError(f"Operation {operation_id} was not found")
-        if record.get("status") not in ACTIVE_STATUSES:
-            return record
-        queue = await self.subscribe_queue(operation_id)
-        try:
-            record = await self.get(operation_id)
-            if record is None:
-                raise LookupError(f"Operation {operation_id} was not found")
-            if record.get("status") not in ACTIVE_STATUSES:
-                return record
-            loop = asyncio.get_running_loop()
-            deadline = None if timeout is None else loop.time() + timeout
-            while True:
-                remaining = None
-                if deadline is not None:
-                    remaining = deadline - loop.time()
-                    if remaining <= 0:
-                        raise TimeoutError(f"Timed out waiting for operation {operation_id}")
-                event = await asyncio.wait_for(queue.get(), timeout=remaining)
-                if event.get("type") in TERMINAL_EVENT_TYPES:
-                    finished = await self.get(operation_id)
-                    if finished is None:
-                        raise LookupError(f"Operation {operation_id} was not found")
-                    return finished
-        finally:
-            await self.unsubscribe_queue(operation_id, queue)
+        return await _delegated_wait_until_terminal(
+            self, self._helper_dependencies(), operation_id, timeout=timeout
+        )
 
     async def _pending_ids_unlocked(self, server_id: int) -> list[str]:
-        cached = self._pending.get(server_id)
-        if cached is not None:
-            return list(cached)
-        stored = await redis_manager.get(self._pending_key(server_id))
-        ids: list[str] = []
-        if isinstance(stored, list):
-            ids = [str(item) for item in stored if item]
-        elif isinstance(stored, str) and stored:
-            try:
-                parsed = json.loads(stored)
-            except json.JSONDecodeError:
-                parsed = []
-            if isinstance(parsed, list):
-                ids = [str(item) for item in parsed if item]
-        self._pending[server_id] = ids
-        return list(ids)
+        return await _delegated_pending_ids_unlocked(self, self._helper_dependencies(), server_id)
 
     async def _forget_operation(self, operation_id: str) -> None:
         self._records.pop(operation_id, None)
@@ -644,13 +590,15 @@ class ServerOperationHub(ServerOperationHistoryMixin):
             self._tasks.pop(operation_id, None)
 
     async def _expire_events(self, operation_id: str, expire: int) -> None:
-        return await _delegated_expire_events(self, operation_id, expire)
+        return await _delegated_expire_events(
+            self, self._helper_dependencies(), operation_id, expire
+        )
 
     async def _persist_pending(self, server_id: int) -> None:
-        return await _delegated_persist_pending(self, server_id)
+        return await _delegated_persist_pending(self, self._helper_dependencies(), server_id)
 
     async def _read_current(self, server_id: int) -> dict[str, Any] | None:
-        return await _delegated_read_current(self, server_id)
+        return await _delegated_read_current(self, self._helper_dependencies(), server_id)
 
     async def patch(self, operation_id: str, **changes: Any) -> dict[str, Any] | None:
         """Persist extra file-job fields such as a resolved download path."""
@@ -661,7 +609,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         return await self._update(operation_id, **filtered)
 
     async def _update(self, operation_id: str, **changes: Any) -> dict[str, Any] | None:
-        return await _delegated_update(self, operation_id, **changes)
+        return await _delegated_update(self, self._helper_dependencies(), operation_id, **changes)
 
     async def _finish_record(
         self, operation_id: str, **changes: Any
@@ -672,16 +620,20 @@ class ServerOperationHub(ServerOperationHistoryMixin):
         several concurrent finishers emits the terminal event and promotes the
         next job. An unknown operation keeps the previous best-effort path.
         """
-        return await _delegated_finish_record(self, operation_id, **changes)
+        return await _delegated_finish_record(
+            self, self._helper_dependencies(), operation_id, **changes
+        )
 
     async def _persist_record(self, record: dict[str, Any]) -> None:
-        return await _delegated_persist_record(self, record)
+        return await _delegated_persist_record(self, self._helper_dependencies(), record)
 
     async def _persist_event(self, operation_id: str, event: dict[str, Any]) -> None:
-        return await _delegated_persist_event(self, operation_id, event)
+        return await _delegated_persist_event(
+            self, self._helper_dependencies(), operation_id, event
+        )
 
     async def _load_events(self, operation_id: str) -> list[dict[str, Any]]:
-        return await _delegated_load_events(self, operation_id)
+        return await _delegated_load_events(self, self._helper_dependencies(), operation_id)
 
 
 server_operation_hub = ServerOperationHub()

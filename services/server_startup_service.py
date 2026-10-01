@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
+from functools import partial
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -198,6 +199,22 @@ async def _commit_server_status(
     return None
 
 
+async def _report_startup_step(
+    progress: ProgressCallback | None, step_id: str, step_status: str, message: str
+) -> None:
+    if progress is not None:
+        await progress(
+            message,
+            "info" if step_status not in {"failed", "interrupted"} else "error",
+            {"step_id": step_id, "step_status": step_status},
+        )
+
+
+async def _report_startup_output(progress: ProgressCallback | None, message: str) -> None:
+    if progress is not None:
+        await progress(message, "info", None)
+
+
 async def execute_server_startup_plan(
     db: AsyncSession,
     user: User,
@@ -210,13 +227,7 @@ async def execute_server_startup_plan(
 ) -> dict[str, Any]:
     """Save an approved startup plan, restart CS2, and verify the result."""
 
-    async def report(step_id: str, step_status: str, message: str) -> None:
-        if progress is not None:
-            await progress(
-                message,
-                "info" if step_status not in {"failed", "interrupted"} else "error",
-                {"step_id": step_id, "step_status": step_status},
-            )
+    report = partial(_report_startup_step, progress)
 
     async with maintenance_lock_service.get(
         server_id,
@@ -292,9 +303,7 @@ async def execute_server_startup_plan(
         if not stopped:
             return await restart_failure(f"Restart stopped before start: {stop_message}")
 
-        async def start_progress(message: str) -> None:
-            if progress is not None:
-                await progress(message, "info", None)
+        start_progress = partial(_report_startup_output, progress)
 
         try:
             started, start_message = await manager.start_server(server, start_progress)

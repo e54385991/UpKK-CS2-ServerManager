@@ -3,9 +3,7 @@
 import asyncio
 import contextlib
 import os
-import secrets
 import shlex
-import string
 import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional, Tuple
@@ -34,6 +32,8 @@ from services.system_dependencies import (
     normalize_debian_architecture,
     steamcmd_architecture_supported,
 )
+
+from .setup_password import generate_secure_password as generate_secure_password
 
 
 class ServerSetupRequest(BaseModel):
@@ -68,37 +68,6 @@ class ServerSetupResponse(BaseModel):
     logs: list[str]
     initialized_server_id: Optional[str] = None  # Durable ID of saved server if save_config is True
     session_id: Optional[str] = None  # Session ID for WebSocket progress updates (if requested)
-
-
-def generate_secure_password(length: int = 16) -> str:
-    """
-    Generate a secure random password with special characters to meet PAM requirements
-    Uses safe special characters and proper escaping to avoid shell issues
-    """
-    # Use safe special characters that are commonly accepted by PAM policies
-    # Avoiding characters that have special meaning in shell: ' " ` $ \ ! and others
-    safe_special_chars = "!@#%^&*()_+-=[]{}|;:,.<>?"
-
-    # Build character sets
-    lowercase = string.ascii_lowercase
-    uppercase = string.ascii_uppercase
-    digits = string.digits
-
-    # Ensure password has at least one of each required type for PAM compliance
-    password = [
-        secrets.choice(lowercase),  # At least one lowercase
-        secrets.choice(uppercase),  # At least one uppercase
-        secrets.choice(digits),  # At least one digit
-        secrets.choice(safe_special_chars),  # At least one special character
-    ]
-
-    # Fill the rest randomly from all character sets
-    all_chars = lowercase + uppercase + digits + safe_special_chars
-    password += [secrets.choice(all_chars) for _ in range(length - 4)]
-
-    # Shuffle to avoid predictable patterns
-    secrets.SystemRandom().shuffle(password)
-    return "".join(password)
 
 
 async def run_sudo_command(
@@ -250,6 +219,46 @@ async def _run_setup_command(context: _SetupContext, command: str) -> tuple[str,
     )
 
 
+async def _install_setup_optional_packages(context: _SetupContext) -> None:
+    archive_package = None
+    for candidate in SEVEN_ZIP_PACKAGE_ALTERNATIVES:
+        result = await context.conn.run(
+            f"apt-cache show --no-all-versions {shlex.quote(candidate)} >/dev/null 2>&1",
+            check=False,
+        )
+        if result.exit_status == 0:
+            archive_package = candidate
+            break
+    optional_packages: list[str] = list(SETUP_OPTIONAL_PACKAGES)
+    if archive_package:
+        optional_packages.append(archive_package)
+    else:
+        await context.add_log(
+            "⚠ No 7zip/p7zip-full package is available; skipping optional 7z support"
+        )
+    if not optional_packages:
+        return
+    await context.add_log(
+        f"Installing optional enhancement dependencies: {', '.join(optional_packages)}"
+    )
+    stdout, stderr, exit_code = await run_apt_command_with_retry(
+        context.conn,
+        apt_get_command("install", optional_packages),
+        description="Installing optional enhancement dependencies",
+        needs_sudo=context.needs_sudo,
+        sudo_password=context.sudo_password,
+        add_log=context.add_log,
+    )
+    if exit_code == 0:
+        await context.add_log("✓ Optional enhancement dependencies installed")
+    else:
+        await context.add_log(
+            "⚠ Optional enhancement dependencies failed to install; "
+            "the verified SteamCMD runtime will be used. "
+            f"Details: {_short_command_error(stdout, stderr)}"
+        )
+
+
 async def _install_setup_dependencies(context: _SetupContext) -> None:
     """Install and verify the required runtime packages."""
     await context.add_log(
@@ -324,43 +333,7 @@ async def _install_setup_dependencies(context: _SetupContext) -> None:
         )
     await context.add_log("✓ Required SteamCMD dependencies installed and verified")
 
-    archive_package = None
-    for candidate in SEVEN_ZIP_PACKAGE_ALTERNATIVES:
-        result = await context.conn.run(
-            f"apt-cache show --no-all-versions {shlex.quote(candidate)} >/dev/null 2>&1",
-            check=False,
-        )
-        if result.exit_status == 0:
-            archive_package = candidate
-            break
-    optional_packages: list[str] = list(SETUP_OPTIONAL_PACKAGES)
-    if archive_package:
-        optional_packages.append(archive_package)
-    else:
-        await context.add_log(
-            "⚠ No 7zip/p7zip-full package is available; skipping optional 7z support"
-        )
-    if not optional_packages:
-        return
-    await context.add_log(
-        f"Installing optional enhancement dependencies: {', '.join(optional_packages)}"
-    )
-    stdout, stderr, exit_code = await run_apt_command_with_retry(
-        context.conn,
-        apt_get_command("install", optional_packages),
-        description="Installing optional enhancement dependencies",
-        needs_sudo=context.needs_sudo,
-        sudo_password=context.sudo_password,
-        add_log=context.add_log,
-    )
-    if exit_code == 0:
-        await context.add_log("✓ Optional enhancement dependencies installed")
-    else:
-        await context.add_log(
-            "⚠ Optional enhancement dependencies failed to install; "
-            "the verified SteamCMD runtime will be used. "
-            f"Details: {_short_command_error(stdout, stderr)}"
-        )
+    await _install_setup_optional_packages(context)
 
 
 def _bundled_legacy_libssl_path() -> str:

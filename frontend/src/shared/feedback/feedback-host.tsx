@@ -1,19 +1,32 @@
 "use client";
 
-import { AlertHost } from "@/shared/feedback/alert-host";
-import { ConfirmHost } from "@/shared/feedback/confirm-host";
 import { lazy, Suspense, useSyncExternalStore } from "react";
-import { getNotificationsServerSnapshot, getNotificationsSnapshot, subscribeNotifications } from "./notification-store";
+import { getAlertServerSnapshot, getAlertSnapshot, subscribeAlert } from "./alert-store";
+import { getConfirmServerSnapshot, getConfirmSnapshot, subscribeConfirm } from "./confirm-store";
+import {
+  getNotificationsServerSnapshot,
+  getNotificationsSnapshot,
+  subscribeNotifications,
+} from "./notification-store";
 
 const AppToaster = lazy(() => import("./toaster").then((module) => ({ default: module.AppToaster })));
+const ConfirmHost = lazy(() => import("./confirm-host").then((module) => ({ default: module.ConfirmHost })));
+const AlertHost = lazy(() => import("./alert-host").then((module) => ({ default: module.AlertHost })));
 
 export function FeedbackHost() {
-  const showToaster = useSyncExternalStore(subscribeNotifications, getNotificationsSnapshot, getNotificationsServerSnapshot);
+  const showToaster = useSyncExternalStore(
+    subscribeNotifications,
+    getNotificationsSnapshot,
+    getNotificationsServerSnapshot,
+  );
+  const confirmation = useSyncExternalStore(subscribeConfirm, getConfirmSnapshot, getConfirmServerSnapshot);
+  const alert = useSyncExternalStore(subscribeAlert, getAlertSnapshot, getAlertServerSnapshot);
+
   return (
     <>
-      {showToaster ? <Suspense fallback={null}><AppToaster /></Suspense> : null}
-      <ConfirmHost />
-      <AlertHost />
+      <Suspense fallback={null}>{showToaster ? <AppToaster /> : null}</Suspense>
+      <Suspense fallback={null}>{confirmation ? <ConfirmHost /> : null}</Suspense>
+      <Suspense fallback={null}>{alert ? <AlertHost /> : null}</Suspense>
     </>
   );
 }

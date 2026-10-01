@@ -14,6 +14,16 @@ if TYPE_CHECKING:
 host = LateBoundModule("services.ssh.file_archive")
 
 
+def _normalize_member_components(member_name: str, value: str) -> tuple[str | None, str | None]:
+    components = value.split("/")
+    if any(component in ("", ".", "..") for component in components):
+        return None, f"Archive member contains an unsafe path component: {member_name!r}"
+    normalized = posixpath.normpath(value)
+    if normalized == ".." or normalized.startswith("../"):
+        return None, f"Archive member escapes the archive root: {member_name!r}"
+    return normalized, None
+
+
 def _normalize_archive_member(
     cls, member_name: str, *, allow_backslash_separators: bool = False
 ) -> Tuple[Optional[str], Optional[str]]:
@@ -49,13 +59,7 @@ def _normalize_archive_member(
     if value.startswith("/") or re.match(r"^[A-Za-z]:", value):
         return None, f"Archive member uses an absolute path: {original_member_name!r}"
 
-    components = value.split("/")
-    if any(component in ("", ".", "..") for component in components):
-        return None, f"Archive member contains an unsafe path component: {member_name!r}"
-    normalized = posixpath.normpath(value)
-    if normalized == ".." or normalized.startswith("../"):
-        return None, f"Archive member escapes the archive root: {member_name!r}"
-    return normalized, None
+    return _normalize_member_components(member_name, value)
 
 
 def _decode_tar_listing_name(value: str) -> Tuple[Optional[str], Optional[str]]:
@@ -129,6 +133,18 @@ def _parse_tar_c_verbose_listing_line(
     return (decoded_name, member_type == "d"), None
 
 
+def _archive_file_ancestor_conflict(member_types: dict[str, bool]) -> str | None:
+    file_paths = {path for path, is_directory in member_types.items() if not is_directory}
+    for path in member_types:
+        parts = path.split("/")
+        for index in range(1, len(parts)):
+            ancestor = "/".join(parts[:index])
+            if ancestor in file_paths:
+                return f"Archive member path conflicts with file ancestor: {path}"
+
+    return None
+
+
 def _build_archive_info(
     cls, archive_type: str, raw_members: List[Tuple[str, bool]]
 ) -> Tuple[bool, Dict[str, Any], str]:
@@ -159,13 +175,9 @@ def _build_archive_info(
         member_types[normalized] = is_directory
         members.append({"path": normalized, "is_dir": is_directory})
 
-    file_paths = {path for path, is_directory in member_types.items() if not is_directory}
-    for path in member_types:
-        parts = path.split("/")
-        for index in range(1, len(parts)):
-            ancestor = "/".join(parts[:index])
-            if ancestor in file_paths:
-                return False, {}, (f"Archive member path conflicts with file ancestor: {path}")
+    ancestor_error = _archive_file_ancestor_conflict(member_types)
+    if ancestor_error is not None:
+        return False, {}, ancestor_error
 
     folders = set()
     for member in members:

@@ -60,7 +60,7 @@ async def _extract_and_verify_cs2fixes(
 
 
 class CS2FixesMixin(SSHMixinBase):
-    async def install_cs2fixes(self, server: Server, progress_callback=None) -> Tuple[bool, str]:  # noqa: C901 - plugin installation protocol.
+    async def install_cs2fixes(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """
         Install CS2Fixes for CS2 server
 

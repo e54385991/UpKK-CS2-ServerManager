@@ -121,7 +121,7 @@ def collect_report(*, include_bundles: bool = False) -> dict[str, object]:
     for name, collector in collectors.items():
         try:
             report[name] = collector()
-        except (OSError, ValueError, RuntimeError, KeyError) as error:
+        except Exception as error:
             unavailable.append(f"{name}: {error}")
     report["unavailable"] = unavailable
     return report

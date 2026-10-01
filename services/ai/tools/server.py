@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlmodel import select
 
-from modules.models import CustomCommand, ServerStatus
+from modules.models import CustomCommand, Server, ServerStatus
 from modules.schemas.discord import AgentCapability
 from modules.utils import get_current_time
 from services.ai.tools.context import (
@@ -161,6 +161,27 @@ async def plan_server_startup_update(
     return build_server_startup_plan(server, data.model_dump(exclude_unset=True))
 
 
+async def _record_operation_frameworks(
+    ctx: ToolContext, server: Server, installed_frameworks: tuple[str, ...]
+) -> bool:
+    from services.plugin_auto_update_service import record_framework_installation
+
+    tracking_failed = False
+    for installed_framework in installed_frameworks:
+        try:
+            await record_framework_installation(server, ctx.user, installed_framework)
+        except Exception as exc:
+            tracking_failed = True
+            logger.warning(
+                "Framework %s installed on server %s but tracking refresh failed: %s",
+                installed_framework,
+                server.id,
+                exc,
+            )
+
+    return tracking_failed
+
+
 async def run_server_operation(ctx: ToolContext, data: ServerOperationInput) -> dict[str, Any]:
     server = await tools._require_current_server(ctx)
     manager = tools.SSHManager()
@@ -202,19 +223,9 @@ async def run_server_operation(ctx: ToolContext, data: ServerOperationInput) -> 
                 success, message = await manager.install_counterstrikesharp(server, progress)
                 installed_frameworks = ("metamod", "counterstrikesharp")
             if success:
-                from services.plugin_auto_update_service import record_framework_installation
-
-                for installed_framework in installed_frameworks:
-                    try:
-                        await record_framework_installation(server, ctx.user, installed_framework)
-                    except Exception as exc:
-                        tracking_failed = True
-                        logger.warning(
-                            "Framework %s installed on server %s but tracking refresh failed: %s",
-                            installed_framework,
-                            server.id,
-                            exc,
-                        )
+                tracking_failed = await _record_operation_frameworks(
+                    ctx, server, installed_frameworks
+                )
         await ctx.db.commit()
     result: dict[str, Any] = {
         "success": success,

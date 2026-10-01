@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -25,7 +24,7 @@ from api.routes.gmail_oauth import (
 )
 from modules import AISystemSettings, GmailCredentialsUploadRequest, SystemSettings
 from modules.schemas.ai import AIProviderTestRequest, AISystemSettingsUpdate
-from services.ai_security import AIConfigurationError, decrypt_credential
+from services.ai_security import decrypt_credential
 from services.audit_log_service import record_audit_event
 from services.client_ip import set_client_ip_header
 from services.email_service import email_service
@@ -69,6 +68,9 @@ from .schemas import (
     SystemSettingsTransfer,
     SystemSettingsView,
 )
+from .settings_secrets import _import_system_secrets
+from .settings_secrets import _secret_transfer as _export_secret_transfer
+from .settings_secrets import _validate_json_secret as _validate_json_secret
 
 router = APIRouter(prefix="/api/v1/settings", tags=["v1-settings"])
 logger = logging.getLogger(__name__)
@@ -257,34 +259,9 @@ def _ai_transfer(settings: AISystemSettings) -> AISystemSettingsTransfer:
 
 
 def _secret_transfer(
-    settings: SystemSettings,
-    ai_settings: AISystemSettings,
+    settings: SystemSettings, ai_settings: AISystemSettings
 ) -> SystemSettingsSecretTransfer:
-    try:
-        ai_api_key = decrypt_credential(ai_settings.api_key_encrypted)
-    except AIConfigurationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="The saved AI API key cannot be decrypted; re-enter it before exporting secrets",
-        ) from exc
-    return SystemSettingsSecretTransfer(
-        global_github_token=settings.global_github_token,
-        smtp_password=settings.smtp_password,
-        gmail_credentials_json=settings.gmail_credentials_json,
-        gmail_token_json=settings.gmail_token_json,
-        ai_api_key=ai_api_key,
-    )
-
-
-def _validate_json_secret(value: str, *, credentials: bool) -> None:
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError as exc:
-        label = "Gmail credentials" if credentials else "Gmail token"
-        raise HTTPException(status_code=422, detail=f"{label} must be valid JSON") from exc
-    if not isinstance(parsed, dict) or (credentials and not {"web", "installed"} & parsed.keys()):
-        label = "credentials" if credentials else "token"
-        raise HTTPException(status_code=422, detail=f"Invalid Gmail {label} JSON structure")
+    return _export_secret_transfer(settings, ai_settings, decrypt_credential)
 
 
 def _ai_import_request(
@@ -339,42 +316,8 @@ async def import_system_settings(
     ai_enabled_without_key = False
     try:
         settings.sqlmodel_update(system_data)
+        imported_secret_fields, preserved_secret_fields = _import_system_secrets(settings, body)
         secrets = body.secrets
-        if secrets is None:
-            preserved_secret_fields = [
-                "global_github_token",
-                "smtp_password",
-                "gmail_credentials_json",
-                "gmail_token_json",
-                "ai_api_key",
-            ]
-        else:
-            if secrets.global_github_token:
-                settings.global_github_token = secrets.global_github_token
-                settings.github_token_fingerprint = None
-                settings.github_token_verification = None
-                imported_secret_fields.append("global_github_token")
-            else:
-                preserved_secret_fields.append("global_github_token")
-            if secrets.smtp_password:
-                settings.smtp_password = secrets.smtp_password
-                imported_secret_fields.append("smtp_password")
-            else:
-                preserved_secret_fields.append("smtp_password")
-            if secrets.gmail_credentials_json:
-                _validate_json_secret(secrets.gmail_credentials_json, credentials=True)
-                settings.gmail_credentials_json = secrets.gmail_credentials_json
-                imported_secret_fields.append("gmail_credentials_json")
-            else:
-                preserved_secret_fields.append("gmail_credentials_json")
-            if secrets.gmail_token_json:
-                _validate_json_secret(secrets.gmail_token_json, credentials=False)
-                settings.gmail_token_json = secrets.gmail_token_json
-                imported_secret_fields.append("gmail_token_json")
-            else:
-                preserved_secret_fields.append("gmail_token_json")
-            if not secrets.ai_api_key:
-                preserved_secret_fields.append("ai_api_key")
 
         ai_request = _ai_import_request(body)
         ai_enabled_without_key = bool(

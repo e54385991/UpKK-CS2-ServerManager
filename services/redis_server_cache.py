@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import time
 from typing import TYPE_CHECKING, Optional
 
-from services.compat import LateBoundModule
+from services.bounded_output import truncate_utf8_tail
 
 if TYPE_CHECKING:
     from .redis_manager import RedisManager
 
-host = LateBoundModule("services.redis_manager")
+logger = logging.getLogger("services.redis_manager")
 
 
 async def set_initialized_server(
@@ -21,7 +24,7 @@ async def set_initialized_server(
     """
     if expire is None:
         expire = self.INITIALIZED_SERVER_CACHE_TTL
-    server_key = f"initialized_server:{user_id}:{int(host.time.time() * 1000)}"
+    server_key = f"initialized_server:{user_id}:{int(time.time() * 1000)}"
     success = await self.set(server_key, server_data, expire)
 
     if not success:
@@ -99,12 +102,12 @@ async def append_deployment_progress(
     """
     key = self.prefixed_key(f"deployment_progress:{server_id}")
     try:
-        message = host.truncate_utf8_tail(
+        message = truncate_utf8_tail(
             message,
             self.MAX_DEPLOYMENT_PROGRESS_MESSAGE_BYTES,
         )
         # Store as JSON for structured data
-        progress_entry = host.json.dumps(
+        progress_entry = json.dumps(
             {"type": msg_type, "message": message, "timestamp": timestamp},
             ensure_ascii=False,
         )
@@ -139,7 +142,7 @@ async def get_deployment_progress(self: RedisManager, server_id: int) -> list:
             -self.MAX_DEPLOYMENT_PROGRESS_ENTRIES,
             -1,
         )
-        return [host.json.loads(entry) for entry in progress_entries]
+        return [json.loads(entry) for entry in progress_entries]
     except Exception as e:
         print(f"Redis get deployment progress error: {e}")
         return []

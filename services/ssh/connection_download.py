@@ -11,6 +11,53 @@ def _legacy_connection_pool():
     return legacy_connection.ssh_connection_pool
 
 
+def _response_content_disposition(raw_headers: str) -> str | None:
+    normalized_headers = raw_headers.replace("\r\n", "\n").replace("\r", "\n")
+    content_disposition = None
+    for block in reversed(re.split(r"\n\s*\n", normalized_headers)):
+        lines = block.splitlines()
+        if not lines or not lines[0].lstrip().upper().startswith("HTTP/"):
+            continue
+
+        unfolded: List[str] = []
+        for line in lines[1:]:
+            if line[:1] in (" ", "\t") and unfolded:
+                unfolded[-1] += " " + line.strip()
+            else:
+                unfolded.append(line)
+        for line in unfolded:
+            name, separator, value = line.partition(":")
+            if separator and name.strip().lower() == "content-disposition":
+                content_disposition = value.strip()
+        break
+
+    return content_disposition
+
+
+def _remote_address_error(hostname: str, hostname_error: str | None) -> str:
+    try:
+        literal_address = ipaddress.ip_address(hostname)
+    except ValueError:
+        literal_address = None
+        try:
+            socket.inet_aton(hostname)
+        except OSError:
+            pass
+        else:
+            return "Non-canonical numeric IPv4 download URLs are not allowed"
+
+        if hostname_error:
+            return hostname_error
+    else:
+        mapped_address = getattr(literal_address, "ipv4_mapped", None)
+        if not literal_address.is_global or (
+            mapped_address is not None and not mapped_address.is_global
+        ):
+            return "Non-public IP address download URLs are not allowed"
+
+    return ""
+
+
 class DownloadConnectionMixin(SSHMixinBase):
     """Focused SSH connection capability."""
 
@@ -131,24 +178,7 @@ class DownloadConnectionMixin(SSHMixinBase):
         effective_url: str,
     ) -> Tuple[Optional[str], str]:
         """Resolve a safe filename from the final headers, then effective URL."""
-        normalized_headers = raw_headers.replace("\r\n", "\n").replace("\r", "\n")
-        content_disposition = None
-        for block in reversed(re.split(r"\n\s*\n", normalized_headers)):
-            lines = block.splitlines()
-            if not lines or not lines[0].lstrip().upper().startswith("HTTP/"):
-                continue
-
-            unfolded: List[str] = []
-            for line in lines[1:]:
-                if line[:1] in (" ", "\t") and unfolded:
-                    unfolded[-1] += " " + line.strip()
-                else:
-                    unfolded.append(line)
-            for line in unfolded:
-                name, separator, value = line.partition(":")
-                if separator and name.strip().lower() == "content-disposition":
-                    content_disposition = value.strip()
-            break
+        content_disposition = _response_content_disposition(raw_headers)
 
         candidates: List[str] = []
         if content_disposition:
@@ -210,25 +240,9 @@ class DownloadConnectionMixin(SSHMixinBase):
         if not hostname or "%" in hostname:
             return None, "Download URL hostname is invalid"
 
-        try:
-            literal_address = ipaddress.ip_address(hostname)
-        except ValueError:
-            literal_address = None
-            try:
-                socket.inet_aton(hostname)
-            except OSError:
-                pass
-            else:
-                return None, "Non-canonical numeric IPv4 download URLs are not allowed"
-
-            if hostname_error:
-                return None, hostname_error
-        else:
-            mapped_address = getattr(literal_address, "ipv4_mapped", None)
-            if not literal_address.is_global or (
-                mapped_address is not None and not mapped_address.is_global
-            ):
-                return None, "Non-public IP address download URLs are not allowed"
+        address_error = _remote_address_error(hostname, hostname_error)
+        if address_error:
+            return None, address_error
 
         return parsed, ""
 

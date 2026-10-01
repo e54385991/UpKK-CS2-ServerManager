@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from typing import Optional, Tuple
+from urllib.parse import SplitResult
 
+import httpx
 from fastapi import status
 
 from services.compat import LateBoundModule
@@ -11,19 +13,7 @@ from services.compat import LateBoundModule
 host = LateBoundModule("api.routes.file_manager.common")
 
 
-def _validate_download_url(url: str) -> str:
-    """Apply transport-level validation before passing a URL to remote curl."""
-    if not isinstance(url, str) or not url or len(url) > host.DOWNLOAD_URL_MAX_LENGTH:
-        raise host.HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"URL is required and must not exceed {host.DOWNLOAD_URL_MAX_LENGTH} characters",
-        )
-    if any(ord(char) < 32 or ord(char) == 127 for char in url):
-        raise host.HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="URL cannot contain control characters",
-        )
-
+def _parse_download_transport(url: str) -> SplitResult:
     try:
         parsed = host.urlsplit(url)
         port = parsed.port  # Accessing this validates malformed ports.
@@ -53,7 +43,27 @@ def _validate_download_url(url: str) -> str:
             detail="URL port is outside the valid range",
         )
 
-    hostname = parsed.hostname.rstrip(".").lower()
+    return parsed
+
+
+def _validate_download_url(url: str) -> str:
+    """Apply transport-level validation before passing a URL to remote curl."""
+    if not isinstance(url, str) or not url or len(url) > host.DOWNLOAD_URL_MAX_LENGTH:
+        raise host.HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"URL is required and must not exceed {host.DOWNLOAD_URL_MAX_LENGTH} characters",
+        )
+    if any(ord(char) < 32 or ord(char) == 127 for char in url):
+        raise host.HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="URL cannot contain control characters",
+        )
+
+    parsed = _parse_download_transport(url)
+
+    hostname = parsed.hostname
+    assert hostname is not None
+    hostname = hostname.rstrip(".").lower()
     if hostname == "localhost" or hostname.endswith(".localhost"):
         raise host.HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -158,6 +168,28 @@ def _github_artifact_http_error(
     return RuntimeError(f"GitHub artifact request failed (HTTP {status_code})")
 
 
+def _artifact_filename(metadata_response: httpx.Response) -> str:
+    try:
+        metadata = metadata_response.json()
+    except ValueError as exc:
+        raise RuntimeError("GitHub returned invalid artifact metadata") from exc
+    if metadata.get("expired") is True:
+        raise RuntimeError("GitHub Actions artifact has expired")
+    artifact_name = metadata.get("name")
+    if not isinstance(artifact_name, str) or not artifact_name.strip():
+        raise RuntimeError("GitHub artifact metadata does not contain a valid name")
+
+    filename = artifact_name if artifact_name.lower().endswith(".zip") else f"{artifact_name}.zip"
+    try:
+        filename = host._validate_direct_child_name(filename, "artifact filename")
+    except host.HTTPException as exc:
+        raise RuntimeError(f"GitHub artifact name is unsafe: {exc.detail}") from exc
+    if host.SSHManager.archive_type_from_path(filename) != "zip":
+        raise RuntimeError("GitHub artifact filename is not a ZIP archive")
+
+    return filename
+
+
 async def _resolve_github_actions_artifact(
     url: str,
     github_token: Optional[str],
@@ -196,25 +228,7 @@ async def _resolve_github_actions_artifact(
                     metadata_response.status_code, token, metadata=True
                 )
 
-            try:
-                metadata = metadata_response.json()
-            except ValueError as exc:
-                raise RuntimeError("GitHub returned invalid artifact metadata") from exc
-            if metadata.get("expired") is True:
-                raise RuntimeError("GitHub Actions artifact has expired")
-            artifact_name = metadata.get("name")
-            if not isinstance(artifact_name, str) or not artifact_name.strip():
-                raise RuntimeError("GitHub artifact metadata does not contain a valid name")
-
-            filename = (
-                artifact_name if artifact_name.lower().endswith(".zip") else f"{artifact_name}.zip"
-            )
-            try:
-                filename = host._validate_direct_child_name(filename, "artifact filename")
-            except host.HTTPException as exc:
-                raise RuntimeError(f"GitHub artifact name is unsafe: {exc.detail}") from exc
-            if host.SSHManager.archive_type_from_path(filename) != "zip":
-                raise RuntimeError("GitHub artifact filename is not a ZIP archive")
+            filename = _artifact_filename(metadata_response)
 
             download_response = await client.get(f"{api_base}/zip", headers=headers)
             if download_response.status_code != 302:

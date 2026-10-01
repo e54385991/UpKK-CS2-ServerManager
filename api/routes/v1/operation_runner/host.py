@@ -6,6 +6,7 @@ import os
 import shutil
 import tempfile
 import uuid
+from collections.abc import Awaitable, Callable
 
 from anyio import to_thread
 from fastapi import HTTPException
@@ -14,6 +15,7 @@ from api.dependencies import require_server_access
 from api.routes.servers.common import get_server_owner_user
 from modules import User
 from modules.database import async_session_maker
+from modules.models import Server
 from services.host_initialization import SshManagerHostRunner, ensure_steamcmd_packages
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.s3_backup_service import s3_backup_service
@@ -24,7 +26,7 @@ from services.server_operation_hub import (
 from services.ssh_manager import SSHManager
 from services.system_dependencies import STEAMCMD_REQUIRED_PACKAGES
 
-from .shared import _dispatch, logger
+from .shared import _disconnect_background_manager, _dispatch, logger
 
 
 async def enqueue_apply_apt_mirror(
@@ -121,7 +123,7 @@ async def run_apply_apt_mirror(*, operation_id: str, mirror: str) -> None:
     except OperationBusyError as exc:
         await server_operation_hub.finish(operation_id, success=False, message=str(exc))
     except HTTPException as exc:
-        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        detail = _restore_http_error_message(exc)
         await server_operation_hub.finish(operation_id, success=False, message=detail)
     except Exception:
         logger.exception("Background apt-mirror switch %s failed", operation_id)
@@ -150,6 +152,85 @@ async def enqueue_s3_restore(
         record,
         lambda: run_s3_restore(operation_id=operation_id, object_key=object_key),
     )
+
+
+async def _upload_and_extract_restore(
+    operation_id: str,
+    manager: SSHManager,
+    server: Server,
+    object_key: str,
+    local_path: str,
+    progress: Callable[[str], Awaitable[None]],
+) -> bool:
+    game_dir = server.game_directory.rstrip("/")
+    filename = s3_backup_service.safe_object_filename(object_key)
+    remote_restore_path = f"{game_dir}/backups/s3-restore-{uuid.uuid4().hex[:8]}-{filename}"
+    await progress(f"Uploading restore archive to {remote_restore_path}")
+    upload_success, upload_error = await manager.upload_file(
+        local_path, remote_restore_path, server
+    )
+    if not upload_success:
+        await server_operation_hub.finish(
+            operation_id,
+            success=False,
+            message=f"Failed to upload restore archive to server: {upload_error}",
+        )
+        return False
+
+    csgo_dir = f"{game_dir}/cs2/game/csgo"
+    await progress(f"Extracting restore archive into {csgo_dir}")
+    extract_success, extract_error = await manager.extract_archive(
+        remote_restore_path,
+        csgo_dir,
+        server,
+        overwrite=True,
+    )
+    if not extract_success:
+        await server_operation_hub.finish(
+            operation_id,
+            success=False,
+            message=f"Failed to extract restore archive: {extract_error}",
+        )
+        return False
+
+    return True
+
+
+async def _download_restore_and_backup(
+    operation_id: str,
+    owner: User,
+    server: Server,
+    object_key: str,
+    local_path: str,
+    manager: SSHManager,
+    progress: Callable[[str], Awaitable[None]],
+) -> bool:
+    await progress(f"Downloading S3 backup {object_key}")
+    download_success, download_error = await s3_backup_service.download_backup(
+        owner,
+        server,
+        object_key,
+        local_path,
+    )
+    if not download_success:
+        await server_operation_hub.finish(
+            operation_id,
+            success=False,
+            message=download_error,
+        )
+        return False
+
+    await progress("Creating a local safety backup of plugin files")
+    safety_success, safety_message = await manager.backup_plugins(server)
+    if not safety_success:
+        await server_operation_hub.finish(
+            operation_id,
+            success=False,
+            message=f"Failed to create safety backup before restore: {safety_message}",
+        )
+        return False
+
+    return True
 
 
 async def run_s3_restore(*, operation_id: str, object_key: str) -> None:
@@ -200,62 +281,14 @@ async def run_s3_restore(*, operation_id: str, object_key: str) -> None:
                 wait=False,
                 ttl=7200,
             ):
-                await progress(f"Downloading S3 backup {object_key}")
-                download_success, download_error = await s3_backup_service.download_backup(
-                    owner,
-                    server,
-                    object_key,
-                    local_path,
-                )
-                if not download_success:
-                    await server_operation_hub.finish(
-                        operation_id,
-                        success=False,
-                        message=download_error,
-                    )
+                if not await _download_restore_and_backup(
+                    operation_id, owner, server, object_key, local_path, manager, progress
+                ):
                     return
 
-                await progress("Creating a local safety backup of plugin files")
-                safety_success, safety_message = await manager.backup_plugins(server)
-                if not safety_success:
-                    await server_operation_hub.finish(
-                        operation_id,
-                        success=False,
-                        message=f"Failed to create safety backup before restore: {safety_message}",
-                    )
-                    return
-
-                game_dir = server.game_directory.rstrip("/")
-                filename = s3_backup_service.safe_object_filename(object_key)
-                remote_restore_path = (
-                    f"{game_dir}/backups/s3-restore-{uuid.uuid4().hex[:8]}-{filename}"
-                )
-                await progress(f"Uploading restore archive to {remote_restore_path}")
-                upload_success, upload_error = await manager.upload_file(
-                    local_path, remote_restore_path, server
-                )
-                if not upload_success:
-                    await server_operation_hub.finish(
-                        operation_id,
-                        success=False,
-                        message=f"Failed to upload restore archive to server: {upload_error}",
-                    )
-                    return
-
-                csgo_dir = f"{game_dir}/cs2/game/csgo"
-                await progress(f"Extracting restore archive into {csgo_dir}")
-                extract_success, extract_error = await manager.extract_archive(
-                    remote_restore_path,
-                    csgo_dir,
-                    server,
-                    overwrite=True,
-                )
-                if not extract_success:
-                    await server_operation_hub.finish(
-                        operation_id,
-                        success=False,
-                        message=f"Failed to extract restore archive: {extract_error}",
-                    )
+                if not await _upload_and_extract_restore(
+                    operation_id, manager, server, object_key, local_path, progress
+                ):
                     return
 
             safety_backup = getattr(manager, "last_plugin_backup", None)
@@ -273,7 +306,7 @@ async def run_s3_restore(*, operation_id: str, object_key: str) -> None:
     except OperationBusyError as exc:
         await server_operation_hub.finish(operation_id, success=False, message=str(exc))
     except HTTPException as exc:
-        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        detail = _restore_http_error_message(exc)
         await server_operation_hub.finish(operation_id, success=False, message=detail)
     except Exception:
         logger.exception("Background S3 restore %s failed", operation_id)
@@ -283,8 +316,9 @@ async def run_s3_restore(*, operation_id: str, object_key: str) -> None:
             message="Restoring the S3 backup failed unexpectedly",
         )
     finally:
-        try:
-            await manager.disconnect()
-        except Exception:
-            pass
+        await _disconnect_background_manager(manager)
         await to_thread.run_sync(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
+
+
+def _restore_http_error_message(exc: HTTPException) -> str:
+    return exc.detail if isinstance(exc.detail, str) else str(exc.detail)

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from services.ssh_manager import SSHManager
+
 import logging
 
 from modules import User
@@ -64,3 +69,10 @@ async def _audit_terminal(
         server_id=int(record["server_id"]),
         details=details,
     )
+
+
+async def _disconnect_background_manager(manager: SSHManager) -> None:
+    try:
+        await manager.disconnect()
+    except Exception:
+        pass

@@ -110,6 +110,7 @@ def main() -> None:
                 "tests/test_discord_agent_message_lifecycle.py",
                 "tests/test_discord_binding_template_policy.py",
                 "tests/test_discord_menu_operations_policy.py",
+                "tests/test_discord_manager_components_coverage.py",
                 "tests/test_batch_performance_contracts.py",
                 "tests/test_telemetry_batches.py",
                 "--cov=services.ai",

@@ -195,6 +195,7 @@ test('Next runtime has no compilation or execution errors', async ({ page, conte
 for (const locale of ['en-US', 'zh-CN']) {
   test(`${locale}: lazy file dialogs preserve editing, unsaved protection and save`, async ({ page, context, request }) => {
     const m = locale === 'en-US' ? en : zh;
+    await page.setViewportSize({ width: locale === 'zh-CN' ? 390 : 1440, height: 844 });
     await request.post(`${mock}/__test__/reset`); await login(context, 'admin', locale);
     await page.goto('/servers/1/files');
     await expect(page.getByTestId('files-dropzone')).not.toHaveAttribute('aria-busy', 'true');
@@ -248,6 +249,8 @@ for (const locale of ['en-US', 'zh-CN']) {
     await warning.getByRole('button', { name: m.plugins.install, exact: true }).click();
     await expect.poll(async () => (await state(request)).requests.find((r: { path: string }) => r.path.endsWith('/plugins/market/1/install'))?.input.acknowledge_framework_mismatch).toBe(true);
     await expect(page.getByTestId('activity-tray-toggle')).toBeVisible();
+    await expect(page.getByTestId('activity-tray-panel')).toBeVisible();
+    await expect(page.getByTestId('activity-tray-toggle')).toHaveAttribute('aria-expanded', 'true');
   });
 }
 
@@ -264,6 +267,9 @@ test('finished install on the plugin page stops streaming its log', async ({ pag
   await expect(log).toContainText('Fixture install finished');
   await expect(log).toContainText('completed');
   const streams = async () => (await state(request)).requests.filter((r: { path: string }) => r.path === operationEvents).length;
+  // The lazy tray may subscribe after the form; wait for both consumers to finish.
+  await expect(page.getByTestId('activity-tray-panel')).toBeVisible();
+  await expect(page.getByTestId('activity-tray-toggle')).toHaveAttribute('data-busy', 'false');
   const openedBeforeCompletion = await streams();
   expect(openedBeforeCompletion).toBeGreaterThan(0);
   // EventSource reconnects about 3 s after a server ends the stream; stay past that.

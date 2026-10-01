@@ -45,6 +45,17 @@ async def maybe_resume_steamcmd_watch(server: Server) -> None:
         _WATCHES.discard(server_id)
 
 
+async def _report_watch_capture(server_id: int, last_capture: str, capture: str) -> str:
+    for line in incremental_console_lines(last_capture, capture or ""):
+        await send_deployment_update(server_id, "output", line)
+    last_capture = capture or last_capture
+    heartbeat = latest_console_heartbeat(capture or last_capture)
+    if heartbeat:
+        await send_deployment_update(server_id, "output", heartbeat)
+
+    return last_capture
+
+
 async def _run_watch(server: Server) -> None:
     server_id = int(server.id)
     ssh = SSHManager()
@@ -80,12 +91,7 @@ async def _run_watch(server: Server) -> None:
                     timeout=15,
                 )
                 if success:
-                    for line in incremental_console_lines(last_capture, capture or ""):
-                        await send_deployment_update(server_id, "output", line)
-                    last_capture = capture or last_capture
-                    heartbeat = latest_console_heartbeat(capture or last_capture)
-                    if heartbeat:
-                        await send_deployment_update(server_id, "output", heartbeat)
+                    last_capture = await _report_watch_capture(server_id, last_capture, capture)
                 await send_deployment_update(
                     server_id,
                     "output",

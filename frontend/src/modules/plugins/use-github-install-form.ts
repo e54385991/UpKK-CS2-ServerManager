@@ -1,35 +1,35 @@
 "use client";
 
 import {
-analyzeGitHubArchiveAction,
-installGitHubPluginAction,
-listGitHubReleasesAction,
-planGitHubPluginInstallAction,
-uninstallGitHubPluginAction,
+  analyzeGitHubArchiveAction,
+  installGitHubPluginAction,
+  listGitHubReleasesAction,
+  planGitHubPluginInstallAction,
+  uninstallGitHubPluginAction,
 } from "@/modules/plugins/actions";
 import type {
-GitHubArchive,
-GitHubInstallPlan,
-GitHubRelease,
+  GitHubArchive,
+  GitHubInstallPlan,
+  GitHubRelease,
 } from "@/modules/plugins/types";
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import {
-mergeOperationEvents,
-operationEventsUrl,
-parseOperationEvent,
+  mergeOperationEvents,
+  operationEventsUrl,
+  parseOperationEvent,
 } from "@/modules/servers/operation-events";
 import type {
-OperationStreamEvent,
-ServerOperation,
+  OperationStreamEvent,
+  ServerOperation,
 } from "@/modules/servers/types";
 import { serverProxyMode } from "@/modules/servers/types";
-import { confirm,notify } from "@/shared/feedback";
+import { confirm, notify } from "@/shared/feedback";
 import {
-createRenderCoalescer,
-isTerminalOperationEventType,
+  createRenderCoalescer,
+  isTerminalOperationEventType,
 } from "@/shared/lib/render-coalesce";
 import { useTranslations } from "next-intl";
-import { useEffect,useMemo,useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { type ServerOption } from "./github-install-form-parts";
 
@@ -126,9 +126,9 @@ export function useGitHubInstallForm({
   function mappingPayload() {
     if (!mappingEnabled) {
       return {
-    excludeDirs,
-    excludeFiles,
-  };
+        excludeDirs,
+        excludeFiles,
+      };
     }
     return {
       sourcePrefix: mappingSource,
@@ -267,7 +267,6 @@ export function useGitHubInstallForm({
     setEvents([]);
   }
 
-  
   return {
     t,
     serverId,

@@ -1,33 +1,32 @@
 "use client";
 
 import {
-applySystemCleanupAction,
-deleteCleanupAction,
-updateCleanupPolicyAction,
+  applySystemCleanupAction,
+  deleteCleanupAction,
+  updateCleanupPolicyAction,
 } from "@/modules/cleanup/actions";
 import {
-cleanupScanStreamUrl,
-cleanupSystemStreamUrl,
-openCleanupEventSource,
+  cleanupScanStreamUrl,
+  cleanupSystemStreamUrl,
+  openCleanupEventSource,
 } from "@/modules/cleanup/stream";
 import {
-type CleanupPolicy,
-type CleanupScan,
-type CleanupSystemScan
+  type CleanupPolicy,
+  type CleanupScan,
+  type CleanupSystemScan
 } from "@/modules/cleanup/types";
 import {
-toCleanupScan,
-toCleanupSystemScan,
-type CleanupScanViewDto,
-type CleanupSystemScanDto,
+  toCleanupScan,
+  toCleanupSystemScan,
+  type CleanupScanViewDto,
+  type CleanupSystemScanDto,
 } from "@/modules/cleanup/wire";
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { useQueuedOperationTerminal } from "@/modules/servers/use-queued-operation-terminal";
 import { confirm } from "@/shared/feedback";
 import type { Route } from "next";
-import { useFormatter,useTranslations } from "next-intl";
-import { useEffect,useRef,useState } from "react";
-
+import { useFormatter, useTranslations } from "next-intl";
+import { useEffect, useRef, useState } from "react";
 
 export function useCleanupConsole({
   serverId,
@@ -307,7 +306,6 @@ export function useCleanupConsole({
         ? "ok"
         : "neutral";
 
-  
   return {
     t,
     format,

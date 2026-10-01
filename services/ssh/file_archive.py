@@ -23,6 +23,37 @@ from .common import *
 from .connection import ConnectionMixin
 
 
+def _archive_line_handler(
+    self: ArchiveOperationsMixin, line_handler: Callable[[str], str | None]
+) -> Callable[[bytes], Awaitable[str | None]]:
+    line_count = 0
+
+    async def handle(raw_line: bytes) -> Optional[str]:
+        nonlocal line_count
+        raw_line = raw_line.rstrip(b"\r")
+        if not raw_line:
+            return None
+        line_count += 1
+        if line_count > self.ARCHIVE_MAX_ENTRIES:
+            return f"Archive contains too many entries (maximum {self.ARCHIVE_MAX_ENTRIES})"
+        if len(raw_line) > self.ARCHIVE_LISTING_MAX_LINE_BYTES:
+            return "Archive contains an excessively long member path"
+        try:
+            line = raw_line.decode("utf-8", errors="strict")
+        except UnicodeDecodeError:
+            return "Archive contains a member name which is not valid UTF-8"
+        return line_handler(line)
+
+    return handle
+
+
+async def _cancel_archive_stderr(stderr_task: asyncio.Task[str]) -> None:
+    if not stderr_task.done():
+        stderr_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await stderr_task
+
+
 class ArchiveOperationsMixin(SSHMixinBase):
     """Focused file-system capability."""
 
@@ -86,23 +117,8 @@ class ArchiveOperationsMixin(SSHMixinBase):
         self, stream, line_handler: Callable[[str], Optional[str]]
     ) -> Optional[str]:
         buffer = bytearray()
-        line_count = 0
 
-        async def handle(raw_line: bytes) -> Optional[str]:
-            nonlocal line_count
-            raw_line = raw_line.rstrip(b"\r")
-            if not raw_line:
-                return None
-            line_count += 1
-            if line_count > self.ARCHIVE_MAX_ENTRIES:
-                return f"Archive contains too many entries (maximum {self.ARCHIVE_MAX_ENTRIES})"
-            if len(raw_line) > self.ARCHIVE_LISTING_MAX_LINE_BYTES:
-                return "Archive contains an excessively long member path"
-            try:
-                line = raw_line.decode("utf-8", errors="strict")
-            except UnicodeDecodeError:
-                return "Archive contains a member name which is not valid UTF-8"
-            return line_handler(line)
+        handle = _archive_line_handler(self, line_handler)
 
         while True:
             chunk = await stream.read(self.ARCHIVE_LISTING_READ_BYTES)
@@ -186,10 +202,7 @@ class ArchiveOperationsMixin(SSHMixinBase):
             if process is not None and not process_finished:
                 await self._stop_archive_listing_process(process)
             if stderr_task is not None:
-                if not stderr_task.done():
-                    stderr_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError, Exception):
-                    await stderr_task
+                await _cancel_archive_stderr(stderr_task)
 
     @classmethod
     async def _stop_archive_listing_process(cls, process: Any) -> bool:

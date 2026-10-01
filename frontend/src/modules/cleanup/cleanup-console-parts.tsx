@@ -1,7 +1,7 @@
 "use client";
 
 import {
-type CleanupItem
+  type CleanupItem
 } from "@/modules/cleanup/types";
 import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";

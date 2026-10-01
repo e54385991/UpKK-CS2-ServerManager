@@ -1,31 +1,31 @@
 "use client";
 
 import {
-AdditionalParametersField,
-OfficialMapField,
+  AdditionalParametersField,
+  OfficialMapField,
 } from "@/modules/servers/additional-parameters-field";
 import { AptMirrorSwitcher } from "@/modules/servers/apt-mirror-switcher";
 import {
-APT_MIRRORS,
-toAptMirror
+  APT_MIRRORS,
+  toAptMirror
 } from "@/modules/servers/apt-mirrors";
 import { GsltTokenField } from "@/modules/servers/gslt-token-field";
 import type {
-InitializedHostCredentials
+  InitializedHostCredentials
 } from "@/modules/servers/setup-api";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import {
-Card,
-CardContent,
-CardDescription,
-CardHeader,
-CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/shared/ui/card";
-import { Input,Label } from "@/shared/ui/input";
+import { Input, Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
-import { Check,Copy,Plus,RefreshCw,TriangleAlert } from "lucide-react";
+import { Check, Copy, Plus, RefreshCw, TriangleAlert } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 

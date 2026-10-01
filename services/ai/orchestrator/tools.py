@@ -49,6 +49,14 @@ async def _load_provider_messages(
     return result.messages
 
 
+def _revalidate_tool_approval(tool_run: AIToolRun, user: User) -> None:
+    _serialized, current_hash = host.canonical_arguments(tool_run.arguments)
+    if current_hash != tool_run.arguments_hash:
+        raise PermissionError("Tool arguments changed after approval")
+    if tool_run.approved_by != user.id or tool_run.approved_at is None:
+        raise PermissionError("Tool approval is not bound to the current user")
+
+
 async def _execute_tool_run(
     db,
     run: AIRun,
@@ -86,11 +94,7 @@ async def _execute_tool_run(
         if current_user is None or not current_user.is_active:
             raise PermissionError("The approving user is no longer active")
         if tool_run.requires_approval:
-            _serialized, current_hash = host.canonical_arguments(tool_run.arguments)
-            if current_hash != tool_run.arguments_hash:
-                raise PermissionError("Tool arguments changed after approval")
-            if tool_run.approved_by != user.id or tool_run.approved_at is None:
-                raise PermissionError("Tool approval is not bound to the current user")
+            _revalidate_tool_approval(tool_run, user)
         if server is not None and server.id is not None:
             server = await host.authorized_server(db, current_user, server.id)
             context.server = server

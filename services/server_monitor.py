@@ -20,6 +20,7 @@ from services.server_lifecycle_policy import (
     automatic_start_block_reason,
 )
 
+from .server_monitor_loop import MonitorDependencies
 from .server_monitor_loop import monitor_server as _delegated_monitor_server
 
 logger = logging.getLogger(__name__)
@@ -322,7 +323,7 @@ class ServerMonitor:
         except OperationBusyError as exc:
             return None, str(exc), None
 
-    async def monitor_server(self, server_id: int, ssh_manager, progress_callback=None):  # noqa: C901 - monitor/restart state machine.
+    async def monitor_server(self, server_id: int, ssh_manager, progress_callback=None):
         """
         Monitor a server and auto-restart on crash
 
@@ -331,7 +332,12 @@ class ServerMonitor:
             ssh_manager: SSHManager instance to use for checks and restarts
             progress_callback: Optional callback for progress updates
         """
-        return await _delegated_monitor_server(self, server_id, ssh_manager, progress_callback)
+        dependencies = MonitorDependencies(
+            logger, get_current_time, automatic_start_block_reason, restart_protection_window
+        )
+        return await _delegated_monitor_server(
+            self, dependencies, server_id, ssh_manager, progress_callback
+        )
 
     def start_monitoring(self, server_id: int, ssh_manager, progress_callback=None):
         """Start monitoring a server in the background"""

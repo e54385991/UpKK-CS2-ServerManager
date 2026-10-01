@@ -1,28 +1,28 @@
 "use client";
 
 import {
-applyAptMirrorAction,
-createServerAction,
+  applyAptMirrorAction,
+  createServerAction,
 } from "@/modules/servers/actions";
 import type { ServerCreateResult } from "@/modules/servers/api";
 import {
-type AptMirrorId
+  type AptMirrorId
 } from "@/modules/servers/apt-mirrors";
 import {
-isInvalidGameDirectory,
-parseHostDirectoryConflict,
-pickInitializedHost,
-rememberInitializedHost,
-setupWizardHref,
-suggestedDeployPort,
+  isInvalidGameDirectory,
+  parseHostDirectoryConflict,
+  pickInitializedHost,
+  rememberInitializedHost,
+  setupWizardHref,
+  suggestedDeployPort,
 } from "@/modules/servers/initialized-hosts";
 import {
-getInitializedHostCredentialsAction,
-listInitializedHostsAction,
+  getInitializedHostCredentialsAction,
+  listInitializedHostsAction,
 } from "@/modules/servers/setup-actions";
 import type {
-InitializedHost,
-InitializedHostCredentials,
+  InitializedHost,
+  InitializedHostCredentials,
 } from "@/modules/servers/setup-api";
 import { alertDialog } from "@/shared/feedback/alert-store";
 import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
@@ -30,10 +30,10 @@ import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
-useCallback,
-useEffect,
-useState,
-type FormEvent
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent
 } from "react";
 
 import { type Captcha } from "./create-form-parts";
@@ -281,7 +281,6 @@ export function useCreateServerForm({
 
   const showCreateFields = !hostsLoading && hosts.length > 0;
 
-  
   return {
     t,
     captcha,

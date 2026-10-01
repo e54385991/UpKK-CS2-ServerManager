@@ -1,6 +1,5 @@
 "use client";
 
-
 export type ServerOption = {
   readonly id: number;
   readonly name: string;

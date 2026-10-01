@@ -1,23 +1,23 @@
 "use client";
 
 import {
-CS2_USERNAME_PATTERN
+  CS2_USERNAME_PATTERN
 } from "@/modules/servers/cs2-username";
 import {
-addServerAfterSetupHref
+  addServerAfterSetupHref
 } from "@/modules/servers/initialized-hosts";
 import { SetupLiveLog } from "@/modules/servers/setup-live-log";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import {
-Card,
-CardContent,
-CardDescription,
-CardHeader,
-CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/shared/ui/card";
-import { Input,Label } from "@/shared/ui/input";
-import { Check,Copy,RefreshCw,TriangleAlert } from "lucide-react";
+import { Input, Label } from "@/shared/ui/input";
+import { Check, Copy, RefreshCw, TriangleAlert } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 

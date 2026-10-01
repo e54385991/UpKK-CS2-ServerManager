@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import time
+import warnings
 from typing import TYPE_CHECKING
-
-from services.compat import LateBoundModule
 
 if TYPE_CHECKING:
     from .redis_manager import RedisManager
 
-host = LateBoundModule("services.redis_manager")
+logger = logging.getLogger("services.redis_manager")
 
 
 async def set_batch_action_status(
@@ -35,9 +37,7 @@ async def set_batch_action_status(
     """
     key = self.prefixed_key(f"batch_action:{batch_id}:{server_id}")
     try:
-        data = host.json.dumps(
-            {"status": status, "message": message, "timestamp": host.time.time()}
-        )
+        data = json.dumps({"status": status, "message": message, "timestamp": time.time()})
         return await self._set_with_expiry(key, data, expire)
     except Exception as e:
         print(f"Redis set batch action status error: {e}")
@@ -53,20 +53,18 @@ async def set_batch_action_statuses(
     expire: int = 3600,
 ) -> bool:
     """Initialize a batch in one non-transactional Redis pipeline."""
-    timestamp = host.time.time()
+    timestamp = time.time()
     try:
         async with self.client.pipeline(transaction=False) as pipeline:
             for server_id in server_ids:
                 key = self.prefixed_key(f"batch_action:{batch_id}:{server_id}")
-                data = host.json.dumps(
-                    {"status": status, "message": message, "timestamp": timestamp}
-                )
+                data = json.dumps({"status": status, "message": message, "timestamp": timestamp})
                 setter = getattr(pipeline, "set", None)
                 if setter is not None:
                     setter(key, data, ex=expire)
                 else:
-                    with host.warnings.catch_warnings():
-                        host.warnings.simplefilter("ignore", DeprecationWarning)
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", DeprecationWarning)
                         pipeline.setex(key, expire, data)
             await pipeline.execute()
         return True
@@ -100,8 +98,8 @@ async def get_batch_action_status(self: RedisManager, batch_id: str) -> dict:
                 normalized_key = key.decode() if isinstance(key, bytes) else key
                 server_id = normalized_key.rsplit(":", 1)[-1]
                 try:
-                    results[server_id] = host.json.loads(value)
-                except TypeError, host.json.JSONDecodeError:
+                    results[server_id] = json.loads(value)
+                except TypeError, json.JSONDecodeError:
                     results[server_id] = value
             if cursor == 0:
                 break
@@ -117,8 +115,8 @@ async def set_batch_action_meta(
     """Store the actor and action for a batch journal (separate from per-server keys)."""
     key = self.prefixed_key(f"batch_meta:{batch_id}")
     try:
-        data = host.json.dumps(
-            {"actor_user_id": actor_user_id, "action": action, "timestamp": host.time.time()}
+        data = json.dumps(
+            {"actor_user_id": actor_user_id, "action": action, "timestamp": time.time()}
         )
         return await self._set_with_expiry(key, data, expire)
     except Exception as e:
@@ -133,9 +131,9 @@ async def get_batch_action_meta(self: RedisManager, batch_id: str) -> dict | Non
         value = await self.client.get(key)
         if not value:
             return None
-        parsed = host.json.loads(value)
+        parsed = json.loads(value)
         return parsed if isinstance(parsed, dict) else None
-    except TypeError, host.json.JSONDecodeError:
+    except TypeError, json.JSONDecodeError:
         return None
     except Exception as e:
         print(f"Redis get batch action meta error: {e}")
@@ -161,14 +159,14 @@ async def append_monitoring_log(
     key = self.prefixed_key(f"monitoring_logs:{server_id}:{event_type}")
     try:
         # Create log entry with timestamp
-        log_entry = host.json.dumps(
+        log_entry = json.dumps(
             {
-                "id": int(host.time.time() * 1000),  # Use timestamp as unique ID
+                "id": int(time.time() * 1000),  # Use timestamp as unique ID
                 "server_id": server_id,
                 "event_type": event_type,
                 "status": status,
                 "message": message,
-                "created_at": host.time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }
         )
 
@@ -181,12 +179,12 @@ async def append_monitoring_log(
         # Set expiration
         await self.client.expire(key, self.MONITORING_LOG_TTL)
 
-        host.logger.debug(
+        logger.debug(
             f"Appended monitoring log: server={server_id}, type={event_type}, status={status}"
         )
         return True
     except Exception as e:
-        host.logger.error(f"Redis append monitoring log error: {e}")
+        logger.error(f"Redis append monitoring log error: {e}")
         return False
 
 
@@ -209,10 +207,10 @@ async def get_monitoring_logs(
             # Get logs for specific event type
             key = self.prefixed_key(f"monitoring_logs:{server_id}:{event_type}")
             log_entries = await self.client.lrange(key, 0, limit - 1)
-            host.logger.debug(
+            logger.debug(
                 f"Retrieved {len(log_entries)} logs for server={server_id}, type={event_type}"
             )
-            return [host.json.loads(entry) for entry in log_entries]
+            return [json.loads(entry) for entry in log_entries]
         else:
             # Get all event types and merge
             event_types = [
@@ -228,15 +226,15 @@ async def get_monitoring_logs(
                 key = self.prefixed_key(f"monitoring_logs:{server_id}:{etype}")
                 log_entries = await self.client.lrange(key, 0, limit - 1)
                 for entry in log_entries:
-                    all_logs.append(host.json.loads(entry))
+                    all_logs.append(json.loads(entry))
 
             # Sort by created_at descending
             all_logs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
 
-            host.logger.debug(f"Retrieved {len(all_logs)} total logs for server={server_id}")
+            logger.debug(f"Retrieved {len(all_logs)} total logs for server={server_id}")
             return all_logs[:limit]
     except Exception as e:
-        host.logger.error(f"Redis get monitoring logs error: {e}")
+        logger.error(f"Redis get monitoring logs error: {e}")
         return []
 
 
@@ -269,10 +267,8 @@ async def clear_monitoring_logs(
             for etype in event_types:
                 key = self.prefixed_key(f"monitoring_logs:{server_id}:{etype}")
                 await self.client.delete(key)
-        host.logger.debug(
-            f"Cleared monitoring logs for server={server_id}, type={event_type or 'all'}"
-        )
+        logger.debug(f"Cleared monitoring logs for server={server_id}, type={event_type or 'all'}")
         return True
     except Exception as e:
-        host.logger.error(f"Redis clear monitoring logs error: {e}")
+        logger.error(f"Redis clear monitoring logs error: {e}")
         return False

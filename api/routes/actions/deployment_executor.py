@@ -5,15 +5,19 @@ from __future__ import annotations
 from fastapi import Request
 
 from api.dependencies import ActiveUser, DatabaseSession
+from modules import (
+    Server,
+    ServerAction,
+    User,
+)
 from services.compat import LateBoundModule
 
-from .common import *
-
-host = LateBoundModule("api.routes.actions.deployment")
-from modules import Server, ServerAction
-
-from .action_context import ActionContext
-from .backup_actions import _action_backup_plugins
+from .action_context import (
+    ActionContext,
+)
+from .backup_actions import (
+    _action_backup_plugins,
+)
 from .framework_actions import (
     _action_install_counterstrikesharp,
     _action_install_cs2fixes,
@@ -33,6 +37,8 @@ from .lifecycle_actions import (
     _action_update,
     _action_validate,
 )
+
+host = LateBoundModule("api.routes.actions.deployment")
 
 
 async def _record_action_framework(server: Server, current_user: User, action: str) -> None:
@@ -78,7 +84,7 @@ async def _prepare_action_lock(server_id: int, action: str) -> str:
     return deployment_lock_key
 
 
-async def execute_server_action(  # noqa: C901
+async def execute_server_action(
     server_id: int,
     action_data: ServerAction,
     db: DatabaseSession,

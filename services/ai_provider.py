@@ -265,6 +265,42 @@ async def _request_message(
     return message
 
 
+def _append_request_variant(
+    request_variants: list[
+        tuple[str, AIProviderConfig, list[dict[str, Any]], list[dict[str, Any]] | None]
+    ],
+    messages: list[dict[str, Any]],
+    tool_choice: str | dict[str, Any] | None,
+    stream: bool,
+    base_url: str,
+    name: str,
+    variant_config: AIProviderConfig,
+    variant_tools: list[dict[str, Any]] | None,
+    *,
+    byte_limit: int,
+) -> None:
+    def payload_factory(candidate: list[dict[str, Any]]) -> dict[str, Any]:
+        return _provider_request(
+            variant_config,
+            candidate,
+            variant_tools,
+            tool_choice,
+            stream,
+            base_url,
+        )[1]
+
+    variant_messages, _compacted = _compact_messages(
+        messages,
+        payload_factory,
+        context_window_tokens=getattr(
+            variant_config, "context_window_tokens", DEFAULT_CONTEXT_WINDOW_TOKENS
+        ),
+        max_completion_tokens=variant_config.max_completion_tokens,
+        byte_limit=byte_limit,
+    )
+    request_variants.append((name, variant_config, variant_messages, variant_tools))
+
+
 async def create_chat_completion(
     config: AIProviderConfig,
     messages: list[dict[str, Any]],
@@ -291,33 +327,9 @@ async def create_chat_completion(
         tuple[str, AIProviderConfig, list[dict[str, Any]], list[dict[str, Any]] | None]
     ] = []
 
-    def add_variant(
-        name: str,
-        variant_config: AIProviderConfig,
-        variant_tools: list[dict[str, Any]] | None,
-        *,
-        byte_limit: int,
-    ) -> None:
-        def payload_factory(candidate: list[dict[str, Any]]) -> dict[str, Any]:
-            return _provider_request(
-                variant_config,
-                candidate,
-                variant_tools,
-                tool_choice,
-                stream,
-                base_url,
-            )[1]
-
-        variant_messages, _compacted = _compact_messages(
-            messages,
-            payload_factory,
-            context_window_tokens=getattr(
-                variant_config, "context_window_tokens", DEFAULT_CONTEXT_WINDOW_TOKENS
-            ),
-            max_completion_tokens=variant_config.max_completion_tokens,
-            byte_limit=byte_limit,
-        )
-        request_variants.append((name, variant_config, variant_messages, variant_tools))
+    add_variant = partial(
+        _append_request_variant, request_variants, messages, tool_choice, stream, base_url
+    )
 
     add_variant("normal", config, tools, byte_limit=MAX_PROVIDER_REQUEST_BYTES)
     adaptive_config = replace(

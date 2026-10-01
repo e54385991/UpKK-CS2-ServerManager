@@ -2,35 +2,148 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable as Awaitable, Callable as Callable, Iterable as Iterable
-from typing import Any as Any, Protocol as Protocol
+from collections.abc import Awaitable as Awaitable
+from collections.abc import Callable as Callable
+from collections.abc import Iterable as Iterable
+from typing import Any as Any
+from typing import Protocol as Protocol
 
 from sqlalchemy import delete as delete
 from sqlalchemy.ext.asyncio import AsyncSession as AsyncSession
-from sqlmodel import col as col, select as select
+from sqlmodel import col as col
+from sqlmodel import select as select
 
-from modules import ManagedPlugin as ManagedPlugin, Server as Server, ServerStatus as ServerStatus, User as User
-from services.game_mode_execstack import append_execstack_step as append_execstack_step, run_planned_execstack_step as run_planned_execstack_step
+from modules import (
+    ManagedPlugin as ManagedPlugin,
+)
+from modules import (
+    Server as Server,
+)
+from modules import (
+    ServerStatus as ServerStatus,
+)
+from modules import (
+    User as User,
+)
+from services.game_mode_execstack import (
+    append_execstack_step as append_execstack_step,
+)
+from services.game_mode_execstack import (
+    run_planned_execstack_step as run_planned_execstack_step,
+)
 from services.game_mode_launch import upsert_additional_parameters as upsert_additional_parameters
-from services.game_mode_planning import GameModePlanError as GameModePlanError, _config_needs_patch as _config_needs_patch, _jsonable_dict as _jsonable_dict, _map_already_present as _map_already_present, _market_restart_required as _market_restart_required, _plan_hash as _plan_hash, _read_text as _read_text, find_market_plugin_by_title as find_market_plugin_by_title
+from services.game_mode_planning import (
+    GameModePlanError as GameModePlanError,
+)
+from services.game_mode_planning import (
+    _config_needs_patch as _config_needs_patch,
+)
+from services.game_mode_planning import (
+    _jsonable_dict as _jsonable_dict,
+)
+from services.game_mode_planning import (
+    _map_already_present as _map_already_present,
+)
+from services.game_mode_planning import (
+    _market_restart_required as _market_restart_required,
+)
+from services.game_mode_planning import (
+    _plan_hash as _plan_hash,
+)
+from services.game_mode_planning import (
+    _read_text as _read_text,
+)
 from services.game_mode_planning import catalog_for_server as _catalog_for_server
-from services.game_mode_recipes import GameModeRecipe as GameModeRecipe, UnknownGameModeError as UnknownGameModeError, get_recipe as get_recipe
-from services.game_mode_remote import connect as connect, inspect_game_mode_state as inspect_game_mode_state, read_linux_release as read_linux_release, remote_paths as remote_paths, replace_remote_file as replace_remote_file, resolve_addons_directory as resolve_addons_directory, wait_file_paths as wait_file_paths, wait_for_remote_files as wait_for_remote_files, wipe_addons_directory as wipe_addons_directory
+from services.game_mode_planning import (
+    find_market_plugin_by_title as find_market_plugin_by_title,
+)
+from services.game_mode_recipes import (
+    GameModeRecipe as GameModeRecipe,
+)
+from services.game_mode_recipes import (
+    UnknownGameModeError as UnknownGameModeError,
+)
+from services.game_mode_recipes import (
+    get_recipe as get_recipe,
+)
+from services.game_mode_remote import (
+    connect as connect,
+)
+from services.game_mode_remote import (
+    inspect_game_mode_state as inspect_game_mode_state,
+)
+from services.game_mode_remote import (
+    read_linux_release as read_linux_release,
+)
+from services.game_mode_remote import (
+    remote_paths as remote_paths,
+)
+from services.game_mode_remote import (
+    replace_remote_file as replace_remote_file,
+)
+from services.game_mode_remote import (
+    resolve_addons_directory as resolve_addons_directory,
+)
+from services.game_mode_remote import (
+    wait_file_paths as wait_file_paths,
+)
+from services.game_mode_remote import (
+    wait_for_remote_files as wait_for_remote_files,
+)
+from services.game_mode_remote import (
+    wipe_addons_directory as wipe_addons_directory,
+)
+from services.game_mode_types import PlanReport as PlanReport
+from services.game_mode_types import ProgressCallback as ProgressCallback
 from services.maintenance_lock import maintenance_lock_service as maintenance_lock_service
-from services.map_management_service import DEFAULT_MAPS_CONFIG as DEFAULT_MAPS_CONFIG, DEFAULT_PLUGIN_CONFIG_CONTENT as DEFAULT_PLUGIN_CONFIG_CONTENT, MAX_MAPS_CONFIG_BYTES as MAX_MAPS_CONFIG_BYTES, MAX_PLUGIN_CONFIG_BYTES as MAX_PLUGIN_CONFIG_BYTES, append_map_to_config as append_map_to_config, parse_plugin_config as parse_plugin_config, update_plugin_config as update_plugin_config
-from services.plugin_auto_update_service import record_framework_installation as record_framework_installation
-from services.plugin_conflict_service import PluginPlanError as PluginPlanError, _emit_plan_progress as _emit_plan_progress, build_plugin_install_plan as build_plugin_install_plan, execute_plugin_install_plan as execute_plugin_install_plan, validate_plugin_plan_acknowledgements as validate_plugin_plan_acknowledgements
+from services.map_management_service import (
+    DEFAULT_MAPS_CONFIG as DEFAULT_MAPS_CONFIG,
+)
+from services.map_management_service import (
+    DEFAULT_PLUGIN_CONFIG_CONTENT as DEFAULT_PLUGIN_CONFIG_CONTENT,
+)
+from services.map_management_service import (
+    MAX_MAPS_CONFIG_BYTES as MAX_MAPS_CONFIG_BYTES,
+)
+from services.map_management_service import (
+    MAX_PLUGIN_CONFIG_BYTES as MAX_PLUGIN_CONFIG_BYTES,
+)
+from services.map_management_service import (
+    append_map_to_config as append_map_to_config,
+)
+from services.map_management_service import (
+    parse_plugin_config as parse_plugin_config,
+)
+from services.map_management_service import (
+    update_plugin_config as update_plugin_config,
+)
+from services.plugin_auto_update_service import (
+    record_framework_installation as record_framework_installation,
+)
+from services.plugin_conflict_service import (
+    PluginPlanError as PluginPlanError,
+)
+from services.plugin_conflict_service import (
+    _emit_plan_progress as _emit_plan_progress,
+)
+from services.plugin_conflict_service import (
+    build_plugin_install_plan as build_plugin_install_plan,
+)
+from services.plugin_conflict_service import (
+    execute_plugin_install_plan as execute_plugin_install_plan,
+)
+from services.plugin_conflict_service import (
+    validate_plugin_plan_acknowledgements as validate_plugin_plan_acknowledgements,
+)
 from services.redis_manager import redis_manager as redis_manager
 from services.server_compatibility import effective_clear_execstack as effective_clear_execstack
 from services.ssh_manager import SSHManager as SSHManager
 
-from .game_mode_install_phases import _wipe_mode_addons as _wipe_mode_addons
+from .game_mode_configure import _configure_mode_server as _configure_mode_server
 from .game_mode_install_phases import _install_mode_framework as _install_mode_framework
 from .game_mode_install_phases import _install_mode_plugins as _install_mode_plugins
 from .game_mode_install_phases import _restart_mode_server as _restart_mode_server
-from .game_mode_configure import _configure_mode_server as _configure_mode_server
-
-from services.game_mode_types import PlanReport as PlanReport, ProgressCallback as ProgressCallback
+from .game_mode_install_phases import _wipe_mode_addons as _wipe_mode_addons
 
 __all__ = [
     "GameModePlanError",
@@ -339,17 +452,15 @@ async def _save_launch_args(db: AsyncSession, server: Server, value: str | None)
     await redis_manager.clear_server_cache(int(server.id))
 
 
-
-
-
-
-
-
-
-
-
-
-async def _validate_mode_execution(db: AsyncSession, server: Server, user: User, mode_id: str, wipe_addons: bool, expected_plan_hash: str, acknowledged_warning_rule_ids: Iterable[int]) -> tuple[Server, dict[str, Any], set[int], GameModeRecipe]:
+async def _validate_mode_execution(
+    db: AsyncSession,
+    server: Server,
+    user: User,
+    mode_id: str,
+    wipe_addons: bool,
+    expected_plan_hash: str,
+    acknowledged_warning_rule_ids: Iterable[int],
+) -> tuple[Server, dict[str, Any], set[int], GameModeRecipe]:
     current_server = (
         await Server.get_by_id(db, server.id)
         if user.is_admin
@@ -374,7 +485,7 @@ async def _validate_mode_execution(db: AsyncSession, server: Server, user: User,
     return current_server, plan, acknowledged, recipe
 
 
-async def execute_game_mode_plan(  # noqa: C901
+async def execute_game_mode_plan(
     db: AsyncSession,
     server: Server,
     user: User,
@@ -407,10 +518,20 @@ async def execute_game_mode_plan(  # noqa: C901
     async with maintenance_lock_service.get(
         server.id, operation="game_mode_install", wait=False, ttl=7200
     ):
-        current_server, plan, acknowledged, recipe = await _validate_mode_execution(db, server, user, mode_id, wipe_addons, expected_plan_hash, acknowledged_warning_rule_ids)
+        current_server, plan, acknowledged, recipe = await _validate_mode_execution(
+            db,
+            server,
+            user,
+            mode_id,
+            wipe_addons,
+            expected_plan_hash,
+            acknowledged_warning_rule_ids,
+        )
         try:
             if wipe_addons:
-                current_server = await _wipe_mode_addons(db, current_server, user, plan, completed, report, server)
+                current_server = await _wipe_mode_addons(
+                    db, current_server, user, plan, completed, report, server
+                )
             if plan["startup"]["changed"]:
                 await report("startup", "running", "Updating launch parameters")
                 await _save_launch_args(db, current_server, plan["startup"]["after"])
@@ -418,12 +539,24 @@ async def execute_game_mode_plan(  # noqa: C901
                 await report("startup", "completed", "Launch parameters saved")
             need_css = wipe_addons or not plan["current"].get("css")
             if need_css and "counterstrikesharp" in recipe.frameworks:
-
                 await _install_mode_framework(db, current_server, user, plan, completed, report)
-            await _install_mode_plugins(db, current_server, user, plan, completed, report, recipe, wipe_addons, acknowledged, operation_id)
+            await _install_mode_plugins(
+                db,
+                current_server,
+                user,
+                plan,
+                completed,
+                report,
+                recipe,
+                wipe_addons,
+                acknowledged,
+                operation_id,
+            )
             restart_step = next(item for item in plan["steps"] if item["id"] == "restart_and_wait")
             if restart_step["status"] == "pending" or wipe_addons:
-                await _restart_mode_server(db, current_server, user, plan, completed, report, recipe)
+                await _restart_mode_server(
+                    db, current_server, user, plan, completed, report, recipe
+                )
 
             await _configure_mode_server(db, current_server, user, plan, completed, report, recipe)
         except Exception as exc:

@@ -5,16 +5,43 @@ from __future__ import annotations
 import logging
 import shlex
 from collections.abc import Awaitable, Callable
+from functools import partial
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from modules import GitHubPluginInstallRequest, GitHubPluginInstallResponse, User
+from modules import GitHubPluginInstallRequest, GitHubPluginInstallResponse, Server, User
 from services.plugins.github_install.context import GithubInstallContext, host
 from services.plugins.github_install.deploy import deploy_plugin_archive
 from services.plugins.github_install.download import download_plugin_archive
 
 logger = logging.getLogger(__name__)
+
+
+async def _record_installation(server: Server, request: GitHubPluginInstallRequest) -> None:
+    if not request.record_installation or not request.repo_url:
+        return
+    from services.plugins.tracking import (
+        canonical_repo_url,
+        derive_asset_glob,
+        upsert_managed_plugin,
+    )
+
+    repo_url = canonical_repo_url(request.repo_url)
+    await upsert_managed_plugin(
+        server_id=server.id,
+        source_type="github",
+        source_key=repo_url.lower(),
+        display_name=request.display_name or repo_url.rsplit("/", 1)[-1],
+        repo_url=repo_url,
+        installed_release_id=request.release_id,
+        installed_version=request.release_tag or "unknown",
+        installed_asset_name=request.asset_name,
+        asset_glob=request.asset_glob or derive_asset_glob(request.asset_name, request.release_tag),
+        custom_install_path=request.custom_install_path,
+        exclude_dirs=request.exclude_dirs,
+        exclude_files=request.exclude_files,
+    )
 
 
 async def install_github_plugin(
@@ -76,31 +103,7 @@ async def install_github_plugin(
             details=details,
         )
 
-    async def record_installation() -> None:
-        if not request.record_installation or not request.repo_url:
-            return
-        from services.plugins.tracking import (
-            canonical_repo_url,
-            derive_asset_glob,
-            upsert_managed_plugin,
-        )
-
-        repo_url = canonical_repo_url(request.repo_url)
-        await upsert_managed_plugin(
-            server_id=server.id,
-            source_type="github",
-            source_key=repo_url.lower(),
-            display_name=request.display_name or repo_url.rsplit("/", 1)[-1],
-            repo_url=repo_url,
-            installed_release_id=request.release_id,
-            installed_version=request.release_tag or "unknown",
-            installed_asset_name=request.asset_name,
-            asset_glob=request.asset_glob
-            or derive_asset_glob(request.asset_name, request.release_tag),
-            custom_install_path=request.custom_install_path,
-            exclude_dirs=request.exclude_dirs,
-            exclude_files=request.exclude_files,
-        )
+    record_installation = partial(_record_installation, server, request)
 
     ssh_manager = host.SSHManager()
     success, msg = await ssh_manager.connect(server)

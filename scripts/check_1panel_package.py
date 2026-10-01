@@ -336,6 +336,29 @@ def _require_random_fields(version_fields: list[Any], keys: tuple[str, ...]) -> 
             fail(f"{key} must be generated automatically by 1Panel")
 
 
+def _validate_console_port(version_fields: list[Any], compose_text: str) -> None:
+    port_field = next(
+        (field for field in version_fields if field.get("envKey") == "PANEL_APP_PORT_HTTP"), None
+    )
+    if (
+        not isinstance(port_field, dict)
+        or port_field.get("type") != "number"
+        or port_field.get("rule") != "paramPort"
+        or port_field.get("edit") is not True
+        or port_field.get("default") != DEFAULT_PUBLIC_CONSOLE_PORT
+    ):
+        fail(
+            "PANEL_APP_PORT_HTTP must be an editable console port "
+            f"defaulting to {DEFAULT_PUBLIC_CONSOLE_PORT}"
+        )
+    if "${PANEL_APP_PORT_HTTP}:80" not in compose_text:
+        fail("compose must map PANEL_APP_PORT_HTTP to Caddy port 80")
+    if "${PANEL_APP_PORT_HTTP}:8000" in compose_text:
+        fail("compose must not map the public HTTP port onto FastAPI :8000")
+    if ":8001" in compose_text or "8001:" in compose_text:
+        fail("compose must not publish or remap FastAPI as 8001")
+
+
 def _validate_form_and_init(
     version_fields: list[Any], compose_text: str, app_env: dict[str, Any]
 ) -> None:
@@ -383,26 +406,7 @@ def _validate_form_and_init(
         or internal_api_field.get("edit") is not False
     ):
         fail("FRONTEND_INTERNAL_API_URL must be locked to http://app:8000")
-    port_field = next(
-        (field for field in version_fields if field.get("envKey") == "PANEL_APP_PORT_HTTP"), None
-    )
-    if (
-        not isinstance(port_field, dict)
-        or port_field.get("type") != "number"
-        or port_field.get("rule") != "paramPort"
-        or port_field.get("edit") is not True
-        or port_field.get("default") != DEFAULT_PUBLIC_CONSOLE_PORT
-    ):
-        fail(
-            "PANEL_APP_PORT_HTTP must be an editable console port "
-            f"defaulting to {DEFAULT_PUBLIC_CONSOLE_PORT}"
-        )
-    if "${PANEL_APP_PORT_HTTP}:80" not in compose_text:
-        fail("compose must map PANEL_APP_PORT_HTTP to Caddy port 80")
-    if "${PANEL_APP_PORT_HTTP}:8000" in compose_text:
-        fail("compose must not map the public HTTP port onto FastAPI :8000")
-    if ":8001" in compose_text or "8001:" in compose_text:
-        fail("compose must not publish or remap FastAPI as 8001")
+    _validate_console_port(version_fields, compose_text)
     _require_random_fields(version_fields, ("SECRET_KEY", "JWT_SECRET_KEY"))
     init_script = (VERSION_ROOT / "scripts/init.sh").read_text(encoding="utf-8")
     if "openssl rand -hex 32" not in init_script or "ensure_secret SECRET_KEY" not in init_script:

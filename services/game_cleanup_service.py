@@ -13,6 +13,16 @@ import posixpath
 import shlex
 from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Tuple
 
+import asyncssh
+
+from services.game_cleanup_scan import (
+    CleanupScanState,
+    _scan_archives,
+    _scan_logs,
+    _scan_safe_roots,
+    _scan_workshop,
+)
+
 try:
     from .game_cleanup_delete import CleanupDeleteMixin
 except ImportError:  # compatibility when loaded directly by legacy tests
@@ -46,6 +56,15 @@ FIND_TIMEOUT_SECONDS = 45
 CHILD_TIMEOUT_SECONDS = 30
 SIZE_TIMEOUT_SECONDS = 15
 STREAM_CHUNK_BYTES = 65536
+
+
+def _close_cleanup_process(process: asyncssh.SSHClientProcess[bytes]) -> None:
+    closer = getattr(process, "close", None)
+    if callable(closer):
+        try:
+            closer()
+        except Exception:
+            pass
 
 
 class GameCleanupService(CleanupDeleteMixin):
@@ -239,12 +258,7 @@ class GameCleanupService(CleanupDeleteMixin):
         except TimeoutError as exc:
             raise RuntimeError("Command timeout") from exc
         finally:
-            closer = getattr(process, "close", None)
-            if callable(closer):
-                try:
-                    closer()
-                except Exception:
-                    pass
+            _close_cleanup_process(process)
 
     async def _iter_find_records(
         self,
@@ -468,7 +482,7 @@ class GameCleanupService(CleanupDeleteMixin):
                     "truncated": bool(event.get("truncated")),
                 }
 
-    async def iter_scan(self, ssh_manager, server) -> AsyncIterator[Dict[str, Any]]:  # noqa: C901 - ordered scan protocol.
+    async def iter_scan(self, ssh_manager, server) -> AsyncIterator[Dict[str, Any]]:
         if self.game_dir(server) in ("", ".", "/"):
             yield {
                 "type": "error",
@@ -481,210 +495,40 @@ class GameCleanupService(CleanupDeleteMixin):
             yield {"type": "error", "message": f"Connection failed: {message}"}
             return
 
-        truncated = False
-        safe_items: List[Dict[str, Any]] = []
-        yield {"type": "phase", "phase": "safe_roots", "message": "Scanning approved log folders"}
-        for safe_root, reason in self.safe_roots(server):
-            records: List[Dict[str, Any]] = []
-            async for event in self._iter_find_records(
-                ssh_manager,
-                server,
-                self._find_children_command(safe_root),
-                timeout=CHILD_TIMEOUT_SECONDS,
-            ):
-                kind = event.get("type")
-                if kind == "heartbeat":
-                    yield {"type": "heartbeat"}
-                    continue
-                if kind == "progress":
-                    yield {
-                        "type": "batch",
-                        "category": "safe",
-                        "phase": "safe_roots",
-                        "found": len(safe_items) + int(event.get("found") or 0),
-                        "size": sum(item["size"] for item in safe_items)
-                        + int(event.get("size") or 0),
-                    }
-                    continue
-                if kind == "error":
-                    yield {"type": "error", "message": event.get("message")}
-                    return
-                if kind == "complete":
-                    records = list(event.get("listed") or [])
-                    truncated = truncated or bool(event.get("truncated"))
-            safe_items.extend(
-                self._with_category(record, "safe", reason, "safe")
-                for record in records
-                if not self.is_workshop_path(server, record["path"])
-                or self.is_workshop_temp_path(server, record["path"])
-            )
-            yield {
-                "type": "batch",
-                "category": "safe",
-                "phase": "safe_roots",
-                "found": len(safe_items),
-                "size": sum(item["size"] for item in safe_items),
-            }
-
-        yield {"type": "phase", "phase": "logs", "message": "Scanning leftover log files"}
-        log_records: List[Dict[str, Any]] = []
-        log_found = 0
-        async for event in self._scan_phase_events(
-            ssh_manager,
-            server,
-            self._find_named_files_command(server, LOG_NAME_PATTERNS),
-            "safe",
-            "logs",
+        state = CleanupScanState()
+        async for event in _scan_safe_roots(
+            self, ssh_manager, server, state, CHILD_TIMEOUT_SECONDS
         ):
-            kind = event.get("type")
-            if kind == "heartbeat":
-                yield {"type": "heartbeat"}
-                continue
-            if kind == "progress":
-                yield {
-                    "type": "batch",
-                    "category": "safe",
-                    "phase": "logs",
-                    "found": len(safe_items) + int(event["found"]),
-                    "size": sum(item["size"] for item in safe_items) + int(event["size"]),
-                }
-                continue
-            if kind == "error":
-                yield {"type": "error", "message": event.get("message")}
+            yield event
+            if event.get("type") == "error":
                 return
-            if kind == "complete":
-                log_records = list(event.get("listed") or [])
-                log_found = int(event.get("found") or 0)
-                truncated = truncated or bool(event.get("truncated"))
-        safe_root_paths = [root for root, _ in self.safe_roots(server)]
-        extra_logs = [
-            self._with_category(record, "safe", "Game log file", "safe")
-            for record in log_records
-            if record["type"] == "file"
-            and not any(self.is_under(root, record["path"]) for root in safe_root_paths)
-            and not self.is_workshop_path(server, record["path"])
-        ]
-        safe_items.extend(extra_logs)
-        safe_items = self._filter_nested_items(safe_items)
-        safe_count = max(len(safe_items), log_found)
-        yield {
-            "type": "batch",
-            "category": "safe",
-            "phase": "logs",
-            "found": safe_count,
-            "size": sum(item["size"] for item in safe_items),
-        }
-
-        yield {"type": "phase", "phase": "archives", "message": "Scanning leftover archives"}
-        archive_records: List[Dict[str, Any]] = []
-        archive_found = 0
-        archive_size = 0
-        async for event in self._scan_phase_events(
-            ssh_manager,
-            server,
-            self._find_named_files_command(server, ARCHIVE_NAME_PATTERNS),
-            "archive",
-            "archives",
-        ):
-            kind = event.get("type")
-            if kind == "heartbeat":
-                yield {"type": "heartbeat"}
-                continue
-            if kind == "progress":
-                yield {
-                    "type": "batch",
-                    "category": "archive",
-                    "phase": "archives",
-                    "found": int(event["found"]),
-                    "size": int(event["size"]),
-                }
-                continue
-            if kind == "error":
-                yield {"type": "error", "message": event.get("message")}
+        async for event in _scan_logs(self, ssh_manager, server, state, LOG_NAME_PATTERNS):
+            yield event
+            if event.get("type") == "error":
                 return
-            if kind == "complete":
-                archive_records = list(event.get("listed") or [])
-                archive_found = int(event.get("found") or 0)
-                archive_size = int(event.get("size") or 0)
-                truncated = truncated or bool(event.get("truncated"))
-        archive_items = [
-            self._with_category(record, "archive", "Common leftover archive file", "confirm")
-            for record in archive_records
-            if record["type"] == "file"
-            and self.is_archive_path(record["path"])
-            and not self.is_workshop_path(server, record["path"])
-            and not any(self.is_under(item["path"], record["path"]) for item in safe_items)
-        ]
-        archive_items.sort(key=lambda item: item["path"])
-        yield {
-            "type": "batch",
-            "category": "archive",
-            "phase": "archives",
-            "found": max(len(archive_items), archive_found),
-            "size": archive_size,
-        }
-
-        yield {"type": "phase", "phase": "workshop", "message": "Scanning Steam Workshop"}
-        workshop_records: List[Dict[str, Any]] = []
-        workshop_found = 0
-        async for event in self._scan_phase_events(
-            ssh_manager,
-            server,
-            self._find_children_command(self.workshop_dir(server)),
-            "workshop",
-            "workshop",
-            timeout=CHILD_TIMEOUT_SECONDS,
-        ):
-            kind = event.get("type")
-            if kind == "heartbeat":
-                yield {"type": "heartbeat"}
-                continue
-            if kind == "progress":
-                yield {
-                    "type": "batch",
-                    "category": "workshop",
-                    "phase": "workshop",
-                    "found": int(event["found"]),
-                    "size": int(event["size"]),
-                }
-                continue
-            if kind == "error":
-                yield {"type": "error", "message": event.get("message")}
+        async for event in _scan_archives(self, ssh_manager, server, state, ARCHIVE_NAME_PATTERNS):
+            yield event
+            if event.get("type") == "error":
                 return
-            if kind == "complete":
-                workshop_records = list(event.get("listed") or [])
-                workshop_found = int(event.get("found") or 0)
-                truncated = truncated or bool(event.get("truncated"))
-        workshop_items = [
-            self._with_category(record, "workshop", "Steam Workshop content", "danger")
-            for record in workshop_records
-        ]
-        workshop_size = await self._directory_size(ssh_manager, self.workshop_dir(server))
-        if workshop_size == 0:
-            workshop_size = sum(item["size"] for item in workshop_items)
-        yield {
-            "type": "batch",
-            "category": "workshop",
-            "phase": "workshop",
-            "found": max(len(workshop_items), workshop_found),
-            "size": workshop_size,
-        }
-
+        async for event in _scan_workshop(self, ssh_manager, server, state, CHILD_TIMEOUT_SECONDS):
+            yield event
+            if event.get("type") == "error":
+                return
         data = {
-            "safe_items": safe_items,
-            "archive_items": archive_items,
+            "safe_items": state.safe_items,
+            "archive_items": state.archive_items,
             "workshop_summary": {
                 "path": self.workshop_dir(server),
-                "item_count": max(len(workshop_items), workshop_found),
-                "size": workshop_size,
-                "items": workshop_items,
+                "item_count": max(len(state.workshop_items), state.workshop_found),
+                "size": state.workshop_size,
+                "items": state.workshop_items,
             },
-            "total_size": sum(item["size"] for item in safe_items)
-            + sum(item["size"] for item in archive_items)
-            + workshop_size,
-            "safe_item_count": max(len(safe_items), safe_count),
-            "archive_item_count": max(len(archive_items), archive_found),
-            "truncated": truncated,
+            "total_size": sum(item["size"] for item in state.safe_items)
+            + sum(item["size"] for item in state.archive_items)
+            + state.workshop_size,
+            "safe_item_count": max(len(state.safe_items), state.safe_count),
+            "archive_item_count": max(len(state.archive_items), state.archive_found),
+            "truncated": state.truncated,
         }
         yield {"type": "done", "data": data}
 

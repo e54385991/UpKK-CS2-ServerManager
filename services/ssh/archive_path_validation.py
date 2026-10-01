@@ -45,6 +45,26 @@ async def _probe_remote_path(self: ArchiveOperationsMixin, sftp, target: str, al
             raise ValueError(f"Cannot resolve remote path: {exc}") from exc
 
 
+def _regular_archive_error(
+    target_attrs: asyncssh.SFTPAttrs | None, missing_parts: list[str]
+) -> str | None:
+    if missing_parts:
+        return "Archive file does not exist"
+    if target_attrs is None or target_attrs.type != host.FILEXFER_TYPE_REGULAR:
+        return "Archive path must be a regular file and cannot be a symlink"
+
+    return None
+
+
+def _canonical_missing_target(canonical_existing: str, missing_parts: list[str]) -> str:
+    canonical_target = canonical_existing
+    for component in reversed(missing_parts):
+        canonical_target = posixpath.join(canonical_target, component)
+    canonical_target = posixpath.normpath(canonical_target)
+
+    return canonical_target
+
+
 async def validate_path_within_base(
     self: ArchiveOperationsMixin,
     base_path: str,
@@ -86,18 +106,14 @@ async def validate_path_within_base(
             except ValueError as exc:
                 return False, str(exc)
 
-            canonical_target = canonical_existing
-            for component in reversed(missing_parts):
-                canonical_target = posixpath.join(canonical_target, component)
-            canonical_target = posixpath.normpath(canonical_target)
+            canonical_target = _canonical_missing_target(canonical_existing, missing_parts)
             if not self._canonical_path_is_within(canonical_base, canonical_target):
                 return False, "Remote path resolves outside the server directory"
 
             if require_regular:
-                if missing_parts:
-                    return False, "Archive file does not exist"
-                if target_attrs is None or target_attrs.type != host.FILEXFER_TYPE_REGULAR:
-                    return False, "Archive path must be a regular file and cannot be a symlink"
+                regular_error = _regular_archive_error(target_attrs, missing_parts)
+                if regular_error is not None:
+                    return False, regular_error
             return True, ""
     except asyncssh.SFTPError as exc:
         return False, f"SFTP path validation failed: {exc}"

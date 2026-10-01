@@ -4,28 +4,27 @@ import type { CustomCommand } from "@/modules/commands/types";
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { useQueuedOperationTerminal } from "@/modules/servers/use-queued-operation-terminal";
 import {
-getPluginUpdateStatusAction,
-refreshPluginUpdatesAction,
-runPluginUpdatesAction,
-savePluginUpdatesAction,
-togglePluginAutoUpdateAction
+  getPluginUpdateStatusAction,
+  refreshPluginUpdatesAction,
+  runPluginUpdatesAction,
+  savePluginUpdatesAction,
+  togglePluginAutoUpdateAction
 } from "@/modules/updates/actions";
 import {
-clampPluginInterval
+  clampPluginInterval
 } from "@/modules/updates/intervals";
 import {
-availablePostUpdateCommands
+  availablePostUpdateCommands
 } from "@/modules/updates/post-commands";
 import { pluginRunIsBusy } from "@/modules/updates/status";
 import type {
-ManagedUpdatePlugin,
-PluginUpdateStatus,
-PluginUpdates,
-RegisterMarketOption,
+  ManagedUpdatePlugin,
+  PluginUpdateStatus,
+  PluginUpdates,
+  RegisterMarketOption,
 } from "@/modules/updates/types";
-import { useFormatter,useTranslations } from "next-intl";
-import { useEffect,useRef,useState } from "react";
-
+import { useFormatter, useTranslations } from "next-intl";
+import { useEffect, useRef, useState } from "react";
 
 export function useUpdatesConsole({
   serverId,
@@ -179,7 +178,6 @@ export function useUpdatesConsole({
     return `${command.name} (${tCommands(`targets.${command.target}`)})`;
   }
 
-  
   return {
     t,
     tCommands,

@@ -34,7 +34,7 @@ async def _configure_metamod_gameinfo(
 
 
 class MetamodMixin(SSHMixinBase):
-    async def install_metamod(self, server: Server, progress_callback=None) -> Tuple[bool, str]:  # noqa: C901 - dependency installation protocol.
+    async def install_metamod(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """
         Install Metamod:Source 2.0 for CS2 server
 

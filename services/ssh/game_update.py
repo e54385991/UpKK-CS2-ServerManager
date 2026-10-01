@@ -2,11 +2,14 @@
 
 # ruff: noqa: F403,F405
 
+from functools import partial
+
 from services.steamcmd_retry import (
     resolve_steamcmd_max_retries,
 )
 
 from .common import *
+from .progress_callbacks import send_text_progress
 
 
 class GameUpdateMixin(SSHMixinBase):
@@ -86,13 +89,7 @@ class GameUpdateMixin(SSHMixinBase):
         if not success:
             return False, f"Connection failed: {msg}"
 
-        async def send_progress(message: str):
-            """Helper to send progress updates"""
-            if progress_callback:
-                if inspect.iscoroutinefunction(progress_callback):
-                    await progress_callback(message)
-                else:
-                    progress_callback(message)
+        send_progress = partial(send_text_progress, progress_callback)
 
         try:
             await send_progress("Starting server update...")
@@ -204,13 +201,7 @@ class GameUpdateMixin(SSHMixinBase):
         if not success:
             return False, f"Connection failed: {msg}"
 
-        async def send_progress(message: str):
-            """Helper to send progress updates"""
-            if progress_callback:
-                if inspect.iscoroutinefunction(progress_callback):
-                    await progress_callback(message)
-                else:
-                    progress_callback(message)
+        send_progress = partial(send_text_progress, progress_callback)
 
         try:
             await send_progress("Starting server update and validation...")

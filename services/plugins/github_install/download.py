@@ -18,7 +18,9 @@ from services.plugins.github_install.context import GithubInstallContext, Progre
 logger = logging.getLogger(__name__)
 
 
-async def _download_approved_archive(ctx: GithubInstallContext, archive_type: str, archive_filename: str) -> str | GitHubPluginInstallResponse:
+async def _download_approved_archive(
+    ctx: GithubInstallContext, archive_type: str, archive_filename: str
+) -> str | GitHubPluginInstallResponse:
     request = ctx.request
     server = ctx.server
     ssh_manager = ctx.ssh_manager
@@ -67,7 +69,9 @@ async def _download_approved_archive(ctx: GithubInstallContext, archive_type: st
     return archive_file
 
 
-async def _download_panel_archive(ctx: GithubInstallContext, archive_type: str, archive_filename: str) -> str | GitHubPluginInstallResponse:
+async def _download_panel_archive(
+    ctx: GithubInstallContext, archive_type: str, archive_filename: str
+) -> str | GitHubPluginInstallResponse:
     request = ctx.request
     server = ctx.server
     current_user = ctx.current_user
@@ -91,9 +95,7 @@ async def _download_panel_archive(ctx: GithubInstallContext, archive_type: str, 
     try:
         # Download to panel server
         await progress(f"Downloading {archive_type} archive to panel server...")
-        logger.info(
-            f"Panel proxy: Downloading from {request.download_url} to {panel_archive_path}"
-        )
+        logger.info(f"Panel proxy: Downloading from {request.download_url} to {panel_archive_path}")
 
         from services.plugins.download_reuse import cached_download
 
@@ -121,9 +123,7 @@ async def _download_panel_archive(ctx: GithubInstallContext, archive_type: str, 
         if not os.path.exists(panel_archive_path):
             await progress("Downloaded file not found", "error")
             await notify_install_result(False, "Downloaded file not found")
-            return GitHubPluginInstallResponse(
-                success=False, message="Downloaded file not found"
-            )
+            return GitHubPluginInstallResponse(success=False, message="Downloaded file not found")
 
         file_size = os.path.getsize(panel_archive_path)
         if file_size < 1000:
@@ -180,7 +180,9 @@ async def _download_panel_archive(ctx: GithubInstallContext, archive_type: str, 
     return archive_file
 
 
-async def _download_remote_archive(ctx: GithubInstallContext, archive_type: str, archive_filename: str) -> str | GitHubPluginInstallResponse:
+async def _download_remote_archive(
+    ctx: GithubInstallContext, archive_type: str, archive_filename: str
+) -> str | GitHubPluginInstallResponse:
     request = ctx.request
     server = ctx.server
     ssh_manager = ctx.ssh_manager
@@ -188,8 +190,7 @@ async def _download_remote_archive(ctx: GithubInstallContext, archive_type: str,
     progress = ctx.progress
     notify_install_result = ctx.notify_install_result
     await ssh_manager.execute_command(
-        f"rm -rf -- {shlex.quote(remote_temp_dir)} && "
-        f"mkdir -p -- {shlex.quote(remote_temp_dir)}"
+        f"rm -rf -- {shlex.quote(remote_temp_dir)} && mkdir -p -- {shlex.quote(remote_temp_dir)}"
     )
     archive_file = f"{remote_temp_dir}/{archive_filename}"
 
@@ -206,9 +207,7 @@ async def _download_remote_archive(ctx: GithubInstallContext, archive_type: str,
 
     # Use curl with progress output
     download_cmd = f"curl -fL --progress-bar -o {archive_file} '{actual_download_url}' 2>&1"
-    success, download_output, stderr = await ssh_manager.execute_command(
-        download_cmd, timeout=300
-    )
+    success, download_output, stderr = await ssh_manager.execute_command(download_cmd, timeout=300)
 
     if not success:
         await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
@@ -242,7 +241,9 @@ def _archive_format(download_url: str) -> tuple[str, str]:
     return archive_type, archive_filename
 
 
-async def _verify_approved_archive(ctx: GithubInstallContext, archive_file: str) -> GitHubPluginInstallResponse | None:
+async def _verify_approved_archive(
+    ctx: GithubInstallContext, archive_file: str
+) -> GitHubPluginInstallResponse | None:
     request = ctx.request
     ssh_manager = ctx.ssh_manager
     remote_temp_dir = ctx.remote_temp_dir
@@ -252,7 +253,9 @@ async def _verify_approved_archive(ctx: GithubInstallContext, archive_file: str)
     digest_cmd = f"sha256sum -- {shlex.quote(archive_file)} | awk '{{print $1}}'"
     digest_ok, digest_output, _ = await ssh_manager.execute_command(digest_cmd)
     actual_digest = digest_output.strip().casefold()
-    if not digest_ok or actual_digest != request.expected_archive_sha256.casefold():
+    expected_digest = request.expected_archive_sha256
+    assert expected_digest is not None
+    if not digest_ok or actual_digest != expected_digest.casefold():
         await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
         error_msg = "Release archive digest changed after approval"
         await progress(error_msg, "error")
@@ -262,7 +265,9 @@ async def _verify_approved_archive(ctx: GithubInstallContext, archive_file: str)
     return None
 
 
-async def _verify_remote_archive(ctx: GithubInstallContext, archive_file: str) -> GitHubPluginInstallResponse | None:
+async def _verify_remote_archive(
+    ctx: GithubInstallContext, archive_file: str
+) -> GitHubPluginInstallResponse | None:
     ssh_manager = ctx.ssh_manager
     remote_temp_dir = ctx.remote_temp_dir
     progress = ctx.progress
@@ -293,7 +298,7 @@ async def _verify_remote_archive(ctx: GithubInstallContext, archive_file: str) -
     return None
 
 
-async def download_plugin_archive(  # noqa: C901
+async def download_plugin_archive(
     ctx: GithubInstallContext,
 ) -> GitHubPluginInstallResponse | tuple[str, str, bool]:
     request = ctx.request

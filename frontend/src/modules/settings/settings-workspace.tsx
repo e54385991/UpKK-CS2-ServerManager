@@ -4,9 +4,6 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { SettingsSectionKey } from "@/modules/settings/settings-form-parts";
 
-
-
-
 import { SettingsSection } from "@/modules/settings/settings-section";
 import type { AiSystemSettings, SystemSettings } from "@/modules/settings/types";
 
@@ -53,10 +50,9 @@ export function SettingsWorkspace({
 }) {
   const t = useTranslations("settings");
   const feedback = useTranslations("feedback");
-  const [active, setActive] = useState<SectionKey>(() =>
-    typeof window === "undefined" ? "performance" : keyFromHash(window.location.hash),
-  );
-  const [visited, setVisited] = useState<ReadonlySet<SectionKey>>(() => new Set([active]));
+  // URL fragments are client-only; hydrate the same initial shell on both sides.
+  const [active, setActive] = useState<SectionKey>("performance");
+  const [visited, setVisited] = useState<ReadonlySet<SectionKey>>(() => new Set());
   const [dirty, setDirty] = useState<ReadonlySet<SectionKey>>(() => new Set());
 
   useEffect(() => {
@@ -68,6 +64,7 @@ export function SettingsWorkspace({
       setActive(next);
       setVisited((current) => new Set(current).add(next));
     };
+    onHash();
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -75,9 +72,9 @@ export function SettingsWorkspace({
   const mainSection = useMemo<SettingsSectionKey>(
     () =>
       active === "downloads" ||
-      active === "notifications" ||
-      active === "security" ||
-      active === "logging"
+        active === "notifications" ||
+        active === "security" ||
+        active === "logging"
         ? active
         : "hidden",
     [active],
@@ -125,51 +122,52 @@ export function SettingsWorkspace({
 
       <div className="min-w-0">
         <Suspense fallback={<div role="status" className="p-4">{feedback("loading")}</div>}>
-        {visited.has("performance") ? (
-          <SettingsSection
-            className={active === "performance" ? undefined : "hidden"}
-            id="settings-performance"
-            title={t("sections.performance.title")}
-            description={t("sections.performance.description")}
-            testId="settings-section-performance"
-          >
-            <PerformanceDiagnosticsCard />
-          </SettingsSection>
-        ) : null}
-        {visited.has("announcements") ? (
-          <SettingsSection
-            className={active === "announcements" ? undefined : "hidden"}
-            id="settings-announcements"
-            title={t("sections.announcements.title")}
-            description={t("sections.announcements.description")}
-            testId="settings-section-announcements"
-          >
-            <AnnouncementManager
-              initial={announcements}
-              loadError={announcementError}
-            />
-          </SettingsSection>
-        ) : null}
-        {["downloads", "notifications", "security", "logging"].some((key) => visited.has(key as SectionKey)) ? <SettingsForm
-          initial={settings}
-          activeSection={mainSection}
-          onDirty={() => {
-            if (mainSection === "hidden") return;
-            markDirty(mainSection);
-          }}
-          onSaved={() => {
-            clearDirty(mainSection);
-          }}
-        /> : null}
-        {visited.has("download-cache") ? <div data-testid="settings-section-download-cache" className={cn(active === "download-cache" ? "" : "hidden")}>
-          <DownloadCacheCard initial={settings} onDirty={() => markDirty("download-cache")} onSaved={() => clearDirty("download-cache")} />
-        </div> : null}
-        {visited.has("ai") ? <div data-testid="settings-section-ai" className={cn(active === "ai" ? "" : "hidden")}>
-          <AiSettingsForm initial={ai} onDirty={() => markDirty("ai")} onSaved={() => clearDirty("ai")} />
-        </div> : null}
-        {visited.has("transfer") ? <div data-testid="settings-section-transfer" className={cn(active === "transfer" ? "" : "hidden")}>
-          <SettingsTransferCard />
-        </div> : null}
+          {visited.size === 0 ? <div role="status" className="p-4">{feedback("loading")}</div> : null}
+          {visited.has("performance") ? (
+            <SettingsSection
+              className={active === "performance" ? undefined : "hidden"}
+              id="settings-performance"
+              title={t("sections.performance.title")}
+              description={t("sections.performance.description")}
+              testId="settings-section-performance"
+            >
+              <PerformanceDiagnosticsCard />
+            </SettingsSection>
+          ) : null}
+          {visited.has("announcements") ? (
+            <SettingsSection
+              className={active === "announcements" ? undefined : "hidden"}
+              id="settings-announcements"
+              title={t("sections.announcements.title")}
+              description={t("sections.announcements.description")}
+              testId="settings-section-announcements"
+            >
+              <AnnouncementManager
+                initial={announcements}
+                loadError={announcementError}
+              />
+            </SettingsSection>
+          ) : null}
+          {["downloads", "notifications", "security", "logging"].some((key) => visited.has(key as SectionKey)) ? <SettingsForm
+            initial={settings}
+            activeSection={mainSection}
+            onDirty={() => {
+              if (mainSection === "hidden") return;
+              markDirty(mainSection);
+            }}
+            onSaved={() => {
+              clearDirty(mainSection);
+            }}
+          /> : null}
+          {visited.has("download-cache") ? <div data-testid="settings-section-download-cache" className={cn(active === "download-cache" ? "" : "hidden")}>
+            <DownloadCacheCard initial={settings} onDirty={() => markDirty("download-cache")} onSaved={() => clearDirty("download-cache")} />
+          </div> : null}
+          {visited.has("ai") ? <div data-testid="settings-section-ai" className={cn(active === "ai" ? "" : "hidden")}>
+            <AiSettingsForm initial={ai} onDirty={() => markDirty("ai")} onSaved={() => clearDirty("ai")} />
+          </div> : null}
+          {visited.has("transfer") ? <div data-testid="settings-section-transfer" className={cn(active === "transfer" ? "" : "hidden")}>
+            <SettingsTransferCard />
+          </div> : null}
         </Suspense>
       </div>
     </div>

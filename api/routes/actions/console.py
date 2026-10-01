@@ -88,54 +88,16 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
 
         # Handle interactive shell
         process = None
-        output_task = None
         try:
             # Create interactive process with PTY for interactive shell
             # Request a PTY to enable interactive terminal features
             process = await ssh_manager.create_interactive_process()
 
-            async def read_output():
-                """Read output from SSH and send to WebSocket"""
-                try:
-                    while True:
-                        output = await process.stdout.read(1024)
-                        if output:
-                            await websocket.send_json(
-                                {"type": "output", "data": decode_remote_text(output)}
-                            )
-                        else:
-                            break
-                except Exception:
-                    pass
-
-            # Start reading output
-            output_task = asyncio.create_task(read_output())
-
-            # Handle input from WebSocket
-            while True:
-                data = await websocket.receive_text()
-                message = json.loads(data)
-
-                if message.get("type") == "input":
-                    # Send input to SSH
-                    input_data = message.get("data", "")
-                    process.stdin.write(encode_console_input(str(input_data)))
-                    await process.stdin.drain()
-                elif message.get("type") == "resize":
-                    # Handle terminal resize
-                    cols = message.get("cols", 80)
-                    rows = message.get("rows", 24)
-                    process.change_terminal_size(cols, rows)
-                elif message.get("type") == "disconnect":
-                    break
+            await _relay_console(websocket, process, allow_ping=False)
 
         except Exception as e:
             await websocket.send_json({"type": "error", "message": f"Console error: {str(e)}"})
         finally:
-            if output_task is not None:
-                output_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await output_task
             if process is not None:
                 with suppress(Exception):
                     process.terminate()

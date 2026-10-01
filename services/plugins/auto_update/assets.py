@@ -15,6 +15,55 @@ logger = logging.getLogger("services.plugin_auto_update_service")
 host = LateBoundModule("services.plugin_auto_update_service")
 
 
+def _select_update_runtime_assets(
+    item: ManagedPlugin,
+    assets: List[Dict[str, Any]],
+    matches: List[Dict[str, Any]],
+    fallback_matches: List[Dict[str, Any]],
+    pattern: str,
+    linux_runtime_profile: Dict[str, Any],
+) -> tuple[bool, List[Dict[str, Any]], str]:
+    from services.linux_runtime_service import (
+        RuntimeSelectionRequired,
+        paired_runtime_families,
+        prioritize_runtime_assets,
+        steam_runtime_asset_family,
+    )
+
+    paired = paired_runtime_families(assets)
+    reference_families = {
+        family
+        for name in [
+            item.installed_asset_name,
+            *(str(asset.get("name") or "") for asset in matches),
+            *(str(asset.get("name") or "") for asset in fallback_matches),
+        ]
+        if name and (family := steam_runtime_asset_family(str(name)))
+    }
+    related = paired & reference_families
+    if len(related) == 1:
+        family = next(iter(related))
+        siblings = [
+            asset
+            for asset in assets
+            if steam_runtime_asset_family(str(asset.get("name") or "")) == family
+        ]
+        try:
+            matches = [prioritize_runtime_assets(siblings, linux_runtime_profile)[0]]
+        except RuntimeSelectionRequired as exc:
+            return False, [], f"{item.display_name}: {exc}"
+    elif len(related) > 1:
+        return (
+            False,
+            [],
+            f"Multiple paired Steam Runtime asset families match '{pattern}'",
+        )
+    elif not matches and fallback_matches:
+        matches = fallback_matches
+
+    return True, matches, ""
+
+
 class AutoUpdateAssetsMixin:
     @staticmethod
     def _is_windows_asset(asset_name: str) -> bool:
@@ -150,43 +199,11 @@ class AutoUpdateAssetsMixin:
         # metadata forever. Registration helpers omit the profile and retain
         # their explicit asset/glob selection.
         if linux_runtime_profile is not None:
-            from services.linux_runtime_service import (
-                RuntimeSelectionRequired,
-                paired_runtime_families,
-                prioritize_runtime_assets,
-                steam_runtime_asset_family,
+            selected, matches, selection_error = _select_update_runtime_assets(
+                item, assets, matches, fallback_matches, pattern, linux_runtime_profile
             )
-
-            paired = paired_runtime_families(assets)
-            reference_families = {
-                family
-                for name in [
-                    item.installed_asset_name,
-                    *(str(asset.get("name") or "") for asset in matches),
-                    *(str(asset.get("name") or "") for asset in fallback_matches),
-                ]
-                if name and (family := steam_runtime_asset_family(str(name)))
-            }
-            related = paired & reference_families
-            if len(related) == 1:
-                family = next(iter(related))
-                siblings = [
-                    asset
-                    for asset in assets
-                    if steam_runtime_asset_family(str(asset.get("name") or "")) == family
-                ]
-                try:
-                    matches = [prioritize_runtime_assets(siblings, linux_runtime_profile)[0]]
-                except RuntimeSelectionRequired as exc:
-                    return False, None, f"{item.display_name}: {exc}"
-            elif len(related) > 1:
-                return (
-                    False,
-                    None,
-                    f"Multiple paired Steam Runtime asset families match '{pattern}'",
-                )
-            elif not matches and fallback_matches:
-                matches = fallback_matches
+            if not selected:
+                return False, None, selection_error
 
         if len(matches) != 1:
             return (

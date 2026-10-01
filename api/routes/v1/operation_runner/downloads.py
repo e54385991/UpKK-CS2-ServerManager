@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from fastapi import HTTPException
 
 from api.dependencies import require_server_access
 from modules import User
 from modules.database import async_session_maker
+from modules.models import Server
 from services.github_credentials import get_effective_github_token
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.server_operation_hub import (
@@ -15,7 +18,13 @@ from services.server_operation_hub import (
 )
 from services.ssh_manager import SSHManager
 
-from .shared import _audit_terminal, _dispatch, _progress_emitter, logger
+from .shared import (
+    _audit_terminal,
+    _disconnect_background_manager,
+    _dispatch,
+    _progress_emitter,
+    logger,
+)
 
 
 async def enqueue_extract_archive(
@@ -216,6 +225,42 @@ async def enqueue_url_download(
     )
 
 
+async def _download_with_artifact_retry(
+    manager: SSHManager,
+    server: Server,
+    download_url: str,
+    url: str,
+    resolved_target: str | None,
+    overwrite: bool,
+    destination_path: str,
+    update_target: Callable[[str], Awaitable[None]],
+    is_github_artifact: bool,
+    github_token: str | None,
+) -> tuple[bool, str]:
+    from api.routes.file_manager.common import _resolve_github_actions_artifact
+
+    success, error = await manager.download_url_to_file(
+        download_url,
+        resolved_target,
+        server,
+        overwrite=overwrite,
+        destination_path=destination_path,
+        resolved_target_callback=update_target,
+    )
+    if is_github_artifact and not success and str(error).startswith("Download failed:"):
+        download_url, _ = await _resolve_github_actions_artifact(url, github_token)
+        success, error = await manager.download_url_to_file(
+            download_url,
+            resolved_target,
+            server,
+            overwrite=overwrite,
+            destination_path=destination_path,
+            resolved_target_callback=update_target,
+        )
+
+    return success, error
+
+
 async def run_url_download(
     *,
     operation_id: str,
@@ -289,24 +334,18 @@ async def run_url_download(
                         resolved_target = remote_join(destination_path, artifact_filename)
                         await update_target(resolved_target)
 
-                success, error = await manager.download_url_to_file(
-                    download_url,
-                    resolved_target,
+                success, error = await _download_with_artifact_retry(
+                    manager,
                     server,
-                    overwrite=overwrite,
-                    destination_path=destination_path,
-                    resolved_target_callback=update_target,
+                    download_url,
+                    url,
+                    resolved_target,
+                    overwrite,
+                    destination_path,
+                    update_target,
+                    is_github_artifact,
+                    github_token,
                 )
-                if is_github_artifact and not success and str(error).startswith("Download failed:"):
-                    download_url, _ = await _resolve_github_actions_artifact(url, github_token)
-                    success, error = await manager.download_url_to_file(
-                        download_url,
-                        resolved_target,
-                        server,
-                        overwrite=overwrite,
-                        destination_path=destination_path,
-                        resolved_target_callback=update_target,
-                    )
                 github_token = None
             message = "Archive downloaded successfully" if success else error
             await server_operation_hub.finish(operation_id, success=success, message=message)
@@ -329,7 +368,4 @@ async def run_url_download(
         logger.exception("Background URL download %s failed", operation_id)
         await fail("URL download failed unexpectedly")
     finally:
-        try:
-            await manager.disconnect()
-        except Exception:
-            pass
+        await _disconnect_background_manager(manager)

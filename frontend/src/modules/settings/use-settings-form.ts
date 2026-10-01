@@ -1,32 +1,32 @@
 "use client";
 
 import {
-authorizeGmailAction,
-refreshSettingsAction,
-revokeGmailAction,
-saveSettingsAction,
-sendTestEmailAction,
-uploadGmailCredentialsAction,
+  authorizeGmailAction,
+  refreshSettingsAction,
+  revokeGmailAction,
+  saveSettingsAction,
+  sendTestEmailAction,
+  uploadGmailCredentialsAction,
 } from "@/modules/settings/actions";
 import {
-AUDIT_LOG_RETENTION_DAYS_MAX,
-AUDIT_LOG_RETENTION_DAYS_MIN,
-clientIpChoiceOf,
-clientIpHeaderOf,
-customClientIpOf,
-ENVIRONMENT_LOG_LEVEL,
-logLevelOf
+  AUDIT_LOG_RETENTION_DAYS_MAX,
+  AUDIT_LOG_RETENTION_DAYS_MIN,
+  clientIpChoiceOf,
+  clientIpHeaderOf,
+  customClientIpOf,
+  ENVIRONMENT_LOG_LEVEL,
+  logLevelOf
 } from "@/modules/settings/runtime-cards";
 import {
-isClientIpHeader,
-isGoogleClientId,
-type EmailProvider,
-type ProxyMode,
-type SystemSettings,
+  isClientIpHeader,
+  isGoogleClientId,
+  type EmailProvider,
+  type ProxyMode,
+  type SystemSettings,
 } from "@/modules/settings/types";
 import { confirm } from "@/shared/feedback";
 import { useTranslations } from "next-intl";
-import { useState,type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import { type Banner, type SettingsSectionKey } from "./settings-form-parts";
 
@@ -119,39 +119,39 @@ export function useSettingsForm({
     const patch =
       activeSection === "downloads"
         ? {
-            defaultProxyMode: proxyMode,
-            githubProxyUrl: githubProxyUrl.trim() || null,
-            ...(clearGithubToken
-              ? { clearGlobalGithubToken: true }
-              : githubToken.trim()
-                ? { globalGithubToken: githubToken.trim() }
-                : {}),
-          }
+          defaultProxyMode: proxyMode,
+          githubProxyUrl: githubProxyUrl.trim() || null,
+          ...(clearGithubToken
+            ? { clearGlobalGithubToken: true }
+            : githubToken.trim()
+              ? { globalGithubToken: githubToken.trim() }
+              : {}),
+        }
         : activeSection === "notifications"
           ? {
-              emailEnabled,
-              emailProvider,
-              emailFromAddress: fromAddress.trim() || null,
-              emailFromName: fromName.trim() || null,
-              smtpHost: smtpHost.trim() || null,
-              smtpPort: Number.isInteger(parsedPort) ? parsedPort : 587,
-              smtpUsername: smtpUsername.trim() || null,
-              ...(smtpPassword.trim() ? { smtpPassword: smtpPassword.trim() } : {}),
-              smtpUseTls,
-            }
+            emailEnabled,
+            emailProvider,
+            emailFromAddress: fromAddress.trim() || null,
+            emailFromName: fromName.trim() || null,
+            smtpHost: smtpHost.trim() || null,
+            smtpPort: Number.isInteger(parsedPort) ? parsedPort : 587,
+            smtpUsername: smtpUsername.trim() || null,
+            ...(smtpPassword.trim() ? { smtpPassword: smtpPassword.trim() } : {}),
+            smtpUseTls,
+          }
           : activeSection === "security"
             ? {
-                captchaEnabled,
-                registrationEnabled,
-                clientIpHeader,
-                googleClientId: googleClientId.trim() || null,
-              }
+              captchaEnabled,
+              registrationEnabled,
+              clientIpHeader,
+              googleClientId: googleClientId.trim() || null,
+            }
             : activeSection === "logging"
-            ? {
+              ? {
                 logLevel: logLevelOf(logLevel),
                 auditLogRetentionDays: parsedRetention,
               }
-            : {};
+              : {};
     const result = await saveSettingsAction(patch);
     setSaving(false);
     if (!result.ok) {
@@ -262,7 +262,6 @@ export function useSettingsForm({
     if (refreshed.ok) setSettings(refreshed.data);
   }
 
-  
   return {
     t,
     settings,

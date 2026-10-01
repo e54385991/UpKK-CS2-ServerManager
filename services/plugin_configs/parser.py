@@ -151,6 +151,50 @@ def _json_string_token(content: str, index: int, line: int) -> tuple[_JsonToken,
     return _JsonToken("string", value, start, index, token_line), index
 
 
+def _jsonc_comment_end(content: str, index: int, line: int) -> tuple[int, int]:
+    end = content.find("*/", index + 2)
+    if end < 0:
+        raise PluginConfigError(f"Unterminated JSONC comment at line {line}")
+    segment = content[index : end + 2]
+    line += segment.count("\n")
+    index = end + 2
+
+    return index, line
+
+
+def _json_object_value(parser: _JsoncParser, path: list[Any]) -> None:
+    parser._take("{")
+    if parser._peek().kind == "}":
+        parser._take("}")
+        return
+    while True:
+        key = parser._take("string")
+        parser._take(":")
+        parser._value([*path, key.value], str(key.value))
+        if parser._peek().kind == ",":
+            parser._take(",")
+            if parser._peek().kind == "}":
+                parser._take("}")
+                return
+            continue
+        parser._take("}")
+        return
+
+
+def _json_keyword(
+    content: str, index: int, line: int, tokens: list[_JsonToken]
+) -> tuple[bool, int]:
+    matched_keyword = False
+    for word, value in (("true", True), ("false", False), ("null", None)):
+        if content.startswith(word, index):
+            tokens.append(_JsonToken(word, value, index, index + len(word), line))
+            index += len(word)
+            matched_keyword = True
+            break
+
+    return matched_keyword, index
+
+
 class _JsoncParser:
     _number = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
 
@@ -181,12 +225,7 @@ class _JsoncParser:
                 index = newline
                 continue
             if content.startswith("/*", index):
-                end = content.find("*/", index + 2)
-                if end < 0:
-                    raise PluginConfigError(f"Unterminated JSONC comment at line {line}")
-                segment = content[index : end + 2]
-                line += segment.count("\n")
-                index = end + 2
+                index, line = _jsonc_comment_end(content, index, line)
                 continue
             if char in "{}[]:,":
                 tokens.append(_JsonToken(char, char, index, index + 1, line))
@@ -199,17 +238,11 @@ class _JsoncParser:
             number = self._number.match(content, index)
             if number:
                 raw = number.group(0)
-                value: Any = float(raw) if any(c in raw for c in ".eE") else int(raw)
+                value = _json_number_value(raw)
                 tokens.append(_JsonToken("number", value, index, number.end(), line))
                 index = number.end()
                 continue
-            matched_keyword = False
-            for word, value in (("true", True), ("false", False), ("null", None)):
-                if content.startswith(word, index):
-                    tokens.append(_JsonToken(word, value, index, index + len(word), line))
-                    index += len(word)
-                    matched_keyword = True
-                    break
+            matched_keyword, index = _json_keyword(content, index, line, tokens)
             if matched_keyword:
                 continue
             raise PluginConfigError(f"Unexpected JSON token at line {line}, column {index + 1}")
@@ -241,22 +274,8 @@ class _JsoncParser:
     def _value(self, path: list[Any], label: str) -> None:
         token = self._peek()
         if token.kind == "{":
-            self._take("{")
-            if self._peek().kind == "}":
-                self._take("}")
-                return
-            while True:
-                key = self._take("string")
-                self._take(":")
-                self._value([*path, key.value], str(key.value))
-                if self._peek().kind == ",":
-                    self._take(",")
-                    if self._peek().kind == "}":
-                        self._take("}")
-                        return
-                    continue
-                self._take("}")
-                return
+            _json_object_value(self, path)
+            return
         if token.kind == "[":
             self._take("[")
             array_index = 0
@@ -586,3 +605,7 @@ __all__ = [
     "apply_visual_changes",
     "validate_raw_content",
 ]
+
+
+def _json_number_value(raw: str) -> int | float:
+    return float(raw) if any(c in raw for c in ".eE") else int(raw)

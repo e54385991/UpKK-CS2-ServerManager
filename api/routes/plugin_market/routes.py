@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# Leaf routes register here in their original position after router initialization.
+# ruff: noqa: E402
 import logging as logging
 from typing import Optional as Optional
 
@@ -37,12 +39,24 @@ host = LateBoundModule("api.routes.plugin_market")
 router = APIRouter(prefix="/api/plugin-market", tags=["plugin-market"])
 
 
-from .catalog_routes import create_plugin as create_plugin
-from .catalog_routes import delete_plugin as delete_plugin
-from .catalog_routes import get_plugin as get_plugin
-from .catalog_routes import get_plugin_releases as get_plugin_releases
-from .catalog_routes import list_plugins as list_plugins
-from .catalog_routes import update_plugin as update_plugin
+from .catalog_routes import (
+    create_plugin as create_plugin,
+)
+from .catalog_routes import (
+    delete_plugin as delete_plugin,
+)
+from .catalog_routes import (
+    get_plugin as get_plugin,
+)
+from .catalog_routes import (
+    get_plugin_releases as get_plugin_releases,
+)
+from .catalog_routes import (
+    list_plugins as list_plugins,
+)
+from .catalog_routes import (
+    update_plugin as update_plugin,
+)
 
 
 @router.get("/plugins/{plugin_id}/install-preflight")

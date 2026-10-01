@@ -2,14 +2,14 @@
 
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import {
-savePluginExcludesAction,
-testManagedPluginUpdateAction,
-togglePluginBackupAction,
-togglePluginRestartAction,
-unregisterManagedPluginAction
+  savePluginExcludesAction,
+  testManagedPluginUpdateAction,
+  togglePluginBackupAction,
+  togglePluginRestartAction,
+  unregisterManagedPluginAction
 } from "@/modules/updates/actions";
 import type {
-ManagedUpdatePlugin
+  ManagedUpdatePlugin
 } from "@/modules/updates/types";
 import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
@@ -17,7 +17,7 @@ import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/input";
 import { Switch } from "@/shared/ui/switch";
 import { Textarea } from "@/shared/ui/textarea";
-import { useFormatter,useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { useState } from "react";
 
 export function joinLines(values: readonly string[]): string {

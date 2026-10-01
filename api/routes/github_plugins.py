@@ -35,6 +35,7 @@ from modules import GitHubPluginSearchResponse as GitHubPluginSearchResponse
 from modules import GitHubRelease as GitHubRelease
 from modules import GitHubReleaseAsset as GitHubReleaseAsset
 from modules import GitHubReleasesResponse as GitHubReleasesResponse
+from modules import InstalledPluginFile
 from modules import PluginUninstallRequest as PluginUninstallRequest
 from modules import PluginUninstallResponse as PluginUninstallResponse
 from modules import Server as Server
@@ -393,6 +394,37 @@ async def install_github_plugin(
     )
 
 
+def _parse_installed_plugin_files(
+    output: str, safe_dir: str
+) -> tuple[list[InstalledPluginFile], int]:
+    files = []
+    total_size = 0
+
+    if output.strip():
+        for line in output.strip().split("\n"):
+            line = line.strip()
+            if not line or line == ".":
+                continue
+
+            # Try to parse size and path
+            parts = line.split(None, 1)
+            if len(parts) == 2 and parts[0].isdigit():
+                size = int(parts[0])
+                path = parts[1].strip().lstrip("./")
+            else:
+                # Fallback if no size info
+                size = 0
+                path = line.lstrip("./")
+
+            if path:
+                # Make path relative to csgo directory
+                full_path = f"{safe_dir}/{path}"
+                files.append(InstalledPluginFile(path=full_path, size=size, is_dir=False))
+                total_size += size
+
+    return files, total_size
+
+
 @router.get("/servers/{server_id}/analyze-installed-plugins")
 async def analyze_installed_plugins(
     server_id: int,
@@ -448,30 +480,7 @@ async def analyze_installed_plugins(
                 success=False, error=f"Failed to list files: {stderr}"
             )
 
-        files = []
-        total_size = 0
-
-        if output.strip():
-            for line in output.strip().split("\n"):
-                line = line.strip()
-                if not line or line == ".":
-                    continue
-
-                # Try to parse size and path
-                parts = line.split(None, 1)
-                if len(parts) == 2 and parts[0].isdigit():
-                    size = int(parts[0])
-                    path = parts[1].strip().lstrip("./")
-                else:
-                    # Fallback if no size info
-                    size = 0
-                    path = line.lstrip("./")
-
-                if path:
-                    # Make path relative to csgo directory
-                    full_path = f"{safe_dir}/{path}"
-                    files.append(InstalledPluginFile(path=full_path, size=size, is_dir=False))
-                    total_size += size
+        files, total_size = _parse_installed_plugin_files(output, safe_dir)
 
         # Also get directories
         dir_cmd = f"cd {target_dir} && find . -type d 2>/dev/null | grep -v '^\\.\\?$' || echo ''"

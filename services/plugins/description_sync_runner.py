@@ -97,6 +97,45 @@ async def _handle_cancelled(job_id: str) -> None:
     await store.requeue_job(job_id, "Description sync interrupted; will resume")
 
 
+async def _record_sync_readme(
+    job: store.DescriptionSyncJobSnapshot, target: store.TargetPlugin, readme: str | None
+) -> None:
+    if not readme:
+        await store.record_item(
+            job.operation_id,
+            plugin_id=target.plugin_id,
+            title=target.title,
+            github_url=target.github_url,
+            action="skipped",
+            message="Repository has no README",
+        )
+        return
+    if (target.description or "") == readme:
+        await store.record_item(
+            job.operation_id,
+            plugin_id=target.plugin_id,
+            title=target.title,
+            github_url=target.github_url,
+            action="unchanged",
+        )
+        return
+    await store.record_item(
+        job.operation_id,
+        plugin_id=target.plugin_id,
+        title=target.title,
+        github_url=target.github_url,
+        action="updated",
+        description=readme,
+    )
+
+
+async def _persist_sync_interruption(operation_id: str) -> None:
+    try:
+        await asyncio.shield(_handle_cancelled(operation_id))
+    except Exception:
+        logger.exception("Failed to persist interrupted description sync %s", operation_id)
+
+
 async def run_job(job: store.DescriptionSyncJobSnapshot) -> None:
     """Run one claimed job, persisting after every listing."""
     try:
@@ -182,33 +221,7 @@ async def run_job(job: store.DescriptionSyncJobSnapshot) -> None:
                 )
                 continue
 
-            if not readme:
-                await store.record_item(
-                    job.operation_id,
-                    plugin_id=target.plugin_id,
-                    title=target.title,
-                    github_url=target.github_url,
-                    action="skipped",
-                    message="Repository has no README",
-                )
-                continue
-            if (target.description or "") == readme:
-                await store.record_item(
-                    job.operation_id,
-                    plugin_id=target.plugin_id,
-                    title=target.title,
-                    github_url=target.github_url,
-                    action="unchanged",
-                )
-                continue
-            await store.record_item(
-                job.operation_id,
-                plugin_id=target.plugin_id,
-                title=target.title,
-                github_url=target.github_url,
-                action="updated",
-                description=readme,
-            )
+            await _record_sync_readme(job, target, readme)
 
         await _finish(
             job.operation_id,
@@ -217,10 +230,7 @@ async def run_job(job: store.DescriptionSyncJobSnapshot) -> None:
             message="Description sync completed",
         )
     except asyncio.CancelledError:
-        try:
-            await asyncio.shield(_handle_cancelled(job.operation_id))
-        except Exception:
-            logger.exception("Failed to persist interrupted description sync %s", job.operation_id)
+        await _persist_sync_interruption(job.operation_id)
         raise
     except PermissionError:
         await _finish(

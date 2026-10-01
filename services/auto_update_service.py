@@ -6,8 +6,10 @@ Periodically checks server versions against Steam API and triggers updates when 
 import asyncio
 import logging
 import math
+from collections.abc import Awaitable, Callable
 from typing import Any, Optional, Set, Tuple
 
+from modules.models import Server
 from modules.utils import get_current_time
 from services.cs2_version_tracking import remember_advertised_version
 from services.discord_notification_service import EVENT_AUTO_UPDATE, discord_notification_service
@@ -17,6 +19,98 @@ from services.steam_api_service import steam_api_service
 from services.steam_inf_service import steam_inf_service
 
 logger = logging.getLogger(__name__)
+
+
+async def _record_update_command_failure(
+    server: Server,
+    update_message: str,
+    notification_details: dict[str, str],
+    log_id: int | None,
+    output_messages: list[str],
+) -> None:
+    from modules.database import async_session_maker
+    from modules.models import DeploymentLog
+
+    error_msg = f"Update failed: {update_message}"
+    notification_details["Operation Result"] = update_message
+    logger.error(f"Update failed for server {server.id}: {update_message}")
+
+    # Update log as failed
+    async with async_session_maker() as db:
+        log_to_update = await db.get(DeploymentLog, log_id)
+        if log_to_update:
+            log_to_update.status = "failed"
+            log_to_update.error_message = error_msg
+            log_to_update.output = "\n".join(output_messages) if output_messages else None
+            await db.commit()
+    discord_notification_service.queue_notify(
+        server,
+        EVENT_AUTO_UPDATE,
+        "auto_update",
+        False,
+        error_msg,
+        title="Automatic update failed",
+        details=notification_details,
+    )
+    return
+
+
+async def _record_update_verification_failure(
+    server: Server,
+    observed_version: str | None,
+    latest_required_version: str | None,
+    required_version: str | None,
+    log_progress: Callable[[str], Awaitable[None]],
+    log_id: int | None,
+    output_messages: list[str],
+    notification_details: dict[str, str],
+) -> None:
+    from modules.database import async_session_maker
+    from modules.models import DeploymentLog
+
+    expected_version = latest_required_version or required_version or "current Steam version"
+    error_msg = (
+        "Update verification failed: steam.inf could not be read"
+        if not observed_version
+        else f"Update verification failed: steam.inf reports {observed_version}, required {expected_version}"
+    )
+    await log_progress(error_msg)
+    async with async_session_maker() as db:
+        log_to_update = await db.get(DeploymentLog, log_id)
+        if log_to_update:
+            log_to_update.status = "failed"
+            log_to_update.error_message = error_msg
+            log_to_update.output = "\n".join(output_messages)
+            await db.commit()
+    discord_notification_service.queue_notify(
+        server,
+        EVENT_AUTO_UPDATE,
+        "auto_update",
+        False,
+        error_msg,
+        title="Automatic update failed",
+        details=notification_details,
+    )
+    return
+
+
+async def _record_update_exception(
+    log_id: int | None, error_msg: str, output_messages: list[str]
+) -> None:
+    from modules.database import async_session_maker
+    from modules.models import DeploymentLog
+
+    try:
+        async with async_session_maker() as db:
+            if log_id:
+                log_to_update = await db.get(DeploymentLog, log_id)
+                if log_to_update:
+                    log_to_update.status = "failed"
+                    log_to_update.error_message = error_msg
+                    log_to_update.output = "\n".join(output_messages)
+                    await db.commit()
+    except Exception as log_error:
+        logger.error(f"Failed to update deployment log: {log_error}")
 
 
 class AutoUpdateService:
@@ -407,28 +501,8 @@ class AutoUpdateService:
                 )
 
                 if not update_success and not reconcile_steamcmd_failure:
-                    error_msg = f"Update failed: {update_message}"
-                    notification_details["Operation Result"] = update_message
-                    logger.error(f"Update failed for server {server.id}: {update_message}")
-
-                    # Update log as failed
-                    async with async_session_maker() as db:
-                        log_to_update = await db.get(DeploymentLog, log_id)
-                        if log_to_update:
-                            log_to_update.status = "failed"
-                            log_to_update.error_message = error_msg
-                            log_to_update.output = (
-                                "\n".join(output_messages) if output_messages else None
-                            )
-                            await db.commit()
-                    discord_notification_service.queue_notify(
-                        server,
-                        EVENT_AUTO_UPDATE,
-                        "auto_update",
-                        False,
-                        error_msg,
-                        title="Automatic update failed",
-                        details=notification_details,
+                    await _record_update_command_failure(
+                        server, update_message, notification_details, log_id, output_messages
                     )
                     return
 
@@ -463,30 +537,15 @@ class AutoUpdateService:
                     )
 
                 if not version_verified:
-                    expected_version = (
-                        latest_required_version or required_version or "current Steam version"
-                    )
-                    error_msg = (
-                        "Update verification failed: steam.inf could not be read"
-                        if not observed_version
-                        else f"Update verification failed: steam.inf reports {observed_version}, required {expected_version}"
-                    )
-                    await log_progress(error_msg)
-                    async with async_session_maker() as db:
-                        log_to_update = await db.get(DeploymentLog, log_id)
-                        if log_to_update:
-                            log_to_update.status = "failed"
-                            log_to_update.error_message = error_msg
-                            log_to_update.output = "\n".join(output_messages)
-                            await db.commit()
-                    discord_notification_service.queue_notify(
+                    await _record_update_verification_failure(
                         server,
-                        EVENT_AUTO_UPDATE,
-                        "auto_update",
-                        False,
-                        error_msg,
-                        title="Automatic update failed",
-                        details=notification_details,
+                        observed_version,
+                        latest_required_version,
+                        required_version,
+                        log_progress,
+                        log_id,
+                        output_messages,
+                        notification_details,
                     )
                     return
 
@@ -536,17 +595,7 @@ class AutoUpdateService:
                 logger.error(f"Error triggering update for server {server.id}: {e}")
 
                 # Update log as failed
-                try:
-                    async with async_session_maker() as db:
-                        if log_id:
-                            log_to_update = await db.get(DeploymentLog, log_id)
-                            if log_to_update:
-                                log_to_update.status = "failed"
-                                log_to_update.error_message = error_msg
-                                log_to_update.output = "\n".join(output_messages)
-                                await db.commit()
-                except Exception as log_error:
-                    logger.error(f"Failed to update deployment log: {log_error}")
+                await _record_update_exception(log_id, error_msg, output_messages)
                 discord_notification_service.queue_notify(
                     server,
                     EVENT_AUTO_UPDATE,

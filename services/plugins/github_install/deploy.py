@@ -13,7 +13,9 @@ from services.plugins.install_mapping import stage_mapping
 logger = logging.getLogger(__name__)
 
 
-async def _prepare_rollback(ctx: GithubInstallContext, request: GitHubPluginInstallRequest, source: str, target: str) -> str | None:
+async def _prepare_rollback(
+    ctx: GithubInstallContext, request: GitHubPluginInstallRequest, source: str, target: str
+) -> str | None:
     server = ctx.server
     ssh_manager = ctx.ssh_manager
     progress = ctx.progress
@@ -35,7 +37,9 @@ async def _prepare_rollback(ctx: GithubInstallContext, request: GitHubPluginInst
     return backup_root
 
 
-async def _rollback_install(ctx: GithubInstallContext, target: str, backup_root: str | None) -> str | None:
+async def _rollback_install(
+    ctx: GithubInstallContext, target: str, backup_root: str | None
+) -> str | None:
     ssh_manager = ctx.ssh_manager
     if backup_root is None:
         return None
@@ -47,7 +51,9 @@ async def _rollback_install(ctx: GithubInstallContext, target: str, backup_root:
     return f"Rollback failed: {rollback_error or rollback_output}"
 
 
-async def _exclusion_patterns(ctx: GithubInstallContext, request: GitHubPluginInstallRequest) -> list[str]:
+async def _exclusion_patterns(
+    ctx: GithubInstallContext, request: GitHubPluginInstallRequest
+) -> list[str]:
     progress = ctx.progress
     exclude_raw_patterns = []
 
@@ -74,14 +80,19 @@ async def _exclusion_patterns(ctx: GithubInstallContext, request: GitHubPluginIn
     return exclude_raw_patterns
 
 
-async def _install_custom_tree(ctx: GithubInstallContext, request: GitHubPluginInstallRequest, requested_source_dir: str) -> GitHubPluginInstallResponse:
+async def _install_custom_tree(
+    ctx: GithubInstallContext,
+    request: GitHubPluginInstallRequest,
+    requested_source_dir: str,
+    custom_install_path: str,
+) -> GitHubPluginInstallResponse:
     ssh_manager = ctx.ssh_manager
     remote_temp_dir = ctx.remote_temp_dir
     progress = ctx.progress
     notify_install_result = ctx.notify_install_result
     record_installation = ctx.record_installation
     csgo_dir = ctx.csgo_dir
-    safe_custom_path = request.custom_install_path.strip().strip("/")
+    safe_custom_path = custom_install_path.strip().strip("/")
 
     # Validate custom path to prevent path traversal
     if ".." in safe_custom_path or safe_custom_path.startswith("/"):
@@ -117,9 +128,7 @@ async def _install_custom_tree(ctx: GithubInstallContext, request: GitHubPluginI
     else:
         # Fallback to cp with tar for exclusions
         if exclude_raw_patterns:
-            await progress(
-                f"Using tar with {len(exclude_raw_patterns)} exclusion pattern(s)"
-            )
+            await progress(f"Using tar with {len(exclude_raw_patterns)} exclusion pattern(s)")
         copy_cmd = host._build_plugin_copy_command(
             requested_source_dir,
             target_custom_dir,
@@ -150,9 +159,7 @@ async def _install_custom_tree(ctx: GithubInstallContext, request: GitHubPluginI
     _, count_after, _ = await ssh_manager.execute_command(count_after_cmd)
     count_after = int(count_after.strip()) if count_after.strip().isdigit() else 0
 
-    await progress(
-        f"Installation complete! Custom path used: {safe_custom_path}", "success"
-    )
+    await progress(f"Installation complete! Custom path used: {safe_custom_path}", "success")
     await notify_install_result(
         True,
         f"Plugin installed successfully to custom path: {safe_custom_path}",
@@ -167,7 +174,9 @@ async def _install_custom_tree(ctx: GithubInstallContext, request: GitHubPluginI
     )
 
 
-async def _extract_archive(ctx: GithubInstallContext, archive_file: str, archive_type: str) -> str | GitHubPluginInstallResponse:
+async def _extract_archive(
+    ctx: GithubInstallContext, archive_file: str, archive_type: str
+) -> str | GitHubPluginInstallResponse:
     ssh_manager = ctx.ssh_manager
     remote_temp_dir = ctx.remote_temp_dir
     progress = ctx.progress
@@ -205,7 +214,9 @@ async def _extract_archive(ctx: GithubInstallContext, archive_file: str, archive
     return extract_dir
 
 
-async def _stage_approved_tree(ctx: GithubInstallContext, request: GitHubPluginInstallRequest, extract_dir: str) -> tuple[GitHubPluginInstallRequest, str] | GitHubPluginInstallResponse:
+async def _stage_approved_tree(
+    ctx: GithubInstallContext, request: GitHubPluginInstallRequest, extract_dir: str
+) -> tuple[GitHubPluginInstallRequest, str] | GitHubPluginInstallResponse:
     ssh_manager = ctx.ssh_manager
     remote_temp_dir = ctx.remote_temp_dir
     progress = ctx.progress
@@ -264,7 +275,7 @@ async def _stage_approved_tree(ctx: GithubInstallContext, request: GitHubPluginI
     return request, requested_source_dir
 
 
-async def deploy_plugin_archive(  # noqa: C901
+async def deploy_plugin_archive(
     ctx: GithubInstallContext,
     archive_file: str,
     archive_type: str,
@@ -288,8 +299,6 @@ async def deploy_plugin_archive(  # noqa: C901
     request, requested_source_dir = staged
 
     backup_root: str | None = None
-
-
 
     # Check if addons directory exists in extracted content
     addons_check = f"test -d {shlex.quote(f'{requested_source_dir}/addons')} && echo 'addons_found'"
@@ -318,7 +327,9 @@ async def deploy_plugin_archive(  # noqa: C901
         elif request.custom_install_path:
             # No addons directory found, but custom install path is specified
             # Extract to the custom path (e.g., 'addons')
-            return await _install_custom_tree(ctx, request, requested_source_dir)
+            return await _install_custom_tree(
+                ctx, request, requested_source_dir, request.custom_install_path
+            )
         else:
             # No addons directory found - reject installation
             await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")

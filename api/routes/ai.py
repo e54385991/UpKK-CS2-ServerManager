@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# Leaf routes register here in their original position after router initialization.
+# ruff: noqa: E402
 from typing import Any as Any
 
 from fastapi import APIRouter as APIRouter
@@ -89,13 +91,25 @@ async def get_system_ai_settings(
     return _system_response(await AISystemSettings.get_or_create(db))
 
 
-from .ai_settings import _conversation_for_user as _conversation_for_user
-from .ai_settings import _server_for_user as _server_for_user
-from .ai_settings import get_user_ai_settings as get_user_ai_settings
-from .ai_settings import test_system_ai_settings as test_system_ai_settings
-from .ai_settings import test_user_ai_settings as test_user_ai_settings
-from .ai_settings import update_system_ai_settings as update_system_ai_settings  # noqa: E402
-from .ai_settings import update_user_ai_settings as update_user_ai_settings
+from .ai_settings import (
+    _conversation_for_user as _conversation_for_user,
+)
+from .ai_settings import (
+    _server_for_user as _server_for_user,
+)
+from .ai_settings import (
+    get_user_ai_settings as get_user_ai_settings,
+)
+from .ai_settings import (
+    test_system_ai_settings as test_system_ai_settings,
+)
+from .ai_settings import (
+    test_user_ai_settings as test_user_ai_settings,
+)
+from .ai_settings import update_system_ai_settings as update_system_ai_settings
+from .ai_settings import (
+    update_user_ai_settings as update_user_ai_settings,
+)
 
 
 async def _require_enabled_provider(db: DatabaseSession, user) -> None:
@@ -524,6 +538,11 @@ async def decide_ai_tool(
     return {"status": item.status}
 
 
-from .ai_stream_routes import _encode_sse_event as _encode_sse_event  # noqa: E402
-from .ai_stream_routes import ai_run_event_stream as ai_run_event_stream
-from .ai_stream_routes import ai_run_events as ai_run_events
+from . import ai_stream_routes as _ai_stream_routes  # noqa: F401 - compatibility module alias
+from .ai_stream_routes import _encode_sse_event as _encode_sse_event
+from .ai_stream_routes import (
+    ai_run_event_stream as ai_run_event_stream,
+)
+from .ai_stream_routes import (
+    ai_run_events as ai_run_events,
+)

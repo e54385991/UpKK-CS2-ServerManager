@@ -26,7 +26,7 @@ from .remote_download_protocol import _resolve_downloaded_target as _resolve_dow
 class DownloadExtractMixin(SSHMixinBase):
     """Focused file-system capability."""
 
-    async def download_url_to_file(  # noqa: C901
+    async def download_url_to_file(
         self,
         url: str,
         target_path: Optional[str],
@@ -107,7 +107,7 @@ class DownloadExtractMixin(SSHMixinBase):
                 timeout=10,
             )
 
-    async def extract_archive(  # noqa: C901
+    async def extract_archive(
         self,
         archive_path: str,
         destination_path: str,

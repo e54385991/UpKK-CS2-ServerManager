@@ -3,12 +3,14 @@
 # ruff: noqa: F403,F405
 
 import time
+from functools import partial
 
 from services.bounded_output import BoundedLineBuffer
 from services.ssh.stream_progress import iter_ssh_progress_lines
 from services.ssh.text import decode_remote_text
 
 from .common import *
+from .progress_callbacks import send_text_progress
 
 
 def _legacy_connection_module():
@@ -19,6 +21,20 @@ def _legacy_connection_module():
 
 def _schedule_legacy_status_update(server_id: int, success: bool) -> None:
     _legacy_connection_module()._schedule_status_update(server_id, success)
+
+
+async def _open_streaming_process(
+    conn: asyncssh.SSHClientConnection, command: str
+) -> asyncssh.SSHClientProcess[bytes]:
+    try:
+        process = await conn.create_process(command, term_type="xterm", encoding=None)
+    except TypeError:
+        try:
+            process = await conn.create_process(command, encoding=None)
+        except TypeError:
+            process = await conn.create_process(command)
+
+    return process
 
 
 class ConnectionRuntimeMixin(SSHMixinBase):
@@ -235,21 +251,10 @@ class ConnectionRuntimeMixin(SSHMixinBase):
             assert conn is not None
             # PTY makes SteamCMD flush \\r progress instead of buffering a
             # whole download with no newlines.
-            try:
-                process = await conn.create_process(command, term_type="xterm", encoding=None)
-            except TypeError:
-                try:
-                    process = await conn.create_process(command, encoding=None)
-                except TypeError:
-                    process = await conn.create_process(command)
+            process = await _open_streaming_process(conn, command)
 
             # Helper to send output via callback
-            async def send_output(line: str):
-                if output_callback:
-                    if inspect.iscoroutinefunction(output_callback):
-                        await output_callback(line)
-                    else:
-                        output_callback(line)
+            send_output = partial(send_text_progress, output_callback)
 
             # Read stdout and stderr concurrently
             async def read_stream(stream, lines_list, prefix=""):

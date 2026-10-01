@@ -2,7 +2,7 @@
 
 import { Label } from "@/shared/ui/input";
 import {
-type ReactNode
+  type ReactNode
 } from "react";
 
 export type Captcha = { token: string; imageUrl: string; enabled: boolean };

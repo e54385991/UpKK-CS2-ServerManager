@@ -166,7 +166,7 @@ async def _extract_and_verify_swiftly(
 
 
 class SwiftlyMixin(SSHMixinBase):
-    async def install_swiftly(self, server: Server, progress_callback=None) -> Tuple[bool, str]:  # noqa: C901 - plugin installation protocol.
+    async def install_swiftly(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """
         Install SwiftlyS2 framework for CS2 server
 

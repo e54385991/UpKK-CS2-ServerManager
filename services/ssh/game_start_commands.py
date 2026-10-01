@@ -10,7 +10,6 @@ host = LateBoundModule("services.ssh.game_start")
 
 
 def _build_startup_parameters(server: Server) -> tuple[str, str, str, str, str, int]:
-    cs2_executable = "./cs2"  # Use relative path when in correct directory
 
     # Get configuration with safe defaults
     default_map = host.normalize_default_map(server.default_map or "de_dust2")

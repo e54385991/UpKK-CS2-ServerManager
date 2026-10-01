@@ -7,6 +7,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
+from functools import partial
 from typing import Dict, Optional
 
 from sqlmodel import col, select
@@ -37,6 +38,59 @@ MAX_CONCURRENT_SCHEDULED_TASKS = 4
 HUB_SCHEDULED_ACTIONS = frozenset(
     {"start", "stop", "restart", "update", "validate", "backup_plugins"}
 )
+
+
+async def _execute_queued_scheduled_task(
+    self: "ScheduledTaskService", server: Server, task: ScheduledTask
+) -> None:
+    from services.operation_enqueue import enqueue_server_operation
+    from services.server_operation_hub import (
+        ServerOperationConflict,
+        server_operation_hub,
+    )
+
+    try:
+        record = await enqueue_server_operation(
+            server_id=server.id,
+            action=task.action,
+            actor_user_id=server.user_id,
+        )
+    except ServerOperationConflict as exc:
+        logger.info("Skipping scheduled task %s: %s", task.id, exc)
+        await self._update_task_status(task.id, "skipped", str(exc))
+        return
+    final = await server_operation_hub.wait_until_terminal(str(record["operation_id"]))
+    success = bool(final.get("success"))
+    message = str(final.get("message") or "")
+    await _record_scheduled_result(self, task, success, message)
+    return
+
+
+async def _record_scheduled_result(
+    self: "ScheduledTaskService", task: ScheduledTask, success: bool, message: str
+) -> None:
+    if success:
+        logger.info(f"Task {task.id} completed successfully")
+        await self._update_task_status(task.id, "success", None)
+    else:
+        logger.error(f"Task {task.id} failed: {message}")
+        await self._update_task_status(task.id, "failed", message)
+
+
+async def _log_scheduled_progress(server_id: int, msg: str) -> None:
+    logger.info(f"[Server {server_id}] {msg}")
+
+
+async def _skip_blocked_scheduled_start(
+    self: "ScheduledTaskService", server: Server, task: ScheduledTask
+) -> bool:
+    block_reason = automatic_start_block_reason(server)
+    if block_reason:
+        logger.info("Skipping scheduled task %s: %s", task.id, block_reason)
+        await self._update_task_status(task.id, "skipped", block_reason)
+        return True
+
+    return False
 
 
 class ScheduledTaskService:
@@ -153,10 +207,7 @@ class ScheduledTaskService:
                     return
 
             if task.action in {"start", "restart"}:
-                block_reason = automatic_start_block_reason(server)
-                if block_reason:
-                    logger.info("Skipping scheduled task %s: %s", task.id, block_reason)
-                    await self._update_task_status(task.id, "skipped", block_reason)
+                if await _skip_blocked_scheduled_start(self, server, task):
                     return
 
             if server.should_skip_background_checks():
@@ -169,31 +220,7 @@ class ScheduledTaskService:
                 return
 
             if task.action in HUB_SCHEDULED_ACTIONS:
-                from services.operation_enqueue import enqueue_server_operation
-                from services.server_operation_hub import (
-                    ServerOperationConflict,
-                    server_operation_hub,
-                )
-
-                try:
-                    record = await enqueue_server_operation(
-                        server_id=server.id,
-                        action=task.action,
-                        actor_user_id=server.user_id,
-                    )
-                except ServerOperationConflict as exc:
-                    logger.info("Skipping scheduled task %s: %s", task.id, exc)
-                    await self._update_task_status(task.id, "skipped", str(exc))
-                    return
-                final = await server_operation_hub.wait_until_terminal(str(record["operation_id"]))
-                success = bool(final.get("success"))
-                message = str(final.get("message") or "")
-                if success:
-                    logger.info(f"Task {task.id} completed successfully")
-                    await self._update_task_status(task.id, "success", None)
-                else:
-                    logger.error(f"Task {task.id} failed: {message}")
-                    await self._update_task_status(task.id, "failed", message)
+                await _execute_queued_scheduled_task(self, server, task)
                 return
 
             operation_lock = maintenance_lock_service.get(
@@ -233,12 +260,7 @@ class ScheduledTaskService:
             try:
                 success, message = await self._execute_action(ssh_manager, server, task.action)
 
-                if success:
-                    logger.info(f"Task {task.id} completed successfully")
-                    await self._update_task_status(task.id, "success", None)
-                else:
-                    logger.error(f"Task {task.id} failed: {message}")
-                    await self._update_task_status(task.id, "failed", message)
+                await _record_scheduled_result(self, task, success, message)
 
                 await self._notify_task_result(server, task, success, message)
 
@@ -367,8 +389,7 @@ class ScheduledTaskService:
                 if block_reason:
                     return False, block_reason
 
-            async def log_progress(msg: str):
-                logger.info(f"[Server {server.id}] {msg}")
+            log_progress = partial(_log_scheduled_progress, server.id)
 
             if action == "restart":
                 return await self._execute_restart(ssh_manager, server, log_progress)

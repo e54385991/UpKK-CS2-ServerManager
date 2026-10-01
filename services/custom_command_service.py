@@ -172,6 +172,28 @@ async def read_game_console(server: Server, *, lines: int = 120) -> Dict[str, An
         await ssh_manager.disconnect()
 
 
+async def _initial_game_console(
+    ssh_manager: SSHManagerType, active_manager: str, name: str
+) -> tuple[str | None, str | None]:
+    baseline: str | None = None
+    baseline_error: str | None = None
+    snapshot_cmd = capture_console_command(
+        active_manager,
+        name,
+        lines=GAME_CONSOLE_CAPTURE_LINES,
+    )
+    captured, snapshot, snapshot_error = await ssh_manager.execute_command(
+        snapshot_cmd,
+        timeout=10,
+    )
+    if captured:
+        baseline = _clean_console_snapshot(snapshot)
+    else:
+        baseline_error = snapshot_error or snapshot or "Unable to capture the initial console"
+
+    return baseline, baseline_error
+
+
 async def execute_custom_commands(
     server: Server,
     target: str,
@@ -217,21 +239,9 @@ async def execute_custom_commands(
                 baseline: str | None = None
                 baseline_error: str | None = None
                 if capture_game_output:
-                    snapshot_cmd = capture_console_command(
-                        active_manager,
-                        name,
-                        lines=GAME_CONSOLE_CAPTURE_LINES,
+                    baseline, baseline_error = await _initial_game_console(
+                        ssh_manager, active_manager, name
                     )
-                    captured, snapshot, snapshot_error = await ssh_manager.execute_command(
-                        snapshot_cmd,
-                        timeout=10,
-                    )
-                    if captured:
-                        baseline = _clean_console_snapshot(snapshot)
-                    else:
-                        baseline_error = (
-                            snapshot_error or snapshot or "Unable to capture the initial console"
-                        )
 
                 input_cmd = send_keys_command(active_manager, name, command)
                 success, stdout, stderr = await ssh_manager.execute_command(input_cmd, timeout=10)

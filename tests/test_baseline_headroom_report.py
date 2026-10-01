@@ -3,6 +3,8 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from scripts import report_baseline_headroom as report
 from scripts.check_file_sizes import FileBudget
 
@@ -30,11 +32,14 @@ def test_file_warnings_include_boundary_and_reuse_each_budget(monkeypatch):
 
 def test_complexity_includes_suppressed_functions_without_mislabeling_other_noqa(monkeypatch):
     root = Path("/test-repository")
-    diagnostic = lambda name, row, value: {
-        "filename": str(root / "services/example.py"),
-        "location": {"row": row},
-        "message": f"`{name}` is too complex ({value} > 12)",
-    }
+
+    def diagnostic(name, row, value):
+        return {
+            "filename": str(root / "services/example.py"),
+            "location": {"row": row},
+            "message": f"`{name}` is too complex ({value} > 12)",
+        }
+
     visible = diagnostic("visible", 10, 13)
     suppressed = diagnostic("suppressed", 20, 19)
     monkeypatch.setattr(report, "PROJECT_ROOT", root)
@@ -65,9 +70,10 @@ def test_complexity_includes_suppressed_functions_without_mislabeling_other_noqa
     ]
 
 
-def test_collector_failure_is_advisory_and_other_results_survive(monkeypatch):
+@pytest.mark.parametrize("failure", [OSError, TypeError, IndexError])
+def test_collector_failure_is_advisory_and_other_results_survive(monkeypatch, failure):
     def unavailable():
-        raise OSError("ruff unavailable")
+        raise failure("ruff unavailable")
 
     monkeypatch.setattr(report, "file_budgets", lambda: iter([]))
     monkeypatch.setattr(report, "complexity_budgets", unavailable)

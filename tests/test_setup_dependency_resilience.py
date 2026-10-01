@@ -197,5 +197,9 @@ def test_manual_setup_script_contains_retry_architecture_and_runtime_guards():
         / "servers"
         / "setup-wizard.tsx"
     ).read_text()
-    assert "getManualSetupScriptAction" in wizard
+    controller = (
+        Path(__file__).resolve().parents[1] / "frontend/src/modules/servers/use-setup-wizard.ts"
+    ).read_text()
+    assert "useSetupWizard" in wizard
+    assert "getManualSetupScriptAction" in controller
     assert "{manual.script}" in wizard
