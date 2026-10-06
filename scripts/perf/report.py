@@ -47,6 +47,7 @@ def git_sha(cwd: Path | None = None) -> str:
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     sha = result.stdout.strip()
     return sha if result.returncode == 0 and sha else "unknown"

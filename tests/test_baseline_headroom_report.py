@@ -1,5 +1,9 @@
 """Advisory thresholds and unavailable collectors must not replace hard gates."""
 
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -103,3 +107,45 @@ def test_bundle_collector_reads_existing_artifacts_and_includes_boundary(monkeyp
     assert commands[0][:2] == ["node", "--input-type=module"]
     assert "measureBundles('frontend/.next')" in commands[0][-1]
     assert "next build" not in commands[0][-1]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Executable fixture uses a Unix shebang")
+def test_complexity_json_uses_utf8_with_ascii_default_encoding(tmp_path):
+    diagnostic = [{"filename": "services/插件.py", "message": "本地化诊断"}]
+    payload = json.dumps(diagnostic, ensure_ascii=False).encode("utf-8")
+    binary = tmp_path / "ruff"
+    binary.write_text(
+        f"#!{sys.executable}\nimport os\nos.write(1, {payload!r})\n", encoding="utf-8"
+    )
+    binary.chmod(0o755)
+    environment = {
+        **os.environ,
+        "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+        "LC_ALL": "C",
+        "PYTHONCOERCECLOCALE": "0",
+        "PYTHONUTF8": "0",
+    }
+    source = (
+        "import json, locale; "
+        "from scripts.report_baseline_headroom import _complexity_diagnostics; "
+        "assert locale.getencoding().lower() in ('ascii', 'ansi_x3.4-1968', 'us-ascii'); "
+        "print(json.dumps(_complexity_diagnostics(ignore_noqa=False)))"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-X",
+            "warn_default_encoding",
+            "-W",
+            "error::EncodingWarning",
+            "-c",
+            source,
+        ],
+        cwd=report.PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == diagnostic

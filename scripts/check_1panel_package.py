@@ -136,6 +136,7 @@ def run_compose_config(compose_path: Path, variables: dict[str, str]) -> None:
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if version.returncode != 0:
@@ -149,6 +150,7 @@ def run_compose_config(compose_path: Path, variables: dict[str, str]) -> None:
         env=environment,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if result.returncode != 0:

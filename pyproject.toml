@@ -13,7 +13,9 @@ dependencies = [
     "psycopg[binary]>=3.3.6",
     "redis[hiredis]>=8.1.0",
     "python-dotenv>=1.2.3",
-    "pydantic>=2.13.5,<3.0.0",
+    # Python 3.14 keeps stable Pydantic; the beta supplies Python 3.15 support.
+    "pydantic>=2.13.5,<2.14; python_version < '3.15'",
+    "pydantic==2.14.0b2; python_version >= '3.15'",
     "pydantic-settings>=2.15.0,<3.0.0",
     "anyio>=4.15.1",
     "asyncssh>=2.24.0",

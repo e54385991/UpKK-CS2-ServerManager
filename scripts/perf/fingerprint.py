@@ -44,6 +44,7 @@ def _command_version(binary: str) -> str | None:
         check=False,
         capture_output=True,
         text=True,
+        encoding="locale",
     )
     line = (result.stdout or result.stderr).strip().splitlines()
     return line[0] if line else None
@@ -56,6 +57,7 @@ def memory_bytes() -> int | None:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         raw = result.stdout.strip()
         return int(raw) if raw.isdigit() else None

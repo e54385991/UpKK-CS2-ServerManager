@@ -137,6 +137,7 @@ def _current_rss_bytes() -> int:
         raw = subprocess.check_output(
             ["ps", "-o", "rss=", "-p", str(os.getpid())],
             text=True,
+            encoding="utf-8",
         ).strip()
         return int(raw.split()[0]) * 1024
     except OSError, ValueError, IndexError:

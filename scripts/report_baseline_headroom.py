@@ -38,7 +38,14 @@ def _complexity_diagnostics(*, ignore_noqa: bool):
     ]
     if ignore_noqa:
         command.append("--ignore-noqa")
-    result = subprocess.run(command, cwd=PROJECT_ROOT, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
     if result.returncode not in (0, 1):
         raise RuntimeError(result.stderr.strip() or "Ruff measurement failed")
     diagnostics = json.loads(result.stdout)
@@ -93,6 +100,7 @@ console.log(JSON.stringify(rows));
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if result.returncode:
