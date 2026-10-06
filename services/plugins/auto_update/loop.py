@@ -183,25 +183,30 @@ class AutoUpdateLoopMixin:
             )
             servers = list(result.scalars().all())
         for server in servers:
-            if server.should_skip_background_checks():
-                continue
-            if self._due(
-                server.last_plugin_update_check,
-                server.plugin_update_check_interval_hours
-                or DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS,
-            ):
+            # One unavailable server queue must not abort the scan and starve
+            # every server that follows it on each scheduled pass.
+            try:
+                if server.should_skip_background_checks():
+                    continue
+                if not self._due(
+                    server.last_plugin_update_check,
+                    server.plugin_update_check_interval_hours
+                    or DEFAULT_PLUGIN_UPDATE_CHECK_INTERVAL_HOURS,
+                ):
+                    continue
                 if await self._plugin_update_already_queued(server.id):
                     continue
-                try:
-                    from services.operation_enqueue import enqueue_plugin_auto_update
+                from services.operation_enqueue import enqueue_plugin_auto_update
 
-                    await enqueue_plugin_auto_update(
-                        server_id=server.id,
-                        actor_user_id=server.user_id,
-                        force=False,
-                    )
-                except ServerOperationConflict:
-                    logger.info(
-                        "Skipping plugin auto-update for server %s: the per-server queue is full",
-                        server.id,
-                    )
+                await enqueue_plugin_auto_update(
+                    server_id=server.id,
+                    actor_user_id=server.user_id,
+                    force=False,
+                )
+            except ServerOperationConflict:
+                logger.info(
+                    "Skipping plugin auto-update for server %s: the per-server queue is full",
+                    server.id,
+                )
+            except Exception:
+                logger.exception("Failed to schedule plugin auto-update for server %s", server.id)
