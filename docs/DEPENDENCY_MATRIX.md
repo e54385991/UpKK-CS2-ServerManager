@@ -63,6 +63,12 @@ core 2.46.5；3.15 及以上暂时精确使用 `2.14.0b2` 及其要求的 core 2
 还适配了 Python 3.15 的 `eager_start` 参数。锁文件与带哈希导出包含两条 Pydantic 分支，
 Python 3.14 的生产安装不会引入 beta。
 
+生产导出使用 `uv run python scripts/export_requirements.py`。uv 的普通导出将次版本
+边界规范成 `python_full_version < / >= '3.15'`，而 pip 对 `3.15.0rc3` 的 PEP 440 判断
+会让两条分支都不匹配。导出脚本仅将 `<` / `>=` 的两段版本边界还原成
+`python_version`，保留补丁级约束、平台条件、包版本和全部哈希。回归测试用
+3.14.7、3.15.0rc3 与 3.15.0 确认项目声明和生产导出都唯一选择匹配的 Pydantic/core。
+
 [Python 3.15 默认使用 UTF-8](https://docs.python.org/3.15/whatsnew/3.15.html#other-language-changes)。
 8 处质量/性能工具的子进程文本输出已明确编码：结构化输出使用 UTF-8，通用外部程序
 版本信息显式使用 locale 编码。回归测试在 ASCII locale、关闭 UTF-8 模式、将
@@ -70,7 +76,8 @@ Python 3.14 的生产安装不会引入 beta。
 3.15 已移除的 API；`re.match()` 仅软弃用，保留它以兼容最低支持版本。
 
 独立 CI job `python-315-compatibility` 精确断言 rc3 版本，用同一锁文件执行 HTTP/Pydantic
-契约检查、带原有覆盖率门槛的全量后端测试，以及隔离 PostgreSQL 18 集成测试；
+契约检查、带哈希生产导出的依赖审计、带原有覆盖率门槛的全量后端测试，
+以及隔离 PostgreSQL 18 集成测试；
 `DeprecationWarning` 和 `PendingDeprecationWarning` 均作为错误处理。原有 3.14 完整基线
 继续负责静态检查、前端构建、依赖审计与其他质量门禁。
 
@@ -80,7 +87,8 @@ Python 3.14 的生产安装不会引入 beta。
 rc3 全量后端测试在严格弃用检查下为 2359 项通过、1 项跳过、126 个 subtest 通过，
 分支覆盖率 87.47%，高于原有 86.70% 门槛；保留一个既有 Discord mock 的未等待协程
 `RuntimeWarning`。独立临时 PostgreSQL 18.4 集成检查 18 项通过，测试后已停止实例。
-Python 3.14 完整质量基线通过：同样 2359 项测试通过，分支覆盖率 87.48%，分域覆盖率
+随后新增的 4 项导出 marker 回归检查也在 rc3 下通过；该环境的生产依赖审计无已知漏洞。
+Python 3.14 最终完整质量基线通过：2363 项测试通过、1 项跳过，分支覆盖率 87.48%，分域覆盖率
 91.25%；前端测试、lint/typecheck/build、40 页包体预算和依赖审计均通过。
 新增 workflow 通过 actionlint 1.7.12 检查，3.14 Linux musl 的带哈希生产依赖通过
 仅二进制安装 dry-run；该 dry-run 只证明依赖解析与 wheel 可用性。
@@ -95,7 +103,7 @@ Python 3.14 完整质量基线通过：同样 2359 项测试通过，分支覆�
 ## 更新流程
 
 1. 核对最新稳定版本及上游兼容约束，更新 `pyproject.toml` 下限后运行
-   `uv lock --upgrade` 和 `uv export --no-dev --no-emit-project --format requirements-txt -o requirements.txt`；
+   `uv lock --upgrade` 和 `uv run python scripts/export_requirements.py`；
 2. 前端先更新 `frontend/package.json` 中的精确版本，再在 `frontend/` 内运行
    `npm update --package-lock-only && npm ci`，同步更新兼容范围内的传递依赖；
 3. 执行 `uv run python scripts/check_baseline.py`，确认锁文件、测试和审计一致；
