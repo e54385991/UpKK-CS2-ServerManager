@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import Request
+from sqlalchemy import Select
 
 from api.dependencies import ActiveUser, DatabaseSession
 from modules import (
@@ -14,6 +15,7 @@ from modules import (
     DiscordGlobalBindingResponse,
     UserDiscordBot,
 )
+from modules.models import Server, ServerDiscordBinding
 from services.compat import LateBoundModule
 
 host = LateBoundModule("api.routes.discord_bot")
@@ -77,7 +79,7 @@ async def _connected_bot_token(db: DatabaseSession, user_id: int) -> tuple[UserD
 
 
 async def _bound_menu_push_channels(db: DatabaseSession, user_id: int) -> dict[str, set[str]]:
-    result = await db.execute(
+    statement: Select[ServerDiscordBinding, Server] = (
         host.select(host.ServerDiscordBinding, host.Server)
         .join(
             host.Server, host.col(host.Server.id) == host.col(host.ServerDiscordBinding.server_id)
@@ -88,6 +90,7 @@ async def _bound_menu_push_channels(db: DatabaseSession, user_id: int) -> dict[s
             host.Server.user_id == user_id,
         )
     )
+    result = await db.execute(statement)
     known_capabilities = {item.value for item in host.DiscordCapability}
     channels_by_guild: dict[str, set[str]] = {}
     for binding, server in result.all():

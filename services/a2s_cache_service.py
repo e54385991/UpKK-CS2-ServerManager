@@ -143,14 +143,17 @@ class A2SCacheService:
 
             # Foreground refreshes and the background scan share the same limit.
             async def query(server) -> None:
-                # Skip servers that are marked as down due to SSH failures
-                if server.should_skip_background_checks():
-                    logger.debug(
-                        f"Skipping A2S query for server {server.id} - marked as SSH down for 3+ days"
-                    )
-                    return
+                try:
+                    # Skip servers that are marked as down due to SSH failures
+                    if server.should_skip_background_checks():
+                        logger.debug(
+                            f"Skipping A2S query for server {server.id} - marked as SSH down for 3+ days"
+                        )
+                        return
 
-                await self._limited_query(server)
+                    await self._limited_query(server)
+                except Exception:
+                    logger.exception("Failed to schedule A2S query for server %s", server.id)
 
             scan_timeout = self.scan_timeout if timeout is None else timeout
             if scan_timeout is None:
@@ -169,8 +172,11 @@ class A2SCacheService:
             logger.error(f"Error querying servers: {e}")
 
     async def _limited_query(self, server: Server) -> None:
-        async with self._probe_limiter.slot(server.id):
-            await self._query_and_cache_server(server)
+        try:
+            async with self._probe_limiter.slot(server.id):
+                await self._query_and_cache_server(server)
+        except Exception:
+            logger.exception("Failed to refresh A2S info for server %s", server.id)
 
     async def get_many_cached_info(
         self, servers: Sequence[Server], *, force_refresh: bool = False

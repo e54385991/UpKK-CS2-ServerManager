@@ -17,8 +17,10 @@ ssh_probe_limiter = KeyedConcurrencyLimiter[tuple[str, int]](
 
 async def collect_ordered[T](jobs: Iterable[Awaitable[T]]) -> list[T]:
     """Keep input order and drain every child before propagating failure/cancellation."""
-    tasks = [asyncio.ensure_future(job) for job in jobs]
+    tasks: list[asyncio.Future[T]] = []
     try:
+        for job in jobs:
+            tasks.append(asyncio.ensure_future(job))
         return list(await asyncio.gather(*tasks))
     except BaseException:
         for task in tasks:

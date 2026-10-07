@@ -408,7 +408,7 @@ async def test_status_and_next_run_database_error_paths(monkeypatch):
     all_db = _Db(rows=[task, _task(id=11, schedule_type="unknown", schedule_value="x")])
     _session_patch(monkeypatch, all_db)
     await service._calculate_all_next_runs()
-    assert all_db.commits == 1
+    assert all_db.commits == 0  # No calculated next run means no write transaction.
     failing = _Db(rows=[])
     failing.fail_execute = True
     _session_patch(monkeypatch, failing)

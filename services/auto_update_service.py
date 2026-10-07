@@ -193,35 +193,42 @@ class AutoUpdateService:
             # Check and update each server
             # DB session is already closed, so SSH operations won't hold DB connections
             for server in servers:
-                # Skip if server is currently being updated (prevent duplicate runs)
-                if server.id in self.updating_servers:
-                    logger.debug(
-                        f"Skipping server {server.id} ({server.name}) - update already in progress"
+                try:
+                    await self._check_eligible_server(server)
+                except Exception:
+                    logger.exception(
+                        "Failed to check auto-update eligibility for server %s", server.id
                     )
-                    continue
 
-                # Skip servers that are marked as down due to SSH failures
-                if server.should_skip_background_checks():
-                    logger.info(
-                        f"Skipping auto-update check for server {server.id} ({server.name}) - marked as SSH down for 3+ days"
-                    )
-                    continue
+        except Exception:
+            logger.exception("Error checking servers for updates")
 
-                # Check if we should check this server based on its configured interval
-                interval_hours = server.update_check_interval_hours or 1
-                if not steam_api_service.should_check_version(
-                    server.last_update_check, interval_hours
-                ):
-                    logger.debug(
-                        f"Skipping server {server.id} ({server.name}) - "
-                        f"checked recently (interval: {interval_hours}h)"
-                    )
-                    continue
+    async def _check_eligible_server(self, server: Server) -> None:
+        """Keep eligibility checks inside the same per-server failure boundary."""
+        # Skip if server is currently being updated (prevent duplicate runs)
+        if server.id in self.updating_servers:
+            logger.debug(
+                f"Skipping server {server.id} ({server.name}) - update already in progress"
+            )
+            return
 
-                await self._check_and_update_server(server)
+        # Skip servers that are marked as down due to SSH failures
+        if server.should_skip_background_checks():
+            logger.info(
+                f"Skipping auto-update check for server {server.id} ({server.name}) - marked as SSH down for 3+ days"
+            )
+            return
 
-        except Exception as e:
-            logger.error(f"Error checking servers for updates: {e}")
+        # Check if we should check this server based on its configured interval
+        interval_hours = server.update_check_interval_hours or 1
+        if not steam_api_service.should_check_version(server.last_update_check, interval_hours):
+            logger.debug(
+                f"Skipping server {server.id} ({server.name}) - "
+                f"checked recently (interval: {interval_hours}h)"
+            )
+            return
+
+        await self._check_and_update_server(server)
 
     async def _check_and_update_server(self, server):
         """Check a single server and run a long update outside the check timeout."""

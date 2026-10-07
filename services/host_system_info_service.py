@@ -241,7 +241,11 @@ class HostSystemInfoService:
         async def read(server: Server, value: HostSystemInfoData | None) -> HostSystemInfoData:
             if value is not None:
                 return value
-            return await self.get_host_system_info(server, force_refresh=force_refresh)
+            try:
+                return await self.get_host_system_info(server, force_refresh=force_refresh)
+            except Exception:
+                logger.exception("Failed to read host info for server %s", server.id)
+                return _snapshot_from_values(int(server.id), {}, None)
 
         values = await telemetry_runtime.collect_ordered(
             read(server, value) for server, value in zip(servers, cached, strict=True)

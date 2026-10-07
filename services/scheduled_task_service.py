@@ -575,21 +575,24 @@ class ScheduledTaskService:
                 )
                 tasks = result.scalars().all()
 
-                for task in tasks:
-                    try:
-                        next_run = self._calculate_next_run(task)
-                        if next_run:
+            # Each task commits independently: a failed SQL statement must not
+            # poison the transaction used by every later task in the fleet.
+            for task in tasks:
+                try:
+                    next_run = self._calculate_next_run(task)
+                    if next_run:
+                        async with async_session_maker() as db:
                             await db.execute(
                                 sql_update(ScheduledTask)
                                 .where(col(ScheduledTask.id) == task.id)
                                 .values(next_run=next_run)
                             )
-                            logger.info(f"Calculated next run for task {task.id}: {next_run}")
-                    except Exception as e:
-                        logger.error(f"Error calculating next run for task {task.id}: {e}")
+                            await db.commit()
+                        logger.info(f"Calculated next run for task {task.id}: {next_run}")
+                except Exception:
+                    logger.exception("Error calculating next run for task %s", task.id)
 
-                await db.commit()
-                logger.info(f"Calculated next run times for {len(tasks)} tasks")
+            logger.info(f"Calculated next run times for {len(tasks)} tasks")
 
         except Exception as e:
             logger.error(f"Error calculating next runs: {e}")

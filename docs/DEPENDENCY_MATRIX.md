@@ -5,23 +5,51 @@
 
 | 类别 | 当前基线 | 维护方式 |
 | --- | --- | --- |
-| Python | 最低 3.14；生产 3.14.7；兼容验证 3.15.0rc3 | `uv` 按 Python 版本解析，生产导出 `requirements.txt` |
-| uv | Docker `0.12.21-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
+| Python | 最低 3.14；生产 3.14.8；兼容验证 3.15.0rc3 | `uv` 按 Python 版本解析，生产导出 `requirements.txt` |
+| uv | Docker `0.12.23-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
 | FastAPI / Starlette | `>=0.142.2` / `>=1.7.0` | 保持上游兼容约束 |
-| SQLAlchemy / SQLModel | `>=2.0.54` / `>=0.0.47` | PostgreSQL 主路径，短事务 |
+| SQLAlchemy / SQLModel | `>=2.1.3` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
 | PostgreSQL | Compose `18.6-alpine` | 健康检查后启动，Alembic 自动升级 |
 | Redis | Compose `8.10.2-alpine3.23` | 保持 Redis 7 协议兼容，pipeline/MGET |
-| Caddy | Compose `2.11.4-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
+| Caddy | Compose `2.11.7-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
 | HTTP | 生产 `httpx>=0.28.1` | 应用级共享 transport |
 | Starlette 测试客户端 | `httpx2>=2.13.1`（开发） | 仅用于测试兼容层 |
-| SSH | `asyncssh>=2.24.0` | 显式 lease 和连接池 |
+| SSH | `asyncssh>=2.24.1` | 显式 lease 和连接池 |
 | Node.js | 26 Current（Docker `node:26.10.0-alpine3.24`） | CI `setup-node` 与前端镜像对齐 |
-| 前端控制台 | Next.js 16.3.8、React 19.3.0、next-intl 4.14.8 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
+| 前端控制台 | Next.js 16.4.0、React 19.3.0、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
 
-关键安全包当前下限为 `boto3>=1.43.106`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
+关键安全包当前下限为 `boto3>=1.43.108`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
 uv、npm（`frontend/`）、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.17,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
 
-SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLAlchemy 仍停在 2.0.x：SQLModel 0.0.47 声明 `SQLAlchemy<2.1.0`，待上游放开后再评估 2.1。
+SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，本轮同步升级到 SQLAlchemy 2.1.3；保留现有时区映射与 Alembic schema。
+
+## 稳定版本核对（2026-10-07）
+
+通过 [PyPI](https://pypi.org/)、[npm registry](https://registry.npmjs.org/next/latest)、
+GitHub Releases 和官方容器 registry 实时核对直接依赖、Python 锁定包、前端传递依赖、
+GitHub Actions、pre-commit hooks 和基础镜像。更新 20 个 Python 包；主要变化包括
+SQLModel 0.0.48、SQLAlchemy 2.1.3、AsyncSSH 2.24.1、Google Auth 2.60.0、Boto3 1.43.108、
+Ruff 0.16.10 和 BasedPyright 1.40.2。前端升级到 Next.js / eslint-config-next 16.4.0、
+next-intl 4.14.9、lucide-react 1.52.0、PostCSS 8.5.29 和 @types/node 26.6.4，
+42 个 npm 包条目升级（包括各平台二进制包）；传递依赖通过正常 npm 解析更新，
+保持精确版本和锁文件。
+
+生产镜像升级到 Python 3.14.8、uv 0.12.23 和 Caddy 2.11.7，并固定多架构摘要。
+Node.js 26.10.0、PostgreSQL 18.6、Redis 8.10.2 和所有 GitHub Actions 已是核对时的最新稳定版。
+SQLModel 0.0.48 的发布元数据允许 SQLAlchemy 2.1，本轮解除旧限制。
+
+仍保留以下经过重新核对的上游约束：
+
+| 包 | 当前锁定 | 最新稳定 | 原因 |
+| --- | --- | --- | --- |
+| TypeScript | 6.0.3 | 7.0.2 | `@typescript-eslint/parser@8.71.1` 要求 `typescript >=4.8.4 <6.1.0` |
+| ESLint | 9.39.5 | 10.12.0 | `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` 的 peer 范围最高为 9；React Hooks 已支持 10 |
+| multidict | 6.9.1 | 7.0.0 | `aiohttp@3.14.4` 要求 `multidict<7.0` |
+| pydantic-core（Python 3.14） | 2.46.5 | 2.49.0 | 最新稳定 `pydantic@2.13.5` 精确要求 core 2.46.5 |
+
+Python 3.14 生产依赖保持稳定版；Python 3.15 兼容验证仍沿用下文已选择的
+`pydantic==2.14.0b2` 临时例外，因为支持 3.15 的稳定版尚未发布。不扩大预发布解析范围。
+上述保留项不代表已升级到其绝对最新版本；升级不能绕过父包和 peer 约束。
 
 ## 稳定版本核对（2026-10-01）
 
@@ -108,3 +136,47 @@ Python 3.14 最终完整质量基线通过：2363 项测试通过、1 项跳过�
    `npm update --package-lock-only && npm ci`，同步更新兼容范围内的传递依赖；
 3. 执行 `uv run python scripts/check_baseline.py`，确认锁文件、测试和审计一致；
 4. 生产升级前先在 PostgreSQL 18、Redis 8 Compose 环境做健康启动和回滚演练。
+
+## 当前审计限制（2026-10-07）
+
+生产 Python 依赖与前端生产依赖的审计以完整质量基线为准。
+额外的 `npm --prefix frontend audit`（含开发依赖）报告 5 个 high 条目，
+它们来自同一条 `eslint-config-next → @next/eslint-plugin-next → fast-glob → micromatch → braces`
+开发依赖链。braces 3.0.3 是核对时的最新稳定版，
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) 明确尚无修复版本；
+升级前的锁文件已使用该版本。本轮未降级 Next.js、强制覆盖依赖或忽略审计告警。
+该问题在解析攻击者控制的深度嵌套 glob 模式时可能导致进程栈溢出，
+开发工具链仍有此已知限制；不得把生产审计通过表述为所有依赖均无漏洞。
+
+SQLAlchemy 2.1 将 `Select` / `Row` 的泛型从一个 tuple 参数改为变长列参数。
+本轮同步修正概览统计查询和 Discord 双实体查询的精确类型，保持原 SQL、授权过滤和响应契约；
+不使用 `cast`、`type: ignore` 或扩大 `Any` 来绕过静态检查。
+
+Next.js 16.4 在 `agentRules: false` 时会删除 AGENTS.md 中已有的托管段落。
+前端项目说明保留为普通正文并移除托管标记，避免开发服务器删除手写规则；
+不启用 `cacheComponents` 或 `partialPrefetching`。
+
+## 本轮验证结果（2026-10-07）
+
+- Python 3.14.8 隔离环境执行 `uv run python scripts/check_baseline.py` 全部通过：
+  2400 项后端测试、126 个 subtest 通过，1 项跳过，分支覆盖率 87.35%；
+  分域覆盖率 91.25%，BasedPyright 零错误/警告，前端测试、lint、typecheck、
+  生产构建和 40 页包体预算通过。生产 Python 与前端生产依赖审计均无已知漏洞。
+- Python 3.15.0rc3 严格弃用检查下的全量后端测试同样为 2400 项通过、
+  126 个 subtest 通过、1 项跳过，覆盖率 87.35%。两种环境均保留一个既有
+  Discord mock 未消费 `Client.start` 协程的 `RuntimeWarning`。
+- 临时 PostgreSQL 18.4 实例上的迁移集成检查，在两种 Python 环境中各 18 项通过；
+  不访问线上数据库，检查后停止并删除实例。
+- 完成 CI 中现有四组 Playwright 检查：公共教程 1 项、概览 18 项、
+  性能/导航 51 项、监控/设置 14 项，共 84 项通过；Next MCP 编译诊断无问题。
+  性能场景日志仍出现新建服务器页既有的 `serverConfig` 命名空间缺失告警，
+  该页面及其 namespace 列表未在本轮修改，不能把上述通过表述为所有页面无运行告警。
+- Linux arm64 Alpine 后端镜像（Python 3.14.8）与前端镜像（Node.js 26.10.0）
+  构建成功。使用已有 Colima context 创建独立名称、随机 loopback 端口、临时数据卷的
+  Compose 栈；app/frontend/PostgreSQL 18.6/Redis 8.10.2/Caddy 2.11.7 均健康。
+  启动自动迁移到 `0036_cs2_version_state`；Redis PING、PostgreSQL readiness、
+  数据库 head 诊断及前端/Caddy 的健康、登录、教程端点均通过，随后删除全部临时容器和卷。
+  未修改默认 Docker context，未推送、发布或重启线上服务。
+
+镜像检查覆盖 Linux arm64；x86_64 musl 带哈希的纯二进制安装 dry-run 通过，
+但它不等于 amd64 镜像运行认证。更新后的依赖解析、构建和测试结果不能代替线上故障取证。

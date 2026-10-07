@@ -87,7 +87,10 @@ class DiscordLifecycleMixin:
                 await self._reconcile_task
             self._reconcile_task = None
         for user_id in list(self._runtimes):
-            await self._stop_runtime(user_id, status="disabled")
+            try:
+                await self._stop_runtime(user_id, status="disabled")
+            except Exception:
+                host.logger.exception("Failed to stop Discord Bot for user %s", user_id)
 
     async def _reconcile_loop(self: Manager) -> None:
         while self._started:
@@ -102,7 +105,10 @@ class DiscordLifecycleMixin:
             result = await db.execute(host.select(UserDiscordBot.user_id))
             user_ids = set(result.scalars().all()) | set(self._runtimes)
         for user_id in user_ids:
-            await self.reconcile_user(user_id)
+            try:
+                await self.reconcile_user(user_id)
+            except Exception:
+                host.logger.exception("Failed to reconcile Discord Bot for user %s", user_id)
 
     async def reconcile_user(self: Manager, user_id: int) -> None:
         if not self._started:
@@ -209,14 +215,15 @@ class DiscordLifecycleMixin:
             await self._update_bot_status(user_id, status, None)
             return
         runtime.renew_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await runtime.renew_task
-        await runtime.client.close()
-        runtime.client_task.cancel()
-        await asyncio.gather(runtime.client_task, return_exceptions=True)
-        await host.redis_manager.release_lock(
-            f"discord_gateway:user:{user_id}", runtime.lease_token
-        )
+        try:
+            await asyncio.gather(runtime.renew_task, return_exceptions=True)
+            await runtime.client.close()
+        finally:
+            runtime.client_task.cancel()
+            await asyncio.gather(runtime.client_task, return_exceptions=True)
+            await host.redis_manager.release_lock(
+                f"discord_gateway:user:{user_id}", runtime.lease_token
+            )
         await self._update_bot_status(user_id, status, None)
 
     async def _client_stopped(self: Manager, user_id: int, task: asyncio.Task) -> None:

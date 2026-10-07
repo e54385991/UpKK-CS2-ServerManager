@@ -91,8 +91,12 @@ class DiskSpaceService:
                 return value
             if cache_only and not force_refresh:
                 return None
-            _ok, info = await self.get_disk_space(server, force_refresh=force_refresh)
-            return info
+            try:
+                _ok, info = await self.get_disk_space(server, force_refresh=force_refresh)
+                return info
+            except Exception:
+                logger.exception("Failed to read disk space for server %s", server.id)
+                return None
 
         values = await telemetry_runtime.collect_ordered(
             read(server, value) for server, value in zip(servers, cached, strict=True)

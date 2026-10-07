@@ -35,7 +35,7 @@ class OverviewServerStats:
     capacity: int
 
 
-def overview_server_stats_statement(user_id: int) -> Select[Any]:
+def overview_server_stats_statement(user_id: int) -> Select[ServerStatus, int]:
     """Same user scope and 1000-row cap as the previous ORM list, fewer columns."""
     return (
         select(col(Server.status), col(Server.max_players))
@@ -44,11 +44,11 @@ def overview_server_stats_statement(user_id: int) -> Select[Any]:
     )
 
 
-def selected_column_names(statement: Select[Any]) -> tuple[str, ...]:
+def selected_column_names[*Columns](statement: Select[*Columns]) -> tuple[str, ...]:
     return tuple(column.name for column in statement.selected_columns)
 
 
-def statement_loads_secret_columns(statement: Select[Any]) -> bool:
+def statement_loads_secret_columns[*Columns](statement: Select[*Columns]) -> bool:
     return bool(_SECRET_COLUMNS.intersection(selected_column_names(statement)))
 
 

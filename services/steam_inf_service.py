@@ -127,9 +127,9 @@ class SteamInfService:
             started = monotonic()
 
             async def refresh(server: Server) -> bool:
-                if server.should_skip_background_checks():
-                    return True
                 try:
+                    if server.should_skip_background_checks():
+                        return True
                     # get_steam_inf_details starts its timeout after admission,
                     # so large batches do not time out while waiting for a slot.
                     success, _version = await self.get_version_from_steam_inf(
