@@ -21,7 +21,6 @@ from typing import Dict, Optional
 import asyncssh
 
 from modules.utils import get_current_time
-from services.telemetry_runtime import collect_ordered
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +110,7 @@ class SSHHealthMonitor:
                     except Exception as e:
                         logger.error(f"Error checking SSH health for server {server.id}: {e}")
 
-            await collect_ordered(check(server) for server in servers)
+            await asyncio.gather(*(check(server) for server in servers))
         except Exception as e:
             logger.error(f"Error getting servers for SSH health check: {e}")
 
