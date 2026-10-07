@@ -48,6 +48,7 @@ const app = createServer(async (req, res) => {
   record.ended = Date.now();
   if (res.destroyed) return;
   if (rule?.status) return json({ detail: 'Fixture failure' }, rule.status);
+  if (rule && Object.hasOwn(rule, 'body')) return json(rule.body);
   if (path === '/api/v1/auth/registration-config') return json({ registration_enabled: false, captcha_enabled: false });
   if (path === '/api/v1/auth/me') return actor.includes('invalid') ? json({ detail: 'Expired' }, 401) : json({ id: actor.includes('member') ? 2 : 1, username: actor.includes('member') ? 'fixture-member' : 'fixture-admin', is_admin: !actor.includes('member'), is_active: true, email: null });
   if (path === '/api/v1/operations/inbox/events') {

@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { hasSessionCookie } from "@/modules/auth/session";
+import { hasSessionCookie } from "@/shared/auth/session-cookie";
 
 /**
- * Edge guard for the authenticated console (Next 16 `proxy` convention). This is
+ * Node.js guard for the authenticated console (Next 16 `proxy` convention). This is
  * a cheap presence check on the session cookie to avoid a server round-trip for
  * obviously-anonymous visitors; the layout still validates the session against
  * the backend. Public routes and the API proxy are excluded via the matcher.

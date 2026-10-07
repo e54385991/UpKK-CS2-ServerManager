@@ -169,8 +169,8 @@ Next.js 16.4 在 `agentRules: false` 时会删除 AGENTS.md 中已有的托管�
   不访问线上数据库，检查后停止并删除实例。
 - 完成 CI 中现有四组 Playwright 检查：公共教程 1 项、概览 18 项、
   性能/导航 51 项、监控/设置 14 项，共 84 项通过；Next MCP 编译诊断无问题。
-  性能场景日志仍出现新建服务器页既有的 `serverConfig` 命名空间缺失告警，
-  该页面及其 namespace 列表未在本轮修改，不能把上述通过表述为所有页面无运行告警。
+  首轮性能场景发现新建服务器页既有的 `serverConfig` 命名空间缺失告警，
+  随后的 Next.js 16.4 实践调整已补齐该命名空间，并用两种语言分别复核。
 - Linux arm64 Alpine 后端镜像（Python 3.14.8）与前端镜像（Node.js 26.10.0）
   构建成功。使用已有 Colima context 创建独立名称、随机 loopback 端口、临时数据卷的
   Compose 栈；app/frontend/PostgreSQL 18.6/Redis 8.10.2/Caddy 2.11.7 均健康。
@@ -180,3 +180,28 @@ Next.js 16.4 在 `agentRules: false` 时会删除 AGENTS.md 中已有的托管�
 
 镜像检查覆盖 Linux arm64；x86_64 musl 带哈希的纯二进制安装 dry-run 通过，
 但它不等于 amd64 镜像运行认证。更新后的依赖解析、构建和测试结果不能代替线上故障取证。
+
+## Next.js 16.4 追加验证（2026-10-07）
+
+构建、Proxy、请求边界、导航、错误恢复、图片加载和可选开关的核对见
+[前端实践说明](FRONTEND.md)。
+
+- 在隔离 Git worktree 中，以 `.env.example` 作为进程级验证配置执行完整
+  `uv run python scripts/check_baseline.py`，最终退出码为 0：2400 项后端测试、
+  126 个 subtest 通过，1 项跳过；分支覆盖率 87.51%，分域覆盖率 91.25%。
+  BasedPyright 零错误/警告，7 项前端源码/构建契约检查、143 项前端单元测试、
+  lint、typecheck、Turbopack 生产构建和 40 页包体预算均通过。
+- 四组 CI Playwright 回归共 90 项通过（教程 1、概览 18、性能/导航 57、监控/设置 14）；
+  新增的中英文 404、错误后重新请求、新建服务器翻译共 6 项在生产模式中再次通过。
+  正常页面的 Next MCP 编译和执行诊断无问题；错误恢复测试主动注入的服务端异常为预期日志。
+- 4 个 Docker 编译命令回归覆盖显式 ID、空 ID、`unknown` 回退 Git SHA、
+  两者未知时不设置 ID，同时核对编译进程收到 BuildKit 密钥。
+  实际 Linux arm64 Alpine 镜像分别用显式 deployment ID 和默认 `unknown` 构建并启动：
+  Server Actions manifest 的密钥与传入 secret 一致，页面资源带正确的显式 ID 或 Git SHA。
+  两次隔离 Compose 栈均健康，Redis/PostgreSQL/head/HTTP 检查通过，临时容器和卷已删除。
+- 过程中曾遇到 npm 审计 TLS 中断和 pip-audit 临时 pip 环境升级失败；
+  原命令重试通过，最终整轮基线的两项生产依赖审计也通过，未跳过或降低门禁。
+  前述开发依赖 braces 告警、上游版本兼容限制和既有 Discord mock 警告仍保留。
+- 原工作区的 SSH 巡检文件仍出现回写旧版本的现象，来源未定位；
+  `1a2be09` 中的取消清理修复正确，隔离工作区保持该源码并通过全部检查。
+  保留隔离工作区作为已验证副本；这不代表原工作区的回写原因已修复。

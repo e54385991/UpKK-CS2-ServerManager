@@ -14,6 +14,8 @@ test("deployment tutorial is public and shows the illustrated steps", async ({
   await expect(
     page.locator('img[src*="/tutorial/deploy/1.webp"]'),
   ).toBeVisible();
+  await expect(page.locator('img[src*="/tutorial/deploy/1.webp"]')).toHaveAttribute("loading", "eager");
+  await expect(page.locator('img[src*="/tutorial/deploy/10.webp"]')).toHaveAttribute("loading", "lazy");
   await expect(
     page.getByRole("link", { name: /返回登录|Back to sign in/ }).first(),
   ).toBeVisible();

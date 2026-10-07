@@ -62,6 +62,7 @@ export async function TutorialGuide({ signedIn }: { signedIn: boolean }) {
                   alt={t("stepAlt", { step })}
                   width={1280}
                   height={720}
+                  loading={step === 1 ? "eager" : "lazy"}
                   unoptimized
                   className="h-auto w-full rounded-md border border-line"
                 />

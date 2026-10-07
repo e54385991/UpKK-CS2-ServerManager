@@ -1,8 +1,6 @@
 # Compile Next on the build host. QEMU amd64 `next build` hangs on arm64
-# builders; the runner stage still uses the target-arch Node binary.  The
-# pinned Next native Turbopack binding is not available on every arm64 build
-# host, so release images use the supported Webpack fallback while local
-# development/CI keep the faster Turbopack default.
+# builders; the runner stage still uses the target-arch Node binary. Use the
+# stable default Turbopack bundler in Docker, development and CI alike.
 # Node 26.10.0 is the current stable release (Alpine 3.24, multi-arch index).
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
@@ -20,18 +18,22 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN --mount=type=secret,id=next_server_actions_key \
-    NEXT_DEPLOYMENT_ID="${DEPLOYMENT_ID}" \
+    mkdir -p public && \
+    next_build_deployment_id="${DEPLOYMENT_ID}" && \
+    if [ -z "${next_build_deployment_id}" ] || [ "${next_build_deployment_id}" = "unknown" ]; then \
+        next_build_deployment_id="${GIT_SHA}"; \
+    fi && \
+    if [ "${next_build_deployment_id}" = "unknown" ]; then next_build_deployment_id=""; fi && \
+    NEXT_DEPLOYMENT_ID="${next_build_deployment_id}" \
     NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$(cat /run/secrets/next_server_actions_key 2>/dev/null || true)" \
-    mkdir -p public && npx next build --webpack
+    npx next build
 
 FROM node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS runner
 WORKDIR /app
 ARG GIT_SHA
 ARG BUILD_TIME
-ARG DEPLOYMENT_ID
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_DEPLOYMENT_ID=${DEPLOYMENT_ID} \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     APP_GIT_SHA=${GIT_SHA} \

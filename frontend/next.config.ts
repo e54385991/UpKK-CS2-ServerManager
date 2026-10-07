@@ -25,8 +25,8 @@ const INTERNAL_API_URL = internalApiUrl();
 // deployments and perform a hard refresh before it keeps submitting old
 // Server Action references. Docker/release builds set this to the immutable
 // commit SHA; local development may override it explicitly.
-const DEPLOYMENT_ID =
-  process.env.NEXT_DEPLOYMENT_ID || process.env.GIT_SHA || undefined;
+const DEPLOYMENT_ID = [process.env.NEXT_DEPLOYMENT_ID, process.env.GIT_SHA]
+  .find((value) => value && value !== "unknown");
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -34,8 +34,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   typedRoutes: true,
-  // Keep the authored frontend/AGENTS.md stable; next dev would otherwise
-  // rewrite the header block on every start.
+  // Handwritten frontend/AGENTS.md instructions use no managed markers.
+  // Next 16.4 removes managed blocks when agentRules is disabled.
   agentRules: false,
   // `localhost` and `127.0.0.1` are different Origins. Without this, opening
   // http://127.0.0.1:31800 or a LAN IP blocks `/_next/static` and the login

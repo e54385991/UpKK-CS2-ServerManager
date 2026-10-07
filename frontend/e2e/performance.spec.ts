@@ -327,3 +327,54 @@ test('activity-tray inbox poll stays single-flight and pauses while hidden', asy
   await expect.poll(async () => (await inboxGets()).length).toBe(2);
   await request.post(`${mock}/__test__/release`, { data: { path: '/api/v1/operations/inbox' } });
 });
+
+for (const locale of ['en-US', 'zh-CN'] as const) {
+  test(`${locale}: missing pages offer an accessible way back`, async ({ page, context, request }) => {
+    await request.post(`${mock}/__test__/reset`);
+    await login(context, 'admin', locale);
+    const response = await page.goto('/missing-fixture-page');
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole('heading', {
+      name: locale === 'zh-CN' ? '页面不存在' : 'Page not found',
+    })).toBeVisible();
+    await expect(page.getByRole('link', {
+      name: locale === 'zh-CN' ? '返回总览' : 'Back to overview',
+    })).toHaveAttribute('href', '/overview');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test(`${locale}: retry refetches after a server rendering failure`, async ({ page, context, request }) => {
+    await login(context, 'admin', locale);
+    await request.post(`${mock}/__test__/reset`, {
+      data: { rules: { '/api/v1/announcements': { body: { items: null } } } },
+    });
+    await page.goto('/overview', { waitUntil: 'commit' });
+    await expect(page.getByRole('heading', {
+      name: locale === 'zh-CN' ? '暂时无法显示此页面' : 'Unable to display this page',
+    })).toBeVisible();
+    await expect(page.locator('main')).not.toContainText('TypeError');
+    await expect(page.locator('main')).not.toContainText('Cannot read properties');
+    await request.post(`${mock}/__test__/reset`);
+    await page.getByRole('button', {
+      name: locale === 'zh-CN' ? '重试' : 'Try again', exact: true,
+    }).click();
+    await expect(page.getByTestId('overview-stats')).toBeVisible();
+    expect((await state(request)).requests.some(
+      (record: { path: string }) => record.path === '/api/v1/announcements',
+    )).toBe(true);
+  });
+
+  test(`${locale}: new server controls receive their message namespaces`, async ({ page, context, request }) => {
+    const missingMessages: string[] = [];
+    page.on('console', message => {
+      if (message.type() === 'error' && message.text().includes('MISSING_MESSAGE')) {
+        missingMessages.push(message.text());
+      }
+    });
+    await request.post(`${mock}/__test__/reset`);
+    await login(context, 'admin', locale);
+    await page.goto('/servers/new');
+    await expect(page.locator('main input').first()).toBeVisible();
+    expect(missingMessages).toEqual([]);
+  });
+}

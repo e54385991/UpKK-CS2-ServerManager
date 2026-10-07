@@ -68,6 +68,7 @@ export const SERVERS_SECTION_NAMESPACES = [
   "serverNew",
   "setupWizard",
   "initializedHosts",
+  "serverConfig",
 ] as const satisfies readonly MessageNamespace[];
 
 export const SETTINGS_TREE_NAMESPACES = [
