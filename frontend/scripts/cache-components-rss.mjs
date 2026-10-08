@@ -27,7 +27,7 @@ const rounds = mode === 'full' ? Number(roundsArg) : 1;
 if (mode === 'full' && rounds !== 3) throw new Error('The acceptance protocol requires exactly three rounds');
 const warmupSeconds = mode === 'full' ? RSS_PROTOCOL.warmupSeconds : 10;
 const measureSeconds = mode === 'full' ? RSS_PROTOCOL.measureSeconds : 30;
-const visitSeconds = 30;
+const visitSeconds = 15;
 const baseURL = 'http://cache-components.test:31961';
 const listenerURL = 'http://127.0.0.1:31961';
 const mockURL = 'http://127.0.0.1:38261';
@@ -64,23 +64,24 @@ async function setPhase(phase) {
 }
 
 async function load(context, actor, index, keepGoing, measured, error, diagnose) {
-  let page = null;
+  let pending = new Set();
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  page.on('pageerror', error);
+  page.on('request', request => pending.add(request.url()));
+  page.on('requestfinished', request => pending.delete(request.url()));
+  page.on('requestfailed', request => pending.delete(request.url()));
   const ids = fixtureServerIds(actor);
   const tenantWorkers = Array.from({ length: 30 }, (_, worker) => worker)
     .filter(worker => CACHE_COMPONENTS_ACTORS[worker % 4].at(-1) === actor.at(-1));
   let step = tenantWorkers.indexOf(index);
   await delay(index * 250);
-  while (keepGoing()) {
-    const iterationStarted = performance.now();
-    const id = ids[step % ids.length];
-    const pending = new Set();
-    try {
-      page = await context.newPage();
-      page.setDefaultTimeout(15000);
-      page.on('pageerror', error);
-      page.on('request', request => pending.add(request.url()));
-      page.on('requestfinished', request => pending.delete(request.url()));
-      page.on('requestfailed', request => pending.delete(request.url()));
+  try {
+    while (keepGoing()) {
+      const iterationStarted = performance.now();
+      const id = ids[step % ids.length];
+      pending = new Set();
+      try {
       await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
       await page.getByTestId('monitoring-form').waitFor();
       // The console intentionally keeps SSE readers and App Router streams open;
@@ -105,20 +106,21 @@ async function load(context, actor, index, keepGoing, measured, error, diagnose)
         await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
         await page.getByTestId('monitoring-form').waitFor();
       }
-    } catch (failure) {
-      if (keepGoing()) {
-        error(JSON.stringify({ failure: String(failure), actor, index, id,
-          url: page?.url(), pending: [...pending].slice(0, 12) }));
-        await diagnose(actor, index, id);
+      } catch (failure) {
+        if (keepGoing()) {
+          error(JSON.stringify({ failure: String(failure), actor, index, id,
+            url: page.url(), pending: [...pending].slice(0, 12) }));
+          await diagnose(actor, index, id);
+        }
       }
-    } finally {
-      // Finish the tab lifecycle after each host visit. This cancels request
-      // readers and prefetches before the next visit in the same cookie context.
-      await page?.close().catch(() => undefined);
-      page = null;
+      step += tenantWorkers.length;
+      await delay(Math.max(0, visitSeconds * 1000 - (performance.now() - iterationStarted)));
     }
-    step += tenantWorkers.length;
-    await delay(Math.max(0, visitSeconds * 1000 - (performance.now() - iterationStarted)));
+  } finally {
+    // Reuse one tab per context. Each document navigation cancels the previous
+    // document's readers, while avoiding renderer churn from creating hundreds
+    // of tabs during the one-hour workload.
+    await page.close().catch(() => undefined);
   }
 }
 
