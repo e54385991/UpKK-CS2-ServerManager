@@ -52,6 +52,11 @@ test("all 18 handlers preserve methods, bearer forwarding and stream cancellatio
     }, { method, path });
     expect(result.status, `${method} ${path}`).toBe(200);
     expect(result.redirected, path).toBe(false);
+    if (result.type.includes("text/event-stream")) {
+      await expect.poll(async () => (await connections(request)).activeStreams, {
+        message: `${method} ${path} must release its upstream stream`,
+      }).toBe(0);
+    }
   }
   const calls = (await state(request)).requests.filter((row: { path: string }) => row.path.startsWith("/api/"));
   expect(calls.every((row: { actor: string }) => row.actor === "Bearer fixture-admin-a")).toBe(true);
@@ -117,6 +122,59 @@ test("language changes keep public path, query, hash and navigation selection", 
   const activeConfig = page.locator('[data-workspace-category="config"]').filter({ visible: true });
   await expect(activeConfig).toHaveCount(1);
   await expect(activeConfig).toHaveAttribute("aria-current", "page");
+});
+
+test("native navigation clicks keep streamed link hints consistent during hydration", async ({ page }, info) => {
+  const messages = info.project.name.startsWith("zh-CN") ? zh : en;
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(String(error)));
+  page.on("console", message => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  for (const path of ["/overview", "/servers/1/monitoring"]) {
+    await page.goto(path, { waitUntil: "commit" });
+    const desktop = info.project.name.endsWith("1440");
+    if (!desktop) await page.getByRole("button", { name: messages.shell.openNav, exact: true }).click();
+    const scope = page.getByTestId(desktop ? "console-sidebar" : "console-mobile-drawer");
+    await expect(scope).toBeVisible();
+    await scope.evaluate(element => {
+      const link = element.querySelector<HTMLAnchorElement>('a[data-nav-key="servers"]');
+      if (!link) throw new Error("Missing server navigation link");
+      link.click();
+    });
+    await expect(page).toHaveURL(url => url.pathname === "/servers");
+    await expect(page.locator('a[href="/servers/1"]').filter({ visible: true }).first()).toBeVisible();
+  }
+  expect(errors).toEqual([]);
+});
+
+test("admin and shared navigation choose one most specific selected entry", async ({ page, request }, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(String(error)));
+  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  const messages = info.project.name.startsWith("zh-CN") ? zh : en;
+  const desktop = info.project.name.endsWith("1440");
+  const scope = page.getByTestId(desktop ? "console-sidebar" : "console-mobile-drawer");
+  await request.post(`${mock}/__test__/reset`, { data: { rules: { "/api/v1/auth/me": { delay: 3000 } } } });
+  await page.goto("/settings", { waitUntil: "commit" });
+  if (!desktop) await page.getByRole("button", { name: messages.shell.openNav, exact: true }).click();
+  await scope.locator('a[data-nav-key="discord"]').click();
+  await expect(page).toHaveURL(url => url.pathname === "/settings/discord");
+  if (!desktop) await page.getByRole("button", { name: messages.shell.openNav, exact: true }).click();
+  await expect(scope.locator('a[data-nav-key="settings"]')).toBeVisible();
+  await expect(scope.locator('a[data-nav-key][aria-current="page"]')).toHaveCount(1);
+  if (!desktop) await scope.getByRole("button", { name: messages.shell.closeNav, exact: true }).click();
+  await request.post(`${mock}/__test__/reset`);
+  for (const [key, path] of [["settings", "/settings"], ["discord", "/settings/discord"], ["audit", "/audit"]]) {
+    if (!desktop) await page.getByRole("button", { name: messages.shell.openNav, exact: true }).click();
+    await scope.locator(`a[data-nav-key="${key}"]`).click();
+    await expect(page).toHaveURL(url => url.pathname === path);
+    if (!desktop) await page.getByRole("button", { name: messages.shell.openNav, exact: true }).click();
+    await expect(scope.locator('a[data-nav-key][aria-current="page"]')).toHaveCount(1);
+    await expect(scope.locator(`a[data-nav-key="${key}"]`)).toHaveAttribute("aria-current", "page");
+    if (!desktop) await scope.getByRole("button", { name: messages.shell.closeNav, exact: true }).click();
+  }
+  expect(errors).toEqual([]);
 });
 
 test("unknown paths and missing IDs render a localized 404", async ({ page }, info) => {

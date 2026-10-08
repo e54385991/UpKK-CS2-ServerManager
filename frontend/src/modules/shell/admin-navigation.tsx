@@ -5,7 +5,7 @@ import { NavLink } from "./nav-link";
 
 export function AdminNavigation() {
   const t = useTranslations("nav");
-  const items = NAV_SECTIONS.flatMap(section => section.items).filter(item => item.adminOnly);
-  return items.map(item => <NavLink key={item.href} href={item.href} label={t(item.key)}
+  const items = NAV_SECTIONS.flatMap(section => section.items);
+  return items.filter(item => item.adminOnly).map(item => <NavLink key={item.href} href={item.href} label={t(item.key)}
     icon={item.icon} navKey={item.key} items={items} />);
 }

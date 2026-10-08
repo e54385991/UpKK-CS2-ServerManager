@@ -54,8 +54,7 @@ function categoryLink(page: Page, category: string) {
 async function clickShowsPending(page: Page, selector: string) {
   await page.waitForFunction(
     (target) =>
-      document.documentElement.getAttribute("data-link-pending-capture") ===
-        "true" &&
+      Boolean(Reflect.get(document, Symbol.for("upkk.link-pending-capture"))) &&
       Boolean(
         document
           .querySelector(target)
@@ -136,11 +135,12 @@ test("all 19 workspace tabs keep the current page marker while switching", async
   }
 
   await categoryLink(page, "config").click();
-  await expect(page.getByTestId("server-config-tabs")).toBeVisible();
-  await page.getByTestId("server-config-tabs").locator('a[data-config-section="host"]').click();
+  const configTabs = page.getByTestId("server-config-tabs").filter({ visible: true });
+  await expect(configTabs).toBeVisible();
+  await configTabs.locator('a[data-config-section="host"]').click();
   await expect(page).toHaveURL(/\/servers\/1\/host-config$/);
   await expect(page.getByTestId("host-config-form")).toBeVisible();
-  await page.getByTestId("server-config-tabs").locator('a[data-config-section="game"]').click();
+  await configTabs.locator('a[data-config-section="game"]').click();
   await expect(page).toHaveURL(/\/servers\/1\/config$/);
   await expect(page.getByTestId("game-config-form")).toBeVisible();
 });
@@ -460,4 +460,3 @@ test("mobile drawer uses the same pending nav links", async ({ page, context, re
     "true",
   );
 });
-

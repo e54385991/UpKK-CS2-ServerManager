@@ -1,22 +1,11 @@
 const HINT = "[data-testid='link-pending-hint']";
-const CAPTURE_ATTR = "data-link-pending-capture";
+const CAPTURE_LISTENER = Symbol.for("upkk.link-pending-capture");
 
 let pendingHref: string | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
   for (const listener of listeners) listener();
-}
-
-function writeDom(href: string | null) {
-  if (typeof document === "undefined") return;
-  for (const node of document.querySelectorAll(HINT)) {
-    if (!(node instanceof HTMLElement)) continue;
-    node.setAttribute(
-      "data-pending",
-      href != null && node.dataset.pendingHref === href ? "true" : "false",
-    );
-  }
 }
 
 function hrefFromClick(event: Event) {
@@ -36,9 +25,11 @@ function onCaptureClick(event: Event) {
 
 export function ensureLinkPendingCapture() {
   if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  if (root.getAttribute(CAPTURE_ATTR) === "true") return;
-  root.setAttribute(CAPTURE_ATTR, "true");
+  const captureDocument: Document & { [CAPTURE_LISTENER]?: EventListener } = document;
+  const previous = captureDocument[CAPTURE_LISTENER];
+  if (previous === onCaptureClick) return;
+  if (previous) document.removeEventListener("click", previous, true);
+  captureDocument[CAPTURE_LISTENER] = onCaptureClick;
   document.addEventListener("click", onCaptureClick, true);
 }
 
@@ -49,14 +40,12 @@ if (typeof document !== "undefined") {
 export function markLinkPending(href: string) {
   pendingHref = href;
   emit();
-  writeDom(href);
 }
 
 export function clearLinkPending(href?: string) {
   if (href != null && pendingHref !== href) return;
   pendingHref = null;
   emit();
-  writeDom(null);
 }
 
 export function subscribeLinkPending(listener: () => void) {

@@ -8,6 +8,7 @@ import { Suspense, type MouseEventHandler } from "react";
 import { cn } from "@/shared/lib/cn";
 import { activeNavHref, navPathMatches, type NavItem } from "@/shared/config/navigation";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
+import { useHydrated } from "@/shared/lib/use-hydrated";
 
 /**
  * Sidebar / mobile-drawer navigation link. Keeps the default `<Link>` prefetch
@@ -30,9 +31,10 @@ export function NavLink(props: NavLinkProps) {
   </Suspense>;
 }
 function ActiveNavLink(props: NavLinkProps) {
+  const hydrated = useHydrated();
   const pathname = usePathname();
-  const active = props.active ?? (props.items
-    ? activeNavHref(pathname, props.items) === props.href : navPathMatches(pathname, props.href));
+  const active = hydrated && (props.active ?? (props.items
+    ? activeNavHref(pathname, props.items) === props.href : navPathMatches(pathname, props.href)));
   return <NavLinkView {...props} active={active} />;
 }
 function NavLinkView({ href, label, icon: Icon, active, navKey, onClick }: NavLinkProps) {

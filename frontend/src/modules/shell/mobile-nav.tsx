@@ -10,6 +10,7 @@ import { NAV_SECTIONS } from "@/shared/config/navigation";
 import { NavLink } from "@/modules/shell/nav-link";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 import { Button } from "@/shared/ui/button";
+import { useHydrated } from "@/shared/lib/use-hydrated";
 
 /**
  * Hamburger + overlay drawer for viewports below `md`.
@@ -23,6 +24,7 @@ import { Button } from "@/shared/ui/button";
  * dismisses the drawer without an effect.
  */
 export function MobileNav({ admin }: { admin?: React.ReactNode }) {
+  const hydrated = useHydrated();
   const pathname = usePathname();
   const [openPath, setOpenPath] = useState<string | null>(null);
   const open = openPath === pathname;
@@ -126,6 +128,7 @@ export function MobileNav({ admin }: { admin?: React.ReactNode }) {
         data-testid="console-mobile-open"
         aria-label={tShell("openNav")}
         aria-expanded={open}
+        disabled={!hydrated}
         onClick={() => setOpenPath(pathname)}
       >
         <Menu className="size-5" />
