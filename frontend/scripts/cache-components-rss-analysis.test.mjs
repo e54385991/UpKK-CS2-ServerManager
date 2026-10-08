@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compareRssRuns, summarizeRssRun } from './cache-components-rss-analysis.mjs';
+import { compareRssRuns, summarizeRssRun, median } from './cache-components-rss-analysis.mjs';
 
 function run(bytes = 1000) {
   return { metadata: { mode: 'full', contexts: 30, warmupSeconds: 300,
@@ -14,6 +14,20 @@ test('5% threshold is inclusive and three full runs are required', () => {
   assert.equal(compareRssRuns([run(), run(), run()], [run(1050), run(1050), run(1050)]).passed, true);
   assert.equal(compareRssRuns([run(), run(), run()], [run(1051), run(1051), run(1051)]).passed, false);
   assert.equal(compareRssRuns([run()], [run()]).passed, false);
+});
+test('even sample windows use both middle values and cannot hide a growth regression', () => {
+  assert.equal(median([4, 1, 2, 3]), 2.5);
+  assert.equal(median([4, 1, 3]), 3);
+  assert.throws(() => median([]), /missing/);
+  const boundary = run();
+  boundary.samples.splice(721, 1);
+  const last = boundary.samples.filter(sample => sample.elapsedSeconds >= 3600);
+  assert.equal(last.length, 60);
+  last.forEach((sample, index) => { sample.rssBytes = index < 30 ? 1050 : 1052; });
+  const summary = summarizeRssRun(boundary);
+  assert.equal(summary.complete, true);
+  assert.equal(summary.growth, 1.051);
+  assert.equal(summary.passed, false);
 });
 test('smoke, missing hosts, wrong PID and unreleased streams fail closed', () => {
   for (const change of [

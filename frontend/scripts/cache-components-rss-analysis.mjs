@@ -7,6 +7,13 @@ export function quantile(values, ratio) {
   return sorted[Math.max(0, Math.ceil(sorted.length * ratio) - 1)];
 }
 
+export function median(values) {
+  if (!values.length) throw new Error('RSS samples are missing');
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
 export function summarizeRssRun(run) {
   const { samples, metadata, finalConnections, coverage } = run;
   const measured = samples.filter(sample => sample.phase === 'measure');
@@ -20,8 +27,8 @@ export function summarizeRssRun(run) {
     samples.every((sample, index) => sample.pid === metadata.nextPid && Number.isFinite(sample.rssBytes) && sample.rssBytes > 0 &&
       (index === 0 || sample.elapsedSeconds - samples[index - 1].elapsedSeconds <= 10));
   const growth = first.length && last.length
-    ? quantile(last.map(sample => sample.rssBytes), 0.5) /
-      quantile(first.map(sample => sample.rssBytes), 0.5) : null;
+    ? median(last.map(sample => sample.rssBytes)) /
+      median(first.map(sample => sample.rssBytes)) : null;
   const cancelled = finalConnections.activeStreams === 0 &&
     finalConnections.openedStreams > 0 &&
     finalConnections.openedStreams === finalConnections.cancelledStreams;
@@ -43,7 +50,7 @@ export function compareRssRuns(baseline, candidate) {
   const complete = matched && before.length === 3 && after.length === 3 &&
     [...before, ...after].every(run => run.complete);
   const medianP95 = runs => runs.length && runs.every(run => run.p95Bytes !== null)
-    ? quantile(runs.map(run => run.p95Bytes), 0.5) : null;
+    ? median(runs.map(run => run.p95Bytes)) : null;
   const baselineP95 = medianP95(before);
   const candidateP95 = medianP95(after);
   const ratio = baselineP95 && candidateP95 ? candidateP95 / baselineP95 : null;
