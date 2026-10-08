@@ -45,7 +45,9 @@ RSS 使用 `scripts/cache-components-rss.mjs`，直接启动 standalone `server.
 服务器 ID，并反复读取、取消活动队列和助手 SSE，正式负载加入文档导航取消。真实 Link
 导航由独立功能矩阵覆盖。
 每个上下文按固定 5 秒迭代节奏执行，服务器 ID 按同租户上下文分片，确保
-预热完整覆盖 500 个 ID；两个版本共用相同负载代码和 fixture。
+预热完整覆盖 500 个 ID。每次访问结束后关闭 tab，再在同一 cookie 上下文创建
+tab，完成请求读者与预取的取消，避免旧 tab 的未结束请求积累。采样按绝对时间
+每 5 秒调度，错误实时落盘；两个版本共用相同负载代码和 fixture。
 
 ```bash
 node scripts/cache-components-rss.mjs /tmp/upkk-cc-build-baseline /tmp/upkk-cc-rss-baseline full
@@ -59,6 +61,8 @@ node scripts/cache-components-rss-report.mjs /tmp/upkk-cc-rss-baseline /tmp/upkk
 预热和测量必须分别访问完整数据集。三轮 RSS p95 的中位数回归上限为 1.05，
 每轮最后 5 分钟与预热后首 5 分钟的 RSS 中位数之比上限也为 1.05。
 缺失轮次、时长、样本、服务器、错误 PID、未释放流或浏览器异常均不能通过。
+任何完整轮次失败即停止后续轮次并保留结果；修复具体原因后重测，不能用不足
+三轮的结果通过门禁，也不能混用不同负载代码的对照和候选结果。
 
 `smoke` 模式只验证负载设施能运行（10 秒预热、30 秒测量），输出强制标记为
 不完整，不能批准开启正式默认。完整内存和功能门禁均通过后，才开启两项默认。

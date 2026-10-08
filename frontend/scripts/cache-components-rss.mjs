@@ -57,20 +57,24 @@ async function setPhase(phase) {
   await fetch(`${mockURL}/__test__/phase`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phase }) });
 }
 
-async function load(page, actor, index, keepGoing, error) {
+async function load(context, actor, index, keepGoing, error) {
+  let page = null;
   const ids = fixtureServerIds(actor);
   const tenantWorkers = Array.from({ length: 30 }, (_, worker) => worker)
     .filter(worker => CACHE_COMPONENTS_ACTORS[worker % 4].at(-1) === actor.at(-1));
   let step = tenantWorkers.indexOf(index);
-  const pending = new Set();
-  page.on('request', request => pending.add(request.url()));
-  page.on('requestfinished', request => pending.delete(request.url()));
-  page.on('requestfailed', request => pending.delete(request.url()));
   await delay(index * 250);
   while (keepGoing()) {
     const iterationStarted = performance.now();
     const id = ids[step % ids.length];
+    const pending = new Set();
     try {
+      page = await context.newPage();
+      page.setDefaultTimeout(15000);
+      page.on('pageerror', error);
+      page.on('request', request => pending.add(request.url()));
+      page.on('requestfinished', request => pending.delete(request.url()));
+      page.on('requestfailed', request => pending.delete(request.url()));
       await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
       await page.getByTestId('monitoring-form').waitFor();
       // Read real Next proxy streams, cancel, and then navigate away while the inbox stream is open.
@@ -93,11 +97,16 @@ async function load(page, actor, index, keepGoing, error) {
       }
     } catch (failure) {
       if (keepGoing()) error(JSON.stringify({ failure: String(failure), actor, index,
-        url: page.url(), pending: [...pending].slice(0,12),
-        document: await page.evaluate(() => ({ ready: document.readyState,
+        url: page?.url(), pending: [...pending].slice(0,12),
+        document: await page?.evaluate(() => ({ ready: document.readyState,
           scripts: document.scripts.length, hidden: document.querySelectorAll('[hidden]').length,
           text: document.body.innerText.slice(0, 200) })).catch(() => null),
-        heading: await page.locator('h1').allTextContents().catch(() => []) }));
+        heading: await page?.locator('h1').allTextContents().catch(() => []) }));
+    } finally {
+      // Finish the tab lifecycle after each host visit. This cancels request
+      // readers and prefetches before the next visit in the same cookie context.
+      await page?.close().catch(() => undefined);
+      page = null;
     }
     step += tenantWorkers.length;
     await delay(Math.max(0, 5000 - (performance.now() - iterationStarted)));
@@ -112,7 +121,11 @@ for (let round = 1; round <= rounds; round++) {
   let running = true;
   let errors = 0;
   const failures = [];
-  const recordError = error => { errors += 1; if (failures.length < 100) failures.push(String(error)); };
+  const recordError = error => {
+    errors += 1;
+    if (failures.length < 100) failures.push(String(error));
+    writeFileSync(resolve(report, `round-${round}-errors.json`), JSON.stringify({ errors, failures }, null, 2));
+  };
   const samples = [];
   const log = createWriteStream(resolve(report, `round-${round}.log`));
   const raw = createWriteStream(resolve(report, `round-${round}.ndjson`));
@@ -134,15 +147,11 @@ for (let round = 1; round <= rounds; round++) {
       baseURL, viewport: { width: Math.floor(index / 8) % 2 ? 1440 : 390, height: 844 },
       locale: Math.floor(index / 4) % 2 ? 'zh-CN' : 'en-US',
     })));
-    const pages = await Promise.all(contexts.map(async (context, index) => {
+    await Promise.all(contexts.map(async (context, index) => {
       await context.addCookies([
         { name: 'upkk_access_token', value: `fixture-${CACHE_COMPONENTS_ACTORS[index % 4]}`, url: baseURL, httpOnly: true },
         { name: 'locale', value: Math.floor(index / 4) % 2 ? 'zh-CN' : 'en-US', url: baseURL },
       ]);
-      const page = await context.newPage();
-      page.setDefaultTimeout(15000);
-      page.on('pageerror', recordError);
-      return page;
     }));
     const started = performance.now();
     let phase = 'warmup';
@@ -155,17 +164,22 @@ for (let round = 1; round <= rounds; round++) {
       } catch (failure) { recordError(failure); }
     }
     await sample();
-    let sampling = false;
-    timer = setInterval(() => {
-      if (sampling) return;
-      sampling = true;
-      sample().finally(() => { sampling = false; });
-    }, 5000);
-    const jobs = pages.map((page, index) => load(page, CACHE_COMPONENTS_ACTORS[index % 4], index, () => running, recordError).catch(recordError));
+    let nextSample = started + 5000;
+    let sampling = true;
+    const scheduleSample = () => {
+      timer = setTimeout(async () => {
+        await sample();
+        nextSample += 5000;
+        if (sampling) scheduleSample();
+      }, Math.max(0, nextSample - performance.now()));
+    };
+    scheduleSample();
+    const jobs = contexts.map((context, index) => load(context, CACHE_COMPONENTS_ACTORS[index % 4], index, () => running, recordError).catch(recordError));
     console.log(`${identity.variant} round ${round}: pid ${nextProcess.pid}, 30 contexts, warmup ${warmupSeconds}s + measure ${measureSeconds}s`);
     await delay(warmupSeconds * 1000);
     phase = 'measure'; await setPhase(phase);
     await delay(measureSeconds * 1000);
+    sampling = false; clearTimeout(timer);
     await sample();
     running = false;
     await Promise.all(contexts.map(context => context.close()));
@@ -178,9 +192,11 @@ for (let round = 1; round <= rounds; round++) {
     const result = { metadata, samples, finalConnections, coverage: finalConnections.coverage };
     results.push(result);
     writeFileSync(resolve(report, `round-${round}.json`), JSON.stringify(result, null, 2));
-    console.log(JSON.stringify(summarizeRssRun(result)));
+    const summary = summarizeRssRun(result);
+    console.log(JSON.stringify(summary));
+    if (mode === 'full' && !summary.passed) break;
   } finally {
-    running = false; clearInterval(timer);
+    running = false; clearTimeout(timer);
     await Promise.all(browsers.map(browser => browser.close()));
     await stop(nextProcess); await stop(mockProcess);
     raw.end(); log.end();
