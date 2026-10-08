@@ -82,30 +82,29 @@ async function load(context, actor, index, keepGoing, measured, error, diagnose)
       const id = ids[step % ids.length];
       pending = new Set();
       try {
-      await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
-      await page.getByTestId('monitoring-form').waitFor();
-      // The console intentionally keeps SSE readers and App Router streams open;
-      // the browser's `load` event is therefore not a useful workload barrier.
-      // The monitoring form is the committed document marker used by the
-      // functional matrix, and is enough before the explicit stream-cancel step.
-      // Read real Next proxy streams, cancel, and then navigate away while the inbox stream is open.
-      await page.evaluate(async ({ id, operation }) => {
-        for (const url of [`/ops-stream/servers/${id}/operations/${operation}`, '/ai-stream/runs/fixture-run']) {
-          const controller = new AbortController();
-          const response = await fetch(url, { signal: controller.signal });
-          if (!response.ok) throw new Error(`Stream ${url}: ${response.status}`);
-          const reader = response.body.getReader();
-          await reader.read();
-          controller.abort();
-          await reader.cancel().catch(() => undefined);
-        }
-      }, { id, operation: FIXTURE_OPERATION });
-      // Cancel a real in-flight Link navigation with the next host document.
-      if (measured() && step % 5 === 0) {
-        await page.locator('a[data-workspace-category="files"]').click({ noWaitAfter: true });
         await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
         await page.getByTestId('monitoring-form').waitFor();
-      }
+        // Check meaningful UI; persistent streams are cancelled explicitly.
+        await page.evaluate(async ({ id, operation }) => {
+          for (const url of [`/ops-stream/servers/${id}/operations/${operation}`, '/ai-stream/runs/fixture-run']) {
+            const controller = new AbortController();
+            const response = await fetch(url, { signal: controller.signal });
+            if (!response.ok) throw new Error(`Stream ${url}: ${response.status}`);
+            const reader = response.body.getReader();
+            await reader.read();
+            controller.abort();
+            await reader.cancel().catch(() => undefined);
+          }
+        }, { id, operation: FIXTURE_OPERATION });
+        if (measured() && step % 5 === 0) {
+          await page.locator('a[data-workspace-category="files"]').click({ noWaitAfter: true });
+          await page.goto('about:blank', { waitUntil: 'commit' });
+          await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
+          await page.getByTestId('monitoring-form').waitFor();
+        }
+        // Dispose the old router/document before the next visit so a late
+        // client navigation cannot abort the following document navigation.
+        await page.goto('about:blank', { waitUntil: 'commit' });
       } catch (failure) {
         if (keepGoing()) {
           error(JSON.stringify({ failure: String(failure), actor, index, id,
