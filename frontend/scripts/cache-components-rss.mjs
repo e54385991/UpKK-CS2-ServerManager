@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, createWriteStream } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, createWriteStream, statfsSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { once } from 'node:events';
-import { hostname } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from '@playwright/test';
@@ -35,6 +35,10 @@ const hash = paths => createHash('sha256').update(Buffer.concat(paths.map(path =
 const controls = { node: process.version, platform: process.platform, arch: process.arch, host: hostname(),
   next: JSON.parse(readFileSync(resolve(build, 'node_modules/next/package.json'))).version,
   browserProcesses: 5, contexts: 30, visitSeconds,
+  nofile: execFileSync('sh', ['-c', 'ulimit -n'], { encoding: 'utf8' }).trim(),
+  tempFilesystemType: statfsSync(tmpdir()).type,
+  memoryLimitBytes: existsSync('/sys/fs/cgroup/memory.max')
+    ? readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim() : 'host',
   fixtureHash: hash(['../e2e/cache-components.mock.mjs', '../e2e/performance.mock.mjs', '../e2e/helpers/cache-components-surfaces.mjs', '../e2e/helpers/cache-components-responses.mjs']),
   workloadHash: hash(['cache-components-rss.mjs']),
 };

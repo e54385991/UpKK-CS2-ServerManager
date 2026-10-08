@@ -72,9 +72,13 @@ node scripts/cache-components-rss-report.mjs /tmp/upkk-cc-rss-baseline /tmp/upkk
 `smoke` 模式只验证负载设施能运行（10 秒预热、30 秒测量），输出强制标记为
 不完整，不能批准开启正式默认。完整内存和功能门禁均通过后，才开启两项默认。
 
-Linux 实际验收使用独立容器 `upkk-cc-acceptance`，镜像
+Linux 实际验收使用独立容器 `upkk-cc-acceptance-tmpfs`，镜像
 `mcr.microsoft.com/playwright:v1.63.0-noble`（digest:
 `sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27`），
-固定 Node 26.10.0 Linux arm64。两个版本在同一容器、同一安装依赖下重建，
+固定 Node 26.10.0 Linux arm64、10 GiB 容器内存限制、2 GiB `/dev/shm`、
+4 GiB `/tmp` tmpfs、65,536 文件描述符软/硬上限。Playwright 的临时文件和
+共享内存位于 tmpfs；文件系统类型、内存限制和描述符上限写入测量控制项，
+比较器拒绝混用不同条件。旧容器 `upkk-cc-acceptance` 的失败记录继续保留。
+两个版本使用已经在旧容器完成的同一构建及依赖副本，
 进程和 mock 只绑定容器 loopback；采样读取容器内实际 Next PID。原始报告通过
 `docker cp` 保留到隔离主机目录。不得以 macOS 调试失败样本作为 Linux 对照。
