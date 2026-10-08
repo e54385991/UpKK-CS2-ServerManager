@@ -7,10 +7,13 @@ let responses = structuredClone(INITIAL_RESPONSES);
 const fileContents = new Map();
 const port = Number(process.env.CC_MOCK_PORT ?? 38261);
 const stats = { activeStreams: 0, openedStreams: 0, cancelledStreams: 0, activeRequests: 0, activeSockets: 0, openedSockets: 0, closedSockets: 0 };
+const activeStreamPaths = new Map();
 const coverage = { warmup: new Set(), measure: new Set() };
 let phase = 'warmup';
 
 function stream(res, frames) {
+  const path = res.req.url.split('?')[0];
+  activeStreamPaths.set(path, (activeStreamPaths.get(path) ?? 0) + 1);
   stats.openedStreams += 1;
   stats.activeStreams += 1;
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
@@ -20,12 +23,16 @@ function stream(res, frames) {
     clearInterval(timer);
     stats.activeStreams -= 1;
     stats.cancelledStreams += 1;
+    const count = activeStreamPaths.get(path) - 1;
+    if (count) activeStreamPaths.set(path, count);
+    else activeStreamPaths.delete(path);
   });
 }
 
 async function extraHandler({ req, res, path, input, actor, json, server, inbox }) {
   if (path === '/__test__/connections') {
-    json({ ...stats, coverage: Object.fromEntries(Object.entries(coverage).map(([key, ids]) => [key, ids.size])) });
+    json({ ...stats, activeStreamPaths: Object.fromEntries(activeStreamPaths),
+      coverage: Object.fromEntries(Object.entries(coverage).map(([key, ids]) => [key, ids.size])) });
     return true;
   }
   if (path === '/__test__/phase') {

@@ -33,7 +33,26 @@ const handlers = [
 test("all 18 handlers preserve methods, bearer forwarding and stream cancellation", async ({ page, request }) => {
   await page.goto("/cc-navigation");
   for (const [method, path] of handlers) {
-    const result = await page.evaluate(async ({ method, path }) => {
+    const eventSource = method === "GET" && /^\/(ai-stream|cleanup-stream|ops-stream)\//.test(path);
+    const responsePromise = eventSource ? page.waitForResponse(response =>
+      new URL(response.url()).pathname === path) : null;
+    const result = await page.evaluate(async ({ method, path, eventSource }) => {
+      if (eventSource) {
+        const source = new EventSource(path);
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error(`Stream ${path}: no data`)), 10000);
+            const done = () => { clearTimeout(timer); resolve(); };
+            source.onmessage = done;
+            for (const type of ["progress", "inbox", "token_usage", "assistant_delta"]) {
+              source.addEventListener(type, done, { once: true });
+            }
+            source.onerror = () => { clearTimeout(timer); reject(new Error(`Stream ${path}: connection failed`)); };
+          });
+          await new Promise(resolve => setTimeout(resolve, 0));
+        } finally { source.close(); }
+        return null;
+      }
       const controller = new AbortController();
       let body: string | FormData | undefined;
       if (method === "POST" || method === "PATCH") {
@@ -49,13 +68,23 @@ test("all 18 handlers preserve methods, bearer forwarding and stream cancellatio
         await reader.cancel().catch(() => undefined);
       } else await response.text();
       return { status: response.status, type, redirected: response.redirected };
-    }, { method, path });
-    expect(result.status, `${method} ${path}`).toBe(200);
-    expect(result.redirected, path).toBe(false);
-    if (result.type.includes("text/event-stream")) {
-      await expect.poll(async () => (await connections(request)).activeStreams, {
+    }, { method, path, eventSource });
+    const response = responsePromise ? await responsePromise : null;
+    expect(response?.status() ?? result?.status, `${method} ${path}`).toBe(200);
+    expect(response ? response.request().redirectedFrom() !== null : result?.redirected, path).toBe(false);
+    if (response) expect(await response.headerValue("content-type")).toContain("text/event-stream");
+    if (eventSource || result?.type.includes("text/event-stream")) {
+      // A document navigation delivers the actual HTTP disconnect to the proxy.
+      // Soft navigation of the real assistant component is covered below.
+      await page.goto("/deployment-tutorial");
+      await expect(page).toHaveURL(url => url.pathname === "/deployment-tutorial");
+      await expect.poll(async () => {
+        const current = await connections(request);
+        return { activeStreams: current.activeStreams, activeStreamPaths: current.activeStreamPaths };
+      }, {
         message: `${method} ${path} must release its upstream stream`,
-      }).toBe(0);
+      }).toEqual({ activeStreams: 0, activeStreamPaths: {} });
+      await page.goto("/cc-navigation");
     }
   }
   const calls = (await state(request)).requests.filter((row: { path: string }) => row.path.startsWith("/api/"));
@@ -245,6 +274,13 @@ test("activity tray, upload, assistant SSE and live terminal survive navigation 
   await page.getByRole("button", { name: messages.assistant.send, exact: true }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: messages.assistant.continueWithoutServer, exact: true }).click();
   await expect(page.getByText("Fixture assistant stream", { exact: true })).toBeVisible();
+  const desktop = info.project.name.endsWith("1440");
+  if (!desktop) await page.getByRole("button", { name: messages.shell.openNav, exact: true }).click();
+  await page.getByTestId(desktop ? "console-sidebar" : "console-mobile-drawer")
+    .locator('a[data-nav-key="plugins"]').click();
+  await expect(page).toHaveURL(url => url.pathname === "/plugins");
+  await expect.poll(async () => (await connections(request)).activeStreamPaths[
+    "/api/v1/assistant/runs/fixture-run/events"] ?? 0).toBe(0);
   await page.goto("/live-console/1?view=game");
   await expect.poll(async () => (await connections(request)).activeSockets).toBe(1);
   await expect(page.locator(".xterm-screen")).toBeVisible();

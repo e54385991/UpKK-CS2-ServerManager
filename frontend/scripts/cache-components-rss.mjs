@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from '@playwright/test';
 import { prepareStandaloneAssets } from './with-internal-api-url.mjs';
 import { RSS_PROTOCOL, summarizeRssRun } from './cache-components-rss-analysis.mjs';
+import { resolveNextRuntime } from './cache-components-runtime.mjs';
 import { CACHE_COMPONENTS_ACTORS, fixtureServerIds, FIXTURE_OPERATION } from '../e2e/helpers/cache-components-surfaces.mjs';
 
 const [buildArg, reportArg, mode = 'full', roundsArg = '3'] = process.argv.slice(2);
@@ -18,6 +19,7 @@ if (!buildArg || !reportArg || !['full', 'smoke'].includes(mode)) {
 const build = resolve(buildArg);
 const report = resolve(reportArg);
 const identity = JSON.parse(readFileSync(resolve(build, 'acceptance/build-input.json'), 'utf8'));
+const nextRuntime = resolveNextRuntime();
 if (identity.testingApi) throw new Error('RSS measurements require a production build with the testing API disabled');
 if (execFileSync('ps', ['-eo', 'comm='], { encoding: 'utf8' }).split('\n')
   .some(command => command.trim().startsWith('next-build'))) {
@@ -36,12 +38,13 @@ const hash = paths => createHash('sha256').update(Buffer.concat(paths.map(path =
 const controls = { node: process.version, platform: process.platform, arch: process.arch, host: hostname(),
   next: JSON.parse(readFileSync(resolve(build, 'node_modules/next/package.json'))).version,
   browserProcesses: 5, contexts: 30, visitSeconds, startIntervalMs,
+  nextRuntime: nextRuntime.identity,
   nofile: execFileSync('sh', ['-c', 'ulimit -n'], { encoding: 'utf8' }).trim(),
   tempFilesystemType: statfsSync(tmpdir()).type,
   memoryLimitBytes: existsSync('/sys/fs/cgroup/memory.max')
     ? readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim() : 'host',
   fixtureHash: hash(['../e2e/cache-components.mock.mjs', '../e2e/performance.mock.mjs', '../e2e/helpers/cache-components-surfaces.mjs', '../e2e/helpers/cache-components-responses.mjs']),
-  workloadHash: hash(['cache-components-rss.mjs']),
+  workloadHash: hash(['cache-components-rss.mjs', 'cache-components-runtime.mjs']),
 };
 mkdirSync(report, { recursive: true });
 
@@ -92,13 +95,19 @@ async function load(context, actor, index, keepGoing, measured, error, diagnose)
         // Check meaningful UI; persistent streams are cancelled explicitly.
         await page.evaluate(async ({ id, operation }) => {
           for (const url of [`/ops-stream/servers/${id}/operations/${operation}`, '/ai-stream/runs/fixture-run']) {
-            const controller = new AbortController();
-            const response = await fetch(url, { signal: controller.signal });
-            if (!response.ok) throw new Error(`Stream ${url}: ${response.status}`);
-            const reader = response.body.getReader();
-            await reader.read();
-            controller.abort();
-            await reader.cancel().catch(() => undefined);
+            const source = new EventSource(url);
+            try {
+              await new Promise((resolve, reject) => {
+                const timer = setTimeout(() => reject(new Error(`Stream ${url}: no data`)), 10000);
+                const done = () => { clearTimeout(timer); resolve(); };
+                source.onmessage = done;
+                for (const type of ['progress', 'token_usage', 'assistant_delta']) {
+                  source.addEventListener(type, done, { once: true });
+                }
+                source.onerror = () => { clearTimeout(timer); reject(new Error(`Stream ${url}: connection failed`)); };
+              });
+              await new Promise(resolve => setTimeout(resolve, 0));
+            } finally { source.close(); }
           }
         }, { id, operation: FIXTURE_OPERATION });
         if (measured() && step % 5 === 0) {
@@ -176,7 +185,8 @@ for (let round = 1; round <= rounds; round++) {
     await ready(`${mockURL}/health`, mockProcess);
     const serverPath = resolve(build, '.next/standalone/server.js');
     prepareStandaloneAssets(build, serverPath);
-    nextProcess = spawn(process.execPath, [serverPath], { cwd: resolve(build, '.next/standalone'), env });
+    nextProcess = spawn(nextRuntime.executable, [...nextRuntime.prefix, serverPath],
+      { cwd: resolve(build, '.next/standalone'), env });
     nextProcess.stdout.pipe(log, { end: false }); nextProcess.stderr.pipe(log, { end: false });
     await ready(`${listenerURL}/login`, nextProcess);
     browsers = await Promise.all(Array.from({ length: controls.browserProcesses }, () => chromium.launch({ headless: true,

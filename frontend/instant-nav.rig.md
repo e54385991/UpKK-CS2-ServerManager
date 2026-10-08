@@ -44,6 +44,10 @@ RSS 使用 `scripts/cache-components-rss.mjs`，直接启动 standalone `server.
 宽度，固定轮转完整 500 个
 服务器 ID，并反复读取、取消活动队列和助手 SSE，正式负载加入文档导航取消。真实 Link
 导航由独立功能矩阵覆盖。
+SSE 使用产品的 EventSource 接口，收到真实首帧后关闭；文档导航结束旧页面的
+连接。Handler 契约验证实际 HTTP 断连后释放，真实助手组件另以侧栏 Link
+软导航验证清理。仍核对 5 秒内释放及最终打开/取消计数相等，不通过重置计数
+掩盖残留；mock 的 `activeStreamPaths` 保留按路径的诊断信息。
 每个上下文按固定 15 秒迭代节奏执行，服务器 ID 按同租户上下文分片，确保
 预热完整覆盖 500 个 ID。30 个首次访问以 500ms 间隔均匀分散到一个完整迭代
 周期内；访问节奏和首次间隔同样写入控制项，不混用不同请求分布的结果。
@@ -85,3 +89,34 @@ Linux 实际验收使用独立容器 `upkk-cc-acceptance-tmpfs`，镜像
 两个版本使用已经在旧容器完成的同一构建及依赖副本，
 进程和 mock 只绑定容器 loopback；采样读取容器内实际 Next PID。原始报告通过
 `docker cp` 保留到隔离主机目录。不得以 macOS 调试失败样本作为 Linux 对照。
+
+Next 受测运行时使用 `frontend/Dockerfile` 已锁定的生产镜像
+`node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80`。
+将该镜像根文件系统导出到容器内 `/acceptance/production-runtime`，以自己的
+musl 加载器、库及 Node 执行 Next。浏览器与 mock 继续使用相同版本的 GNU Node；
+两者和 Next 的版本、平台及架构必须相同。运行器不经 shell 包装服务，采样 PID
+仍是实际 Next 进程。镜像 digest、Node 与加载器 SHA-256、libc 写入控制项，
+不同 libc 或二进制的结果不能混用；生产镜像及应用启动配置没有改动。
+
+提取步骤（先建好专用 Playwright 容器，以下命令只处理隔离测试环境）：
+
+```bash
+docker create --name upkk-cc-production-runtime-image \
+  node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 true
+docker exec upkk-cc-acceptance-tmpfs mkdir /acceptance/production-runtime
+docker export upkk-cc-production-runtime-image | \
+  docker exec -i upkk-cc-acceptance-tmpfs tar -C /acceptance/production-runtime -xf -
+```
+
+本机对应 Docker context 为 `colima-pyvideo-paths`，每个 docker 命令加上
+`--context colima-pyvideo-paths`；提取镜像的容器不启动应用。
+
+```bash
+CC_RSS_RUNTIME_ROOT=/acceptance/production-runtime \
+CC_RSS_RUNTIME_IMAGE_DIGEST=sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 \
+node scripts/cache-components-rss.mjs /acceptance/baseline /acceptance/rss-baseline-musl full
+```
+
+候选使用同一组运行时变量；导航启动器 `run-cache-components.mjs` 也支持它们。
+未指定时使用当前 Node，保留 macOS/CI 的导航测试能力；历史 glibc 样本继续保留，
+不能将只在历史环境通过的结果视为这组生产运行时证据。
