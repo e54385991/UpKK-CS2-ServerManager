@@ -27,7 +27,7 @@ const rounds = mode === 'full' ? Number(roundsArg) : 1;
 if (mode === 'full' && rounds !== 3) throw new Error('The acceptance protocol requires exactly three rounds');
 const warmupSeconds = mode === 'full' ? RSS_PROTOCOL.warmupSeconds : 10;
 const measureSeconds = mode === 'full' ? RSS_PROTOCOL.measureSeconds : 30;
-const visitSeconds = 15;
+const visitSeconds = 30;
 const baseURL = 'http://cache-components.test:31961';
 const listenerURL = 'http://127.0.0.1:31961';
 const mockURL = 'http://127.0.0.1:38261';
