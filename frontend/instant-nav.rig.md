@@ -44,10 +44,14 @@ RSS 使用 `scripts/cache-components-rss.mjs`，直接启动 standalone `server.
 宽度，固定轮转完整 500 个
 服务器 ID，并反复读取、取消活动队列和助手 SSE，正式负载加入文档导航取消。真实 Link
 导航由独立功能矩阵覆盖。
-每个上下文按固定 5 秒迭代节奏执行，服务器 ID 按同租户上下文分片，确保
+每个上下文按固定 15 秒迭代节奏执行，服务器 ID 按同租户上下文分片，确保
 预热完整覆盖 500 个 ID。每次访问结束后关闭 tab，再在同一 cookie 上下文创建
 tab，完成请求读者与预取的取消，避免旧 tab 的未结束请求积累。采样按绝对时间
 每 5 秒调度，错误实时落盘；两个版本共用相同负载代码和 fixture。
+正常访问等待文档完整加载；正式阶段从真实工作区 Link 发起导航并取消。
+完整模式首个错误即停止，关闭上下文及流后落盘；超时另记录独立 HTTP 探测和
+进程信息。运行前必须结束同一隔离主机上的构建和其他浏览器回归，不能与长测
+重叠；脚本拒绝启用了测试 API 的构建，并检查同进程环境中的 Next 构建进程。
 
 ```bash
 node scripts/cache-components-rss.mjs /tmp/upkk-cc-build-baseline /tmp/upkk-cc-rss-baseline full

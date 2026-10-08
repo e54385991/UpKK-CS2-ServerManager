@@ -18,17 +18,23 @@ if (!buildArg || !reportArg || !['full', 'smoke'].includes(mode)) {
 const build = resolve(buildArg);
 const report = resolve(reportArg);
 const identity = JSON.parse(readFileSync(resolve(build, 'acceptance/build-input.json'), 'utf8'));
+if (identity.testingApi) throw new Error('RSS measurements require a production build with the testing API disabled');
+if (execFileSync('ps', ['-eo', 'comm='], { encoding: 'utf8' }).split('\n')
+  .some(command => command.trim().startsWith('next-build'))) {
+  throw new Error('Finish Next production builds before starting the isolated RSS workload');
+}
 const rounds = mode === 'full' ? Number(roundsArg) : 1;
 if (mode === 'full' && rounds !== 3) throw new Error('The acceptance protocol requires exactly three rounds');
 const warmupSeconds = mode === 'full' ? RSS_PROTOCOL.warmupSeconds : 10;
 const measureSeconds = mode === 'full' ? RSS_PROTOCOL.measureSeconds : 30;
+const visitSeconds = 15;
 const baseURL = 'http://cache-components.test:31961';
 const listenerURL = 'http://127.0.0.1:31961';
 const mockURL = 'http://127.0.0.1:38261';
 const hash = paths => createHash('sha256').update(Buffer.concat(paths.map(path => readFileSync(resolve(import.meta.dirname, path))))).digest('hex');
 const controls = { node: process.version, platform: process.platform, arch: process.arch, host: hostname(),
   next: JSON.parse(readFileSync(resolve(build, 'node_modules/next/package.json'))).version,
-  browserProcesses: 5, contexts: 30,
+  browserProcesses: 5, contexts: 30, visitSeconds,
   fixtureHash: hash(['../e2e/cache-components.mock.mjs', '../e2e/performance.mock.mjs', '../e2e/helpers/cache-components-surfaces.mjs', '../e2e/helpers/cache-components-responses.mjs']),
   workloadHash: hash(['cache-components-rss.mjs']),
 };
@@ -57,7 +63,7 @@ async function setPhase(phase) {
   await fetch(`${mockURL}/__test__/phase`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phase }) });
 }
 
-async function load(context, actor, index, keepGoing, error) {
+async function load(context, actor, index, keepGoing, measured, error, diagnose) {
   let page = null;
   const ids = fixtureServerIds(actor);
   const tenantWorkers = Array.from({ length: 30 }, (_, worker) => worker)
@@ -77,6 +83,7 @@ async function load(context, actor, index, keepGoing, error) {
       page.on('requestfailed', request => pending.delete(request.url()));
       await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
       await page.getByTestId('monitoring-form').waitFor();
+      await page.waitForLoadState('load');
       // Read real Next proxy streams, cancel, and then navigate away while the inbox stream is open.
       await page.evaluate(async ({ id, operation }) => {
         for (const url of [`/ops-stream/servers/${id}/operations/${operation}`, '/ai-stream/runs/fixture-run']) {
@@ -90,18 +97,18 @@ async function load(context, actor, index, keepGoing, error) {
         }
       }, { id, operation: FIXTURE_OPERATION });
       // Cancel a real in-flight Link navigation with the next host document.
-      if (step % 5 === 0) {
-        await page.goto(`/servers/${id}/files`, { waitUntil: 'commit' });
+      if (measured() && step % 5 === 0) {
+        await page.locator('a[data-workspace-category="files"]').click({ noWaitAfter: true });
         await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
         await page.getByTestId('monitoring-form').waitFor();
+        await page.waitForLoadState('load');
       }
     } catch (failure) {
-      if (keepGoing()) error(JSON.stringify({ failure: String(failure), actor, index,
-        url: page?.url(), pending: [...pending].slice(0,12),
-        document: await page?.evaluate(() => ({ ready: document.readyState,
-          scripts: document.scripts.length, hidden: document.querySelectorAll('[hidden]').length,
-          text: document.body.innerText.slice(0, 200) })).catch(() => null),
-        heading: await page?.locator('h1').allTextContents().catch(() => []) }));
+      if (keepGoing()) {
+        error(JSON.stringify({ failure: String(failure), actor, index, id,
+          url: page?.url(), pending: [...pending].slice(0, 12) }));
+        await diagnose(actor, index, id);
+      }
     } finally {
       // Finish the tab lifecycle after each host visit. This cancels request
       // readers and prefetches before the next visit in the same cookie context.
@@ -109,7 +116,7 @@ async function load(context, actor, index, keepGoing, error) {
       page = null;
     }
     step += tenantWorkers.length;
-    await delay(Math.max(0, 5000 - (performance.now() - iterationStarted)));
+    await delay(Math.max(0, visitSeconds * 1000 - (performance.now() - iterationStarted)));
   }
 }
 
@@ -120,13 +127,36 @@ for (let round = 1; round <= rounds; round++) {
   let browsers = [];
   let running = true;
   let errors = 0;
+  const roundStop = new AbortController();
   const failures = [];
   const recordError = error => {
     errors += 1;
     if (failures.length < 100) failures.push(String(error));
     writeFileSync(resolve(report, `round-${round}-errors.json`), JSON.stringify({ errors, failures }, null, 2));
+    if (mode === 'full') { running = false; roundStop.abort(); }
   };
+  const interrupt = () => { recordError('RSS round interrupted by process signal'); running = false; roundStop.abort(); };
+  process.once('SIGINT', interrupt); process.once('SIGTERM', interrupt);
+  async function waitForLoad(seconds) {
+    try { await delay(seconds * 1000, undefined, { signal: roundStop.signal }); }
+    catch (error) { if (!roundStop.signal.aborted) throw error; }
+  }
   const samples = [];
+  const diagnostics = [];
+  async function diagnose(actor, index, id) {
+    const started = performance.now();
+    let http;
+    try {
+      const response = await fetch(`${listenerURL}/servers/${id}/monitoring`, {
+        headers: { cookie: `upkk_access_token=fixture-${actor}; locale=${Math.floor(index / 4) % 2 ? 'zh-CN' : 'en-US'}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      http = { status: response.status, bytes: (await response.arrayBuffer()).byteLength };
+    } catch (failure) { http = { failure: String(failure) }; }
+    diagnostics.push({ actor, index, id, http, milliseconds: performance.now() - started,
+      processes: execFileSync('ps', ['-eo', 'pid,ppid,rss,pcpu,stat,comm'], { encoding: 'utf8' }) });
+    writeFileSync(resolve(report, `round-${round}-diagnostics.json`), JSON.stringify(diagnostics, null, 2));
+  }
   const log = createWriteStream(resolve(report, `round-${round}.log`));
   const raw = createWriteStream(resolve(report, `round-${round}.ndjson`));
   let timer;
@@ -174,11 +204,14 @@ for (let round = 1; round <= rounds; round++) {
       }, Math.max(0, nextSample - performance.now()));
     };
     scheduleSample();
-    const jobs = contexts.map((context, index) => load(context, CACHE_COMPONENTS_ACTORS[index % 4], index, () => running, recordError).catch(recordError));
+    const jobs = contexts.map((context, index) => load(context, CACHE_COMPONENTS_ACTORS[index % 4], index,
+      () => running, () => phase === 'measure', recordError, diagnose).catch(recordError));
     console.log(`${identity.variant} round ${round}: pid ${nextProcess.pid}, 30 contexts, warmup ${warmupSeconds}s + measure ${measureSeconds}s`);
-    await delay(warmupSeconds * 1000);
-    phase = 'measure'; await setPhase(phase);
-    await delay(measureSeconds * 1000);
+    await waitForLoad(warmupSeconds);
+    if (!roundStop.signal.aborted) {
+      phase = 'measure'; await setPhase(phase);
+      await waitForLoad(measureSeconds);
+    }
     sampling = false; clearTimeout(timer);
     await sample();
     running = false;
@@ -197,6 +230,7 @@ for (let round = 1; round <= rounds; round++) {
     if (mode === 'full' && !summary.passed) break;
   } finally {
     running = false; clearTimeout(timer);
+    process.off('SIGINT', interrupt); process.off('SIGTERM', interrupt);
     await Promise.all(browsers.map(browser => browser.close()));
     await stop(nextProcess); await stop(mockProcess);
     raw.end(); log.end();
