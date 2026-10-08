@@ -64,3 +64,57 @@ async def test_health_checks_release_db_and_use_bounded_concurrency(monkeypatch)
 
     assert 1 < maximum_active <= MAX_CONCURRENT_HEALTH_CHECKS
     assert monitor.last_check_times == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_source", ["child", "parent"])
+async def test_health_check_cancellation_drains_active_and_queued_checks(
+    monkeypatch, cancel_source
+):
+    servers = [SimpleNamespace(id=server_id) for server_id in range(8)]
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def execute(self, _statement):
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: servers))
+
+    monkeypatch.setattr("modules.database.async_session_maker", Session)
+    monitor = SSHHealthMonitor()
+    saturated = asyncio.Event()
+    started = set()
+    cleaned = set()
+
+    async def check(server):
+        started.add(server.id)
+        if len(started) == MAX_CONCURRENT_HEALTH_CHECKS:
+            saturated.set()
+        try:
+            await saturated.wait()
+            if cancel_source == "child" and server.id == 0:
+                raise asyncio.CancelledError
+            await asyncio.Event().wait()
+        finally:
+            # Connection teardown can itself yield; cancellation must await it.
+            await asyncio.sleep(0)
+            cleaned.add(server.id)
+
+    monkeypatch.setattr(monitor, "_check_server_health", check)
+    existing_tasks = asyncio.all_tasks()
+    batch = asyncio.create_task(monitor._check_all_servers())
+    try:
+        await asyncio.wait_for(saturated.wait(), timeout=1)
+        if cancel_source == "parent":
+            batch.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(batch, timeout=1)
+        assert len(started) >= MAX_CONCURRENT_HEALTH_CHECKS
+        assert cleaned == started
+        assert asyncio.all_tasks() <= existing_tasks
+    finally:
+        batch.cancel()
+        await asyncio.gather(batch, return_exceptions=True)

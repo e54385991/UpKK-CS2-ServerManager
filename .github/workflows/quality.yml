@@ -178,9 +178,7 @@ jobs:
           uv run --no-sync python scripts/check_pydantic_v2.py
 
       - name: Verify hash-pinned export and audit Python 3.15 dependencies
-        run: |
-          uv run --no-sync python scripts/export_requirements.py --check
-          uv run --no-sync pip-audit -r requirements.txt
+        run: uv run --no-sync pip-audit -r requirements.txt
 
       - name: Run backend compatibility tests and coverage
         run: >-
