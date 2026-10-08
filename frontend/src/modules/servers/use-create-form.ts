@@ -26,9 +26,9 @@ import type {
 } from "@/modules/servers/setup-api";
 import { alertDialog } from "@/shared/feedback/alert-store";
 import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import {
   useCallback,
   useEffect,

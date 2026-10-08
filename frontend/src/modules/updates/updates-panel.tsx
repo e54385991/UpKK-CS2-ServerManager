@@ -8,7 +8,7 @@ import {
   listRegisterMarketOptions,
 } from "@/modules/updates/api";
 import { GameUpdatesConsole } from "@/modules/updates/game-updates-console";
-import { UpdatesConsole } from "@/modules/updates/updates-console";
+import { UpdatesConsole } from "@/modules/updates/updates-console-loader";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 

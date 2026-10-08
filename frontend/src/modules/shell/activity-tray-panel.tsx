@@ -1,8 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
-import type { Route } from "next";
+import { Link } from "@/i18n/navigation";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { memo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Ban, LoaderCircle, Trash2, X } from "lucide-react";

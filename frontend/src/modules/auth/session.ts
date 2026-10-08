@@ -1,6 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { redirect } from "@/i18n/redirect";
 import type { SessionUserDto } from "@/shared/api/types";
 import {
   SESSION_COOKIE,

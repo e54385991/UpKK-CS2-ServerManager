@@ -20,6 +20,8 @@ test('smoke, missing hosts, wrong PID and unreleased streams fail closed', () =>
     r => { r.metadata.mode = 'smoke'; }, r => { r.coverage.warmup = 499; },
     r => { r.samples[0].pid = 456; }, r => { r.finalConnections.activeStreams = 1; },
     r => { r.metadata.errors = 1; },
+    r => { r.samples[0].rssBytes = Infinity; },
+    r => { r.samples.splice(100, 5); },
   ]) { const sample = run(); change(sample); assert.equal(summarizeRssRun(sample).passed, false); }
 });
 test('each round must be stable even when aggregate p95 is below regression limit', () => {

@@ -1,25 +1,14 @@
 import { getRequestConfig } from "next-intl/server";
-import { cookies, headers } from "next/headers";
-import { LOCALE_COOKIE, resolveLocale } from "@/i18n/config";
+import { locale as rootLocale } from "next/root-params";
+import { notFound } from "next/navigation";
+import { isLocale } from "@/i18n/config";
 import { withMonitorMessages } from "@/i18n/monitor-messages";
 
-/**
- * i18n without URL routing: the active locale comes from the `locale` cookie,
- * then from the browser's highest-priority Accept-Language value. Chinese
- * resolves to zh-CN; every other value defaults to en-US. This keeps URLs clean
- * (no /[locale] segment) while remaining SSR-authoritative.
- */
-export default getRequestConfig(async () => {
-  const [cookieStore, incoming] = await Promise.all([cookies(), headers()]);
-  const cookieLocale = cookieStore.get(LOCALE_COOKIE)?.value;
-  const active = resolveLocale(
-    cookieLocale,
-    incoming.get("accept-language"),
-  );
+// Proxy resolves the existing cookie / Accept-Language policy into a root
+// parameter. Only local dictionaries are shared; API data remains no-store.
+export default getRequestConfig(async ({ locale }) => {
+  const active = locale ?? await rootLocale();
+  if (!isLocale(active)) notFound();
   const messages = (await import(`@/i18n/messages/${active}.json`)).default;
-
-  return {
-    locale: active,
-    messages: await withMonitorMessages(active, messages),
-  };
+  return { locale: active, messages: await withMonitorMessages(active, messages) };
 });

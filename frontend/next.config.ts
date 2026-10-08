@@ -27,6 +27,7 @@ const INTERNAL_API_URL = internalApiUrl();
 // commit SHA; local development may override it explicitly.
 const DEPLOYMENT_ID = [process.env.NEXT_DEPLOYMENT_ID, process.env.GIT_SHA]
   .find((value) => value && value !== "unknown");
+const isolatedCandidate = process.env.CC_TEST_BUILD === "1" && process.env.CC_CANDIDATE_BUILD === "1";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -37,19 +38,21 @@ const nextConfig: NextConfig = {
   // Handwritten frontend/AGENTS.md instructions use no managed markers.
   // Next 16.4 removes managed blocks when agentRules is disabled.
   agentRules: false,
+  // Preserve the actual internal origin: NextURL normalizes loopback IPs to
+  // localhost, which turns a locale rewrite into an external self-proxy.
+  skipProxyUrlNormalize: true,
   // `localhost` and `127.0.0.1` are different Origins. Without this, opening
   // http://127.0.0.1:31800 or a LAN IP blocks `/_next/static` and the login
   // CAPTCHA never hydrates. Also allows the INTERNAL_API_URL / PUBLIC_APP_URL
   // host so a LAN or Docker access name does not need ALLOWED_DEV_ORIGINS.
   // Extra hosts: ALLOWED_DEV_ORIGINS=host1,host2
   allowedDevOrigins: lanDevOrigins(),
-  // cacheComponents / partialPrefetching are intentionally OFF. See
-  // frontend/AGENTS.md ("Caching & navigation"): every route is authenticated
-  // and locale-cookie driven, so the shell is inherently dynamic and gains
-  // little from a prerendered App Shell; enabling the flags fails prerender for
-  // the cookie reads, and the upstream cacheComponents memory-growth gate from
-  // the plan is unmet. Non-blocking navigation is delivered via the shared App
-  // Shell + per-route loading.tsx + Suspense + <Link> prefetch.
+  // Formal defaults stay off until functional, instant-navigation and RSS gates pass.
+  cacheComponents: isolatedCandidate,
+  partialPrefetching: isolatedCandidate,
+  experimental: {
+    exposeTestingApiInProductionBuild: isolatedCandidate && process.env.CC_EXPOSE_TEST_API === "1",
+  },
   // This app lives in a monorepo alongside the FastAPI backend; pin the
   // Turbopack root to this package so Next does not infer the repository root.
   turbopack: {

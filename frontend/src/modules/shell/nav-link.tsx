@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { Route } from "next";
+import { Link } from "@/i18n/navigation";
+import { usePathname } from "@/i18n/navigation";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import type { LucideIcon } from "lucide-react";
-import type { MouseEventHandler } from "react";
+import { Suspense, type MouseEventHandler } from "react";
 import { cn } from "@/shared/lib/cn";
-import { navPathMatches } from "@/shared/config/navigation";
+import { activeNavHref, navPathMatches, type NavItem } from "@/shared/config/navigation";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 
 /**
@@ -14,24 +14,28 @@ import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
  * so the App Shell and route payload load ahead of the click, and marks the
  * target immediately on click so feedback does not wait on `useLinkStatus`.
  */
-export function NavLink({
-  href,
-  label,
-  icon: Icon,
-  active: activeOverride,
-  navKey,
-  onClick,
-}: {
+type NavLinkProps = {
   href: Route;
   label: string;
   icon: LucideIcon;
   active?: boolean;
   navKey?: string;
+  items?: readonly NavItem[];
   onClick?: MouseEventHandler<HTMLAnchorElement>;
-}) {
-  const pathname = usePathname();
-  const active = activeOverride ?? navPathMatches(pathname, href);
+};
 
+export function NavLink(props: NavLinkProps) {
+  return <Suspense fallback={<NavLinkView {...props} active={false} />}>
+    <ActiveNavLink {...props} />
+  </Suspense>;
+}
+function ActiveNavLink(props: NavLinkProps) {
+  const pathname = usePathname();
+  const active = props.active ?? (props.items
+    ? activeNavHref(pathname, props.items) === props.href : navPathMatches(pathname, props.href));
+  return <NavLinkView {...props} active={active} />;
+}
+function NavLinkView({ href, label, icon: Icon, active, navKey, onClick }: NavLinkProps) {
   return (
     <Link
       href={href}

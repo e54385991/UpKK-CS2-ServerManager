@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link } from "@/i18n/navigation";
+import { usePathname } from "@/i18n/navigation";
 import { Menu, X, Crosshair } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { activeNavHref, NAV_SECTIONS } from "@/shared/config/navigation";
+import { NAV_SECTIONS } from "@/shared/config/navigation";
 import { NavLink } from "@/modules/shell/nav-link";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 import { Button } from "@/shared/ui/button";
@@ -22,7 +22,7 @@ import { Button } from "@/shared/ui/button";
  * Open state is tied to the current pathname so a navigation automatically
  * dismisses the drawer without an effect.
  */
-export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
+export function MobileNav({ admin }: { admin?: React.ReactNode }) {
   const pathname = usePathname();
   const [openPath, setOpenPath] = useState<string | null>(null);
   const open = openPath === pathname;
@@ -83,10 +83,9 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
         <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
           {NAV_SECTIONS.map((section) => {
             const items = section.items.filter(
-              (item) => !item.adminOnly || isAdmin,
+              (item) => !item.adminOnly,
             );
             if (items.length === 0) return null;
-            const activeHref = activeNavHref(pathname, items);
             return (
               <div key={section.titleKey}>
                 <p className="px-3 pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-fg-subtle">
@@ -100,15 +99,16 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
                       label={t(item.key)}
                       icon={item.icon}
                       navKey={item.key}
-                      active={item.href === activeHref}
+                      items={items}
                       onClick={
-                        item.href === activeHref
+                        item.href === pathname
                           ? () => setOpenPath(null)
                           : undefined
                       }
                     />
                   ))}
                 </div>
+                {section.items.some(item => item.adminOnly) ? <div onClick={() => setOpenPath(null)}>{admin}</div> : null}
               </div>
             );
           })}

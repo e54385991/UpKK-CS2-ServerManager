@@ -1,4 +1,4 @@
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import type { ServerListScope, ServerStatus } from "@/modules/servers/types";
 
 export const SERVER_WORKSPACE_NAV_ROWS = [

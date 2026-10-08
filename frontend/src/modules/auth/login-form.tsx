@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, type FormEvent } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
+import { Link } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { useTranslations } from "next-intl";
 import { RefreshCw, LogIn, TriangleAlert } from "lucide-react";
 import { GoogleLoginButton } from "@/modules/auth/google-login";

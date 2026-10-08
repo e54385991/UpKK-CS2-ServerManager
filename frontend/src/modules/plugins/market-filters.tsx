@@ -1,9 +1,10 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useCallback, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { Search } from "lucide-react";
 import { MARKET_SORTS, PLUGIN_CATEGORIES } from "@/modules/plugins/types";
 import { Button } from "@/shared/ui/button";

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { Trash2 } from "lucide-react";
 import {
   mapchooserMarketHref,

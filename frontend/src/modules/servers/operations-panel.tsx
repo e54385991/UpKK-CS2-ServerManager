@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
 import { listCustomCommands } from "@/modules/commands/api";
-import { CommandsConsole } from "@/modules/commands/commands-console";
+import { CommandsConsole } from "@/modules/commands/commands-console-loader";
 import { listOperationLogs } from "@/modules/servers/api";
 import { getCurrentServerOperation, getDeploymentLock } from "@/modules/servers/render-queries";
 import { OperationsConsole } from "@/modules/servers/operations-console";

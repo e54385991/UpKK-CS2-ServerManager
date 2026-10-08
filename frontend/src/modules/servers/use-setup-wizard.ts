@@ -23,9 +23,9 @@ import { confirm as confirmDialog } from "@/shared/feedback/confirm-store";
 import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
 import { copyText } from "@/shared/lib/clipboard";
 import { randomId } from "@/shared/lib/random-id";
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import {
   useCallback,
   useEffect,

@@ -1,4 +1,4 @@
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { getTranslations } from "next-intl/server";
 import { Puzzle, TriangleAlert } from "lucide-react";
 import { GitHubInstallForm } from "@/modules/plugins/github-install-form";

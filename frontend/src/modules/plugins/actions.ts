@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePublicPath as revalidatePath } from "@/i18n/revalidate";
 import { getSession } from "@/modules/auth/session";
 import type { ActionResultDto } from "@/shared/api/types";
 import type { ApiResult } from "@/shared/api/server-fetch";

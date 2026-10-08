@@ -16,7 +16,9 @@ export function summarizeRssRun(run) {
     metadata.warmupSeconds === 300 && metadata.measureSeconds === 3600 &&
     measured.length >= 720 && samples.at(-1)?.elapsedSeconds >= 3900 &&
     coverage.warmup === 500 && coverage.measure === 500 &&
-    samples.every(sample => sample.pid === metadata.nextPid && sample.rssBytes > 0);
+    measured[0]?.elapsedSeconds <= 310 &&
+    samples.every((sample, index) => sample.pid === metadata.nextPid && Number.isFinite(sample.rssBytes) && sample.rssBytes > 0 &&
+      (index === 0 || sample.elapsedSeconds - samples[index - 1].elapsedSeconds <= 10));
   const growth = first.length && last.length
     ? quantile(last.map(sample => sample.rssBytes), 0.5) /
       quantile(first.map(sample => sample.rssBytes), 0.5) : null;

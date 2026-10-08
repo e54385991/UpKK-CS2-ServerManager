@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { useState, type ComponentProps, type ReactNode } from "react";
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 
 type PendingNavLinkProps = Omit<

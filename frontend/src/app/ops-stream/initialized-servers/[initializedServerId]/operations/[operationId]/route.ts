@@ -4,8 +4,6 @@ import { sessionTokenFrom } from "@/modules/auth/session";
 import { internalApiUrl } from "@/shared/config/internal-api";
 import { pipeUnbuffered } from "@/shared/server/stream-proxy";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 export async function GET(
   request: NextRequest,

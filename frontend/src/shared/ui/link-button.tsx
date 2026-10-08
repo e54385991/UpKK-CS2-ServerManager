@@ -1,5 +1,5 @@
-import Link from "next/link";
-import type { Route } from "next";
+import { Link } from "@/i18n/navigation";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import type { ReactNode } from "react";
 import { Button, type ButtonProps } from "@/shared/ui/button";
 

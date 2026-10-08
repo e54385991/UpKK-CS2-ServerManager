@@ -20,7 +20,6 @@ import type { ServerOperationAction } from "@/modules/servers/types";
  * cannot send the HttpOnly JWT, and hashed Server Actions go stale after a
  * Docker image pull — that remounts the workspace and looks like a freeze.
  */
-export const dynamic = "force-dynamic";
 
 function parseServerId(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;

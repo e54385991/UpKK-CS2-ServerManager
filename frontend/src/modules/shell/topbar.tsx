@@ -1,55 +1,32 @@
+import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
-import { MobileNav } from "@/modules/shell/mobile-nav";
-import { UserMenu } from "@/modules/shell/user-menu";
-import { LanguageSwitcher } from "@/modules/shell/language-switcher";
+import { MobileNav } from "./mobile-nav";
+import { LanguageSwitcher } from "./language-switcher";
+import { AdminNavigationSlot, UserMenuSlot, ActivityTraySlot, AnnouncementSlot, SshPoolSlot } from "./session-slots";
 import { StatusDot } from "@/shared/ui/badge";
-import { ActivityTray } from "@/modules/shell/activity-tray";
-import { SshPoolBadge } from "@/modules/shell/ssh-pool-badge";
-import type { SessionUser } from "@/modules/auth/session";
-import type {
-  Announcement,
-  CS2UpdateNotice,
-} from "@/modules/announcements/types";
-import { AnnouncementCenter } from "@/modules/announcements/announcement-center";
-import { CS2UpdateNoticePopover } from "@/modules/announcements/cs2-update-notice-popover";
+import { Skeleton } from "@/shared/ui/skeleton";
+import { Menu } from "lucide-react";
+import { Button } from "@/shared/ui/button";
 
-/**
- * Persistent top bar. Holds the mobile navigation trigger, a live gateway
- * status indicator, the language switcher, and the user menu. Rendered once by
- * the console layout so it never unmounts during navigation.
- */
-export async function Topbar({
-  user,
-  announcements,
-  cs2UpdateNotice,
-}: {
-  user: SessionUser;
-  announcements: readonly Announcement[];
-  cs2UpdateNotice: CS2UpdateNotice | null;
-}) {
+export async function Topbar() {
   const t = await getTranslations("shell");
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-canvas/80 px-4 backdrop-blur-md">
-      <MobileNav isAdmin={user.isAdmin} />
-
+      <Suspense fallback={<Button variant="ghost" size="icon" className="md:hidden" disabled aria-label={t("openNav")}><Menu className="size-5" /></Button>}>
+        <MobileNav admin={<Suspense fallback={null}><AdminNavigationSlot /></Suspense>} />
+      </Suspense>
       <div className="flex items-center gap-3 text-xs text-fg-subtle">
         <span className="inline-flex items-center gap-2">
           <StatusDot tone="ok" pulse />
           <span className="hidden sm:inline">{t("gatewayOnline")}</span>
         </span>
-        <SshPoolBadge />
+        <Suspense fallback={<Skeleton className="h-4 w-16" />}><SshPoolSlot /></Suspense>
       </div>
-
       <div className="ml-auto flex items-center gap-2">
-        <AnnouncementCenter
-          announcements={announcements}
-        />
-        {cs2UpdateNotice ? (
-          <CS2UpdateNoticePopover notice={cs2UpdateNotice} />
-        ) : null}
-        <ActivityTray isAdmin={user.isAdmin} />
+        <Suspense fallback={<Skeleton className="size-9" />}><AnnouncementSlot /></Suspense>
+        <Suspense fallback={<Skeleton className="size-9" />}><ActivityTraySlot /></Suspense>
         <LanguageSwitcher />
-        <UserMenu user={user} />
+        <Suspense fallback={<Skeleton className="size-9" />}><UserMenuSlot /></Suspense>
       </div>
     </header>
   );

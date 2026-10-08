@@ -1,5 +1,5 @@
-import Link from "next/link";
-import type { Route } from "next";
+import { Link } from "@/i18n/navigation";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { getFormatter, getTranslations } from "next-intl/server";
 import { ServerOff, TriangleAlert } from "lucide-react";
 import {

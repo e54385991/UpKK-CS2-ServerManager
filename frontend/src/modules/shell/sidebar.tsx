@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link } from "@/i18n/navigation";
 import { Crosshair } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { activeNavHref, NAV_SECTIONS } from "@/shared/config/navigation";
+import { NAV_SECTIONS } from "@/shared/config/navigation";
 import { NavLink } from "@/modules/shell/nav-link";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 
@@ -14,8 +13,7 @@ import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
  * first paint and stays mounted across route changes, so navigating only
  * re-renders the page region.
  */
-export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
-  const pathname = usePathname();
+export function Sidebar({ admin }: { admin?: React.ReactNode }) {
   const t = useTranslations("nav");
   const tSite = useTranslations("site");
 
@@ -43,10 +41,9 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
         {NAV_SECTIONS.map((section) => {
           const items = section.items.filter(
-            (item) => !item.adminOnly || isAdmin,
+            (item) => !item.adminOnly,
           );
           if (items.length === 0) return null;
-          const activeHref = activeNavHref(pathname, items);
           return (
             <div key={section.titleKey}>
               <p className="px-3 pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-fg-subtle">
@@ -60,10 +57,11 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
                     label={t(item.key)}
                     icon={item.icon}
                     navKey={item.key}
-                    active={item.href === activeHref}
+                    items={items}
                   />
                 ))}
               </div>
+              {section.items.some(item => item.adminOnly) ? admin : null}
             </div>
           );
         })}

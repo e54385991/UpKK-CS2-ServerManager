@@ -10,7 +10,7 @@ export async function PublicAuthFrame({
   const t = await getTranslations("site");
 
   return (
-    <main className="relative flex flex-1 items-center justify-center px-4 py-12">
+    <main data-testid="public-auth-frame" className="relative flex flex-1 items-center justify-center px-4 py-12">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-64 grid-fade opacity-40" />
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">

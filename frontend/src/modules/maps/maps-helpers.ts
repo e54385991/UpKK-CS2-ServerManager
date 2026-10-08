@@ -1,4 +1,4 @@
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import type { MapPluginField, MapsWorkspace } from "@/modules/maps/types";
 
 export const MAPCHOOSER_PLUGIN_NAME = "CS2-Upkk-PanelPLG-Mapchooser";

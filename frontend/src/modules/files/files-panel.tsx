@@ -1,9 +1,9 @@
 import { getTranslations } from "next-intl/server";
-import { Folder, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { getFilesWorkspace } from "@/modules/files/api";
-import { FilesConsole } from "@/modules/files/files-console";
+import { FilesConsole } from "@/modules/files/files-console-loader";
 import { Card } from "@/shared/ui/card";
-import { Skeleton } from "@/shared/ui/skeleton";
+export { FilesPanelSkeleton } from "./files-panel-skeleton";
 
 export async function FilesPanel({
   serverId,
@@ -23,19 +23,4 @@ export async function FilesPanel({
     );
   }
   return <FilesConsole initial={result.data} />;
-}
-
-export function FilesPanelSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-line bg-surface p-5 shadow-panel">
-        <div className="mb-4 flex items-center gap-2">
-          <Folder className="size-4 text-fg-subtle" />
-          <Skeleton className="h-4 w-32" />
-        </div>
-        <Skeleton className="mb-2 h-8 w-full" />
-        <Skeleton className="h-8 w-2/3" />
-      </div>
-    </div>
-  );
 }

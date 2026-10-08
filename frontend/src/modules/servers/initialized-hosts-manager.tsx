@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import type { Route } from "next";
+import { Link } from "@/i18n/navigation";
+import { useRouter } from "@/i18n/navigation";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { useFormatter, useTranslations } from "next-intl";
 import { CheckCircle2, CircleAlert, LoaderCircle, Plus, RefreshCw, Server, Trash2 } from "lucide-react";
 import {

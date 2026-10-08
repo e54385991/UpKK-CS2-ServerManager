@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { LogOut, UserRound, ChevronDown } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
@@ -70,14 +70,14 @@ export function UserMenu({ user }: { user: SessionUser }) {
               {user.isAdmin ? t("admin") : t("user")}
             </p>
           </div>
-          <a
+          <Link
             role="menuitem"
             href="/settings/profile"
             className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
           >
             <UserRound className="size-4" />
             {t("profile")}
-          </a>
+          </Link>
           <button
             role="menuitem"
             type="button"

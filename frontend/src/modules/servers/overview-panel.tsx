@@ -1,5 +1,5 @@
 import { getFormatter, getTranslations } from "next-intl/server";
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { getServerDiskSpace, getStartupCommand } from "@/modules/servers/api";
 import { getServer } from "@/modules/servers/render-queries";
 import { DiskSpaceCard } from "@/modules/servers/disk-space-card";

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useSyncExternalStore } from "react";
 import { useLinkStatus } from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname } from "@/i18n/navigation";
 import {
   clearLinkPending,
   ensureLinkPendingCapture,
@@ -20,6 +20,9 @@ import {
  * the same click (`loading.tsx` / streamed pages); the effect clears it.
  */
 export function LinkPendingHint({ href }: { href: string }) {
+  return <Suspense fallback={<PendingDot href={href} active={false} />}><RuntimeLinkHint href={href} /></Suspense>;
+}
+function RuntimeLinkHint({ href }: { href: string }) {
   const { pending } = useLinkStatus();
   const pathname = usePathname();
   const optimistic = useSyncExternalStore(
@@ -34,6 +37,9 @@ export function LinkPendingHint({ href }: { href: string }) {
     if (pathname === href) clearLinkPending(href);
   }, [href, pathname]);
   const active = pending || optimistic;
+  return <PendingDot href={href} active={active} />;
+}
+function PendingDot({ href, active }: { href: string; active: boolean }) {
   return (
     <span
       aria-hidden

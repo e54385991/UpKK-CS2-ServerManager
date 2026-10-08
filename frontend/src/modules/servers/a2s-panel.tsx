@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { Save, Search, TriangleAlert } from "lucide-react";
 import { formatA2SDuration } from "@/modules/servers/a2s";

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import type { Route } from "next";
+import { useRouter } from "@/i18n/navigation";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { useTranslations } from "next-intl";
 import { LoaderCircle, TriangleAlert } from "lucide-react";
 import {

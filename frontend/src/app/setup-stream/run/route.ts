@@ -3,8 +3,6 @@ import type { NextRequest } from "next/server";
 import { sessionTokenFrom } from "@/modules/auth/session";
 import { internalApiUrl } from "@/shared/config/internal-api";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 export const maxDuration = 1800;
 
 /**

@@ -26,8 +26,8 @@ import { Input, Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
 import { Check, Copy, Plus, RefreshCw, TriangleAlert } from "lucide-react";
-import type { Route } from "next";
-import Link from "next/link";
+import type { PublicRoute as Route } from "@/i18n/public-route";
+import { Link } from "@/i18n/navigation";
 
 import { Field, GAME_MODES, SummaryItem } from "./create-form-parts";
 import { useCreateServerForm } from "./use-create-form";

@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { FilePlus2, Pencil, Send, Trash2 } from "lucide-react";
 import { confirm } from "@/shared/feedback";

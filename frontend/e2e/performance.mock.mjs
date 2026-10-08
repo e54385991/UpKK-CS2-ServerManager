@@ -2,7 +2,7 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 
-export function createPerformanceFixture({ port = Number(process.env.PERF_MOCK_PORT ?? 38131), extraHandler, serverCount = 2 } = {}) {
+export function createPerformanceFixture({ port = Number(process.env.PERF_MOCK_PORT ?? 38131), extraHandler, onReset, serverCount = 2 } = {}) {
 let requests = [];
 let rules = {};
 let savedContent = 'hostname "fixture"\n';
@@ -30,6 +30,7 @@ const app = createServer(async (req, res) => {
   if (path === '/__test__/reset') {
     for (const callbacks of waiters.values()) for (const release of callbacks) release();
     waiters.clear(); requests = []; rules = input.rules ?? {}; servers = new Map(); plugin.title = 'Fixture Plugin'; savedContent = 'hostname "fixture"\n';
+    onReset?.();
     return json({ ok: true });
   }
   if (path === '/__test__/release') {

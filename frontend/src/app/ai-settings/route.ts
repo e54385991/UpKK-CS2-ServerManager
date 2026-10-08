@@ -1,7 +1,5 @@
 import { proxyAiSettings } from "@/modules/settings/ai-proxy";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 export const maxDuration = 180;
 
 export function GET(request: Request) {

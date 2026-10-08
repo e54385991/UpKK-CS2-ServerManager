@@ -42,8 +42,10 @@ RSS 使用 `scripts/cache-components-rss.mjs`，直接启动 standalone `server.
 每 5 秒读取该 PID 的当前 RSS，不测 npm wrapper、峰值 rusage 或后端 RSS。
 5 个 Chromium 进程承载 30 个独立浏览器上下文，包含四类账号、两种语言和两种
 宽度，固定轮转完整 500 个
-服务器 ID，并反复读取、取消活动队列和助手 SSE，穿插真实工作区 Link 导航。
-每个上下文按固定 3 秒迭代节奏执行；两个版本共用相同负载代码和 fixture。
+服务器 ID，并反复读取、取消活动队列和助手 SSE，正式负载加入文档导航取消。真实 Link
+导航由独立功能矩阵覆盖。
+每个上下文按固定 5 秒迭代节奏执行，服务器 ID 按同租户上下文分片，确保
+预热完整覆盖 500 个 ID；两个版本共用相同负载代码和 fixture。
 
 ```bash
 node scripts/cache-components-rss.mjs /tmp/upkk-cc-build-baseline /tmp/upkk-cc-rss-baseline full
@@ -60,3 +62,10 @@ node scripts/cache-components-rss-report.mjs /tmp/upkk-cc-rss-baseline /tmp/upkk
 
 `smoke` 模式只验证负载设施能运行（10 秒预热、30 秒测量），输出强制标记为
 不完整，不能批准开启正式默认。完整内存和功能门禁均通过后，才开启两项默认。
+
+Linux 实际验收使用独立容器 `upkk-cc-acceptance`，镜像
+`mcr.microsoft.com/playwright:v1.63.0-noble`（digest:
+`sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27`），
+固定 Node 26.10.0 Linux arm64。两个版本在同一容器、同一安装依赖下重建，
+进程和 mock 只绑定容器 loopback；采样读取容器内实际 Next PID。原始报告通过
+`docker cp` 保留到隔离主机目录。不得以 macOS 调试失败样本作为 Linux 对照。

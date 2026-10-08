@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePublicPath as revalidatePath } from "@/i18n/revalidate";
 import { apiFetch } from "@/shared/api/server-fetch";
 import type { components } from "@/shared/api/schema";
 

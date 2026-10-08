@@ -13,7 +13,6 @@ import {
  * Cookie → Bearer JSON proxy for the activity tray. Inbox polling used hashed
  * Server Actions, which fail after a Docker pull and remount the console.
  */
-export const dynamic = "force-dynamic";
 
 function resultResponse(result: { ok: boolean; status?: number }) {
   return Response.json(result, {

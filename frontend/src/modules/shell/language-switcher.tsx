@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Languages, Check } from "lucide-react";
-import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, type Locale } from "@/i18n/config";
-import { setCookie } from "@/shared/lib/cookie";
+import { LOCALES, LOCALE_LABELS, type Locale } from "@/i18n/config";
+import type { PublicRoute } from "@/i18n/public-route";
 import { cn } from "@/shared/lib/cn";
+import { rememberNavigationFragment, takeNavigationFragment } from "@/shared/lib/navigation-fragment";
 
 /**
  * Locale switcher. Persists the choice in a first-party cookie (SSR-authoritative
@@ -21,6 +22,14 @@ export function LanguageSwitcher() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const target = takeNavigationFragment(active);
+    if (!target) return;
+    if (`${window.location.pathname}${window.location.search}` === target.path && target.hash) {
+      window.history.replaceState(window.history.state, "", `${target.path}${target.hash}`);
+    }
+  }, [active]);
+
+  useEffect(() => {
     function onClick(event: MouseEvent) {
       if (ref.current && !ref.current.contains(event.target as Node)) {
         setOpen(false);
@@ -31,9 +40,9 @@ export function LanguageSwitcher() {
   }, []);
 
   function choose(locale: Locale) {
-    setCookie(LOCALE_COOKIE, locale);
+    rememberNavigationFragment({ locale, path: `${window.location.pathname}${window.location.search}`, hash: window.location.hash });
     setOpen(false);
-    router.refresh();
+    router.replace(`${window.location.pathname}${window.location.search}${window.location.hash}` as PublicRoute, { locale });
   }
 
   return (

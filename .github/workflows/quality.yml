@@ -251,3 +251,31 @@ jobs:
 
       - name: Verify isolated system-monitoring dashboard
         run: npx playwright test --config=playwright.monitor.config.ts
+
+  frontend-production-navigation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Build an isolated candidate with the test API
+        run: node scripts/prepare-cache-components.mjs "$PWD" /tmp/upkk-cc-build-candidate candidate
+      - name: Verify the candidate production bundle budget with test API disabled
+        run: node scripts/prepare-cache-components.mjs "$PWD" /tmp/upkk-cc-build-candidate-production candidate memory
+      - name: Verify production navigation and functional contracts
+        env:
+          CC_BUILD_ROOT: /tmp/upkk-cc-build-candidate
+        run: npm run test:cache-components

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { Eraser, LoaderCircle, X } from "lucide-react";
 import type { DescriptionSyncJob } from "@/modules/plugins/types";

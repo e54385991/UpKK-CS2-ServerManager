@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { revalidateAfterServerDeleteAction } from "@/modules/servers/actions";
 import { randomDeleteCode } from "@/modules/servers/delete-challenge";
 import { deleteServerRecord } from "@/modules/servers/delete-server-client";

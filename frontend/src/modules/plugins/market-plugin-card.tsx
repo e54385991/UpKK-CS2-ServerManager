@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import type { Route } from "next";
+import { Link } from "@/i18n/navigation";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { useFormatter, useTranslations } from "next-intl";
 import { CalendarClock, Download, Puzzle } from "lucide-react";
 import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin-button";

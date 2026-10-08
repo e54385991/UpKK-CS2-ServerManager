@@ -1,4 +1,4 @@
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,

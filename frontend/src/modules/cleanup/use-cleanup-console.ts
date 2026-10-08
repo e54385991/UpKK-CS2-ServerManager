@@ -24,7 +24,7 @@ import {
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { useQueuedOperationTerminal } from "@/modules/servers/use-queued-operation-terminal";
 import { confirm } from "@/shared/feedback";
-import type { Route } from "next";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 

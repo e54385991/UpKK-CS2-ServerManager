@@ -1,0 +1,80 @@
+import { SessionGate } from "@/modules/shell/session-slots";
+import { Suspense } from "react";
+import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
+import { requireSession } from "@/modules/auth/render-session";
+import { PageHeader } from "@/shared/ui/page-header";
+import { Card } from "@/shared/ui/card";
+import { AuditFilters } from "@/modules/audit/audit-filters";
+import { AuditTable, AuditTableSkeleton } from "@/modules/audit/audit-table";
+import { DomainMessages } from "@/i18n/page-messages";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("audit");
+  return { title: t("title") };
+}
+
+const PAGE_SIZE = 25;
+
+type SearchParams = {
+  category?: string;
+  status?: string;
+  username?: string;
+  q?: string;
+  offset?: string;
+};
+
+async function AuditContent({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const [session, t, sp] = await Promise.all([
+    requireSession(),
+    getTranslations("audit"),
+    searchParams,
+  ]);
+
+  if (!session.isAdmin) {
+    return (
+      <DomainMessages extra={["audit"]}>
+        <Card className="border-warn/30 bg-warn-muted/40 px-5 py-4 text-sm text-warn">
+          {t("forbidden")}
+        </Card>
+      </DomainMessages>
+    );
+  }
+
+  const offset = Math.max(0, Number(sp.offset ?? 0)) || 0;
+  const query = {
+    category: sp.category,
+    status: sp.status,
+    username: sp.username,
+    q: sp.q,
+    limit: PAGE_SIZE,
+    offset,
+  };
+
+  // A stable key so changing filters/offset remounts Suspense and shows the skeleton.
+  const key = JSON.stringify(query);
+
+  return (
+    <DomainMessages extra={["audit"]}>
+      <div className="mb-4">
+        <AuditFilters />
+      </div>
+      <Suspense key={key} fallback={<AuditTableSkeleton />}>
+        <AuditTable query={query} />
+      </Suspense>
+    </DomainMessages>
+  );
+}
+
+export default async function AuditPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const t = await getTranslations("audit");
+  return <DomainMessages extra={["audit"]}><section data-route="/audit">
+    <Suspense fallback={null}><SessionGate /></Suspense>
+    <PageHeader title={t("title")} description={t("description")} />
+    <Suspense fallback={<AuditTableSkeleton />}><AuditContent searchParams={searchParams} /></Suspense>
+  </section></DomainMessages>;
+}

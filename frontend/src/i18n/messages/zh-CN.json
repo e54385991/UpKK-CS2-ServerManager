@@ -396,6 +396,7 @@
     }
   },
   "serverDetail": {
+    "workspaceTitle": "服务器工作区",
     "title": "服务器 #{id}",
     "description": "服务器工作区按分类组织：概览、操作中心、游戏配置、主机配置、基座/框架、监控、插件、地图、文件、日志与垃圾清理与控制台。",
     "workspaceHelp": "用上方分类进入对应功能，不要把所有操作堆在一页。快速安装游戏模式会先列出全部变更再一键排队。",
@@ -2897,9 +2898,9 @@
     "s3Configured": "可用",
     "s3NotConfigured": "未配置",
     "s3Enabled": "启用 S3 兼容备份",
-    "s3CompatibleHint": "支持 AWS S3 或兼容存储（Cloudflare R2、MinIO、阿里云 OSS S3 API 等）。R2 的 Endpoint 填 https://<account_id>.r2.cloudflarestorage.com，Region 填 auto。",
+    "s3CompatibleHint": "支持 AWS S3 或兼容存储（Cloudflare R2、MinIO、阿里云 OSS S3 API 等）。R2 的 Endpoint 填 https://'<account_id>'.r2.cloudflarestorage.com，Region 填 auto。",
     "s3Endpoint": "Endpoint URL",
-    "s3EndpointPlaceholder": "https://<account_id>.r2.cloudflarestorage.com",
+    "s3EndpointPlaceholder": "https://'<account_id>'.r2.cloudflarestorage.com",
     "s3Region": "区域",
     "s3RegionPlaceholder": "auto",
     "s3Bucket": "存储桶",

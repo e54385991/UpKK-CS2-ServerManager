@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import type { Route } from "next";
+import { Link } from "@/i18n/navigation";
+import type { PublicRoute as Route } from "@/i18n/public-route";
 import { useFormatter, useTranslations } from "next-intl";
 import { isA2SVersionOutdated } from "@/modules/servers/a2s";
 import {

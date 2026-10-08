@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import { reconnectServerSshAction } from "@/modules/servers/actions";

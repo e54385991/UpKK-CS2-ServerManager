@@ -3,7 +3,8 @@ import { getTranslations } from "next-intl/server";
 import { LinkButton } from "@/shared/ui/link-button";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Card, CardContent } from "@/shared/ui/card";
-import { cn } from "@/shared/lib/cn";
+import { Suspense } from "react";
+import { getSession } from "@/modules/auth/render-session";
 
 const TUTORIAL_IMAGE_VERSION = "20260831b";
 const TUTORIAL_IMAGE_BASE = "/tutorial/deploy";
@@ -20,27 +21,21 @@ const TUTORIAL_STEPS = [
   { step: 10, title: "step10Title", body: "step10Body" },
 ] as const;
 
-export async function TutorialGuide({ signedIn }: { signedIn: boolean }) {
+export async function TutorialGuide() {
   const t = await getTranslations("tutorial");
 
   return (
     <div
-      className={cn("mx-auto max-w-3xl", signedIn ? "" : "px-4 py-10")}
+      className="mx-auto max-w-3xl"
       data-testid="tutorial-guide"
     >
       <PageHeader
         title={t("title")}
         description={t("subtitle")}
         actions={
-          signedIn ? (
-            <LinkButton href="/servers/new" variant="outline">
-              {t("addServer")}
-            </LinkButton>
-          ) : (
-            <LinkButton href="/login" variant="outline">
-              {t("backToLogin")}
-            </LinkButton>
-          )
+          <Suspense fallback={<LinkButton href="/login" variant="outline">{t("backToLogin")}</LinkButton>}>
+            <TutorialActions header />
+          </Suspense>
         }
       />
 
@@ -73,17 +68,18 @@ export async function TutorialGuide({ signedIn }: { signedIn: boolean }) {
       </ol>
 
       <div className="mt-8 flex flex-wrap gap-3">
-        {signedIn ? (
-          <LinkButton href="/overview" variant="outline">
-            {t("backToOverview")}
-          </LinkButton>
-        ) : (
-          <LinkButton href="/login" variant="outline">
-            {t("backToLogin")}
-          </LinkButton>
-        )}
+        <Suspense fallback={<LinkButton href="/login" variant="outline">{t("backToLogin")}</LinkButton>}>
+          <TutorialActions />
+        </Suspense>
         <LinkButton href="/servers">{t("manageServers")}</LinkButton>
       </div>
     </div>
   );
+}
+
+async function TutorialActions({ header = false }: { header?: boolean }) {
+  const [session, t] = await Promise.all([getSession(), getTranslations("tutorial")]);
+  if (!session) return <LinkButton href="/login" variant="outline">{t("backToLogin")}</LinkButton>;
+  return header ? <LinkButton href="/servers/new" variant="outline">{t("addServer")}</LinkButton>
+    : <LinkButton href="/overview" variant="outline">{t("backToOverview")}</LinkButton>;
 }

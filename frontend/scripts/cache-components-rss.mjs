@@ -29,7 +29,7 @@ const hash = paths => createHash('sha256').update(Buffer.concat(paths.map(path =
 const controls = { node: process.version, platform: process.platform, arch: process.arch, host: hostname(),
   next: JSON.parse(readFileSync(resolve(build, 'node_modules/next/package.json'))).version,
   browserProcesses: 5, contexts: 30,
-  fixtureHash: hash(['../e2e/cache-components.mock.mjs', '../e2e/performance.mock.mjs', '../e2e/helpers/cache-components-surfaces.mjs']),
+  fixtureHash: hash(['../e2e/cache-components.mock.mjs', '../e2e/performance.mock.mjs', '../e2e/helpers/cache-components-surfaces.mjs', '../e2e/helpers/cache-components-responses.mjs']),
   workloadHash: hash(['cache-components-rss.mjs']),
 };
 mkdirSync(report, { recursive: true });
@@ -59,23 +59,20 @@ async function setPhase(phase) {
 
 async function load(page, actor, index, keepGoing, error) {
   const ids = fixtureServerIds(actor);
-  let step = index * 19;
+  const tenantWorkers = Array.from({ length: 30 }, (_, worker) => worker)
+    .filter(worker => CACHE_COMPONENTS_ACTORS[worker % 4].at(-1) === actor.at(-1));
+  let step = tenantWorkers.indexOf(index);
   const pending = new Set();
   page.on('request', request => pending.add(request.url()));
   page.on('requestfinished', request => pending.delete(request.url()));
   page.on('requestfailed', request => pending.delete(request.url()));
-  await delay(index * 100);
-  await page.goto(`/servers/${ids[step % ids.length]}`, { waitUntil: 'commit' });
+  await delay(index * 250);
   while (keepGoing()) {
     const iterationStarted = performance.now();
     const id = ids[step % ids.length];
     try {
-      await page.locator(`a[href="/servers/${id}"]`).filter({ visible: true }).first().click({ noWaitAfter: true });
-      await page.waitForURL(`**/servers/${id}`, { waitUntil: 'commit' });
-      await page.locator('h1').filter({ hasText: `fixture-${actor.at(-1)}-server-${id}` }).first().waitFor();
-      const consoleLink = page.locator(`a[href="/servers/${id}/console"]`).filter({ visible: true }).first();
-      await consoleLink.click({ noWaitAfter: true });
-      await page.waitForURL(`**/servers/${id}/console`, { waitUntil: 'commit' });
+      await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
+      await page.getByTestId('monitoring-form').waitFor();
       // Read real Next proxy streams, cancel, and then navigate away while the inbox stream is open.
       await page.evaluate(async ({ id, operation }) => {
         for (const url of [`/ops-stream/servers/${id}/operations/${operation}`, '/ai-stream/runs/fixture-run']) {
@@ -88,15 +85,22 @@ async function load(page, actor, index, keepGoing, error) {
           await reader.cancel().catch(() => undefined);
         }
       }, { id, operation: FIXTURE_OPERATION });
-      await page.locator('a[href="/servers"]').filter({ visible: true }).first().click({ noWaitAfter: true });
-      await page.waitForURL('**/servers', { waitUntil: 'commit' });
+      // Cancel a real in-flight Link navigation with the next host document.
+      if (step % 5 === 0) {
+        await page.goto(`/servers/${id}/files`, { waitUntil: 'commit' });
+        await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
+        await page.getByTestId('monitoring-form').waitFor();
+      }
     } catch (failure) {
       if (keepGoing()) error(JSON.stringify({ failure: String(failure), actor, index,
         url: page.url(), pending: [...pending].slice(0,12),
+        document: await page.evaluate(() => ({ ready: document.readyState,
+          scripts: document.scripts.length, hidden: document.querySelectorAll('[hidden]').length,
+          text: document.body.innerText.slice(0, 200) })).catch(() => null),
         heading: await page.locator('h1').allTextContents().catch(() => []) }));
     }
-    step += 1;
-    await delay(Math.max(0, 3000 - (performance.now() - iterationStarted)));
+    step += tenantWorkers.length;
+    await delay(Math.max(0, 5000 - (performance.now() - iterationStarted)));
   }
 }
 

@@ -18,8 +18,8 @@ import {
 } from "@/shared/ui/card";
 import { Input, Label } from "@/shared/ui/input";
 import { Check, Copy, RefreshCw, TriangleAlert } from "lucide-react";
-import type { Route } from "next";
-import Link from "next/link";
+import type { PublicRoute as Route } from "@/i18n/public-route";
+import { Link } from "@/i18n/navigation";
 
 import { Field } from "./setup-wizard-parts";
 import { useSetupWizard } from "./use-setup-wizard";

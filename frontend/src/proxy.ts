@@ -1,37 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSessionCookie } from "@/shared/auth/session-cookie";
+import { LOCALE_COOKIE, resolveLocale } from "@/i18n/config";
+import { excludesLocaleRewrite, isConsolePath, loginReturnHref, normalizePublicPath } from "@/i18n/paths";
 
-/**
- * Node.js guard for the authenticated console (Next 16 `proxy` convention). This is
- * a cheap presence check on the session cookie to avoid a server round-trip for
- * obviously-anonymous visitors; the layout still validates the session against
- * the backend. Public routes and the API proxy are excluded via the matcher.
- */
 export function proxy(request: NextRequest) {
-  const hasSession = hasSessionCookie(request.cookies);
-  const { pathname, search } = request.nextUrl;
-
-  if (!hasSession) {
-    const loginUrl = new URL("/login", request.url);
-    if (pathname !== "/overview") {
-      loginUrl.searchParams.set("next", `${pathname}${search}`);
-    }
-    return NextResponse.redirect(loginUrl);
+  const url = new URL(request.url);
+  const { pathname, prefixed } = normalizePublicPath(url.pathname);
+  const publicUrl = new URL(url);
+  publicUrl.pathname = pathname;
+  publicUrl.searchParams.delete("_rsc");
+  if (excludesLocaleRewrite(pathname)) return NextResponse.next();
+  if (isConsolePath(pathname) && !hasSessionCookie(request.cookies)) {
+    return NextResponse.redirect(new URL(loginReturnHref(`${pathname}${publicUrl.search}`), request.url));
   }
-
-  return NextResponse.next();
+  if (prefixed) {
+    return NextResponse.redirect(publicUrl);
+  }
+  const locale = resolveLocale(request.cookies.get(LOCALE_COOKIE)?.value, request.headers.get("accept-language"));
+  const forwarded = new Headers(request.headers);
+  forwarded.set("x-upkk-public-path", `${pathname}${publicUrl.search}`);
+  url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
+  return NextResponse.rewrite(url, { request: { headers: forwarded } });
 }
 
 export const config = {
-  // Guard the console areas only. Public pages, the API proxy, Next internals,
-  // and static assets are intentionally excluded.
-  matcher: [
-    "/overview/:path*",
-    "/servers/:path*",
-    "/plugins/:path*",
-    "/assistant/:path*",
-    "/audit/:path*",
-    "/settings/:path*",
-    "/live-console/:path*",
-  ],
+  matcher: ["/((?!api(?:/|$)|health(?:/|$)|static(?:/|$)|_next(?:/|$)|ai-assistant(?:/|$)|ai-provider-test(?:/|$)|ai-settings(?:/|$)|ai-stream(?:/|$)|cleanup-stream(?:/|$)|files-upload(?:/|$)|ops-stream(?:/|$)|passkeys(?:/|$)|plugin-config-scan(?:/|$)|server-ops(?:/|$)|server-record(?:/|$)|setup-stream(?:/|$)|.*\\..*).*)"],
 };

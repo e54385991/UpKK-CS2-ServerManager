@@ -63,55 +63,40 @@ files thin.
 - Anything reading the request (cookies, headers) is dynamic. Server data access
   lives in `*/api.ts` module files marked `import "server-only"`.
 
-## Non-blocking navigation
+## Non-blocking navigation and Cache Components
 
-Instant navigation is achieved with plain App Router primitives — no
-experimental flags required:
+Console chrome lives in `src/app/[locale]/(console)/layout.tsx`. It renders the
+sidebar, topbar and content container before request-owned data. Authentication
+only redirects in `SessionGate`; the backend still authorizes each data request
+and mutation. Every console page checks the session on its own RSC request,
+even when a parent layout is reused. React `cache()` deduplicates only within
+that render; never cache users, permissions or JWTs across requests or add
+`use cache: private` for them.
 
-- The console **App Shell** (`src/app/(console)/layout.tsx`: `Sidebar` +
-  `Topbar`) is rendered by the shared layout and stays mounted across route
-  changes; only the page region re-renders.
-- Every data route provides a `loading.tsx` skeleton and wraps server data in
-  `<Suspense>`, so the shell paints immediately while data streams in.
-- Navigation uses `<Link>` (default prefetch) and typed routes
-  (`typedRoutes: true`). Runtime path strings must be asserted `as Route`.
+Move `params`, `searchParams`, cookies, headers and uncached API reads into
+small data components behind meaningful localized Suspense fallbacks. Keep
+common headings and structural elements outside those boundaries. Do not use
+an empty shell, whole-page fallback or `instant = false` to pass validation.
+Use existing skeletons and preserve the layout at 390 and 1440 pixel widths.
+Business calls remain `no-store`, with their existing timeout, bearer forwarding
+and degraded results. Shared content is local, non-user content keyed by locale.
 
-Do not reintroduce blocking, all-or-nothing server waits at the layout level.
-Start independent requests together, then give slow optional data its own async
-Server Component and `Suspense` boundary. For example, overview host probes must
-not delay counters or recent servers; preserve per-section failure/empty states
-and locale behavior. Associate batches with a server-ID `Map`, preserving the
-response order. When changing streaming behavior, use a controlled mock-backend
-gate so tests prove the fast content is visible while slow data is still pending.
+Cookie authentication is compatible with Cache Components: Proxy selects the
+locale, `next/root-params` makes it available without reading cookies in the
+root layout, and authentication/data reads stream in their own boundaries.
+The formal defaults remain off until the current functional, production
+navigation and independent Next RSS acceptance gates pass. Isolated candidate
+builds use `CC_TEST_BUILD=1` plus `CC_CANDIDATE_BUILD=1`; only dedicated navigation
+builds may set `CC_EXPOSE_TEST_API=1`. Production and RSS builds never expose
+the testing API. See `instant-nav.rig.md` and
+`../docs/NEXT_CACHE_COMPONENTS_ACCEPTANCE.md`; short tests cannot clear the
+three-round 5% RSS gate.
 
-### Caching & navigation: why `cacheComponents` is off
-
-`cacheComponents` and `partialPrefetching` are intentionally disabled in
-`next.config.ts`. Evidence-based decision:
-
-- Every console route is authenticated and locale is read from the `locale`
-  cookie in the root layout, so the shell is inherently per-session dynamic.
-  Enabling `cacheComponents` fails the production build during prerender
-  ("uncached or runtime data during prerendering" for the layout's `cookies()`
-  reads), and would require wrapping the session/i18n reads in Suspense or
-  `use cache` app-wide for little benefit on a fully-dynamic console.
-- The agreed plan gates `cacheComponents` behind an upstream memory-growth
-  report (a hard memory stress-test gate) that is unmet.
-
-Navigation uses the shared App Shell (persistent sidebar/topbar), per-route
-`loading.tsx` skeletons, `<Suspense>`-streamed server data, and `<Link>` prefetch.
-Historical Lighthouse runs recorded Performance 100 and CLS 0 on `/login` and
-`/overview`; those observations are not a current performance guarantee. When
-changing navigation or loading behavior, measure the changed route under
-controlled delays and real browser navigation. Revisit
-`cacheComponents` once it is stable for cookie-driven apps and the memory gate
-is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-partial-prefetching.md`.
-
-This gate applies to enabling those flags, not to ordinary frontend fixes or
-navigation improvements using the current architecture. A generic request to
-improve navigation does not waive the gate. Before proposing flag adoption,
-locate the agreed memory test and acceptance criteria; if they are unavailable,
-report that specific gap instead of inventing a passing threshold.
+Use the centralized `@/i18n/navigation` Link/router/pathname adapters and
+`PublicRoute` types derived from `next typegen`. Preserve default shared-shell
+prefetch, `prefetch={false}` and existing hover/focus intent. Do not add full
+business-data prefetch. Server Actions call `revalidatePublicPath` so both
+internal languages are invalidated. Typecheck always runs `next typegen` first.
 
 ## Backend contract & auth
 
@@ -185,32 +170,25 @@ report that specific gap instead of inventing a passing threshold.
 
 ## Internationalization (i18n)
 
-Bilingual **zh-CN + en-US (default)** via `next-intl`, without URL routing:
+Bilingual **zh-CN + en-US (default)** via `next-intl`, with public URLs preserved:
 
-- Active locale comes from the `locale` cookie (SSR-authoritative). Without a
-  valid cookie, the browser's highest-priority Chinese language maps to
-  `zh-CN`; every other language falls back to `en-US` — see
-  `src/i18n/request.ts` and `src/i18n/config.ts`. The Next plugin is wired in
-  `next.config.ts`.
-- Message catalogs live in `src/i18n/messages/{zh-CN,en-US}.json` and MUST keep
-  identical key sets. Namespaces: `site`, `nav`, `shell`, `login`, `overview`,
-  `servers`, `serverDetail`, `serverNew`, `plugins`, `assistant`, `settings`,
-  `audit`, `profile`. The `settings` namespace covers the admin system-settings
-  form (proxy, GitHub token, SMTP/Gmail). The `plugins` namespace covers the
-  marketplace catalog, install preflight, and the per-server installed list.
-- Server Components: `const t = await getTranslations("ns")`. Client Components:
-  `const t = useTranslations("ns")`. Root layout only provides `feedback` to
-  `FeedbackHost` and sets `<html lang>`. Console chrome, auth pages, and
-  domain layouts wrap `ClientMessages` with explicit namespaces from
-  `src/i18n/namespaces.ts` (`pickMessages` handles dotted paths such as
-  `plugins.aiImport`). Nested providers replace the client dictionary; they
-  do not merge. Keep the full server catalog in `src/i18n/request.ts`
-  (including `settings.monitor`). Do not fetch extra locale JSON from the
-  browser.
-- The topbar `LanguageSwitcher` writes the `locale` cookie and calls
-  `router.refresh()`. Do not hardcode user-facing strings — add a key to both
-  catalogs instead. Because the layout reads the cookie, routes render
-  dynamically (expected for this authenticated console).
+- Pages and the root layout live below `[locale]`. Proxy internally rewrites
+  public paths using a valid `locale` cookie, otherwise the existing highest
+  quality Accept-Language rule, otherwise `en-US`. Only those two root values
+  are generated. Explicit internal prefixes are normalized before the auth
+  presence check; API, static files and JSON/stream/upload handlers stay outside
+  locale rewriting. Never trust incoming `x-upkk-public-path`; Proxy sets it.
+- Server configuration reads `next/root-params`, not cookies or headers, for
+  locale. `generateMetadata` gets language from that configuration; request Host
+  remains request-owned and is never cached across requests.
+- Catalogs in `src/i18n/messages/{zh-CN,en-US}.json` keep identical keys. Preserve
+  the monitoring catalog merge before namespace trimming. Root, console, auth
+  and domain `ClientMessages` providers select explicit namespaces; nested
+  providers replace dictionaries instead of merging them. Browser code does
+  not download another locale JSON.
+- Language switching uses the locale-aware navigation API while preserving the
+  public pathname, query and hash. Keep local 404/error recovery and public login
+  return addresses. No user-facing strings are hardcoded.
 
 ## Styling
 
@@ -264,7 +242,7 @@ npm run start        # serve the production build on :31800
 npm run build:start  # production build, then start
 # Repo-root ./start.sh also accepts: api | dev | build | start | build+start
 npm run lint       # ESLint (flat config)
-npm run typecheck  # tsc --noEmit
+npm run typecheck  # next typegen + tsc --noEmit
 npm run test:unit  # TypeScript module tests (Node's built-in test runner)
 npm run gen:api    # regenerate OpenAPI types from ../tests/baselines/openapi.json
 npx playwright test --config=playwright.overview.config.ts # isolated streaming regression
@@ -284,7 +262,7 @@ frontend change, run only the applicable commands and tests. Run
 `npm run check:bundle` when the change can affect client bundles or route
 loading, rather than after every production build. The bundle check
 checks the gzip size of every route's initial client
-chunks (252 KiB per route, 150 KiB per chunk). Heavy editors and terminal
+chunks (253 KiB per route, 150 KiB per chunk). Heavy editors and terminal
 libraries must remain in lazy chunks. The CI `frontend-playwright-smoke` job also
 runs the isolated overview configuration after the public-page smoke. It starts
 its own mock backend and Next dev server on loopback ports 38121/31821 (override

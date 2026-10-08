@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useSyncExternalStore } from "react";
+import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { Fingerprint, LoaderCircle, Pencil, Trash2 } from "lucide-react";
 import { confirm } from "@/shared/feedback";
@@ -28,6 +28,8 @@ import {
 } from "@/modules/auth/webauthn";
 
 type JsonRecord = Record<string, unknown>;
+const subscribeEnvironment = () => () => {};
+const serverEnvironment = () => null;
 
 export function PasskeyForm({
   initial,
@@ -43,7 +45,7 @@ export function PasskeyForm({
   const [banner, setBanner] = useState<string | null>(loadError ? t("passkeyLoadError") : null);
   const [renameId, setRenameId] = useState<number | null>(null);
   const [nickname, setNickname] = useState("");
-  const env = passkeyEnvironmentIssue();
+  const env = useSyncExternalStore(subscribeEnvironment, passkeyEnvironmentIssue, serverEnvironment);
 
   function mapError(detail: string | null, status: number) {
       if (detail && isPasskeyErrorCode(detail)) return t(detail);

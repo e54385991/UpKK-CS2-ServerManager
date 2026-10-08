@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePublicPath as revalidatePath } from "@/i18n/revalidate";
 import { updateServer, type ServerDetail } from "@/modules/servers/api";
 import {
   probeServerCompatibility,

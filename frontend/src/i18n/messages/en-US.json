@@ -396,6 +396,7 @@
     }
   },
   "serverDetail": {
+    "workspaceTitle": "Server workspace",
     "title": "Server #{id}",
     "description": "Server workspace, split into overview, operations, game config, host config, base/frameworks, monitoring, plugins, maps, files, log cleanup, and console.",
     "workspaceHelp": "Use the categories above. Quick game-mode install lists every change, then queues one job.",
@@ -2897,9 +2898,9 @@
     "s3Configured": "Ready",
     "s3NotConfigured": "Not configured",
     "s3Enabled": "Enable S3-compatible backups",
-    "s3CompatibleHint": "AWS S3 or compatible storage such as Cloudflare R2, MinIO, or Aliyun OSS S3 API. For R2, set Endpoint to https://<account_id>.r2.cloudflarestorage.com and Region to auto.",
+    "s3CompatibleHint": "AWS S3 or compatible storage such as Cloudflare R2, MinIO, or Aliyun OSS S3 API. For R2, set Endpoint to https://'<account_id>'.r2.cloudflarestorage.com and Region to auto.",
     "s3Endpoint": "Endpoint URL",
-    "s3EndpointPlaceholder": "https://<account_id>.r2.cloudflarestorage.com",
+    "s3EndpointPlaceholder": "https://'<account_id>'.r2.cloudflarestorage.com",
     "s3Region": "Region",
     "s3RegionPlaceholder": "auto",
     "s3Bucket": "Bucket",
