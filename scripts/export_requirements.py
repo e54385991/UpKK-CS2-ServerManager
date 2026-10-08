@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+from argparse import ArgumentParser
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +27,7 @@ def preserve_minor_version_markers(content: str) -> str:
     return MINOR_BOUNDARY.sub(r"python_version \1 \2\3\2", content)
 
 
-def main() -> None:
+def export_requirements() -> str:
     result = subprocess.run(
         [
             "uv",
@@ -43,10 +44,25 @@ def main() -> None:
         encoding="utf-8",
         check=True,
     )
-    (PROJECT_ROOT / "requirements.txt").write_text(
-        HEADER + preserve_minor_version_markers(result.stdout), encoding="utf-8"
-    )
+    return HEADER + preserve_minor_version_markers(result.stdout)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="Check the export without writing it")
+    options = parser.parse_args(argv)
+    content = export_requirements()
+    destination = PROJECT_ROOT / "requirements.txt"
+    if options.check:
+        if not destination.is_file() or destination.read_text(encoding="utf-8") != content:
+            print("requirements.txt does not match the hash-pinned export of uv.lock.")
+            print("Regenerate with: uv run python scripts/export_requirements.py")
+            return 1
+        print("Hash-pinned dependency export matches uv.lock.")
+        return 0
+    destination.write_text(content, encoding="utf-8")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

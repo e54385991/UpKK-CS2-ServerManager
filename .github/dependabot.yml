@@ -3,6 +3,9 @@ version: 2
 updates:
   - package-ecosystem: uv
     directory: /
+    # requirements.txt is a hash-pinned export of uv.lock, not an independent manifest.
+    exclude-paths:
+      - requirements.txt
     schedule:
       interval: weekly
       day: monday

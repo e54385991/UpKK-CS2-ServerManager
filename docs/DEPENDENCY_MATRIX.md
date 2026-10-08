@@ -1,7 +1,8 @@
 # 依赖与运行时矩阵
 
-依赖版本由 `pyproject.toml`、`uv.lock`、`requirements.txt` 和
-`frontend/package-lock.json` 共同锁定。`requirements.txt` 为生产导出并包含哈希；开发环境使用 `uv sync --dev`。
+Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁定；前端使用
+`frontend/package-lock.json`。`requirements.txt` 是从 `uv.lock` 生成的带哈希生产导出，
+不得独立升级其中的包；开发环境使用 `uv sync --dev`。
 
 | 类别 | 当前基线 | 维护方式 |
 | --- | --- | --- |
@@ -96,6 +97,12 @@ Python 3.14 的生产安装不会引入 beta。
 会让两条分支都不匹配。导出脚本仅将 `<` / `>=` 的两段版本边界还原成
 `python_version`，保留补丁级约束、平台条件、包版本和全部哈希。回归测试用
 3.14.7、3.15.0rc3 与 3.15.0 确认项目声明和生产导出都唯一选择匹配的 Pydantic/core。
+
+`uv run python scripts/export_requirements.py --check` 只检查版本、marker 和哈希与
+锁文件的完整导出是否一致，不修改文件；完整质量基线与 3.15 兼容 CI 都执行这项检查。
+Dependabot 的 uv 配置通过 `exclude-paths` 排除生成的 `requirements.txt`，继续维护
+`pyproject.toml` 和 `uv.lock`；依赖更新后须使用上面的导出命令同步生产文件。
+否则单独升级 `pydantic-core` 会破坏 Pydantic 对 core 的精确版本约束。
 
 [Python 3.15 默认使用 UTF-8](https://docs.python.org/3.15/whatsnew/3.15.html#other-language-changes)。
 8 处质量/性能工具的子进程文本输出已明确编码：结构化输出使用 UTF-8，通用外部程序

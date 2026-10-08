@@ -51,6 +51,10 @@ def main() -> None:
 
     checks = (
         ("Lock file", [uv, "lock", "--check"]),
+        (
+            "Hash-pinned dependency export",
+            [sys.executable, "scripts/export_requirements.py", "--check"],
+        ),
         ("Pre-commit hooks", [pre_commit, "run", "--all-files", "--show-diff-on-failure"]),
         ("Ruff format", [ruff, "format", "--check", "."]),
         ("Ruff lint", [ruff, "check", "."]),

@@ -112,6 +112,7 @@ jobs:
       REDIS_SOCKET_TIMEOUT: "5"
       API_HOST: 127.0.0.1
       API_PORT: "8000"
+      BACKEND_URL: http://127.0.0.1:8000
       LOG_LEVEL: INFO
       ASYNCSSH_LOG_LEVEL: WARNING
       SECRET_KEY: ci-secret-key-must-be-at-least-32-characters
@@ -177,7 +178,9 @@ jobs:
           uv run --no-sync python scripts/check_pydantic_v2.py
 
       - name: Verify hash-pinned export and audit Python 3.15 dependencies
-        run: uv run --no-sync pip-audit -r requirements.txt
+        run: |
+          uv run --no-sync python scripts/export_requirements.py --check
+          uv run --no-sync pip-audit -r requirements.txt
 
       - name: Run backend compatibility tests and coverage
         run: >-
