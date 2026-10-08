@@ -83,7 +83,10 @@ async function load(context, actor, index, keepGoing, measured, error, diagnose)
       page.on('requestfailed', request => pending.delete(request.url()));
       await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
       await page.getByTestId('monitoring-form').waitFor();
-      await page.waitForLoadState('load');
+      // The console intentionally keeps SSE readers and App Router streams open;
+      // the browser's `load` event is therefore not a useful workload barrier.
+      // The monitoring form is the committed document marker used by the
+      // functional matrix, and is enough before the explicit stream-cancel step.
       // Read real Next proxy streams, cancel, and then navigate away while the inbox stream is open.
       await page.evaluate(async ({ id, operation }) => {
         for (const url of [`/ops-stream/servers/${id}/operations/${operation}`, '/ai-stream/runs/fixture-run']) {
@@ -101,7 +104,6 @@ async function load(context, actor, index, keepGoing, measured, error, diagnose)
         await page.locator('a[data-workspace-category="files"]').click({ noWaitAfter: true });
         await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
         await page.getByTestId('monitoring-form').waitFor();
-        await page.waitForLoadState('load');
       }
     } catch (failure) {
       if (keepGoing()) {
