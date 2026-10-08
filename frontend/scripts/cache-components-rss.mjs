@@ -1,0 +1,188 @@
+#!/usr/bin/env node
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync, createWriteStream } from 'node:fs';
+import { resolve } from 'node:path';
+import { once } from 'node:events';
+import { hostname } from 'node:os';
+import { createHash } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
+import { chromium } from '@playwright/test';
+import { prepareStandaloneAssets } from './with-internal-api-url.mjs';
+import { RSS_PROTOCOL, summarizeRssRun } from './cache-components-rss-analysis.mjs';
+import { CACHE_COMPONENTS_ACTORS, fixtureServerIds, FIXTURE_OPERATION } from '../e2e/helpers/cache-components-surfaces.mjs';
+
+const [buildArg, reportArg, mode = 'full', roundsArg = '3'] = process.argv.slice(2);
+if (!buildArg || !reportArg || !['full', 'smoke'].includes(mode)) {
+  throw new Error('Usage: node scripts/cache-components-rss.mjs BUILD_FRONTEND REPORT_DIR full|smoke [ROUNDS]');
+}
+const build = resolve(buildArg);
+const report = resolve(reportArg);
+const identity = JSON.parse(readFileSync(resolve(build, 'acceptance/build-input.json'), 'utf8'));
+const rounds = mode === 'full' ? Number(roundsArg) : 1;
+if (mode === 'full' && rounds !== 3) throw new Error('The acceptance protocol requires exactly three rounds');
+const warmupSeconds = mode === 'full' ? RSS_PROTOCOL.warmupSeconds : 10;
+const measureSeconds = mode === 'full' ? RSS_PROTOCOL.measureSeconds : 30;
+const baseURL = 'http://cache-components.test:31961';
+const listenerURL = 'http://127.0.0.1:31961';
+const mockURL = 'http://127.0.0.1:38261';
+const hash = paths => createHash('sha256').update(Buffer.concat(paths.map(path => readFileSync(resolve(import.meta.dirname, path))))).digest('hex');
+const controls = { node: process.version, platform: process.platform, arch: process.arch, host: hostname(),
+  next: JSON.parse(readFileSync(resolve(build, 'node_modules/next/package.json'))).version,
+  browserProcesses: 5, contexts: 30,
+  fixtureHash: hash(['../e2e/cache-components.mock.mjs', '../e2e/performance.mock.mjs', '../e2e/helpers/cache-components-surfaces.mjs']),
+  workloadHash: hash(['cache-components-rss.mjs']),
+};
+mkdirSync(report, { recursive: true });
+
+async function ready(url, child) {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    if (child.exitCode !== null) throw new Error(`Process exited ${child.exitCode} before ${url}`);
+    try { if ((await fetch(url)).ok) return; } catch { /* process is starting */ }
+    await delay(500);
+  }
+  throw new Error(`Process did not become ready: ${url}`);
+}
+async function stop(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  child.kill('SIGTERM');
+  await Promise.race([once(child, 'exit'), delay(5000)]);
+  if (child.exitCode === null && child.signalCode === null) {
+    const exited = once(child, 'exit'); child.kill('SIGKILL'); await exited;
+  }
+}
+async function snapshot() {
+  return (await fetch(`${mockURL}/__test__/connections`)).json();
+}
+async function setPhase(phase) {
+  await fetch(`${mockURL}/__test__/phase`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phase }) });
+}
+
+async function load(page, actor, index, keepGoing, error) {
+  const ids = fixtureServerIds(actor);
+  let step = index * 19;
+  const pending = new Set();
+  page.on('request', request => pending.add(request.url()));
+  page.on('requestfinished', request => pending.delete(request.url()));
+  page.on('requestfailed', request => pending.delete(request.url()));
+  await delay(index * 100);
+  await page.goto(`/servers/${ids[step % ids.length]}`, { waitUntil: 'commit' });
+  while (keepGoing()) {
+    const iterationStarted = performance.now();
+    const id = ids[step % ids.length];
+    try {
+      await page.locator(`a[href="/servers/${id}"]`).filter({ visible: true }).first().click({ noWaitAfter: true });
+      await page.waitForURL(`**/servers/${id}`, { waitUntil: 'commit' });
+      await page.locator('h1').filter({ hasText: `fixture-${actor.at(-1)}-server-${id}` }).first().waitFor();
+      const consoleLink = page.locator(`a[href="/servers/${id}/console"]`).filter({ visible: true }).first();
+      await consoleLink.click({ noWaitAfter: true });
+      await page.waitForURL(`**/servers/${id}/console`, { waitUntil: 'commit' });
+      // Read real Next proxy streams, cancel, and then navigate away while the inbox stream is open.
+      await page.evaluate(async ({ id, operation }) => {
+        for (const url of [`/ops-stream/servers/${id}/operations/${operation}`, '/ai-stream/runs/fixture-run']) {
+          const controller = new AbortController();
+          const response = await fetch(url, { signal: controller.signal });
+          if (!response.ok) throw new Error(`Stream ${url}: ${response.status}`);
+          const reader = response.body.getReader();
+          await reader.read();
+          controller.abort();
+          await reader.cancel().catch(() => undefined);
+        }
+      }, { id, operation: FIXTURE_OPERATION });
+      await page.locator('a[href="/servers"]').filter({ visible: true }).first().click({ noWaitAfter: true });
+      await page.waitForURL('**/servers', { waitUntil: 'commit' });
+    } catch (failure) {
+      if (keepGoing()) error(JSON.stringify({ failure: String(failure), actor, index,
+        url: page.url(), pending: [...pending].slice(0,12),
+        heading: await page.locator('h1').allTextContents().catch(() => []) }));
+    }
+    step += 1;
+    await delay(Math.max(0, 3000 - (performance.now() - iterationStarted)));
+  }
+}
+
+const results = [];
+for (let round = 1; round <= rounds; round++) {
+  let mockProcess;
+  let nextProcess;
+  let browsers = [];
+  let running = true;
+  let errors = 0;
+  const failures = [];
+  const recordError = error => { errors += 1; if (failures.length < 100) failures.push(String(error)); };
+  const samples = [];
+  const log = createWriteStream(resolve(report, `round-${round}.log`));
+  const raw = createWriteStream(resolve(report, `round-${round}.ndjson`));
+  let timer;
+  try {
+    const env = { ...process.env, INTERNAL_API_URL: mockURL, PUBLIC_APP_URL: baseURL,
+      SESSION_COOKIE_SUFFIX: '', PORT: '31961', HOSTNAME: '127.0.0.1', CC_MOCK_PORT: '38261', NEXT_TELEMETRY_DISABLED: '1' };
+    mockProcess = spawn(process.execPath, [resolve(import.meta.dirname, '../e2e/cache-components.mock.mjs')], { env });
+    mockProcess.stdout.pipe(log, { end: false }); mockProcess.stderr.pipe(log, { end: false });
+    await ready(`${mockURL}/health`, mockProcess);
+    const serverPath = resolve(build, '.next/standalone/server.js');
+    prepareStandaloneAssets(build, serverPath);
+    nextProcess = spawn(process.execPath, [serverPath], { cwd: resolve(build, '.next/standalone'), env });
+    nextProcess.stdout.pipe(log, { end: false }); nextProcess.stderr.pipe(log, { end: false });
+    await ready(`${listenerURL}/login`, nextProcess);
+    browsers = await Promise.all(Array.from({ length: controls.browserProcesses }, () => chromium.launch({ headless: true,
+      args: ['--host-resolver-rules=MAP cache-components.test 127.0.0.1', '--no-proxy-server'] })));
+    const contexts = await Promise.all(Array.from({ length: 30 }, (_, index) => browsers[index % browsers.length].newContext({
+      baseURL, viewport: { width: Math.floor(index / 8) % 2 ? 1440 : 390, height: 844 },
+      locale: Math.floor(index / 4) % 2 ? 'zh-CN' : 'en-US',
+    })));
+    const pages = await Promise.all(contexts.map(async (context, index) => {
+      await context.addCookies([
+        { name: 'upkk_access_token', value: `fixture-${CACHE_COMPONENTS_ACTORS[index % 4]}`, url: baseURL, httpOnly: true },
+        { name: 'locale', value: Math.floor(index / 4) % 2 ? 'zh-CN' : 'en-US', url: baseURL },
+      ]);
+      const page = await context.newPage();
+      page.setDefaultTimeout(15000);
+      page.on('pageerror', recordError);
+      return page;
+    }));
+    const started = performance.now();
+    let phase = 'warmup';
+    async function sample() {
+      try {
+        const rssBytes = Number(execFileSync('ps', ['-o', 'rss=', '-p', String(nextProcess.pid)], { encoding: 'utf8' }).trim()) * 1024;
+        const row = { at: new Date().toISOString(), pid: nextProcess.pid, rssBytes,
+          elapsedSeconds: (performance.now() - started) / 1000, phase, connections: await snapshot(), errors };
+        samples.push(row); raw.write(`${JSON.stringify(row)}\n`);
+      } catch (failure) { recordError(failure); }
+    }
+    await sample();
+    let sampling = false;
+    timer = setInterval(() => {
+      if (sampling) return;
+      sampling = true;
+      sample().finally(() => { sampling = false; });
+    }, 5000);
+    const jobs = pages.map((page, index) => load(page, CACHE_COMPONENTS_ACTORS[index % 4], index, () => running, recordError).catch(recordError));
+    console.log(`${identity.variant} round ${round}: pid ${nextProcess.pid}, 30 contexts, warmup ${warmupSeconds}s + measure ${measureSeconds}s`);
+    await delay(warmupSeconds * 1000);
+    phase = 'measure'; await setPhase(phase);
+    await delay(measureSeconds * 1000);
+    await sample();
+    running = false;
+    await Promise.all(contexts.map(context => context.close()));
+    await Promise.all(jobs);
+    await delay(2000);
+    const finalConnections = await snapshot();
+    const metadata = { ...identity, buildId: readFileSync(resolve(build, '.next/BUILD_ID'), 'utf8').trim(),
+      mode, round, controls, node: process.version, contexts: 30, warmupSeconds, measureSeconds,
+      nextPid: nextProcess.pid, errors, failures };
+    const result = { metadata, samples, finalConnections, coverage: finalConnections.coverage };
+    results.push(result);
+    writeFileSync(resolve(report, `round-${round}.json`), JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(summarizeRssRun(result)));
+  } finally {
+    running = false; clearInterval(timer);
+    await Promise.all(browsers.map(browser => browser.close()));
+    await stop(nextProcess); await stop(mockProcess);
+    raw.end(); log.end();
+  }
+}
+writeFileSync(resolve(report, 'runs.json'), JSON.stringify(results, null, 2));
+writeFileSync(resolve(report, 'summary.json'), JSON.stringify({ mode, rounds: results.map(summarizeRssRun) }, null, 2));
+// A smoke run is infrastructure validation and can never produce an acceptance verdict.
+if (mode === 'full' && results.some(run => !summarizeRssRun(run).passed)) process.exitCode = 1;

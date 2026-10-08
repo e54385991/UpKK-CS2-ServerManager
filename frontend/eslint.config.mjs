@@ -10,6 +10,11 @@ const eslintConfig = [
   {
     ignores: [
       ".next/**",
+      ".next-cache-components/**",
+      ".cache-components/**",
+      "test-results/**",
+      "playwright-report/**",
+      "blob-report/**",
       "node_modules/**",
       "src/shared/api/schema.d.ts",
       "e2e/**",

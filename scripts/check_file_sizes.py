@@ -14,6 +14,15 @@ FRONTEND_ROOT = PROJECT_ROOT / "frontend"
 PRODUCTION_LIMIT = 800
 TEST_LIMIT = 1200
 GENERATED_NAMES = {"schema.d.ts"}
+FRONTEND_ARTIFACT_DIRS = {
+    "node_modules",
+    ".next",
+    ".next-cache-components",
+    ".cache-components",
+    "test-results",
+    "playwright-report",
+    "blob-report",
+}
 
 LEGACY_SIZE_LIMITS: dict[str, int] = {}
 
@@ -23,12 +32,12 @@ def _python_files(root: Path):
 
 
 def _frontend_files(root: Path):
-    for path in root.rglob("*"):
-        if path.suffix not in {".ts", ".tsx"}:
-            continue
-        if any(part in {"node_modules", ".next"} for part in path.parts):
-            continue
-        yield path
+    for directory, directories, filenames in root.walk():
+        directories[:] = [name for name in directories if name not in FRONTEND_ARTIFACT_DIRS]
+        for filename in filenames:
+            path = directory / filename
+            if path.suffix in {".ts", ".tsx"}:
+                yield path
 
 
 @dataclass(frozen=True)

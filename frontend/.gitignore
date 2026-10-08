@@ -35,3 +35,6 @@ yarn-error.log*
 /playwright-report/
 /blob-report/
 /e2e/.auth/
+
+# Isolated Cache Components builds and raw acceptance data
+/.cache-components/

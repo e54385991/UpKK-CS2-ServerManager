@@ -41,6 +41,11 @@
   ],
   "exclude": [
     "node_modules",
+    "test-results",
+    "playwright-report",
+    "blob-report",
+    ".next-cache-components",
+    ".cache-components",
     "e2e",
     "playwright.config.ts",
     "**/*.test.ts"

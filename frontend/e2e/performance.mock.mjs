@@ -1,6 +1,8 @@
 // Loopback-only fixture: never contacts a real database, provider, Redis or SSH host.
 import { createServer } from 'node:http';
-const port = Number(process.env.PERF_MOCK_PORT ?? 38131);
+import { pathToFileURL } from 'node:url';
+
+export function createPerformanceFixture({ port = Number(process.env.PERF_MOCK_PORT ?? 38131), extraHandler, serverCount = 2 } = {}) {
 let requests = [];
 let rules = {};
 let savedContent = 'hostname "fixture"\n';
@@ -24,7 +26,7 @@ const app = createServer(async (req, res) => {
     res.end(JSON.stringify(value));
   };
   let text = ''; for await (const part of req) text += part;
-  const input = text ? JSON.parse(text) : {};
+  const input = text && req.headers['content-type']?.includes('application/json') ? JSON.parse(text) : {};
   if (path === '/__test__/reset') {
     for (const callbacks of waiters.values()) for (const release of callbacks) release();
     waiters.clear(); requests = []; rules = input.rules ?? {}; servers = new Map(); plugin.title = 'Fixture Plugin'; savedContent = 'hostname "fixture"\n';
@@ -39,6 +41,7 @@ const app = createServer(async (req, res) => {
   const actor = String(req.headers.authorization ?? '');
   const record = { path, query: url.search, method: req.method, actor, started: Date.now(), ended: null, input };
   requests.push(record);
+  if (requests.length > 10000) requests.shift();
   const rule = rules[path];
   if (rule?.gate) await new Promise(resolve => {
     const list = waiters.get(path) ?? []; list.push(resolve); waiters.set(path, list);
@@ -49,6 +52,7 @@ const app = createServer(async (req, res) => {
   if (res.destroyed) return;
   if (rule?.status) return json({ detail: 'Fixture failure' }, rule.status);
   if (rule && Object.hasOwn(rule, 'body')) return json(rule.body);
+  if (extraHandler && await extraHandler({ req, res, url, path, input, actor, json, server, plugin, inbox })) return;
   if (path === '/api/v1/auth/registration-config') return json({ registration_enabled: false, captcha_enabled: false });
   if (path === '/api/v1/auth/me') return actor.includes('invalid') ? json({ detail: 'Expired' }, 401) : json({ id: actor.includes('member') ? 2 : 1, username: actor.includes('member') ? 'fixture-member' : 'fixture-admin', is_admin: !actor.includes('member'), is_active: true, email: null });
   if (path === '/api/v1/operations/inbox/events') {
@@ -82,7 +86,7 @@ const app = createServer(async (req, res) => {
   if (path.endsWith('/game-updates')) return json({ installed_source: 'unknown', steam_check_ok: false, enable_auto_update: false, update_check_interval_hours: 6 });
   if (path.endsWith('/plugin-updates')) return json({ enable_plugin_auto_update: false, plugin_update_check_interval_hours: 6, enable_plugin_post_update_commands: false, plugin_post_update_command_ids: [], plugins: [] });
   if (path === '/api/v1/setup/initialized-servers') return json([{ key: 'fixture', name: 'Fixture host', host: 'fixture.invalid', ssh_port: 22, ssh_user: 'cs2server', game_directory: '/srv/cs2', created_at: Date.parse(stamp) / 1000, suggested_game_port: 27015 }]);
-  if (path === '/api/v1/servers') return json([server(1), server(2)]);
+  if (path === '/api/v1/servers') return json(Array.from({ length: serverCount }, (_, index) => server(index + 1)));
   if (/^\/api\/v1\/servers\/\d+$/.test(path)) {
     const id = Number(path.split('/').at(-1));
     if (id === 404) return json({ detail: 'Not found' }, 404);
@@ -147,4 +151,10 @@ const app = createServer(async (req, res) => {
   }
   return json({ detail: `Unused fixture endpoint: ${path}` }, 404);
 });
-app.listen(port, '127.0.0.1', () => console.log(`Performance fixture :${port}`));
+return app;
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  const port = Number(process.env.PERF_MOCK_PORT ?? 38131);
+  createPerformanceFixture({ port }).listen(port, '127.0.0.1', () => console.log(`Performance fixture :${port}`));
+}
