@@ -4,7 +4,7 @@ import { compareRssRuns, summarizeRssRun } from './cache-components-rss-analysis
 
 function run(bytes = 1000) {
   return { metadata: { mode: 'full', contexts: 30, warmupSeconds: 300,
-    measureSeconds: 3600, nextPid: 123, errors: 0, controls: { node: '26', platform: 'darwin', arch: 'arm64', host: 'fixture-host', next: '16.4.0', browserProcesses: 5, contexts: 30, nofile: '65536', tempFilesystemType: 1, memoryLimitBytes: 'host', fixtureHash: 'fixture', workloadHash: 'workload' } },
+    measureSeconds: 3600, nextPid: 123, errors: 0, controls: { node: '26', platform: 'darwin', arch: 'arm64', host: 'fixture-host', next: '16.4.0', browserProcesses: 5, contexts: 30, visitSeconds: 15, startIntervalMs: 500, nofile: '65536', tempFilesystemType: 1, memoryLimitBytes: 'host', fixtureHash: 'fixture', workloadHash: 'workload' } },
   samples: Array.from({ length: 781 }, (_, index) => ({ pid: 123, elapsedSeconds: index * 5,
     phase: index < 60 ? 'warmup' : 'measure', rssBytes: bytes })),
   coverage: { warmup: 500, measure: 500 },
@@ -32,7 +32,7 @@ test('each round must be stable even when aggregate p95 is below regression limi
 });
 
 test('mismatched runtime, host, fixture or request sequence cannot pass', () => {
-  for (const key of ['node', 'host', 'nofile', 'tempFilesystemType', 'memoryLimitBytes', 'fixtureHash', 'workloadHash']) {
+  for (const key of ['node', 'host', 'visitSeconds', 'startIntervalMs', 'nofile', 'tempFilesystemType', 'memoryLimitBytes', 'fixtureHash', 'workloadHash']) {
     const candidate = run(); candidate.metadata.controls[key] = 'different';
     assert.equal(compareRssRuns([run(), run(), run()], [candidate, run(), run()]).passed, false);
   }

@@ -28,13 +28,14 @@ if (mode === 'full' && rounds !== 3) throw new Error('The acceptance protocol re
 const warmupSeconds = mode === 'full' ? RSS_PROTOCOL.warmupSeconds : 10;
 const measureSeconds = mode === 'full' ? RSS_PROTOCOL.measureSeconds : 30;
 const visitSeconds = 15;
+const startIntervalMs = visitSeconds * 1000 / RSS_PROTOCOL.contexts;
 const baseURL = 'http://cache-components.test:31961';
 const listenerURL = 'http://127.0.0.1:31961';
 const mockURL = 'http://127.0.0.1:38261';
 const hash = paths => createHash('sha256').update(Buffer.concat(paths.map(path => readFileSync(resolve(import.meta.dirname, path))))).digest('hex');
 const controls = { node: process.version, platform: process.platform, arch: process.arch, host: hostname(),
   next: JSON.parse(readFileSync(resolve(build, 'node_modules/next/package.json'))).version,
-  browserProcesses: 5, contexts: 30, visitSeconds,
+  browserProcesses: 5, contexts: 30, visitSeconds, startIntervalMs,
   nofile: execFileSync('sh', ['-c', 'ulimit -n'], { encoding: 'utf8' }).trim(),
   tempFilesystemType: statfsSync(tmpdir()).type,
   memoryLimitBytes: existsSync('/sys/fs/cgroup/memory.max')
@@ -79,7 +80,7 @@ async function load(context, actor, index, keepGoing, measured, error, diagnose)
   const tenantWorkers = Array.from({ length: 30 }, (_, worker) => worker)
     .filter(worker => CACHE_COMPONENTS_ACTORS[worker % 4].at(-1) === actor.at(-1));
   let step = tenantWorkers.indexOf(index);
-  await delay(index * 250);
+  await delay(index * startIntervalMs);
   try {
     while (keepGoing()) {
       const iterationStarted = performance.now();

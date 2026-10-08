@@ -37,7 +37,7 @@ export function compareRssRuns(baseline, candidate) {
   const after = candidate.map(summarizeRssRun);
   const reference = baseline[0]?.metadata.controls;
   const controlKeys = ['node', 'platform', 'arch', 'host', 'next', 'browserProcesses', 'contexts',
-    'nofile', 'tempFilesystemType', 'memoryLimitBytes', 'fixtureHash', 'workloadHash'];
+    'visitSeconds', 'startIntervalMs', 'nofile', 'tempFilesystemType', 'memoryLimitBytes', 'fixtureHash', 'workloadHash'];
   const matched = Boolean(reference) && [...baseline, ...candidate].every(run =>
     controlKeys.every(key => reference[key] !== undefined && reference[key] === run.metadata.controls?.[key]));
   const complete = matched && before.length === 3 && after.length === 3 &&
