@@ -2,6 +2,10 @@
 
 状态：实施中；正式 `cacheComponents`、`partialPrefetching` 尚未开启。
 目标和门禁以本次用户计划及 [隔离设施说明](../frontend/instant-nav.rig.md) 为准。
+当前受测应用源码提交为 `89d801d`，工作区字典拆分已完成全仓质量基线和
+360 项生产导航矩阵。候选 `candidate-memory-v20` 的三轮完整 RSS 测量已启动；
+预检确认 579 个源码文件与当前应用一致，运行时、fixture、负载和其余控制项
+均与已通过的三轮 `rss-baseline-musl-15` 精确匹配。该测量尚未产生通过结论。
 
 ## 已实现与验证
 
@@ -16,14 +20,14 @@
 - 外壳、通用标题和已有骨架先显示；身份、权限、公告、活动托盘及业务数据分别
   加载。认证仅使用 React 请求内去重，业务请求保持 `no-store`、HttpOnly JWT
   及后端逐请求鉴权。18 个 Handler 移除不兼容配置，保留取消语义。
-- 最新候选 `candidate-14` 的生产矩阵 **360 项通过**：38 页 × 两类导航 × 两种
+- 前一批候选 `candidate-14` 的生产矩阵 **360 项通过**：38 页 × 两类导航 × 两种
   语言 × 两种宽度，另含 52 项兼容性、权限、租户、语言、404、错误恢复、保存
   及交互检查。活动托盘、multipart 上传、助手 SSE、实时终端实际连接通过；
   切页后流与 socket 归零，浏览器没有未处理异常。
 - 概览差分验证：只恢复顶层 `await getSession()` 后，同一 `instant()` 检查因
   外壳标记缺失而失败；恢复拆分后通过。动态业务数据在测试锁下保持阻塞，释放
   后显示实际内容，测试不能通过空外壳。
-- 测试 API 关闭的候选生产构建通过原 bundle 门禁（`candidate-production-14`
+- 前一批测试 API 关闭的候选生产构建通过原 bundle 门禁（`candidate-production-14`
   最大路由 **258,956 bytes**）；
   原路由上限 259,072 bytes、chunk 上限 153,600 bytes 保持不变。
   CI 新增独立 production-navigation job，运行生产导航矩阵及原 bundle 门禁。
@@ -68,7 +72,7 @@ Next 16.4.0、Playwright 1.63.0；迁移前与候选使用同一容器、依赖�
   诊断等待期间继续堆积负载；关闭上下文和流后保留不完整结果。新增 HTTP /
   进程诊断及构建重叠、测试 API 检查。两个版本共用同一脚本和固定 fixture，
   改动后重新测量，不能混用旧负载结果。完整长测期间不运行其他构建或回归。
-- 最新候选为容器内 `/acceptance/candidate-current-4`，对应已通过功能检查的
+- 该阶段受测候选为容器内 `/acceptance/candidate-current-4`，对应已通过功能检查的
   页面源码；两项候选特性开启、测试 API 关闭。六轮完整结果及 5% 比较仍待完成。
 - 构建和其他回归结束后的 v6 在约 1,580.6 秒发生 1 个
   `page.waitForLoadState` 超时；两阶段均覆盖 500 ID，独立 HTTP 返回
@@ -251,8 +255,11 @@ Next 16.4.0、Playwright 1.63.0；迁移前与候选使用同一容器、依赖�
   编译及运行错误列表均为空；记录为 `workspace-catalog-dev-v20.json`。
   全仓质量基线通过，日志 `/tmp/upkk-cc-workspace-catalog-baseline-v20.log`。
   验证结束后临时开发服务和浏览器已关闭，完整 RSS 测量期间不并行运行。
-  本轮未修改 fixture、负载或 RSS 运行器；原三轮基线仍须精确匹配全部控制项
-  后方可复用。修复后候选三轮完整长测尚未通过，正式默认继续关闭。
+  本轮未修改 fixture、负载或 RSS 运行器；完整测量启动前已逐项确认原三轮
+  基线的全部控制项精确匹配，并记录构建身份及源码摘要。候选长测目录为
+  `/acceptance/rss-candidate-musl-v20`，预检、原始记录与本地日志另存到隔离
+  主机 `rss-candidate-musl-v20-progress`。修复后候选三轮完整长测尚未通过，
+  正式默认继续关闭。
 
 ## 剩余验收
 
