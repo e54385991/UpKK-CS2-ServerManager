@@ -214,8 +214,45 @@ Next 16.4.0、Playwright 1.63.0；迁移前与候选使用同一容器、依赖�
   定位已经被 GC 回收的临时对象（[V8 Inspector 协议定义](https://raw.githubusercontent.com/ChromeDevTools/devtools-protocol/master/pdl/js_protocol.pdl)）；
   原生 `--heap-prof` 的存活对象采样不足以
   回答这一问题。启动前已验证旧轮结束、所有流释放且没有残留 Next 或
-  Chrome 测试进程；当前进程存活。短窗仍固定标记 `diagnostic`，不要求
+  Chrome 测试进程；启动时进程存活。短窗仍固定标记 `diagnostic`，不要求
   它满足正式数据集覆盖，也不能用于通过 RSS 门禁。正式默认继续关闭。
+
+- `memory-pair-v17` 两版分配定位均已结束，零错误，连接全部释放。采样包含
+  被 GC 回收的临时对象，累计采样分配为 **2,770,153,976 /
+  5,130,533,104 bytes**（基线 / 候选），比例 **1.8521**。按与受测构建
+  SHA-256 一致的 Next source map 定位，主要增量来自 `pullFlightData`、
+  RSC `resolveModel` / `emitChunk` 和 `TextEncoder.encode`。原始 profile、
+  映射工具及摘要保留在 `memory-pair-v17`；栈的包含分配不能相加，也不能
+  当成存活堆或 RSS。诊断支持缩小 Flight 序列化负载，尚不证明 RSS 根因。
+- `payload-pair-v18` 实际 HTTP 诊断发现，原候选监控页的双语言 Flight 为
+  **259,587 / 256,170 bytes**，基线为 **124,225 / 122,512 bytes**。
+  原工作区公共 provider 携带所有 19 类页面的字典，英语 / 中文序列化字典为
+  **101,171 / 99,461 bytes**。本轮将公共框架字典与当前页面字典分开，
+  页面 provider 保留其公共控件所需字典，监控页缩至 **33,212 /
+  32,677 bytes**，不携带文件、地图等其他页面字典。类别映射受完整类型
+  约束，两语言回归测试校验字典可解析、共享目录未被修改及 40 KiB 上限。
+- 最初 v19 构建从旧测试目录复制局部文件，完整源码核验发现它缺少此前的
+  导航、hydration 和助手流修复，因此 v19 不计入当前验收。v20 改用当前
+  Git 文件及本轮新增文件的完整输入，**579 个源码文件逐一 SHA-256 一致**。
+  准备脚本现在在成功构建后自动记录真实 `.next/BUILD_ID`，缺失时拒绝。
+  当前内存构建为 `goUH1Hy-o_3OT1YrM0yuA`（测试 API 关闭），导航构建为
+  `JCru1EKQ8ATFkvbYBnX6s`（仅该隔离构建开启测试 API）；两项特性均开启。
+  自动 bundle 检查最大 **258,953 bytes**，低于 **259,072 bytes** 上限。
+- `payload-pair-v20` 使用当前内存构建、锁定的生产 musl 运行时重新读取
+  实际监控页面：英语 / 中文 Flight 为 **124,654 / 123,587 bytes**，
+  HTML 为 **225,017 / 223,848 bytes**，正常监控表单可见。相同基线的
+  Flight 为 **124,225 / 122,512 bytes**。这是响应体诊断，不能替代
+  内存长测；原始响应及摘要保留在隔离主机 `payload-pair-v20`。
+- 当前 v20 的生产矩阵 **360 项全部通过**，覆盖双语言、390/1440 宽度、
+  首次加载、真实 Link 导航及权限、流取消场景；日志为
+  `/tmp/upkk-cc-workspace-catalog-navigation-v20.log`。开发态 Next 16.4.0
+  Turbopack 的 MCP 与 agent-browser 0.38.2 双视图再次检查监控、文件、
+  配置和插件页，双语言/宽度共 **16 次**，页面语言及 React 组件树正常，
+  编译及运行错误列表均为空；记录为 `workspace-catalog-dev-v20.json`。
+  全仓质量基线通过，日志 `/tmp/upkk-cc-workspace-catalog-baseline-v20.log`。
+  验证结束后临时开发服务和浏览器已关闭，完整 RSS 测量期间不并行运行。
+  本轮未修改 fixture、负载或 RSS 运行器；原三轮基线仍须精确匹配全部控制项
+  后方可复用。修复后候选三轮完整长测尚未通过，正式默认继续关闭。
 
 ## 剩余验收
 

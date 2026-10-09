@@ -70,6 +70,8 @@ const build = spawnSync(process.execPath, ['node_modules/next/dist/bin/next', 'b
 });
 if (build.status !== 0) process.exit(build.status ?? 1);
 const actual = JSON.parse(readFileSync(resolve(destination, '.next/required-server-files.json'), 'utf8')).config;
+identity.buildId = readFileSync(resolve(destination, '.next/BUILD_ID'), 'utf8').trim();
+if (!identity.buildId) throw new Error('Built application is missing its Next build ID');
 identity.testingApi = Boolean(actual.experimental.exposeTestingApiInProductionBuild);
 identity.cacheComponents = Boolean(actual.cacheComponents);
 identity.partialPrefetching = Boolean(actual.partialPrefetching);

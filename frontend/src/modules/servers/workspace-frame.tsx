@@ -2,7 +2,7 @@ import { Suspense, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { ClientMessages } from "@/i18n/client-messages";
-import { WORKSPACE_NAMESPACES } from "@/i18n/namespaces";
+import { WORKSPACE_FRAME_NAMESPACES } from "./workspace-messages";
 import { getCurrentServerOperation, getDeploymentLock, getServer } from "./render-queries";
 import { DeleteServerButton } from "./delete-server-button";
 import { WorkspaceStatus, WorkspaceStatusSkeleton } from "./workspace-status";
@@ -24,7 +24,7 @@ async function serverIdFrom(params: ServerParams) {
 
 export async function WorkspaceFrame({ params, children }: { params: ServerParams; children: ReactNode }) {
   const [t, tServers] = await Promise.all([getTranslations("serverDetail"), getTranslations("servers")]);
-  return <ClientMessages namespaces={WORKSPACE_NAMESPACES}>
+  return <ClientMessages namespaces={WORKSPACE_FRAME_NAMESPACES}>
     <PageHeader
       title={<Suspense fallback={t("workspaceTitle")}><WorkspaceIdentity params={params} /></Suspense>}
       description={t("workspaceHelp")}

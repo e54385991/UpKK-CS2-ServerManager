@@ -37,31 +37,6 @@ export const LIVE_CONSOLE_NAMESPACES = [
   "serverDetail",
 ] as const satisfies readonly MessageNamespace[];
 
-export const WORKSPACE_NAMESPACES = [
-  ...CONSOLE_NAMESPACES,
-  "servers",
-  "serverWorkspace",
-  "console",
-  "startupCommand",
-  "files",
-  "maps",
-  "plugins",
-  "pluginConfigs",
-  "pluginUpdates",
-  "quickCommands",
-  "gameUpdates",
-  "cleanup",
-  "schedule",
-  "discord",
-  "serverHelp",
-  "gameModes",
-  "serverAdditionalFixes",
-  "s3Backups",
-  "serverMonitoring",
-  "serverConfig",
-  "profile",
-] as const satisfies readonly MessageNamespace[];
-
 export const SERVERS_SECTION_NAMESPACES = [
   ...CONSOLE_NAMESPACES,
   "servers",
