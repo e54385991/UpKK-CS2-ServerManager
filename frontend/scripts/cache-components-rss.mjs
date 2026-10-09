@@ -111,7 +111,10 @@ async function load(context, actor, index, keepGoing, measured, error, diagnose)
           }
         }, { id, operation: FIXTURE_OPERATION });
         if (measured() && step % 5 === 0) {
-          await page.locator('a[data-workspace-category="files"]').click({ noWaitAfter: true });
+          // If hydration is still pending, the real Link starts a document
+          // navigation. Let that navigation commit before cancelling its
+          // remaining readers; noWaitAfter can race the about:blank navigation.
+          await page.locator('a[data-workspace-category="files"]').click();
           await page.goto('about:blank', { waitUntil: 'commit' });
           await page.goto(`/servers/${id}/monitoring`, { waitUntil: 'commit' });
           await page.getByTestId('monitoring-form').waitFor();
