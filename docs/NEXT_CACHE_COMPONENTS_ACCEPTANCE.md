@@ -192,6 +192,30 @@ Next 16.4.0、Playwright 1.63.0；迁移前与候选使用同一容器、依赖�
   输出位于容器的 `memory-pair-v16`，元数据固定为 `diagnostic`，不能用于
   通过完整 RSS 门禁。修复后仍须完成原协议要求的候选三轮完整长测；若
   运行时、fixture、负载或其他控制项改变，基线也须重新测量。
+- `memory-pair-v16` 两版诊断均完整结束：各 300 秒预热、900 秒诊断负载，
+  两阶段各覆盖 500 ID，零错误；基线 **7,543 条流**、候选 **7,419 条流**
+  全部释放。控制项精确匹配，两份负载结束后的原始堆快照、存活对象分配
+  采样、内存逐行记录、运行身份和诊断工具已保留到隔离主机目录
+  `memory-pair-v16`；`paired-memory-summary.json` 明确标记
+  `diagnostic: true`、`supportsAcceptance: false`。
+  快照对象自身大小合计为 **57,708,995 / 70,359,364 bytes**
+  （基线 / 候选，约 55.0356 / 67.0999 MiB），差 **12,650,369 bytes**。
+  此合计包含快照中的原生缓冲区，不能当成 RSS 或 dominator retained size。
+  候选页面缓存最终只有 **21 条、3,678,848 bytes**，未见随 500 ID 持续
+  堆积；堆快照的主要对象增量是缓冲区、字符串和代码。
+  同一诊断测量窗口的累计堆分配速度为 **23,891,756.58 /
+  44,117,810.79 bytes/s**，候选约 **1.8466 倍**；外部内存中位数为
+  **21,370,307 / 42,977,938.5 bytes**。这些数据支持继续追踪渲染中的
+  临时分配，但尚不能确定正式 RSS 回归的根因，也不证明不存在泄漏。
+- 接续的 `memory-pair-v17` 分配定位已串行启动，仍使用同一受测构建、
+  musl 运行时和 30 浏览器上下文。每版先预热 300 秒，再采样 120 秒，
+  通过 V8 Inspector 的 `HeapProfiler.startSampling` 同时开启
+  `includeObjectsCollectedByMajorGC` 与 `includeObjectsCollectedByMinorGC`，
+  定位已经被 GC 回收的临时对象（[V8 Inspector 协议定义](https://raw.githubusercontent.com/ChromeDevTools/devtools-protocol/master/pdl/js_protocol.pdl)）；
+  原生 `--heap-prof` 的存活对象采样不足以
+  回答这一问题。启动前已验证旧轮结束、所有流释放且没有残留 Next 或
+  Chrome 测试进程；当前进程存活。短窗仍固定标记 `diagnostic`，不要求
+  它满足正式数据集覆盖，也不能用于通过 RSS 门禁。正式默认继续关闭。
 
 ## 剩余验收
 
