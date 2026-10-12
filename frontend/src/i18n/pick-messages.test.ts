@@ -65,3 +65,13 @@ test("login and overview client catalogs stay under half of the full dictionary"
   assert.ok(login * 2 < full, `login ${login} is not 50% below ${full}`);
   assert.ok(overview * 2 < full, `overview ${overview} is not 50% below ${full}`);
 });
+
+test("console catalogs include description task copy without the marketplace dictionary", () => {
+  for (const locale of ["en-US", "zh-CN"]) {
+    const catalog = JSON.parse(readFileSync(new URL(`./messages/${locale}.json`, import.meta.url), "utf8")) as Catalog;
+    const picked = pickMessages(catalog, CONSOLE_NAMESPACES);
+    const plugins = picked.plugins as Catalog;
+    assert.deepEqual(plugins.sync, (catalog.plugins as Catalog).sync);
+    assert.equal(plugins.title, undefined);
+  }
+});

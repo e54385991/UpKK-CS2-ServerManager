@@ -2,6 +2,7 @@ import { test, expect, type BrowserContext, type APIRequestContext } from "@play
 import en from "../src/i18n/messages/en-US.json" with { type: "json" };
 import zh from "../src/i18n/messages/zh-CN.json" with { type: "json" };
 import { FIXTURE_OPERATION } from "./helpers/cache-components-surfaces.mjs";
+import type { DescriptionSyncJob } from "../src/modules/plugins/types";
 
 const origin = "http://127.0.0.1:31961";
 const mock = "http://127.0.0.1:38261";
@@ -251,6 +252,38 @@ test("error retry restores fresh localized data", async ({ page, request }, info
   await request.post(`${mock}/__test__/reset`);
   await page.getByRole("button", { name: chinese ? "重试" : "Try again", exact: true }).click();
   await expect(page.getByTestId("overview-stats").filter({ visible: true })).toHaveCount(1);
+});
+
+test("description tasks in the global tray retain localized copy on the overview", async ({ page }, info) => {
+  const messages = info.project.name.startsWith("zh-CN") ? zh : en;
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(String(error)));
+  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  const task: DescriptionSyncJob = {
+    operation_id: FIXTURE_OPERATION, status: "completed", phase: "completed",
+    command: "Synchronize marketplace descriptions", framework: "counterstrikesharp",
+    created_at: "2026-10-09T00:00:00Z", completed_at: "2026-10-09T00:01:00Z",
+    cancel_requested: false, overwrite: true, total: 1, processed: 1,
+    updated: 1, unchanged: 0, skipped: 0, failed: 0, items: [],
+    message: "Fixture description task",
+  };
+  const inbox = { items: [], active_count: 0, running_count: 0, market_description_items: [task] };
+  await page.route("**/ops-stream/operations/inbox", route => route.fulfill({
+    contentType: "text/event-stream", body: `event: inbox\ndata: ${JSON.stringify(inbox)}\n\n`,
+  }));
+  await page.route("**/server-ops/inbox", route => route.fulfill({ json: {
+    ok: true, data: {
+      items: [], completedItems: [], failedItems: [], marketImportItems: [], marketDescriptionItems: [task],
+      activeCount: 0, runningCount: 0, completedCount: 0, failedCount: 0,
+      completedRetentionDays: 7, failedRetentionDays: 7,
+    },
+  } }));
+  await page.goto("/overview");
+  await page.getByTestId("activity-tray-toggle").click();
+  const tray = page.getByTestId("activity-tray-panel");
+  await expect(tray.getByRole("heading", { name: messages.plugins.sync.taskList, exact: true })).toBeVisible();
+  await expect(tray.getByText(messages.plugins.sync.taskStatus.completed, { exact: true })).toHaveCount(2);
+  expect(errors).toEqual([]);
 });
 
 test("activity tray, upload, assistant SSE and live terminal survive navigation and cancellation", async ({ page, request }, info) => {

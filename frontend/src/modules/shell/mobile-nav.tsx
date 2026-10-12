@@ -3,14 +3,13 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "@/i18n/navigation";
-import { usePathname } from "@/i18n/navigation";
+import { useNavigationPathname } from "@/shared/ui/navigation-path";
 import { Menu, X, Crosshair } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { NAV_SECTIONS } from "@/shared/config/navigation";
 import { NavLink } from "@/modules/shell/nav-link";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
 import { Button } from "@/shared/ui/button";
-import { useHydrated } from "@/shared/lib/use-hydrated";
 
 /**
  * Hamburger + overlay drawer for viewports below `md`.
@@ -24,10 +23,9 @@ import { useHydrated } from "@/shared/lib/use-hydrated";
  * dismisses the drawer without an effect.
  */
 export function MobileNav({ admin }: { admin?: React.ReactNode }) {
-  const hydrated = useHydrated();
-  const pathname = usePathname();
+  const pathname = useNavigationPathname();
   const [openPath, setOpenPath] = useState<string | null>(null);
-  const open = openPath === pathname;
+  const open = openPath !== null && openPath === pathname;
   const t = useTranslations("nav");
   const tSite = useTranslations("site");
   const tShell = useTranslations("shell");
@@ -128,7 +126,7 @@ export function MobileNav({ admin }: { admin?: React.ReactNode }) {
         data-testid="console-mobile-open"
         aria-label={tShell("openNav")}
         aria-expanded={open}
-        disabled={!hydrated}
+        disabled={pathname === null}
         onClick={() => setOpenPath(pathname)}
       >
         <Menu className="size-5" />

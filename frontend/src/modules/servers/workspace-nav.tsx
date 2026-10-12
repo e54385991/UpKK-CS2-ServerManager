@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "@/i18n/navigation";
+import { useNavigationPathname } from "@/shared/ui/navigation-path";
 import { useTranslations } from "next-intl";
 import {
   Activity,
@@ -57,7 +57,7 @@ const CATEGORY_ICONS: Record<ServerWorkspaceCategory, LucideIcon> = {
 };
 
 export function ServerWorkspaceNav({ serverId }: { serverId: number }) {
-  const pathname = usePathname();
+  const pathname = useNavigationPathname();
   const t = useTranslations("serverWorkspace");
 
   return (
@@ -81,7 +81,7 @@ export function ServerWorkspaceNav({ serverId }: { serverId: number }) {
             {row.categories.map((category) => {
               const Icon = CATEGORY_ICONS[category];
               const href = workspaceHref(serverId, category);
-              const active = isWorkspaceCategoryActive(
+              const active = pathname !== null && isWorkspaceCategoryActive(
                 pathname,
                 serverId,
                 category,

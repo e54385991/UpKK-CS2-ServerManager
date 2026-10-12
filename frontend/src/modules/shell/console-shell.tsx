@@ -2,10 +2,12 @@ import { Suspense } from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { AdminNavigationSlot } from "./session-slots";
+import { NavigationPathTracker } from "@/shared/ui/navigation-path";
 
 export function ConsoleShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden" data-testid="console-shell">
+      <Suspense fallback={null}><NavigationPathTracker /></Suspense>
       <Sidebar admin={<Suspense fallback={null}><AdminNavigationSlot /></Suspense>} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Topbar />

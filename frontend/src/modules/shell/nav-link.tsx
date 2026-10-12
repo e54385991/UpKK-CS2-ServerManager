@@ -1,14 +1,13 @@
 "use client";
 
 import { Link } from "@/i18n/navigation";
-import { usePathname } from "@/i18n/navigation";
 import type { PublicRoute as Route } from "@/i18n/public-route";
 import type { LucideIcon } from "lucide-react";
-import { Suspense, type MouseEventHandler } from "react";
+import type { MouseEventHandler } from "react";
 import { cn } from "@/shared/lib/cn";
 import { activeNavHref, navPathMatches, type NavItem } from "@/shared/config/navigation";
 import { LinkPendingHint } from "@/shared/ui/link-pending-hint";
-import { useHydrated } from "@/shared/lib/use-hydrated";
+import { useNavigationPathname } from "@/shared/ui/navigation-path";
 
 /**
  * Sidebar / mobile-drawer navigation link. Keeps the default `<Link>` prefetch
@@ -26,14 +25,8 @@ type NavLinkProps = {
 };
 
 export function NavLink(props: NavLinkProps) {
-  return <Suspense fallback={<NavLinkView {...props} active={false} />}>
-    <ActiveNavLink {...props} />
-  </Suspense>;
-}
-function ActiveNavLink(props: NavLinkProps) {
-  const hydrated = useHydrated();
-  const pathname = usePathname();
-  const active = hydrated && (props.active ?? (props.items
+  const pathname = useNavigationPathname();
+  const active = pathname !== null && (props.active ?? (props.items
     ? activeNavHref(pathname, props.items) === props.href : navPathMatches(pathname, props.href)));
   return <NavLinkView {...props} active={active} />;
 }
