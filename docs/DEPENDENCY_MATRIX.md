@@ -6,23 +6,114 @@ Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁�
 
 | 类别 | 当前基线 | 维护方式 |
 | --- | --- | --- |
-| Python | 最低 3.14；生产 3.14.8；兼容验证 3.15.0rc3 | `uv` 按 Python 版本解析，生产导出 `requirements.txt` |
-| uv | Docker `0.12.23-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
-| FastAPI / Starlette | `>=0.142.2` / `>=1.7.0` | 保持上游兼容约束 |
-| SQLAlchemy / SQLModel | `>=2.1.3` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
+| Python | 最低 3.15；开发 / 主 CI 固定 3.15.0 正式版；Docker 暂用官方 3.15.0rc3 | `.python-version`、`pyproject.toml` 与带哈希生产导出同步 |
+| uv | Docker `0.13.0-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
+| FastAPI / Starlette | `>=0.143.0` / `>=1.7.0` | 保持上游兼容约束 |
+| SQLAlchemy / SQLModel | `>=2.1.4` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
 | PostgreSQL | Compose `18.6-alpine` | 健康检查后启动，Alembic 自动升级 |
 | Redis | Compose `8.10.2-alpine3.23` | 保持 Redis 7 协议兼容，pipeline/MGET |
 | Caddy | Compose `2.11.7-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
 | HTTP | 生产 `httpx>=0.28.1` | 应用级共享 transport |
 | Starlette 测试客户端 | `httpx2>=2.13.1`（开发） | 仅用于测试兼容层 |
 | SSH | `asyncssh>=2.24.1` | 显式 lease 和连接池 |
-| Node.js | 26 Current（Docker `node:26.10.0-alpine3.24`） | CI `setup-node` 与前端镜像对齐 |
+| Node.js | 26 Current（Docker / CI `26.11.1`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
 | 前端控制台 | Next.js 16.4.0、React 19.3.0、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
 
-关键安全包当前下限为 `boto3>=1.43.108`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
+关键安全包当前下限为 `boto3>=1.43.111`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
 uv、npm（`frontend/`）、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.17,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
 
-SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，本轮同步升级到 SQLAlchemy 2.1.3；保留现有时区映射与 Alembic schema。
+SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.4；保留现有时区映射与 Alembic schema。
+
+## Python 3.15 镜像与全仓库更新（2026-10-12）
+
+重新查询官方 Docker registry：`python:3.15.0-alpine3.24` 仍返回 404。
+按本次明确授权，容器临时使用[官方镜像清单](https://raw.githubusercontent.com/docker-library/official-images/master/library/python)
+中的 `3.15.0rc3-alpine3.24`，固定实际存在的 amd64 / arm64 多架构摘要。
+开发与主质量基线继续固定普通 GIL 的 Python 3.15.0 正式版；这项 RC 例外不扩展到依赖包。
+正式镜像发布后应重新核实摘要并通过相同容器检查替换，不能把 RC 称为正式版。
+
+全量重新解析 Python 依赖，更新 20 个包：主要包括 FastAPI 0.143.0、Pydantic 2.14.1
+及其精确要求的 core 2.50.1、SQLAlchemy 2.1.4、Google Auth 2.61.0、Boto3 1.43.111
+和 Ruff 0.17.0。aiohttp 3.14.5 将 multidict 的上限放宽到 `<8.0`，因此同步升级到 7.1.0，
+不继续保留已经失效的旧限制。生产导出由现有脚本生成，包含锁定版本、平台 marker 和哈希。
+
+前端直接依赖更新到 lucide-react 1.55.0、Playwright 1.64.0 和 @types/node 26.6.5；
+正常 npm 解析共更新 34 个锁文件条目，包含平台二进制和传递依赖。
+TypeScript 6.0.3 / ESLint 9.39.5 的上游兼容限制重新核对后仍成立，保留它们并不代表
+绝对最新主版本已经可用。uv 升到 0.13.0、Node.js / CI 升到 26.11.1；
+setup-uv v10.3.0 与 setup-node v7.1.0 固定官方完整提交 SHA，Ruff hook 同步到 0.17.0。
+PostgreSQL 18.6、Redis 8.10.2、Caddy 2.11.7 和其他 Actions / hooks 仍为核对时的最新稳定版本。
+
+Python 3.15 的纯二进制 musllinux 安装预检因 Brotli 缺少适用 wheel 失败，不能沿用
+3.14 镜像中“所有扩展都有 wheel”的假设。后端改为独立的依赖构建阶段，使用带哈希导出
+编译缺少 wheel 的扩展，并将生产虚拟环境复制到相同基础镜像；最终镜像保留必要 C++
+运行库，不保留编译器、uv、pip 或开发依赖。pip / ensurepip 清理按解释器实际路径执行。
+
+Compose 健康 CI 在 amd64 / arm64 原生 runner 上构建当前源码的两个镜像，核对容器
+解释器版本和 GIL，并在同一基础运行时执行带原覆盖率门槛的全量后端及 PostgreSQL
+集成检查。正式版完整质量基线继续维护所有原门禁，弃用警告仍按错误处理。
+
+本轮重新执行的完整 npm 审计仍报告 braces 开发依赖链的 5 个 high 条目；最新稳定版
+braces 3.0.3 尚无对应修复版本。生产审计与完整验证结果须分别记录，不把这项限制隐藏
+为“全部依赖无漏洞”。下方带日期章节保留当时的版本和验收事实。
+
+macOS 27 本机源码构建 grimp 时遇到 `mis-aligned LINKEDIT string pool`，
+重新构建仍可复现；未剥离的构建可正常加载，与
+[Rust 已报告的 Mach-O 剥离对齐问题](https://github.com/rust-lang/rust/issues/157750)一致。
+本机验证环境使用以下限定到一次构建的参数恢复该开发工具，不修改锁定版本、
+不绕过架构门禁，也不把 macOS 参数带入 Linux 运行镜像：
+
+```bash
+RUSTFLAGS='-C strip=none' CARGO_PROFILE_RELEASE_STRIP=none \
+  uv sync --locked --reinstall-package grimp --no-binary-package grimp --no-cache
+```
+
+### 本轮验证结果
+
+- 在只包含本次升级改动的隔离工作区执行完整
+  `uv run python scripts/check_baseline.py`，退出码 0：Python 3.15.0 正式版后端
+  2411 项测试、126 个 subtest 通过，1 项跳过；分支覆盖率 87.51%，分域覆盖率 91.25%。
+  BasedPyright 零错误/警告，架构、契约、锁文件、带哈希导出和全部其他门禁通过。
+- 前端 7 项源码契约、159 项单元测试及 lint / typecheck / build 通过，41 页包体预算
+  通过。现有四组浏览器回归全部通过（教程 1、概览 18、性能/导航 57、监控/设置 14）；
+  性能组首次发现既有登录跳转断言遗漏 `next` 查询参数，经单独授权修正为同时核对
+  `/login` 路径和 `/plugins` 回跳目标，受影响场景重跑通过。额外生产导航 360 项通过，
+  关闭测试 API 的隔离生产构建包体预算通过，最大路由为 258957 字节。
+- Python 与 npm 生产依赖审计无已知漏洞；完整 npm 审计仍保留上文的 5 个开发依赖
+  high 条目。保留一个既有 Discord mock 的未等待协程 `RuntimeWarning`，未关闭弃用检查。
+- amd64 / arm64 后端与前端镜像均实际构建成功，最终运行镜像确认普通 GIL 的
+  Python 3.15.0rc3，且没有 gcc / g++ / uv / pip / ensurepip。两个独立名称、随机
+  loopback 端口和临时数据卷的 Compose 栈全部通过 `up -d --wait`；数据库、Redis、
+  后端及前端健康、登录、教程和 Caddy 代理均通过，启动自动迁移到 `0036_cs2_version_state`。
+- arm64 RC 容器严格弃用检查下的全量后端测试为 2411 项通过、126 个 subtest 通过、
+  1 项跳过，分支覆盖率 87.51%；随后 PostgreSQL 集成 18 项通过。正式版连接独立临时
+  PostgreSQL 的集成检查也为 18 项通过。amd64 运行镜像另验证了 Redis/HTTP 原生解析、
+  五种 7z 编解码、uvloop `eager_start`、bcrypt、PostgreSQL 查询和 Alembic head。
+- 临时 Docker 磁盘写满及 `/tmp` 默认 noexec 曾导致容器验证失败；清理本次临时产物并
+  使用允许执行的内存挂载后，arm64 全量检查重跑通过。本机 amd64 VM 在并发构建压力下
+  额外全量测试耗时过长，已停止该追加检查；不将它计为通过。amd64 本地验证范围为实际
+  构建、健康启动与上述原生功能检查；新增原生双架构 CI 全量测试门禁仍须由 CI 执行。
+
+以上验证没有推送、发布、访问线上数据库或重启线上服务；无关的已有前端导航改动未纳入。
+
+## Python 3.15 正式版升级（2026-10-10）
+
+[Python 3.15.0](https://www.python.org/downloads/release/python-3150/) 已于 2026-10-09
+正式发布。项目最低版本升至 3.15，`.python-version` 固定普通 GIL 的 3.15.0；
+启动脚本、CI、Ruff / BasedPyright 与现役启动文档同步更新。
+
+[Pydantic 2.14.0](https://pypi.org/project/pydantic/2.14.0/) 已正式支持 Python 3.15，
+依赖统一为 `>=2.14.0,<3.0.0`，锁定 2.14.0 及其要求的 core 2.50.0。
+移除原来的 3.14 稳定版 / 3.15 beta 分支，定向更新锁文件并重新生成带哈希生产导出，
+其他依赖继续使用原锁定版本。
+
+原 `python-315-compatibility` rc3 job 合并入正式版完整基线：保留所有质量门禁，
+全量 / 分域后端测试和 PostgreSQL 集成测试继续把两类弃用警告视为错误。
+不再重复执行一套 3.14 与一套 rc3 测试。
+
+当日 Docker 官方 registry 核对时仍只有 3.15.0rc3，`python:3.15.0-alpine3.24` 返回
+`not found`。当时未授权容器使用 RC，生产镜像升级仍受阻；2026-10-12 的临时例外见上文。
+以下带日期的 3.14 / rc3 章节是历史记录，不再规定当前开发与 CI 版本。
 
 ## 稳定版本核对（2026-10-07）
 

@@ -16,7 +16,7 @@ def example_usage():
     print("CS2 Server Manager - API 使用示例")
     print("=" * 60)
     print(
-        "\n注意: 确保已启动 API 服务器 (uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000)"
+        "\n注意: 确保已启动 API 服务器 (uv run --python 3.15.0 --locked uvicorn main:app --host 0.0.0.0 --port 8000)"
     )
     print("以下是示例请求，需要实际运行时替换为真实数据\n")
 

@@ -141,7 +141,7 @@ test('resource ids, permissions, expired sessions and timeout stay isolated', as
   await expect(page.locator('main')).not.toContainText('fixture-server-2');
   await login(context, 'invalid');
   await page.goto('/plugins');
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(url => url.pathname === '/login' && url.searchParams.get('next') === '/plugins');
   await login(context);
   await request.post(`${mock}/__test__/reset`, { data: { rules: { '/api/v1/servers/1': { gate: true } } } });
   await page.goto('/servers/1/config', { waitUntil: 'commit' });

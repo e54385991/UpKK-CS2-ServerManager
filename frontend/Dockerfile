@@ -1,16 +1,16 @@
 # Compile Next on the build host. QEMU amd64 `next build` hangs on arm64
 # builders; the runner stage still uses the target-arch Node binary. Use the
 # stable default Turbopack bundler in Docker, development and CI alike.
-# Node 26.10.0 is the current stable release (Alpine 3.24, multi-arch index).
+# Node 26.11.1 is the current stable release (Alpine 3.24, multi-arch index).
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
 ARG DEPLOYMENT_ID=unknown
-FROM --platform=$BUILDPLATFORM node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS deps
+FROM --platform=$BUILDPLATFORM node:26.11.1-alpine3.24@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM --platform=$BUILDPLATFORM node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS builder
+FROM --platform=$BUILDPLATFORM node:26.11.1-alpine3.24@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS builder
 WORKDIR /app
 ARG GIT_SHA
 ARG DEPLOYMENT_ID
@@ -28,7 +28,7 @@ RUN --mount=type=secret,id=next_server_actions_key \
     NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$(cat /run/secrets/next_server_actions_key 2>/dev/null || true)" \
     npx next build
 
-FROM node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS runner
+FROM node:26.11.1-alpine3.24@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS runner
 WORKDIR /app
 ARG GIT_SHA
 ARG BUILD_TIME

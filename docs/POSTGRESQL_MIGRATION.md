@@ -11,7 +11,7 @@ Docker Compose 会启动 `postgres:18.6-alpine` 和 Redis：
 ```bash
 cp .env.example .env
 docker compose up -d
-uv run --no-dev --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
+uv run --no-dev --python 3.15.0 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 必须配置：

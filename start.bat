@@ -9,11 +9,11 @@ echo ==========================================
 echo.
 
 set PYTHON_CMD=
-py -3.14 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)" >nul 2>&1
+py -3.15 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 15) and sys.version_info.releaselevel == 'final' else 1)" >nul 2>&1
 if %errorlevel%==0 (
-    set "PYTHON_CMD=py -3.14"
+    set "PYTHON_CMD=py -3.15"
 ) else (
-    python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)" >nul 2>&1
+    python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 15) and sys.version_info.releaselevel == 'final' else 1)" >nul 2>&1
     if %errorlevel%==0 set "PYTHON_CMD=python"
 )
 
@@ -22,8 +22,8 @@ set "UV_CMD=uv"
 if errorlevel 1 (
     echo uv is not installed. Installing uv with pip...
     if "%PYTHON_CMD%"=="" (
-        echo Error: uv is not installed and Python 3.14+ was not found to install it.
-        echo Install Python 3.14+ first, then run: pip install uv
+        echo Error: uv is not installed and Python 3.15+ was not found to install it.
+        echo Install Python 3.15+ first, then run: pip install uv
         exit /b 1
     )
 
@@ -54,4 +54,4 @@ echo ==========================================
 echo.
 
 REM uv reads pyproject.toml/uv.lock, creates .venv if needed, and starts the app.
-!UV_CMD! run --no-dev --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
+!UV_CMD! run --no-dev --python 3.15.0 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5

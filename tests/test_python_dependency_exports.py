@@ -1,4 +1,4 @@
-"""Production exports must select one Pydantic pair on stable and RC Python."""
+"""Production exports must select one stable Pydantic pair on supported Python."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from packaging.markers import default_environment
 from packaging.requirements import Requirement
+from packaging.version import Version
 
 from scripts import export_requirements
 from scripts.export_requirements import preserve_minor_version_markers
@@ -18,9 +19,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize(
     ("python_version", "full_version"),
     [
-        ("3.14", "3.14.7"),
-        ("3.15", "3.15.0rc3"),
         ("3.15", "3.15.0"),
+        ("3.15", "3.15.1"),
     ],
 )
 def test_export_selects_one_pydantic_pair(python_version, full_version):
@@ -35,7 +35,9 @@ def test_export_selects_one_pydantic_pair(python_version, full_version):
         candidates = [
             Requirement(line.removesuffix(" \\")) for line in lines if line.startswith(f"{name}==")
         ]
-        selected = [req for req in candidates if req.marker.evaluate(environment)]
+        selected = [
+            req for req in candidates if req.marker is None or req.marker.evaluate(environment)
+        ]
         assert len(selected) == 1
         exported[name] = selected[0]
 
@@ -47,6 +49,7 @@ def test_export_selects_one_pydantic_pair(python_version, full_version):
         and str(exported["pydantic"].specifier) == f"=={package['version']}"
     ]
     assert len(parents) == 1
+    assert not Version(parents[0]["version"]).is_prerelease
     core = next(dep for dep in parents[0]["dependencies"] if dep["name"] == "pydantic-core")
     core_versions = (
         {core["version"]}
@@ -60,7 +63,11 @@ def test_export_selects_one_pydantic_pair(python_version, full_version):
 
     project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     roots = [Requirement(value) for value in project["project"]["dependencies"]]
-    selected = [req for req in roots if req.name == "pydantic" and req.marker.evaluate(environment)]
+    selected = [
+        req
+        for req in roots
+        if req.name == "pydantic" and (req.marker is None or req.marker.evaluate(environment))
+    ]
     assert len(selected) == 1
     assert selected[0].specifier.contains(parents[0]["version"], prereleases=True)
 

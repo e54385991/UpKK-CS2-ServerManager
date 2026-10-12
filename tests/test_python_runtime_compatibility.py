@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import sysconfig
 
 import hiredis
 import httptools
 import py7zr
 import pytest
 from py7zr.properties import FILTER_DEFLATE64
+
+
+def test_backend_runs_on_a_supported_cpython_with_the_gil():
+    assert sys.implementation.name == "cpython"
+    assert sys.version_info >= (3, 15)
+    assert not sysconfig.get_config_var("Py_GIL_DISABLED")
 
 
 def test_native_redis_parser_reads_responses():
@@ -70,10 +77,7 @@ def test_uvloop_runs_asyncio_tasks():
 
     async def probe():
         loop = asyncio.get_running_loop()
-        if sys.version_info >= (3, 15):
-            task = loop.create_task(value(), eager_start=True)
-        else:
-            task = loop.create_task(value())
+        task = loop.create_task(value(), eager_start=True)
         return await task
 
     with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:

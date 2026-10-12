@@ -29,10 +29,13 @@ backend through a same-origin proxy.
 | Styling | `tailwindcss@4.3.3` + `@tailwindcss/postcss` | v4 engine; design tokens live in `src/app/globals.css` under `@theme`. |
 | Lint | `eslint@9.39.5` + `eslint-config-next@16.4.0` | React, import, and JSX accessibility plugins currently declare peer support through ESLint 9. |
 | Icons | `lucide-react` | Import per-icon; never pass an icon **component** across the server→client boundary (see RSC rules). |
-| Docker runtime | `node:26.10.0-alpine3.24` | Production image + CI use Node 26 Current. |
+| Docker runtime | `node:26.11.1-alpine3.24` | Production image + CI use Node 26 Current. |
 
 Dependencies are pinned to exact versions and committed with `package-lock.json`.
-Do not broadly upgrade or rewrite the lockfile without a reason.
+For an authorized dependency upgrade, update all packages to the latest stable
+versions compatible with upstream and peer constraints, then regenerate the
+lockfile normally. Do not force peer dependencies or add overrides to bypass
+those constraints; record any version retained for compatibility.
 
 ## Architecture: `app → modules/<domain> → shared`
 

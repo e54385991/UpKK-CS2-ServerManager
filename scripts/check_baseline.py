@@ -89,6 +89,10 @@ def main() -> None:
             [
                 pytest,
                 "-q",
+                "-W",
+                "error::DeprecationWarning",
+                "-W",
+                "error::PendingDeprecationWarning",
                 "--cov=api",
                 "--cov=modules",
                 "--cov=services",
@@ -102,6 +106,10 @@ def main() -> None:
             [
                 pytest,
                 "-q",
+                "-W",
+                "error::DeprecationWarning",
+                "-W",
+                "error::PendingDeprecationWarning",
                 "tests/test_ai_streaming_unit.py",
                 "tests/test_ai_streaming.py",
                 "tests/test_ai_assistant_security.py",

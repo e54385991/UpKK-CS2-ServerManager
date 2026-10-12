@@ -1,15 +1,31 @@
-# Alpine keeps the production image small and avoids shipping Debian's
-# perl/apt runtime packages.  The Python 3.14.8 wheels exported by uv include
-# musllinux artifacts for every native dependency used by the application.
-FROM ghcr.io/astral-sh/uv:0.12.23-alpine@sha256:5d7310a1497155071f15d5c3b94d09003ddd04c4e6b78a3c00ca108083c1d147 AS uv
-FROM python:3.14.8-alpine3.24@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+# Use the latest official Python 3.15 RC until the stable image is published.
+# Native extensions without cp315 musllinux wheels build in a separate stage.
+FROM ghcr.io/astral-sh/uv:0.13.0-alpine@sha256:20d3fe1308ffa40b51c5c20e002bab5fece40585edcee8ec99357309e8363424 AS uv
+FROM python:3.15.0rc3-alpine3.24@sha256:f288a00331ddad8ddf86aa9d83331f188d9a5b1999dea3762adf2af1968b0c04 AS python
+
+RUN apk upgrade --no-cache \
+    && apk add --no-cache libstdc++
+
+FROM python AS dependencies
+
+ENV UV_LINK_MODE=copy
+
+RUN apk add --no-cache build-base linux-headers
+COPY --from=uv /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
+COPY requirements.txt /tmp/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv venv --python /usr/local/bin/python /opt/venv \
+    && uv pip install --python /opt/venv/bin/python --require-hashes -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
+
+FROM python AS runtime
 
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    UV_LINK_MODE=copy \
+    PATH="/opt/venv/bin:${PATH}" \
     DEBUG=False \
     RUN_MODE=production \
     APP_GIT_SHA=${GIT_SHA} \
@@ -17,25 +33,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Pull security fixes that may have landed after the Python base image was
-# published without persisting repository indexes or download caches.
-RUN apk upgrade --no-cache
+COPY --from=dependencies /opt/venv /opt/venv
+# Resolve base-interpreter paths rather than hard-coding its minor version.
+# The uv-created virtual environment has no pip; remove the base copy too.
+RUN /usr/local/bin/python - <<'PY'
+import shutil
+import sys
+import sysconfig
+from pathlib import Path
 
-# The production export is hash-pinned, so the image build is reproducible
-# without installing the development toolchain or frontend dependencies. uv is
-# build-time only; pip is removed from the runtime image afterwards.
-COPY --from=uv /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
-COPY requirements.txt /tmp/requirements.txt
-# Removing pip also removes its vendored msgpack copy from the runtime
-# vulnerability inventory.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system --require-hashes -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt \
-    && rm -rf /usr/local/lib/python3.14/site-packages/pip \
-        /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
-        /usr/local/lib/python3.14/ensurepip \
-        /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14 \
-    && rm -f /usr/local/bin/uv /usr/local/bin/uvx
+site = Path(sysconfig.get_path("purelib"))
+for path in (site / "pip", *site.glob("pip-*.dist-info")):
+    if path.is_dir():
+        shutil.rmtree(path)
+shutil.rmtree(Path(sysconfig.get_path("stdlib")) / "ensurepip")
+scripts = Path(sysconfig.get_path("scripts"))
+for name in ("pip", "pip3", f"pip{sys.version_info.major}.{sys.version_info.minor}"):
+    (scripts / name).unlink(missing_ok=True)
+PY
 
 COPY . /app
 RUN mkdir -p /app/data \

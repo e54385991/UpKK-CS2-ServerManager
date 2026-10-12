@@ -38,8 +38,8 @@ find_bootstrap_python() {
         return 0
     fi
 
-    if command -v python3.14 >/dev/null 2>&1; then
-        PYTHON_BIN="python3.14"
+    if command -v python3.15 >/dev/null 2>&1; then
+        PYTHON_BIN="python3.15"
     elif command -v python3 >/dev/null 2>&1; then
         PYTHON_BIN="python3"
     elif command -v python >/dev/null 2>&1; then
@@ -51,13 +51,13 @@ install_uv() {
     find_bootstrap_python
 
     if [ -z "$PYTHON_BIN" ]; then
-        echo "Error: uv is not installed and Python 3.14+ was not found to install it."
-        echo "Install Python 3.14+ first, then run: pip install uv"
+        echo "Error: uv is not installed and Python 3.15+ was not found to install it."
+        echo "Install Python 3.15+ first, then run: pip install uv"
         exit 1
     fi
 
-    if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)'; then
-        echo "Error: uv is not installed and Python 3.14+ is required to install it."
+    if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 15) and sys.version_info.releaselevel == "final" else 1)'; then
+        echo "Error: uv is not installed and Python 3.15+ is required to install it."
         echo "Current interpreter: $($PYTHON_BIN --version 2>&1)"
         exit 1
     fi
@@ -126,7 +126,7 @@ start_api() {
     echo ""
 
     export PYTHONUNBUFFERED=1
-    "${UV_CMD[@]}" run --no-dev --python 3.14 --locked uvicorn main:app \
+    "${UV_CMD[@]}" run --no-dev --python 3.15.0 --locked uvicorn main:app \
         --host 0.0.0.0 --port 8000 --workers 1 \
         --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
 }
