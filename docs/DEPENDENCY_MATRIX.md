@@ -64,9 +64,11 @@ uv 0.13.0、Node.js 26.11.1、PostgreSQL 18.6、Redis 8.10.2、Caddy 2.11.7、
   `git diff --check`、actionlint 和现役版本/历史记录一致性检查通过。
 - 独立候选生产构建及关闭测试 API 的生产包体预算通过。执行
   `CC_BUILD_ROOT=/tmp/upkk-python315-stable-20261013/cc-candidate npm run test:cache-components`
-  得到 360 项通过、4 项失败：既有提交 `5326b0f` 新增的描述任务国际化断言在整个托盘
-  查找“已完成”，将同名标签页也计入，实际 3 处而预期 2 处。应用任务行和详情状态均
-  正确显示；测试范围修正待单独授权，提交与 Docker Hub 发布保持待验收状态。
+  首轮 360 项通过、4 项失败：描述任务国际化断言在整个托盘查找“已完成”，将同名
+  标签页也计入，实际 3 处而预期 2 处。经授权，改为分别验证任务行与详情状态；使用
+  相同候选构建，以 `--grep 'description tasks in the global tray retain localized copy on the overview'`
+  重跑受影响的中英文 / 两种视口用例，4 项全部通过，合计 364 项验证通过。
+  修正不改变业务代码，前端 `npm run typecheck` 再次通过。
 - 保留既有 Discord mock 的 `RuntimeWarning`；完整 npm 审计仍为 5 个开发依赖 high。
   TypeScript / ESLint 继续遵守上游兼容限制，未通过强制解析扩大版本范围。
 

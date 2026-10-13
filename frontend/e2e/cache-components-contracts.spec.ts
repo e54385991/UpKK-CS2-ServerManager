@@ -282,7 +282,13 @@ test("description tasks in the global tray retain localized copy on the overview
   await page.getByTestId("activity-tray-toggle").click();
   const tray = page.getByTestId("activity-tray-panel");
   await expect(tray.getByRole("heading", { name: messages.plugins.sync.taskList, exact: true })).toBeVisible();
-  await expect(tray.getByText(messages.plugins.sync.taskStatus.completed, { exact: true })).toHaveCount(2);
+  const completed = messages.plugins.sync.taskStatus.completed;
+  const taskRow = tray.getByRole("button", {
+    name: `${task.framework} ${completed} ${task.message}`,
+    exact: true,
+  });
+  await expect(taskRow.getByText(completed, { exact: true })).toBeVisible();
+  await expect(tray.getByRole("status").getByText(completed, { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
