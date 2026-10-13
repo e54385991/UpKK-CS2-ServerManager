@@ -25,7 +25,7 @@ backend through a same-origin proxy.
 | --- | --- | --- |
 | Framework | `next@16.4.0` (App Router, Turbopack) | Consult the matching bundled docs when changing Next.js behavior. |
 | UI runtime | `react`/`react-dom@19.3.0` | React Compiler-era; the `react-hooks` lint rules are strict. |
-| Language | `typescript@6.0.3` | Deliberate compatibility pin: the current `typescript-eslint@8.71.1` toolchain supports TypeScript `<6.1`, so TypeScript 7 is not yet usable. |
+| Language | `typescript@6.0.3` | Deliberate compatibility pin: the current `typescript-eslint` toolchain supports TypeScript `<6.1`, so TypeScript 7 is not yet usable. |
 | Styling | `tailwindcss@4.3.3` + `@tailwindcss/postcss` | v4 engine; design tokens live in `src/app/globals.css` under `@theme`. |
 | Lint | `eslint@9.39.5` + `eslint-config-next@16.4.0` | React, import, and JSX accessibility plugins currently declare peer support through ESLint 9. |
 | Icons | `lucide-react` | Import per-icon; never pass an icon **component** across the server→client boundary (see RSC rules). |
@@ -36,6 +36,11 @@ For an authorized dependency upgrade, update all packages to the latest stable
 versions compatible with upstream and peer constraints, then regenerate the
 lockfile normally. Do not force peer dependencies or add overrides to bypass
 those constraints; record any version retained for compatibility.
+Recheck these constraints during each upgrade, including transitive dependencies.
+Dependabot monitors this Dockerfile alongside npm; keep the newest compatible
+stable Node release pinned by version and the verified multi-architecture digest.
+The backend uses the latest stable Python 3.15 patch release; the former Docker
+RC exception is historical and no longer applies to production images.
 
 ## Architecture: `app → modules/<domain> → shared`
 

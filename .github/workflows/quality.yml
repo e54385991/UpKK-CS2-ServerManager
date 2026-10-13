@@ -124,7 +124,7 @@ jobs:
         run: |
           test "$(docker compose exec -T redis redis-cli ping)" = "PONG"
           docker compose exec -T postgres pg_isready -U cs2_manager -d cs2_manager
-          docker compose exec -T app python -c 'import platform, sysconfig; print(platform.python_version()); assert platform.python_version() == "3.15.0rc3"; assert not sysconfig.get_config_var("Py_GIL_DISABLED")'
+          docker compose exec -T app python -c 'import platform, sysconfig; print(platform.python_version()); assert platform.python_version() == "3.15.0"; assert not sysconfig.get_config_var("Py_GIL_DISABLED")'
           docker compose exec -T app python -c 'import urllib.request; assert urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3).status == 200'
           docker compose exec -T frontend node -e 'fetch("http://127.0.0.1:3000/health").then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'
 

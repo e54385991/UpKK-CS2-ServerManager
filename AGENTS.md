@@ -13,9 +13,10 @@ This repository hosts two applications:
 # Python 运行时
 
 - 后端最低要求 **Python 3.15**，开发与主质量基线使用 `.python-version` 固定的
-  **CPython 3.15.0 正式版**（普通 GIL）。生产 Docker 镜像优先使用官方正式版；
-  正式镜像尚未发布时，允许明确固定并验证最新官方 3.15 RC 镜像，这是容器的临时例外，
-  不扩大到开发解释器或依赖包。不得使用 alpha、beta 或 free-threaded 构建。
+  **CPython 3.15.0 正式版**（普通 GIL）。开发、CI 和生产 Docker 统一使用
+  Python 3.15 系列最新稳定补丁版，并同步精确版本和真实多架构摘要；不得使用
+  alpha、beta、RC 或 free-threaded 构建。2026-10-12 的容器 RC 例外已结束，
+  仅在带日期的历史验收记录中保留。
 - `pyproject.toml` 的 `requires-python`、Ruff / BasedPyright 目标、启动脚本、CI
   和部署文档须同步维护。Python 3.14 已退出支持范围；历史验收报告保留当时版本。
 - Pydantic 使用 `>=2.14.1,<3.0.0` 的正式版，移除旧的 3.14 / 3.15 beta 条件分支；
@@ -24,7 +25,8 @@ This repository hosts two applications:
   重新生成带哈希的 `requirements.txt`，不得手工修改生成文件。
 - Python 升级必须执行下方完整质量基线，并保留后端测试对 `DeprecationWarning` 和
   `PendingDeprecationWarning` 的错误级检查。生产镜像须核对官方来源、固定真实多架构
-  摘要并完成 amd64 / arm64 实际构建和运行验证；版本断言须区分主基线正式版与容器 RC。
+  摘要并完成 amd64 / arm64 实际构建和运行验证；容器和主基线须精确断言同一正式版本
+  及普通 GIL，不能只检查主次版本或允许预发布版本。
   缺少 cp315 musllinux wheel 的原生扩展在独立阶段按带哈希导出编译，运行镜像不保留
   编译器、uv、pip 或开发依赖；不能把依赖解析或 wheel 预检当作镜像运行认证。
 
@@ -35,6 +37,8 @@ This repository hosts two applications:
   不使用强制 peer 安装、无依据的 override 或预发布依赖绕过兼容性。
 - Python 下限、`uv.lock` 和生产导出同步；前端直接依赖保持精确版本并正常更新锁文件。
   镜像使用真实的多架构 digest，Actions 使用完整提交 SHA，Ruff hook 与开发依赖对齐。
+- Dependabot 同时覆盖根目录及 `frontend/` 的 Dockerfile、Compose、uv、npm 和 Actions；
+  稳定版本更新须通过现有质量门禁后合并，不以可变 `latest` 基础镜像标签替代版本和摘要。
 - 已无修复版本的开发依赖审计问题应单独记录，不将生产审计通过表述为全部依赖无漏洞。
 
 # Task Completion Checks

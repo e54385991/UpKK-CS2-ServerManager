@@ -51,7 +51,8 @@ def test_container_contracts_use_the_pinned_runtime_and_build_current_source():
     assert pin is not None
     version = Version(pin.group(1).split("-", 1)[0])
     assert version.release[:2] == (3, 15)
-    assert version.pre is None or version.pre[0] == "rc"
+    assert not version.is_prerelease
+    assert str(version) == (PROJECT_ROOT / ".python-version").read_text().strip()
 
     workflow = yaml.safe_load((PROJECT_ROOT / ".github/workflows/quality.yml").read_text())
     job = workflow["jobs"]["compose-health"]

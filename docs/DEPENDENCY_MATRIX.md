@@ -6,7 +6,7 @@ Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁�
 
 | 类别 | 当前基线 | 维护方式 |
 | --- | --- | --- |
-| Python | 最低 3.15；开发 / 主 CI 固定 3.15.0 正式版；Docker 暂用官方 3.15.0rc3 | `.python-version`、`pyproject.toml` 与带哈希生产导出同步 |
+| Python | 最低 3.15；开发 / CI / Docker 统一 3.15.0 正式版、普通 GIL | `.python-version`、Docker 精确版本及摘要、`pyproject.toml` 与带哈希生产导出同步 |
 | uv | Docker `0.13.0-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
 | FastAPI / Starlette | `>=0.143.0` / `>=1.7.0` | 保持上游兼容约束 |
 | SQLAlchemy / SQLModel | `>=2.1.4` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
@@ -19,10 +19,56 @@ Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁�
 | Node.js | 26 Current（Docker / CI `26.11.1`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
 | 前端控制台 | Next.js 16.4.0、React 19.3.0、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
 
-关键安全包当前下限为 `boto3>=1.43.111`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
-uv、npm（`frontend/`）、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.17,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
+关键安全包当前下限为 `boto3>=1.43.112`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
+uv、npm（`frontend/`）、两个 Dockerfile、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.17,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
 
 SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.4；保留现有时区映射与 Alembic schema。
+
+## Python 3.15 正式镜像与稳定依赖更新（2026-10-13）
+
+[官方镜像清单](https://raw.githubusercontent.com/docker-library/official-images/master/library/python)
+及 Docker registry 已提供 `python:3.15.0-alpine3.24` 正式版，amd64 / arm64 多架构摘要为
+`sha256:1afb480ba8d3b3b7a8439a84f2365ce5c75ac45a79cf07daa091b49235cbe27b`。
+开发、主 CI 和容器统一为普通 GIL 的 CPython 3.15.0；结束现役 RC 例外，容器契约检查
+要求正式版且与 `.python-version` 精确一致。保留独立原生扩展编译阶段及精简运行镜像。
+
+重新核对所有直接依赖并全量执行 `uv lock --upgrade`，更新 7 个 Python 锁定包：
+Google Auth 2.62.0、Boto3 / Botocore 1.43.112、py7zr 1.1.4、pre-commit 4.7.0、
+texttable 1.7.1 和 truststore 0.10.5。`requirements.txt` 由现有导出脚本重新生成。
+前端正常解析锁文件，更新 14 个版本条目，包括 PostCSS 8.5.30、typescript-eslint
+系列 8.71.2、Zod 4.6.7 和 electron-to-chromium 1.5.453。
+
+TypeScript 6.0.3 / ESLint 9.39.5 继续保留：重新查询 npm 元数据后，当前
+`@typescript-eslint/parser@8.71.2` 仍要求 TypeScript `<6.1.0`，React、import 和
+JSX accessibility 的最新插件仍只声明支持到 ESLint 9，不使用强制 peer 安装或 override。
+完整 npm 审计仍有 braces 3.0.3 开发依赖链的 5 个 high 条目，其最新稳定版尚无修复。
+
+uv 0.13.0、Node.js 26.11.1、PostgreSQL 18.6、Redis 8.10.2、Caddy 2.11.7、
+所有 Actions 和 pre-commit hooks 仍为核对时的最新稳定版；现用镜像摘要与 registry
+一致。Dependabot 补齐根目录及 `frontend/` 的 Dockerfile 更新检查，保持现有每周计划、
+版本与摘要固定策略及合并前质量门禁。下方带日期的 RC 验收记录保留原事实。
+
+本轮验证：
+
+- 隔离工作区的完整 `uv run python scripts/check_baseline.py` 退出码 0；后端
+  2411 项测试、126 个 subtest 通过，1 项跳过，分支覆盖率 87.52%，分域 91.25%。
+  BasedPyright 零错误/警告；前端 160 项单元测试、lint、typecheck、生产构建和 41 页
+  包体预算通过，Python / npm 生产依赖审计均无已知漏洞。
+- 两个架构的后端与前端均实际构建并运行：精确断言 CPython 3.15.0 正式版、普通 GIL，
+  确认运行镜像没有编译器、uv、pip、ensurepip；Redis / HTTP 原生解析、五种 7z
+  编解码和 uvloop 通过。独立临时 Compose 栈的数据库、Redis、后端、前端及 Caddy
+  代理通过健康检查，启动自动迁移到 `0036_cs2_version_state`。
+- Linux arm64 正式版容器全量后端为 2411 项通过、126 个 subtest 通过、1 项跳过，
+  覆盖率 87.51%；独立 PostgreSQL 18.6 集成 18 项通过，两类弃用警告继续按错误处理。
+- 四组现有 Playwright 门禁均通过：教程 1、概览 18、性能/导航 57、监控/设置 14。
+  `git diff --check`、actionlint 和现役版本/历史记录一致性检查通过。
+- 独立候选生产构建及关闭测试 API 的生产包体预算通过。执行
+  `CC_BUILD_ROOT=/tmp/upkk-python315-stable-20261013/cc-candidate npm run test:cache-components`
+  得到 360 项通过、4 项失败：既有提交 `5326b0f` 新增的描述任务国际化断言在整个托盘
+  查找“已完成”，将同名标签页也计入，实际 3 处而预期 2 处。应用任务行和详情状态均
+  正确显示；测试范围修正待单独授权，提交与 Docker Hub 发布保持待验收状态。
+- 保留既有 Discord mock 的 `RuntimeWarning`；完整 npm 审计仍为 5 个开发依赖 high。
+  TypeScript / ESLint 继续遵守上游兼容限制，未通过强制解析扩大版本范围。
 
 ## Python 3.15 镜像与全仓库更新（2026-10-12）
 

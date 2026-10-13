@@ -33,6 +33,18 @@ updates:
       - dependency-name: eslint
         update-types: ["version-update:semver-major"]
 
+  - package-ecosystem: docker
+    directories: [/, /frontend]
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:20"
+      timezone: Asia/Shanghai
+    groups:
+      base-images-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
   - package-ecosystem: docker-compose
     directory: /
     schedule:
