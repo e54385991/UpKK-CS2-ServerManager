@@ -1,6 +1,6 @@
 # Pin the latest stable Python 3.15 patch release and its multi-arch digest.
 # Native extensions without cp315 musllinux wheels build in a separate stage.
-FROM ghcr.io/astral-sh/uv:0.13.0-alpine@sha256:20d3fe1308ffa40b51c5c20e002bab5fece40585edcee8ec99357309e8363424 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.1-alpine@sha256:ffc7a8b9b0bbf136676da234e29915f66480322b68111b31115c5bbcf6b2cab0 AS uv
 FROM python:3.15.0-alpine3.24@sha256:1afb480ba8d3b3b7a8439a84f2365ce5c75ac45a79cf07daa091b49235cbe27b AS python
 
 RUN apk upgrade --no-cache \
