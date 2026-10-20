@@ -7,22 +7,75 @@ Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁�
 | 类别 | 当前基线 | 维护方式 |
 | --- | --- | --- |
 | Python | 最低 3.15；开发 / CI / Docker 统一 3.15.0 正式版、普通 GIL | `.python-version`、Docker 精确版本及摘要、`pyproject.toml` 与带哈希生产导出同步 |
-| uv | Docker `0.13.0-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
-| FastAPI / Starlette | `>=0.143.0` / `>=1.7.0` | 保持上游兼容约束 |
-| SQLAlchemy / SQLModel | `>=2.1.4` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
+| uv | Docker `0.13.3-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
+| FastAPI / Starlette | `>=0.151.0` / `>=1.9.0` | 保持上游兼容约束 |
+| SQLAlchemy / SQLModel | `>=2.1.5` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
 | PostgreSQL | Compose `18.6-alpine` | 健康检查后启动，Alembic 自动升级 |
 | Redis | Compose `8.10.2-alpine3.23` | 保持 Redis 7 协议兼容，pipeline/MGET |
 | Caddy | Compose `2.11.7-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
 | HTTP | 生产 `httpx>=0.28.1` | 应用级共享 transport |
-| Starlette 测试客户端 | `httpx2>=2.13.1`（开发） | 仅用于测试兼容层 |
+| Starlette 测试客户端 | `httpx2>=2.15.1`（开发） | 仅用于测试兼容层 |
 | SSH | `asyncssh>=2.24.1` | 显式 lease 和连接池 |
-| Node.js | 26 Current（Docker / CI `26.11.1`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
-| 前端控制台 | Next.js 16.4.0、React 19.3.0、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
+| Node.js | 26 Current（Docker / CI `26.12.0`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
+| 前端控制台 | Next.js 16.4.2、React 19.3.1、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
 
-关键安全包当前下限为 `boto3>=1.43.112`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
+关键安全包当前下限为 `boto3>=1.43.115`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
 uv、npm（`frontend/`）、两个 Dockerfile、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.17,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
 
-SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.4；保留现有时区映射与 Alembic schema。
+SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.5；保留现有时区映射与 Alembic schema。
+
+## 全仓库稳定依赖更新（2026-10-20）
+
+重新查询 PyPI、npm、GitHub Releases 及官方镜像清单，以最新兼容稳定版正常解析锁文件：
+Python 更新 22 个包，包括 FastAPI 0.151.0、Starlette 1.9.0、SQLAlchemy 2.1.5、
+Pydantic Settings 2.16.0、Boto3 / Botocore 1.43.115、HTTPX2 / HTTPCore2 2.15.1、
+Pillow 13.0.0、hiredis 3.5.0 和 Ruff 0.17.1；带哈希生产导出由脚本重新生成。
+npm 更新 42 个版本条目，包括 Next.js / eslint-config-next / @next/playwright 16.4.2、
+React / React DOM 19.3.1、Playwright 1.64.1、lucide-react 1.60.0、PostCSS 8.5.31
+和 typescript-eslint 8.72.0。根目录、前端 AGENTS 及现役部署文档同步版本。
+
+Node.js 升级到官方 26.12.0，uv 升级到 0.13.3，Docker 与 CI 同步；Ruff hook 同步
+0.17.1。Python 3.15 最新稳定补丁仍是 3.15.0，刷新官方 Alpine 3.24 基础镜像摘要为
+`sha256:2699b90f4d562a22e2dd076c82f964032f64814204bff36d271a54ba4cc2c7e2`。
+Node / uv 同样固定核实的多架构摘要；PostgreSQL 18.6、Redis 8.10.2、Caddy 2.11.7、
+所有 Actions 和 pre-commit-hooks 仍为本次核对时的最新稳定版，保持原摘要 / 完整 SHA。
+
+保留 TypeScript 6.0.3 / ESLint 9.39.5：最新 typescript-eslint 8.72.0 仍要求
+TypeScript `<6.1.0`；React、import、JSX accessibility 插件的 peer 支持最高仍为 ESLint 9。
+两者亦为各自兼容系列最新稳定版，不使用强制 peer 安装或 override。
+完整 npm 审计仍有 braces 3.0.3 开发依赖链的 5 个 high；对当前 Next.js 工具链尚无
+兼容修复，审计建议的 Next 14 降级不符合项目运行时约束。
+
+检查 [FastAPI 发布说明](https://fastapi.tiangolo.com/release-notes/) 中本轮默认值、表单、
+JSON null 处理及已移除参数的变化，使用现有 HTTP 契约与弃用警告门禁验证适配。
+保留现有 API、Alembic schema 与启动自动迁移，不凭升级推测改动业务行为。
+
+升级后的候选生产包体检查发现服务器帮助页为 259,085 字节 gzip，超过既有
+259,072 字节预算 13 字节。将静态帮助说明改为 Server Component，仅抽出原样的
+`CopyCommand` 客户端交互，帮助页降到 257,935 字节；所有路由最大为 258,664 字节。
+复制实现与原提交逐字比对一致，未修改命令、提示、选择文本或复位行为，也未放宽预算。
+
+本轮已完成的应用质量验证：
+
+- 隔离工作区完整 `uv run python scripts/check_baseline.py` 退出码 0；后端 2411 项、
+  126 个 subtest 通过，1 项跳过，覆盖率 87.53%，分域 91.25%；BasedPyright 零错误/警告。
+- 前端 160 项单元、lint、typecheck、正式生产构建、41 页包体预算通过；Python 与 npm
+  生产依赖审计通过。完整 npm 审计的 5 个开发依赖 high 继续单独保留。
+- 生产导航全量 364 项通过；帮助页组件边界调整后，重跑中英文 / 两种视口的 8 项
+  初始与链接导航用例通过，另以隔离 Playwright 检查复制成功、失败选中文本和复位，4 项通过。
+- Linux arm64 正式运行时内的全量后端 2411 项、126 个 subtest 通过，1 项跳过，
+  覆盖率 87.52%；PostgreSQL 18.6 集成 18 项通过，保持两类弃用警告为错误。
+- 四组现有 Playwright 共 90 项通过：教程 1、概览 18、性能/导航 57、监控/设置 14。
+- amd64 / arm64 后端和前端实际构建、运行通过；核对 Python 3.15.0 正式版、普通
+  GIL 和 Node 26.12.0，验证 HTTP / Redis 原生解析器、五种 7z 编解码与 uvloop。
+  运行镜像没有编译器、uv、pip、ensurepip；独立 Compose 栈的 PostgreSQL、Redis、
+  后端、前端及 Caddy 代理通过健康检查，启动自动迁移到 `0036_cs2_version_state`。
+  本机 amd64 为 QEMU 虚拟机，因磁盘初始化超时，仅在临时验证栈使用内存数据库目录，
+  仓库 Compose 健康门槛保持原样；完整 Linux 后端套件在 arm64 验证。
+- 保留既有 Discord mock 的 1 个 `RuntimeWarning`；两类弃用警告继续按错误检查。
+- `git diff --check`、actionlint、文档链接及现役版本一致性检查通过。
+- 本机未提供 `agent-browser`，未声明 next-dev-loop 的完整双视角诊断通过；
+  帮助页交互已由隔离 Playwright 实际浏览器验证，详情见本轮运行日志。
 
 ## Python 3.15 正式镜像与稳定依赖更新（2026-10-13）
 

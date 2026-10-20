@@ -1,11 +1,7 @@
-"use client";
-
-import { useRef, useState } from "react";
 import Image from "next/image";
-import { useTranslations } from "next-intl";
-import { Check, Clipboard, ExternalLink } from "lucide-react";
-import { Button } from "@/shared/ui/button";
-import { copyText } from "@/shared/lib/clipboard";
+import { getTranslations } from "next-intl/server";
+import { ExternalLink } from "lucide-react";
+import { CopyCommand } from "@/modules/help/copy-command";
 import {
   Card,
   CardContent,
@@ -22,54 +18,7 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function CopyCommand({ text }: { text: string }) {
-  const t = useTranslations("serverHelp");
-  const [copied, setCopied] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const preRef = useRef<HTMLPreElement>(null);
-
-  async function onCopy() {
-    try {
-      const ok = await copyText(text);
-      setCopied(ok);
-      setFailed(!ok);
-      if (!ok && preRef.current) {
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(preRef.current);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
-      window.setTimeout(() => {
-        setCopied(false);
-        setFailed(false);
-      }, 2200);
-    } catch {
-      setCopied(false);
-      setFailed(true);
-    }
-  }
-
-  return (
-    <div className="relative rounded-md border border-line bg-surface-raised px-3 py-2.5">
-      <pre ref={preRef} className="overflow-x-auto pr-20 font-mono text-xs text-fg whitespace-pre-wrap">
-        {text}
-      </pre>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        className="absolute top-1.5 right-1.5"
-        onClick={() => void onCopy()}
-      >
-        {copied ? <Check /> : <Clipboard />}
-        {copied ? t("copied") : failed ? t("copyFailed") : t("copy")}
-      </Button>
-    </div>
-  );
-}
-
-export function HelpConsole({
+export async function HelpConsole({
   host,
   gamePort,
   gameDirectory,
@@ -78,7 +27,7 @@ export function HelpConsole({
   gamePort: number;
   gameDirectory: string;
 }) {
-  const t = useTranslations("serverHelp");
+  const t = await getTranslations("serverHelp");
   const port = String(gamePort);
 
   return (

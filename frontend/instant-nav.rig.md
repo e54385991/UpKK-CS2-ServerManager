@@ -1,7 +1,7 @@
 # Cache Components 隔离验收设施
 
 本次迁移前版本：`11643908f470acc30223729d7cc5c924f9003024`。
-Next 与 `@next/playwright` 均固定为 `16.4.0`，Playwright 为 `1.63.0`。
+Next 与 `@next/playwright` 均固定为 `16.4.2`，Playwright 为 `1.64.1`。
 
 构建使用 `scripts/prepare-cache-components.mjs`，复制前端源码和同一套依赖到
 独立新目录，排除 `.env*`、`.next`、开发产物及浏览器登录状态。不能以开发环境
