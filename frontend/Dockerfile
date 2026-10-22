@@ -1,21 +1,23 @@
 # Compile Next on the build host. QEMU amd64 `next build` hangs on arm64
 # builders; the runner stage still uses the target-arch Node binary. Use the
 # stable default Turbopack bundler in Docker, development and CI alike.
-# Node 26.12.0 is the current stable release (Alpine 3.24, multi-arch index).
+# Node 26.12.1 is the current stable release (Alpine 3.24, multi-arch index).
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
 ARG DEPLOYMENT_ID=unknown
-FROM --platform=$BUILDPLATFORM node:26.12.0-alpine3.24@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS deps
+FROM --platform=$BUILDPLATFORM node:26.12.1-alpine3.24@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')" \
+    && npm ci
 
-FROM --platform=$BUILDPLATFORM node:26.12.0-alpine3.24@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS builder
+FROM --platform=$BUILDPLATFORM node:26.12.1-alpine3.24@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS builder
 WORKDIR /app
 ARG GIT_SHA
 ARG DEPLOYMENT_ID
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 COPY . .
 RUN --mount=type=secret,id=next_server_actions_key \
     mkdir -p public && \
@@ -28,7 +30,7 @@ RUN --mount=type=secret,id=next_server_actions_key \
     NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$(cat /run/secrets/next_server_actions_key 2>/dev/null || true)" \
     npx next build
 
-FROM node:26.12.0-alpine3.24@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS runner
+FROM node:26.12.1-alpine3.24@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS runner
 WORKDIR /app
 ARG GIT_SHA
 ARG BUILD_TIME

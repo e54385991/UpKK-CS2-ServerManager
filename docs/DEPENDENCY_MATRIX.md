@@ -7,22 +7,95 @@ Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁�
 | 类别 | 当前基线 | 维护方式 |
 | --- | --- | --- |
 | Python | 最低 3.15；开发 / CI / Docker 统一 3.15.0 正式版、普通 GIL | `.python-version`、Docker 精确版本及摘要、`pyproject.toml` 与带哈希生产导出同步 |
-| uv | Docker `0.13.3-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
-| FastAPI / Starlette | `>=0.151.0` / `>=1.9.0` | 保持上游兼容约束 |
-| SQLAlchemy / SQLModel | `>=2.1.5` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
+| uv | Docker `0.13.4-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
+| FastAPI / Starlette | `>=0.159.1` / `>=1.9.0` | 保持上游兼容约束 |
+| SQLAlchemy / SQLModel | `>=2.1.6` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
 | PostgreSQL | Compose `18.6-alpine` | 健康检查后启动，Alembic 自动升级 |
 | Redis | Compose `8.10.2-alpine3.23` | 保持 Redis 7 协议兼容，pipeline/MGET |
 | Caddy | Compose `2.11.7-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
 | HTTP | 生产 `httpx>=0.28.1` | 应用级共享 transport |
-| Starlette 测试客户端 | `httpx2>=2.15.1`（开发） | 仅用于测试兼容层 |
+| Starlette 测试客户端 | `httpx2>=2.16.0`（开发） | 仅用于测试兼容层 |
 | SSH | `asyncssh>=2.24.1` | 显式 lease 和连接池 |
-| Node.js | 26 Current（Docker / CI `26.12.0`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
+| Node.js | 26 Current（Docker / CI `26.12.1`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
+| npm | `11.21.1` | `frontend/package.json#packageManager` 为 Docker / CI 共用版本来源 |
 | 前端控制台 | Next.js 16.4.2、React 19.3.1、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
 
-关键安全包当前下限为 `boto3>=1.43.115`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
+关键安全包当前下限为 `boto3>=1.43.117`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
 uv、npm（`frontend/`）、两个 Dockerfile、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.17,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
 
-SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.5；保留现有时区映射与 Alembic schema。
+SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.6；保留现有时区映射与 Alembic schema。
+
+## 全仓库稳定依赖更新（2026-10-22）
+
+版本快照截至北京时间 2026-10-22 09:18。重新核对 PyPI、npm、GitHub Releases / tags、
+Node 官方发布清单及 Docker 官方镜像清单。Python 正常执行 `uv lock --upgrade`，更新 9 个锁定包：FastAPI 0.159.1、
+SQLAlchemy 2.1.6、Pydantic Settings 2.16.1、Boto3 / Botocore 1.43.117、
+HTTPX2 / HTTPCore2 2.16.0、pip 26.2.2 和 virtualenv 21.14.12。直接依赖下限与
+带哈希生产导出同步，未使用预发布解析或单独覆盖 pydantic-core。
+
+npm 正常更新直接与传递依赖；lucide-react 更新到 1.61.0，并刷新浏览器支持数据和
+原生模块安装辅助依赖。TypeScript 6.0.3 / ESLint 9.39.5 仍为兼容系列最新版：
+最新 `@typescript-eslint/parser@8.72.0` 要求 TypeScript `<6.1.0`；React 7.37.5、
+import 2.32.0 和 JSX accessibility 6.10.2 插件的 ESLint peer 上限仍为 9。
+保留这两个兼容版本，不使用强制 peer 安装或 override。
+
+Node 更新到官方 [26.12.1 安全补丁](https://nodejs.org/en/blog/release/v26.12.1)，
+Docker / CI 同步；npm 构建工具明确固定到最新兼容稳定 11.21.1，Docker / CI 从
+`frontend/package.json#packageManager` 读取同一版本。uv 更新到 0.13.4 并同步 CI。
+Node 与 uv 均固定经 registry 核实包含 amd64 / arm64 的真实多架构摘要。
+已实际尝试 npm 12.2.0，但正常 `npm update --package-lock-only` 在读取
+`@tailwindcss/oxide-wasm32-wasi@4.3.3` 的 registry bundled tarball 时触发
+`EALLOWREMOTE`；保留 npm 11 系列最新稳定版 11.21.1，不以放开远程依赖门禁规避。
+Python 3.15.0、PostgreSQL 18.6、Redis 8.10.2、Caddy 2.11.7 仍是最新稳定版，
+现有镜像摘要与 registry 一致。setup-uv Action 更新为 v10.3.1 /
+`18d369b23da25a81e9458561248e1aafff6a70fa`，包含并发缓存保存修复和 uv 0.13.4 校验值；
+其余 Actions 的最新 release tag 及完整 SHA、pre-commit-hooks 6.0.0 和 Ruff hook / 开发依赖 0.17.1 均重新核实，保持原值。
+
+附带的旧插件兼容库 `libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb` 仍是
+[Ubuntu 公共源](https://archive.ubuntu.com/ubuntu/pool/main/o/openssl/) 可取得的
+该 ABI 最新版本，本地文件与现有 SHA-256 一致；不能用 OpenSSL 3/4 替换
+`libssl.so.1.1` / `libcrypto.so.1.1` 的旧插件链接契约。它只供游戏主机初始化使用。
+
+检查 [FastAPI 发布说明](https://fastapi.tiangolo.com/release-notes/) 与
+[0.159.1 可选表单联合模型更新](https://github.com/fastapi/fastapi/releases/tag/0.159.1)：本轮涉及
+请求参数的 Pydantic 元数据 / alias 处理、组合参数模型、表单与文件处理；0.155.0
+移除请求参数函数的未知 `**extra`，使用既有 HTTP 契约和严格弃用门禁验证兼容性。
+
+本轮完整 npm 审计仍有 braces 3.0.3 开发依赖链的 5 个 high 条目（一个根因及
+4 个受影响的上游依赖）。braces 最新稳定版仍无修复；审计建议降级到 Next 14 的
+lint 配置，与当前 Next 16 工具链不兼容，因此保留并单独记录，不将生产审计通过
+表述为全部依赖无漏洞。ESLint 9 已被上游标记停止支持，但当前 Next 配置的
+React / import / JSX accessibility 插件仍未声明 ESLint 10 支持；后续应随这些
+上游插件的兼容更新解除保留。
+
+本轮已完成的验证（最终依赖组合）：
+
+- `uv run python scripts/check_baseline.py` 退出码 0：后端 2411 项测试、126 个
+  subtest 通过，1 项跳过，分支覆盖率 87.54%；分域 189 项 / 91.25%。
+  BasedPyright 零错误 / 警告；格式、静态、架构、复杂度、文件规模、HTTP / OpenAPI
+  契约与公开导出快照均通过，两个弃用警告类别继续按错误检查。
+- 前端 160 项单元测试、lint、typecheck、正式生产构建及 41 页包体预算通过。
+  独立生产候选构建关闭测试 API 后，最大初始 gzip 为 258,668 字节，预算 259,072
+  字节；364 项中英文 / 两种视口生产导航通过。前端内容、锁文件与 Node 环境此后未变。
+- 四组现有 Playwright 流程共 90 项通过：公开教程 1、概览 18、性能 / 导航 57、
+  监控 / 设置 14。
+- Linux arm64 生产构建阶段内的全量后端同样为 2411 项、126 个 subtest 通过，
+  1 项跳过，分支覆盖率 87.51%；PostgreSQL 18.6 集成 18 项通过。
+- amd64 / arm64 后端与前端候选镜像均实际构建并运行，通过 CPython 3.15.0
+  正式版 / 普通 GIL、Node 26.12.1、HTTP / Redis 原生解析器、验证码图片、五种
+  7z 编解码和 uvloop 检查；运行镜像不含 gcc / g++ / uv / pip / ensurepip。
+  启动自动迁移到 `0036_cs2_version_state`，Redis、PostgreSQL、前后端及代理链路通过检查。
+  arm64 为原生 VZ 环境的完整 edge 栈；amd64 应用 / 数据库 / Redis 在 VZ 内通过
+  用户态 QEMU 模拟，HTTP 代理使用 arm64 Caddy。另在整机 QEMU 内独立运行
+  amd64 Caddy 2.11.7，版本与 HTTP 检查通过；未声明原生 amd64 硬件或同一完整
+  amd64 edge 栈认证。
+- 整机 QEMU 的 Python 健康探针多次超过原有 5 秒超时，用户态 QEMU 的 amd64
+  Caddy 则出现 Go 运行时崩溃；采用上面的分项验证，未放宽仓库健康检查门槛。
+  仅在临时验证栈使用内存数据目录（应用目录显式设为 UID/GID 10001）；首轮
+  缺少该权限导致写入失败，修正临时挂载后验证通过。临时容器、网络均已清理。
+- Python 生产及开发依赖审计、npm 生产依赖审计通过；完整 npm 审计的 5 个开发
+  依赖 high 按上文单独保留。沿用既有 Discord mock 的一个 `RuntimeWarning`，
+  未放宽弃用警告、覆盖率或包体门槛。
 
 ## 全仓库稳定依赖更新（2026-10-20）
 

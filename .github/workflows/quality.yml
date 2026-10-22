@@ -68,9 +68,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv and stable Python 3.15
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
-          version: "0.13.3"
+          version: "0.13.4"
           python-version-file: ".python-version"
           enable-cache: true
 
@@ -81,9 +81,12 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.12.0"
+          node-version: "26.12.1"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Install pinned npm
+        run: npm install --global "$(node -p 'require("./frontend/package.json").packageManager')"
 
       - name: Install locked Python dependencies
         run: uv sync --locked --group dev
@@ -169,9 +172,12 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.12.0"
+          node-version: "26.12.1"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Install pinned npm
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
 
       - name: Install locked frontend dependencies
         run: npm ci
@@ -203,9 +209,11 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.12.0"
+          node-version: "26.12.1"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Install pinned npm
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
       - name: Install locked dependencies and Chromium
         run: |
           npm ci
