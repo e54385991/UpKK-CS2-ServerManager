@@ -1,6 +1,6 @@
 # This is NOT the Next.js you know
 
-This project uses **Next.js 16.4.2**, which has breaking changes versus older
+This project uses **Next.js 16.4.3**, which has breaking changes versus older
 Next.js — APIs, conventions, and file structure may differ from your training
 data. **When changing Next.js behavior** (for example routing, rendering,
 caching, or build/runtime configuration), read the relevant version-matched
@@ -23,14 +23,14 @@ backend through a same-origin proxy.
 
 | Area | Choice | Notes |
 | --- | --- | --- |
-| Framework | `next@16.4.2` (App Router, Turbopack) | Consult the matching bundled docs when changing Next.js behavior. |
+| Framework | `next@16.4.3` (App Router, Turbopack) | Consult the matching bundled docs when changing Next.js behavior. |
 | UI runtime | `react`/`react-dom@19.3.1` | React Compiler-era; the `react-hooks` lint rules are strict. |
 | Language | `typescript@6.0.3` | Deliberate compatibility pin: the current `typescript-eslint` toolchain supports TypeScript `<6.1`, so TypeScript 7 is not yet usable. |
 | Styling | `tailwindcss@4.3.3` + `@tailwindcss/postcss` | v4 engine; design tokens live in `src/app/globals.css` under `@theme`. |
-| Lint | `eslint@9.39.5` + `eslint-config-next@16.4.2` | React, import, and JSX accessibility plugins currently declare peer support through ESLint 9. |
+| Lint | `eslint@9.39.5` + `eslint-config-next@16.4.3` | React, import, and JSX accessibility plugins currently declare peer support through ESLint 9. |
 | Icons | `lucide-react` | Import per-icon; never pass an icon **component** across the server→client boundary (see RSC rules). |
 | Package manager | `npm@11.21.1` | `package.json#packageManager` is shared by CI and Docker builds. |
-| Docker runtime | `node:26.12.1-alpine3.24` | Production image + CI use Node 26 Current. |
+| Docker runtime | `node:26.13.0-alpine3.24` | Production image + CI use Node 26 LTS. |
 
 Dependencies are pinned to exact versions and committed with `package-lock.json`.
 Use the npm version declared in `packageManager` (`npm install --global npm@11.21.1`)

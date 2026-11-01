@@ -6,24 +6,78 @@ Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁�
 
 | 类别 | 当前基线 | 维护方式 |
 | --- | --- | --- |
-| Python | 最低 3.15；开发 / CI / Docker 统一 3.15.0 正式版、普通 GIL | `.python-version`、Docker 精确版本及摘要、`pyproject.toml` 与带哈希生产导出同步 |
-| uv | Docker `0.13.4-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
-| FastAPI / Starlette | `>=0.159.1` / `>=1.9.0` | 保持上游兼容约束 |
+| Python | 最低 3.15；开发 / CI / Docker 统一 3.15.2 正式版、普通 GIL | `.python-version`、Docker 精确版本及摘要、`pyproject.toml` 与带哈希生产导出同步 |
+| uv | Docker `0.13.6-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
+| FastAPI / Starlette | `>=0.162.0` / `>=1.10.0` | 保持上游兼容约束 |
 | SQLAlchemy / SQLModel | `>=2.1.6` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
 | PostgreSQL | Compose `18.6-alpine` | 健康检查后启动，Alembic 自动升级 |
-| Redis | Compose `8.10.2-alpine3.23` | 保持 Redis 7 协议兼容，pipeline/MGET |
+| Redis | Compose `8.10.3-alpine3.23` | 保持 Redis 7 协议兼容，pipeline/MGET |
 | Caddy | Compose `2.11.7-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
 | HTTP | 生产 `httpx>=0.28.1` | 应用级共享 transport |
 | Starlette 测试客户端 | `httpx2>=2.16.0`（开发） | 仅用于测试兼容层 |
 | SSH | `asyncssh>=2.24.1` | 显式 lease 和连接池 |
-| Node.js | 26 Current（Docker / CI `26.12.1`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
+| Node.js | 26 LTS（Docker / CI `26.13.0`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
 | npm | `11.21.1` | `frontend/package.json#packageManager` 为 Docker / CI 共用版本来源 |
-| 前端控制台 | Next.js 16.4.2、React 19.3.1、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
+| 前端控制台 | Next.js 16.4.3、React 19.3.1、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
 
-关键安全包当前下限为 `boto3>=1.43.117`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
-uv、npm（`frontend/`）、两个 Dockerfile、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.17,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
+关键安全包当前下限为 `boto3>=1.43.123`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
+uv、npm（`frontend/`）、两个 Dockerfile、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.18,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
 
 SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.6；保留现有时区映射与 Alembic schema。
+
+## 全仓库稳定依赖更新（2026-11-01）
+
+重新查询 PyPI、npm、GitHub Releases / tags、Node 官方发布清单和官方镜像 registry，
+升级直接与传递依赖；Python 下限、锁文件和脚本生成的带哈希生产导出同步，
+未启用预发布解析、强制 peer 安装或依赖 override。
+
+Python 正常执行 `uv lock --upgrade`，更新 35 个包，包括 FastAPI 0.162.0、
+Starlette 1.10.0、Pydantic 2.14.2 / core 2.50.2、Pydantic Settings 2.16.2、
+Alembic 1.20.1、Boto3 / Botocore 1.43.123、pytest 9.2.0、pytest-asyncio 1.4.1、
+Grimp 3.18、Ruff 0.17.3 和 diff-cover 11.0.0。
+[diff-cover 11](https://github.com/Bachmann1234/diff_cover/releases/tag/v11.0.0) 的最低 Python 升至 3.11，
+并修正路径排除匹配和带引号的选项解析；项目使用 Python 3.15，且未配置这些旧行为，
+同步提升其主版本约束。Ruff hook 与开发依赖同步到 0.17.3；pre-commit-hooks 6.0.0
+及其余未变直接依赖均重新查询稳定版。
+
+[Python 3.15.2](https://www.python.org/downloads/release/python-3152/) 与
+[Node.js 26.13.0](https://nodejs.org/en/blog/release/v26.13.0) 分别替代旧补丁，
+Python 仍为正式版、普通 GIL；Node 26 已进入 LTS。uv 更新至 0.13.6，Redis 至
+8.10.3；PostgreSQL 18.6 和 Caddy 2.11.7 仍为最新稳定版，刷新其官方重建镜像摘要。
+Python、Node、uv、Redis、PostgreSQL 和 Caddy 的索引摘要均通过 registry 原始响应
+SHA-256 校验，并核实包含 Linux amd64 / arm64。开发固定版本、启动脚本、CI、Docker
+和现役文档同步，历史验收记录保留原版本。
+
+npm 正常重新解析全部依赖，更新 87 个锁定版本条目，包括 Next.js / eslint-config-next / @next/playwright
+16.4.3、lucide-react 1.66.0、PostCSS 8.5.32、Node 类型 26.6.6，以及 Babel、SWC、
+Markdown、浏览器数据、typescript-eslint 8.72.1 等传递包。直接依赖继续精确固定。
+以下版本经本轮重新核实后保留：
+
+| 依赖 | 保留版本 | 最新稳定版 | 依据 |
+| --- | --- | --- | --- |
+| TypeScript | 6.0.3 | 7.0.2 | typescript-eslint 8.72.1 的 peer 要求 `<6.1.0` |
+| ESLint | 9.39.5 | 10.14.0 | React 7.37.5、import 2.32.0、JSX accessibility 6.10.2 的 peer 上限仍为 ESLint 9 |
+| npm | 11.21.1 | 12.2.1 | 实际运行 12.2.1 的正常 `npm update --package-lock-only`，对 Tailwind 4.3.3 的 registry bundled tarball 触发 `EALLOWREMOTE`；保留 npm 11 最新稳定版，未放开门禁 |
+
+传递依赖遵循各上游声明的范围；例如 Next 16.4.3 自身精确依赖 PostCSS 8.5.23，
+与项目直接使用的 PostCSS 8.5.32 并存，不覆盖 Next 的私有依赖。
+Python 仅 python-dateutil 存在超出上游范围的新稳定主版本：保留 2.9.0.post0，
+因为 Botocore 1.43.123 明确要求 `<3.0.0`，不能直接采用 3.0.0。
+本轮完整 npm 审计报告 16 个 moderate 条目，均来自开发 lint 链的
+[minimatch 漏洞](https://github.com/advisories/GHSA-g3hv-75wg-m249)及其上游传播。
+修复版为 minimatch 11.0.1，而当前 ESLint / import / JSX accessibility / TypeScript
+lint 工具链的声明范围尚未采用该主版本；审计建议退回 ESLint 4 / eslint-config-next
+0.2.4，与项目不兼容。保留正常上游解析并记录限制，不使用强制安装或 override，
+也不将生产审计通过表述为全部依赖无漏洞。旧报告中的 braces high 不再出现在本轮审计中。
+
+GitHub Actions 更新 setup-uv v10.3.3 与 docker/login-action v4.7.0，所有 Actions
+保持完整提交 SHA；其余 Action 的最新 tag / commit 均重新核实。
+旧插件兼容库 `libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb` 仍为 Ubuntu 公共源的
+该 ABI 最新文件，远端文件与仓库文件的 SHA-256 均为现有值；保留旧插件链接契约。
+
+[FastAPI 变更说明](https://fastapi.tiangolo.com/release-notes/#01620) 调整了省略布尔
+表单字段时的默认值 / 缺失字段行为；本轮通过现有 HTTP 契约与严格弃用检查验证兼容性。
+不改变 Alembic schema 或启动自动迁移行为。
 
 ## 全仓库稳定依赖更新（2026-10-22）
 

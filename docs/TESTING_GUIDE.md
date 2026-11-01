@@ -11,7 +11,7 @@
 
 ```bash
 cd /home/runner/work/UpKK-CS2-ServerManager/UpKK-CS2-ServerManager
-uv run --python 3.15.0 --locked uvicorn main:app --host 0.0.0.0 --port 8000
+uv run --python 3.15.2 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 The application should start on `http://localhost:8000` (or configured port).

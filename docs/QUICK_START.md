@@ -70,7 +70,7 @@ cp .env.example .env
 docker-compose up -d
 
 # Run the manager
-uv run --no-dev --python 3.15.0 --locked uvicorn main:app --host 0.0.0.0 --port 8000
+uv run --no-dev --python 3.15.2 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 **✅ Verification:**
@@ -217,7 +217,7 @@ cp .env.example .env
 docker-compose up -d
 
 # 运行管理器
-uv run --no-dev --python 3.15.0 --locked uvicorn main:app --host 0.0.0.0 --port 8000
+uv run --no-dev --python 3.15.2 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 **✅ 验证：**

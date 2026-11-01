@@ -126,7 +126,7 @@ start_api() {
     echo ""
 
     export PYTHONUNBUFFERED=1
-    "${UV_CMD[@]}" run --no-dev --python 3.15.0 --locked uvicorn main:app \
+    "${UV_CMD[@]}" run --no-dev --python 3.15.2 --locked uvicorn main:app \
         --host 0.0.0.0 --port 8000 --workers 1 \
         --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
 }

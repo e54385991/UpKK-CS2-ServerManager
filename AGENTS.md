@@ -4,7 +4,7 @@ This repository hosts two applications:
 
 - **Backend** (repo root): a FastAPI + PostgreSQL + Redis management panel
   (`main.py`, `api/`, `modules/`, `services/`, `alembic/`).
-- **Frontend** (`frontend/`): a dedicated **Next.js 16.4.2** console that
+- **Frontend** (`frontend/`): a dedicated **Next.js 16.4.3** console that
   talks to the backend through a same-origin proxy. Use `frontend/AGENTS.md` for frontend-specific constraints.
   When changing Next.js behavior, consult only the relevant version-matched
   sections of `frontend/node_modules/next/dist/docs/` (Next 16 has breaking
@@ -13,13 +13,13 @@ This repository hosts two applications:
 # Python 运行时
 
 - 后端最低要求 **Python 3.15**，开发与主质量基线使用 `.python-version` 固定的
-  **CPython 3.15.0 正式版**（普通 GIL）。开发、CI 和生产 Docker 统一使用
+  **CPython 3.15.2 正式版**（普通 GIL）。开发、CI 和生产 Docker 统一使用
   Python 3.15 系列最新稳定补丁版，并同步精确版本和真实多架构摘要；不得使用
   alpha、beta、RC 或 free-threaded 构建。2026-10-12 的容器 RC 例外已结束，
   仅在带日期的历史验收记录中保留。
 - `pyproject.toml` 的 `requires-python`、Ruff / BasedPyright 目标、启动脚本、CI
   和部署文档须同步维护。Python 3.14 已退出支持范围；历史验收报告保留当时版本。
-- Pydantic 使用 `>=2.14.1,<3.0.0` 的正式版，移除旧的 3.14 / 3.15 beta 条件分支；
+- Pydantic 使用 `>=2.14.2,<3.0.0` 的正式版，移除旧的 3.14 / 3.15 beta 条件分支；
   `pydantic-core` 由 Pydantic 的精确依赖决定，不得独立覆盖或打开全局预发布解析。
   修改依赖后更新 `uv.lock`，通过 `uv run python scripts/export_requirements.py`
   重新生成带哈希的 `requirements.txt`，不得手工修改生成文件。

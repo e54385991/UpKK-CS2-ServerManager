@@ -41,7 +41,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
         env:
           POSTGRES_DB: cs2_manager
           POSTGRES_USER: cs2_manager
@@ -54,7 +54,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
       redis:
-        image: redis:8.10.2-alpine3.23@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+        image: redis:8.10.3-alpine3.23@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537
         ports:
           - 6379:6379
         options: >-
@@ -68,20 +68,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv and stable Python 3.15
-        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: "0.13.4"
+          version: "0.13.6"
           python-version-file: ".python-version"
           enable-cache: true
 
       - name: Assert stable Python 3.15 runtime
         run: |
-          python -c 'import sys, sysconfig; print(sys.version); assert sys.version_info == (3, 15, 0, "final", 0); assert not sysconfig.get_config_var("Py_GIL_DISABLED")'
+          python -c 'import sys, sysconfig; print(sys.version); assert sys.version_info == (3, 15, 2, "final", 0); assert not sysconfig.get_config_var("Py_GIL_DISABLED")'
 
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.12.1"
+          node-version: "26.13.0"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -128,7 +128,7 @@ jobs:
         run: |
           test "$(docker compose exec -T redis redis-cli ping)" = "PONG"
           docker compose exec -T postgres pg_isready -U cs2_manager -d cs2_manager
-          docker compose exec -T app python -c 'import platform, sysconfig; print(platform.python_version()); assert platform.python_version() == "3.15.0"; assert not sysconfig.get_config_var("Py_GIL_DISABLED")'
+          docker compose exec -T app python -c 'import platform, sysconfig; print(platform.python_version()); assert platform.python_version() == "3.15.2"; assert not sysconfig.get_config_var("Py_GIL_DISABLED")'
           docker compose exec -T app python -c 'import urllib.request; assert urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3).status == 200'
           docker compose exec -T frontend node -e 'fetch("http://127.0.0.1:3000/health").then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'
 
@@ -172,7 +172,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.12.1"
+          node-version: "26.13.0"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -209,7 +209,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.12.1"
+          node-version: "26.13.0"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install pinned npm
