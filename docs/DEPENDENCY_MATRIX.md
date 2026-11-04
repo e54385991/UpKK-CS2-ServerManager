@@ -7,9 +7,9 @@ Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁�
 | 类别 | 当前基线 | 维护方式 |
 | --- | --- | --- |
 | Python | 最低 3.15；开发 / CI / Docker 统一 3.15.2 正式版、普通 GIL | `.python-version`、Docker 精确版本及摘要、`pyproject.toml` 与带哈希生产导出同步 |
-| uv | Docker `0.13.6-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
+| uv | Docker `0.13.7-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
 | FastAPI / Starlette | `>=0.162.0` / `>=1.10.0` | 保持上游兼容约束 |
-| SQLAlchemy / SQLModel | `>=2.1.6` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
+| SQLAlchemy / SQLModel | `>=2.1.8` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
 | PostgreSQL | Compose `18.6-alpine` | 健康检查后启动，Alembic 自动升级 |
 | Redis | Compose `8.10.3-alpine3.23` | 保持 Redis 7 协议兼容，pipeline/MGET |
 | Caddy | Compose `2.11.7-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
@@ -17,13 +17,33 @@ Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁�
 | Starlette 测试客户端 | `httpx2>=2.16.0`（开发） | 仅用于测试兼容层 |
 | SSH | `asyncssh>=2.24.1` | 显式 lease 和连接池 |
 | Node.js | 26 LTS（Docker / CI `26.13.0`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
-| npm | `11.21.1` | `frontend/package.json#packageManager` 为 Docker / CI 共用版本来源 |
-| 前端控制台 | Next.js 16.4.3、React 19.3.1、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
+| npm | `11.21.1` | `frontend/package.json#packageManager` 为 Docker / CI 共用版本来源；npm 12.2.1 仍无法正常生成锁文件 |
+| 前端控制台 | Next.js 16.4.5、React 19.3.1、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
 
 关键安全包当前下限为 `boto3>=1.43.123`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
 uv、npm（`frontend/`）、两个 Dockerfile、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.18,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
 
-SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.6；保留现有时区映射与 Alembic schema。
+SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.8；保留现有时区映射与 Alembic schema。
+
+## 全仓库稳定依赖更新（2026-11-04）
+
+按 2026-11-04 官方发布信息重新核对 [Python](https://www.python.org/downloads/release/python-3152/)、[Node.js](https://nodejs.org/en/blog/release/v26.13.0)、[uv](https://github.com/astral-sh/uv/releases/tag/0.13.7)、PyPI、npm、GitHub Releases / tags 和官方镜像 registry。Python 仍为 CPython 3.15.2 正式版、普通 GIL；Node 仍为 26.13.0 LTS。更新 uv 到 0.13.7（索引摘要 `sha256:a788290ce829958f18bcea1dfd9fb5dcf4bfb22f6380b52c9322f9d91e86b117`）。Python 3.15.2 官方镜像摘要保持 `sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211`；PostgreSQL 18.6、Redis 8.10.3、Caddy 2.11.7 和 Node 26.13.0 的精确镜像仍为当前稳定版。上述官方镜像索引均核对包含 amd64 / arm64。
+
+Python 执行 `uv lock --upgrade` 更新 15 个包，包括 AnyIO 4.16.0、SQLAlchemy 2.1.8、psycopg 3.3.7、google-auth 2.62.1、diff-cover 11.0.1、pytest-asyncio 1.4.1.post1，以及 cbor2、coverage、dnspython、filelock、pip、platformdirs、python-discovery、virtualenv。同步提升直接依赖下限、`uv.lock` 和 `scripts/export_requirements.py` 生成的哈希生产导出；未打开预发布解析或覆盖 pydantic-core。
+
+前端使用 npm 11 正常生成锁文件，更新 49 个锁定包条目。直接依赖中 Next.js、`@next/playwright`、`eslint-config-next` 到 16.4.5，Tailwind / PostCSS 插件到 4.3.4，lucide-react 到 1.67.0；传递依赖在上游声明范围内更新。React 19.3.1、next-intl 4.14.9、PostCSS 8.5.32、Node 类型 26.6.6 仍为最新稳定版。Next 16.4.5 仍精确依赖 PostCSS 8.5.23，因此保留它的私有副本，与应用直接使用的 8.5.32 并存。
+
+以下较新版本经过重新核对后保留：
+
+| 依赖 | 保留版本 | 最新稳定版 | 依据 |
+| --- | --- | --- | --- |
+| TypeScript | 6.0.3 | 7.0.2 | typescript-eslint 8.72.1 的 peer 要求 `>=4.8.4 <6.1.0` |
+| ESLint | 9.39.5 | 10.14.0 | ESLint 9 已停止上游支持；React、import、JSX accessibility 插件的 peer 上限仍为 ESLint 9，升级须等插件兼容 ESLint 10 |
+| npm | 11.21.1 | 12.2.1 | 实际重试 `npm@12.2.1 install --package-lock-only`，仍因 Tailwind 4.3.4 的 `@tailwindcss/oxide-wasm32-wasi` tarball 报 `EALLOWREMOTE`；npm 11.21.1 可正常更新，不放宽远程依赖限制 |
+
+GitHub Actions 最新 release / tag 与当前完整 SHA 一致；pre-commit-hooks 6.0.0、Ruff 0.17.3 和 pre-commit 4.7.0 也已重新核对，无需变更。完整 npm 审计仍有 16 个 moderate 开发依赖告警，均沿 ESLint 工具链传递到旧 major 的 minimatch；没有在不兼容的上游 peer 范围之外强行覆盖 minimatch。生产 Python 与前端依赖审计均无已知漏洞；不使用强制 peer 安装或无依据 override。
+
+本轮最终依赖组合验证通过：`uv run python scripts/check_baseline.py` 全部通过，后端 2432 项通过、1 项跳过、126 个 subtest 通过，分支覆盖率 87.55%；分域测试 189 项通过、覆盖率 91.25%。前端 7 项源码测试、160 项 Next 单元测试、lint、typecheck、Next.js 生产构建和 41 页包体预算通过。BasedPyright 零错误 / 警告，Python 及前端生产依赖审计无已知漏洞。Docker Compose 使用官方多架构镜像在 Linux amd64 与 arm64 上分别完成实际构建和健康启动；Python 均为 3.15.2 普通 GIL，Next.js 登录页返回 200，PostgreSQL readiness 与 Redis PING 通过。验证后已删除临时容器和数据卷。后端测试保留一条既有 Discord mock 的未等待协程 `RuntimeWarning`，不属于弃用警告；两个弃用警告类别仍按错误处理。
 
 ## 全仓库稳定依赖更新（2026-11-01）
 
