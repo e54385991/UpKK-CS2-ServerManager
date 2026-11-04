@@ -10,7 +10,12 @@ import bcrypt
 import jwt
 from anyio import to_thread
 from fastapi import Depends, Header, HTTPException, Request, Response, WebSocket, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
+from fastapi.security import (
+    HTTPAuthorizationCredentials,
+    HTTPBearer,
+    OAuth2PasswordBearer,
+    SecurityScopes,
+)
 from jwt import InvalidTokenError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -35,7 +40,7 @@ def web_session_cookie_name() -> str:
 
 
 # OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 # Optional OAuth2 scheme (doesn't raise error if no token)
 optional_oauth2_scheme = HTTPBearer(auto_error=False)
@@ -186,15 +191,26 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
+    security_scopes: SecurityScopes,
 ) -> User:
-    """Get the current authenticated user from JWT token"""
+    """Authenticate JWTs; accept personal keys only on explicitly opted-in routes."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if not token:
+        if "authorization" in request.headers:
+            raise credentials_exception
+        if "personal_api_key" in security_scopes.scopes:
+            user = await get_user_from_api_key(request.headers.get("X-API-Key"), db=db)
+            if user is not None:
+                return user
+        raise credentials_exception
 
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])

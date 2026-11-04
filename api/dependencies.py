@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,8 @@ from services.ssh_manager import SSHManager
 DatabaseSession = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 ActiveUser = Annotated[User, Depends(get_current_active_user)]
+# Personal API keys inherit owner/admin access, without opening account or secret APIs.
+AutomationUser = Annotated[User, Security(get_current_active_user, scopes=["personal_api_key"])]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
 
 

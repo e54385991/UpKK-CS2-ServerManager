@@ -10,7 +10,13 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
-from api.dependencies import ActiveUser, DatabaseSession, StreamUser, require_server_access
+from api.dependencies import (
+    ActiveUser,
+    AutomationUser,
+    DatabaseSession,
+    StreamUser,
+    require_server_access,
+)
 from api.routes.actions.deployment import cancel_deployment
 from modules import DeploymentLog
 from modules.database import async_session_maker
@@ -123,7 +129,7 @@ async def start_server_operation(
     server_id: int,
     body: ServerOperationRequest,
     db: DatabaseSession,
-    current_user: ActiveUser,
+    current_user: AutomationUser,
 ) -> ServerOperationView:
     """Accept a lifecycle action and return immediately with an operation_id."""
     server = await require_server_access(db, server_id, current_user)
@@ -170,7 +176,7 @@ async def start_server_operation(
 async def get_current_server_operation(
     server_id: int,
     db: DatabaseSession,
-    current_user: ActiveUser,
+    current_user: AutomationUser,
 ) -> CurrentServerOperation:
     await require_server_access(db, server_id, current_user)
     record = await server_operation_hub.get_current(server_id)
@@ -243,7 +249,7 @@ async def get_server_operation(
     server_id: int,
     operation_id: UUID,
     db: DatabaseSession,
-    current_user: ActiveUser,
+    current_user: AutomationUser,
 ) -> ServerOperationView:
     await require_server_access(db, server_id, current_user)
     record = await server_operation_hub.get(str(operation_id))

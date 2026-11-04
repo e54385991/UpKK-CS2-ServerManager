@@ -1,5 +1,7 @@
 # CS2 Server Manager
 
+For bot integrations using a personal API key, see [server automation authentication](docs/api-automation.md).
+
 [English](README.md) | [简体中文](README.zh-CN.md)
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg?style=flat&logo=FastAPI)](https://fastapi.tiangolo.com)

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlmodel import col
 
-from api.dependencies import ActiveUser, DatabaseSession, require_server_access
+from api.dependencies import ActiveUser, AutomationUser, DatabaseSession, require_server_access
 from api.presenters.servers import to_detail as _to_detail
 from api.presenters.servers import to_summary as _to_summary
 from api.routes.actions.status import reconnect_ssh as reconnect_ssh_legacy
@@ -225,7 +225,7 @@ async def clone_server(
 @router.get("", response_model=list[ServerSummary])
 async def list_servers(
     db: DatabaseSession,
-    current_user: ActiveUser,
+    current_user: AutomationUser,
     skip: int = 0,
     limit: int = 100,
     scope: Literal["mine", "all"] = Query(default="mine"),
@@ -249,7 +249,7 @@ async def list_servers(
 async def get_server(
     server_id: int,
     db: DatabaseSession,
-    current_user: ActiveUser,
+    current_user: AutomationUser,
 ) -> ServerDetail:
     """Return one server the caller may access (owner or admin), non-secret."""
     server = await require_server_access(db, server_id, current_user)

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request, Response, status
 
-from api.dependencies import ActiveUser, DatabaseSession
+from api.dependencies import AutomationUser, DatabaseSession
 from api.password_reset import complete_password_reset, request_password_reset
 from api.registration import register_user
 from api.routes.auth import google_oauth_login
@@ -59,7 +59,7 @@ async def register(
 
 
 @router.get("/me", response_model=SessionUser)
-async def read_current_session(current_user: ActiveUser) -> SessionUser:
+async def read_current_session(current_user: AutomationUser) -> SessionUser:
     """Return the authenticated principal for the browser session."""
     return SessionUser(
         id=current_user.id,

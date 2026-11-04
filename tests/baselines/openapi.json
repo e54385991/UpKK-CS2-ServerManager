@@ -36518,7 +36518,9 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
           }
         ],
         "summary": "Read Current Session",
@@ -40130,7 +40132,9 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
           }
         ],
         "summary": "List Servers",
@@ -40504,7 +40508,9 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
           }
         ],
         "summary": "Get Server",
@@ -44244,7 +44250,9 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
           }
         ],
         "summary": "Start Server Operation",
@@ -44291,7 +44299,9 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
           }
         ],
         "summary": "Get Current Server Operation",
@@ -44514,7 +44524,9 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
           }
         ],
         "summary": "Get Server Operation",

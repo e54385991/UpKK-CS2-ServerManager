@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
 
 from api import dependencies
@@ -404,7 +404,12 @@ async def test_auth_user_dependencies_and_flexible_fallback(monkeypatch):
 
     db = _FakeDb(execute_result=_Result(active))
     monkeypatch.setattr(auth.jwt, "decode", lambda *_args, **_kwargs: {"sub": "7"})
-    assert await auth.get_current_user("token", db) is active
+    assert (
+        await auth.get_current_user(
+            "token", db, Request({"type": "http", "headers": []}), auth.SecurityScopes()
+        )
+        is active
+    )
     with pytest.raises(HTTPException):
         await auth.get_current_active_user(_user(active=False))
     assert await auth.get_current_active_user(active) is active
