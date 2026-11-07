@@ -43,6 +43,64 @@ def test_map_boundaries(value):
 
 
 @pytest.mark.parametrize(
+    "seconds", ["1", "3600", "9999", "10000", "79999", "80000", "85999", "86000", "86399", "86400"]
+)
+def test_map_time_extension_boundaries(seconds):
+    definition = game_command("css_ext_maptime")
+    assert definition.render([seconds]) == f"css_ext_maptime {seconds}"
+    assert definition.requires_online is True
+    assert definition.requires_empty is False
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        [],
+        ["0"],
+        ["86401"],
+        ["99999"],
+        ["100000"],
+        ["-1"],
+        ["+3600"],
+        ["03600"],
+        ["3.5"],
+        ["1e3"],
+        ["３６００"],
+        ["3600;quit"],
+        ["3600\nquit"],
+        ["3600", "extra"],
+        [3600],
+    ],
+)
+def test_map_time_extension_rejects_invalid_durations_and_injections(args):
+    with pytest.raises(AutomationDenied):
+        game_command("css_ext_maptime").render(args)
+
+
+async def test_map_time_extension_allows_online_players_but_rejects_failed_queries(
+    monkeypatch, target, ssh
+):
+    probe = AsyncMock(return_value=(True, {"player_count": 12, "bot_count": 2}))
+    monkeypatch.setattr(guard.a2s_cache_service, "query_live_info", probe)
+    definition = game_command("css_ext_maptime")
+    await guard.ensure_eligible(
+        target,
+        ssh,
+        requires_empty=definition.requires_empty,
+        requires_online=definition.requires_online,
+    )
+    probe.return_value = (False, None)
+    with pytest.raises(AutomationDenied, match="live A2S"):
+        await guard.ensure_eligible(
+            target,
+            ssh,
+            requires_empty=definition.requires_empty,
+            requires_online=definition.requires_online,
+        )
+    ssh.connect.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
     "args",
     [
         [],

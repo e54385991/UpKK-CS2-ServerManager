@@ -255,8 +255,10 @@ def test_only_documented_endpoints_opt_in_to_keys(automation):
 def test_registered_automation_uses_structured_queue_and_existing_action(automation):
     state = automation
     entries = state.client.get("/api/v1/automation/game-commands", headers=state.key).json()
-    assert entries[0]["name"] == "css_wsmap"
-    assert entries[0]["arguments"][0]["pattern"] == "[A-Za-z0-9_]{1,128}"
+    definitions = {entry["name"]: entry for entry in entries}
+    assert definitions["css_wsmap"]["arguments"][0]["pattern"] == "[A-Za-z0-9_]{1,128}"
+    assert definitions["css_ext_maptime"]["requires_online"] is True
+    assert definitions["css_ext_maptime"]["requires_empty"] is False
     body = {"action": "send_game_command", "command": "css_wsmap", "args": ["ze_example"]}
     response = state.client.post(
         "/api/v1/servers/12/automation-operations", headers=state.key, json=body
@@ -276,6 +278,21 @@ def test_registered_automation_uses_structured_queue_and_existing_action(automat
     assert state.enqueue.await_args.kwargs["extra"]["automation_guard"] == "empty_or_stopped"
 
 
+@pytest.mark.parametrize("seconds", ["1", "3600", "86400"])
+def test_map_time_extension_queues_explicit_seconds_with_scoped_access(automation, seconds):
+    body = {"action": "send_game_command", "command": "css_ext_maptime", "args": [seconds]}
+    response = automation.client.post(
+        "/api/v1/servers/12/automation-operations", headers=automation.key, json=body
+    )
+    assert response.status_code == 202
+    assert automation.game_enqueue.await_args.kwargs == {
+        "server_id": 12,
+        "command": f"css_ext_maptime {seconds}",
+        "actor_user_id": 7,
+        "automation_command": {"name": "css_ext_maptime", "args": [seconds]},
+    }
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -283,6 +300,10 @@ def test_registered_automation_uses_structured_queue_and_existing_action(automat
         {"action": "restart", "command": "quit"},
         {"action": "stop"},
         {"action": "send_game_command", "command": "quit", "args": []},
+        *(
+            {"action": "send_game_command", "command": "css_ext_maptime", "args": args}
+            for args in ([], ["0"], ["86401"], ["3600;quit"], ["3600", "quit"], [3600])
+        ),
         *(
             {"action": "send_game_command", "command": "css_wsmap", "args": args}
             for args in (

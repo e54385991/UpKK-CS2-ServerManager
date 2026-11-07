@@ -45,6 +45,19 @@ class GameCommand:
 
 
 GAME_COMMANDS: dict[str, GameCommand] = {
+    "css_ext_maptime": GameCommand(
+        name="css_ext_maptime",
+        description="Send a map-time extension in seconds. The resulting time limit is not verified.",
+        arguments=(
+            CommandArgument(
+                name="seconds",
+                description="Use an integer from 1 to 86400 seconds.",
+                pattern=r"(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)",
+                max_length=5,
+            ),
+        ),
+        requires_empty=False,
+    ),
     "css_wsmap": GameCommand(
         name="css_wsmap",
         description="Send a Workshop map-change command. Map transition is not verified.",

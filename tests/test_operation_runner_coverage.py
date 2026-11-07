@@ -187,6 +187,28 @@ async def test_registered_worker_rebuilds_command_under_lock_and_rechecks_after_
 
 
 @pytest.mark.asyncio
+async def test_map_time_extension_worker_rebuilds_command_with_online_only_policy(monkeypatch):
+    metadata = {"name": "css_ext_maptime", "args": ["3600"]}
+    hub, _ = _install(
+        monkeypatch,
+        server,
+        record=_record(
+            action="send_game_command",
+            automation_guard="registered_command",
+            automation_command=metadata,
+        ),
+    )
+    eligible = AsyncMock()
+    execute = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(server, "ensure_eligible", eligible)
+    monkeypatch.setattr(server, "execute_custom_commands", execute)
+    await server.run_game_console_command(operation_id="op-1", command="quit; unsafe fallback")
+    assert eligible.await_args.kwargs == {"requires_empty": False, "requires_online": True}
+    assert execute.await_args.args[1:] == ("game_process", "css_ext_maptime 3600")
+    assert hub.finished[-1][1]["success"] is True
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "changes",
     [
