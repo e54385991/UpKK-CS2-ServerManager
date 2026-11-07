@@ -179,6 +179,8 @@ class ServerOperationHub(ServerOperationHistoryMixin):
                     "clear_execstack",
                     "clear_execstack_command",
                     "clear_execstack_targets",
+                    "automation_guard",
+                    "automation_command",
                 ):
                     value = extra.get(key)
                     if value is not None:

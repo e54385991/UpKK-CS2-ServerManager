@@ -178,6 +178,15 @@ class A2SCacheService:
         except Exception:
             logger.exception("Failed to refresh A2S info for server %s", server.id)
 
+    async def query_live_info(self, server: Server) -> tuple[bool, Optional[Dict]]:
+        """Return this bounded probe directly; a stale Redis value is never evidence."""
+        async with self._probe_limiter.slot(server.id):
+            return await a2s_service.query_server_info(
+                server.a2s_query_host or server.host,
+                server.a2s_query_port or server.game_port,
+                timeout=3.0,
+            )
+
     async def get_many_cached_info(
         self, servers: Sequence[Server], *, force_refresh: bool = False
     ) -> list[Optional[Dict]]:

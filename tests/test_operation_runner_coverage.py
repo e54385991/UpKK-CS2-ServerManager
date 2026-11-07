@@ -18,6 +18,7 @@ from api.routes.v1.operation_runner import (
     market,
     server,
 )
+from services.automation.commands import AutomationDenied
 from services.game_mode_install_service import GameModePlanError
 from services.maintenance_lock import OperationBusyError
 from services.plugin_conflict_service import PluginPlanError
@@ -140,6 +141,90 @@ async def test_server_runner_enqueue_and_success_paths(monkeypatch):
     await server.enqueue_server_operation(server_id=7, action="start", actor_user_id=9)
     await server.run_server_operation(operation_id="op-1")
     assert hub.finished[-1][1]["server_status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_registered_worker_rebuilds_command_under_lock_and_rechecks_after_wait(monkeypatch):
+    metadata = {"name": "css_wsmap", "args": ["ze_test"]}
+    record = _record(
+        action="send_game_command",
+        automation_guard="registered_command",
+        automation_command=metadata,
+    )
+    hub, _session = _install(monkeypatch, server, record=record)
+    eligible = AsyncMock()
+    execute = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(server, "ensure_eligible", eligible)
+    monkeypatch.setattr(server, "execute_custom_commands", execute)
+    queued = await server.enqueue_game_console_command(
+        server_id=7, command="css_wsmap ze_test", actor_user_id=9, automation_command=metadata
+    )
+    assert queued["action"] == "send_game_command"
+    assert queued["extra"] == {
+        "automation_guard": "registered_command",
+        "automation_command": metadata,
+    }
+    await server.run_game_console_command(operation_id="op-1", command="quit; unsafe fallback")
+    assert execute.await_args.args[1:] == ("game_process", "css_wsmap ze_test")
+    eligible.assert_awaited_once()
+    assert "not been verified" in hub.finished[-1][1]["message"]
+
+    class JoinedDuringWait(_Lock):
+        async def __aenter__(self):
+            eligible.side_effect = AutomationDenied("The server has human players.")
+            return self
+
+    monkeypatch.setattr(
+        server,
+        "maintenance_lock_service",
+        SimpleNamespace(get=lambda *_a, **_k: JoinedDuringWait()),
+    )
+    execute.reset_mock()
+    await server.run_game_console_command(operation_id="op-1", command="css_wsmap ze_test")
+    execute.assert_not_awaited()
+    assert hub.finished[-1][1]["success"] is False
+    assert "human players" in hub.finished[-1][1]["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"automation_guard": "unknown"},
+        {"automation_guard": None},
+        {"automation_command": {"name": "quit", "args": []}},
+        {"automation_command": {"name": "css_wsmap", "args": ["map;quit"]}},
+        {"automation_command": {"name": "css_wsmap", "args": "map"}},
+    ],
+)
+async def test_registered_worker_rejects_invalid_persisted_policy(monkeypatch, changes):
+    record = _record(
+        action="send_game_command",
+        automation_guard="registered_command",
+        automation_command={"name": "css_wsmap", "args": ["ze_test"]},
+    )
+    record.update(changes)
+    hub, _ = _install(monkeypatch, server, record=record)
+    execute = AsyncMock()
+    monkeypatch.setattr(server, "execute_custom_commands", execute)
+    await server.run_game_console_command(operation_id="op-1", command="css_wsmap ze_test")
+    execute.assert_not_awaited()
+    assert hub.finished[-1][1]["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_restart_worker_propagates_guard_and_rejects_unknown_policy(monkeypatch):
+    record = _record(action="restart", automation_guard="empty_or_stopped")
+    hub, _ = _install(monkeypatch, server, record=record)
+    execute = AsyncMock(return_value=SimpleNamespace(success=True, message="done", data={}))
+    monkeypatch.setattr(server, "execute_server_action", execute)
+    await server.run_server_operation(operation_id="op-1")
+    assert execute.await_args.kwargs["automation_guard"] is True
+    execute.reset_mock()
+    record["automation_guard"] = "invalid"
+    await server.run_server_operation(operation_id="op-1")
+    execute.assert_not_awaited()
+    assert hub.finished[-1][1]["success"] is False
 
 
 @pytest.mark.asyncio

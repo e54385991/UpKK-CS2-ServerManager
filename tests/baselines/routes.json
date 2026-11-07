@@ -2460,6 +2460,22 @@
     "methods": [
       "GET"
     ],
+    "name": "list_game_commands",
+    "path": "/api/v1/automation/game-commands"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "submit_automation_operation",
+    "path": "/api/v1/servers/{server_id}/automation-operations"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "readiness",
     "path": "/api/v1/plugins/market/ai-imports/readiness"
   },

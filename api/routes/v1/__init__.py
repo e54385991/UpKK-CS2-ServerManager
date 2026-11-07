@@ -13,6 +13,7 @@ from . import (
     assistant,
     audit,
     auth,
+    automation,
     batch,
     cleanup,
     console,
@@ -62,6 +63,7 @@ router.include_router(s3_backups.router)
 router.include_router(server_configs.router)
 router.include_router(operation_inbox.router)
 router.include_router(operations.router)
+router.include_router(automation.router)
 router.include_router(plugin_ai_imports.router)
 router.include_router(plugins.market_router)
 router.include_router(plugins.server_router)

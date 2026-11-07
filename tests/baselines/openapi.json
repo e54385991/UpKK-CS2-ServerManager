@@ -4301,6 +4301,52 @@
         "title": "AutoSetupResultView",
         "type": "object"
       },
+      "AutomationCommandRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "send_game_command",
+            "title": "Action",
+            "type": "string"
+          },
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Args",
+            "type": "array"
+          },
+          "command": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "command",
+          "args"
+        ],
+        "title": "AutomationCommandRequest",
+        "type": "object"
+      },
+      "AutomationRestartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "restart",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "AutomationRestartRequest",
+        "type": "object"
+      },
       "BatchActionResponse": {
         "description": "Schema for batch action response",
         "properties": {
@@ -8557,6 +8603,72 @@
           "email"
         ],
         "title": "ForgotPasswordRequest",
+        "type": "object"
+      },
+      "GameCommandArgumentView": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "max_length": {
+            "title": "Max Length",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "title": "Pattern",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "pattern",
+          "max_length"
+        ],
+        "title": "GameCommandArgumentView",
+        "type": "object"
+      },
+      "GameCommandView": {
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "items": {
+              "$ref": "#/components/schemas/GameCommandArgumentView"
+            },
+            "title": "Arguments",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "requires_empty": {
+            "title": "Requires Empty",
+            "type": "boolean"
+          },
+          "requires_online": {
+            "title": "Requires Online",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "arguments",
+          "requires_empty",
+          "requires_online"
+        ],
+        "title": "GameCommandView",
         "type": "object"
       },
       "GameModeCatalogView": {
@@ -36924,6 +37036,39 @@
         ]
       }
     },
+    "/api/v1/automation/game-commands": {
+      "get": {
+        "description": "Discover definitions, not proof that a game plugin is installed or running.",
+        "operationId": "list_game_commands_api_v1_automation_game_commands_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GameCommandView"
+                  },
+                  "title": "Response List Game Commands Api V1 Automation Game Commands Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
+          }
+        ],
+        "summary": "List Game Commands",
+        "tags": [
+          "v1-automation"
+        ]
+      }
+    },
     "/api/v1/diagnostics": {
       "get": {
         "description": "Return an in-process performance snapshot suitable for JSON export.",
@@ -40896,6 +41041,80 @@
         "summary": "Apply Server Apt Mirror",
         "tags": [
           "v1-servers"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/automation-operations": {
+      "post": {
+        "operationId": "submit_automation_operation_api_v1_servers__server_id__automation_operations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "restart": "#/components/schemas/AutomationRestartRequest",
+                    "send_game_command": "#/components/schemas/AutomationCommandRequest"
+                  },
+                  "propertyName": "action"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AutomationRestartRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AutomationCommandRequest"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerOperationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
+          }
+        ],
+        "summary": "Submit Automation Operation",
+        "tags": [
+          "v1-automation"
         ]
       }
     },

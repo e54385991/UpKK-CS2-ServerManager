@@ -94,6 +94,9 @@ def automation(monkeypatch):
     )
     enqueue = AsyncMock(return_value=record)
     monkeypatch.setattr("api.routes.v1.operations.enqueue_server_operation", enqueue)
+    monkeypatch.setattr("api.routes.v1.automation.enqueue_server_operation", enqueue)
+    game_enqueue = AsyncMock(return_value={**record, "action": "send_game_command"})
+    monkeypatch.setattr("api.routes.v1.automation.enqueue_game_console_command", game_enqueue)
     monkeypatch.setattr(
         "api.routes.v1.operations.server_operation_hub.get", AsyncMock(return_value=record)
     )
@@ -104,6 +107,7 @@ def automation(monkeypatch):
             user=user,
             lookup=lookup,
             enqueue=enqueue,
+            game_enqueue=game_enqueue,
             record=record,
             key={"X-API-Key": "personal-key"},
         )
@@ -150,6 +154,7 @@ def test_key_uses_existing_queue_and_operation_status(automation):
         "/api/v1/servers",
         "/api/v1/servers/12",
         "/api/v1/servers/12/operations/current",
+        "/api/v1/automation/game-commands",
     ],
 )
 def test_missing_invalid_revoked_and_inactive_keys_fail(automation, path):
@@ -236,4 +241,95 @@ def test_only_documented_endpoints_opt_in_to_keys(automation):
         ("POST", "/api/v1/servers/{server_id}/operations"),
         ("GET", "/api/v1/servers/{server_id}/operations/current"),
         ("GET", "/api/v1/servers/{server_id}/operations/{operation_id}"),
+        ("GET", "/api/v1/automation/game-commands"),
+        ("POST", "/api/v1/servers/{server_id}/automation-operations"),
     }
+
+
+def test_registered_automation_uses_structured_queue_and_existing_action(automation):
+    state = automation
+    entries = state.client.get("/api/v1/automation/game-commands", headers=state.key).json()
+    assert entries[0]["name"] == "css_wsmap"
+    assert entries[0]["arguments"][0]["pattern"] == "[A-Za-z0-9_]{1,128}"
+    body = {"action": "send_game_command", "command": "css_wsmap", "args": ["ze_example"]}
+    response = state.client.post(
+        "/api/v1/servers/12/automation-operations", headers=state.key, json=body
+    )
+    assert response.status_code == 202
+    assert response.json()["action"] == "send_game_command"
+    assert state.game_enqueue.await_args.kwargs == {
+        "server_id": 12,
+        "command": "css_wsmap ze_example",
+        "actor_user_id": 7,
+        "automation_command": {"name": "css_wsmap", "args": ["ze_example"]},
+    }
+    response = state.client.post(
+        "/api/v1/servers/12/automation-operations", headers=state.key, json={"action": "restart"}
+    )
+    assert response.status_code == 202
+    assert state.enqueue.await_args.kwargs["extra"]["automation_guard"] == "empty_or_stopped"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"action": "css_wsmap", "args": ["ze_test"]},
+        {"action": "restart", "command": "quit"},
+        {"action": "stop"},
+        {"action": "send_game_command", "command": "quit", "args": []},
+        *(
+            {"action": "send_game_command", "command": "css_wsmap", "args": args}
+            for args in (
+                [],
+                ["map", "extra"],
+                ["map;quit"],
+                ["map\nquit"],
+                ["map\rquit"],
+                ["map\x00"],
+                ["../map"],
+                ['map"'],
+                ["map|quit"],
+                ["x" * 129],
+                [12],
+            )
+        ),
+    ],
+)
+def test_automation_rejects_unregistered_and_unsafe_requests_before_queue(automation, body):
+    response = automation.client.post(
+        "/api/v1/servers/12/automation-operations", headers=automation.key, json=body
+    )
+    assert response.status_code == 422
+    automation.enqueue.assert_not_awaited()
+    automation.game_enqueue.assert_not_awaited()
+
+
+def test_automation_permissions_and_code_registration(automation, monkeypatch):
+    from services.automation.commands import GAME_COMMANDS, GameCommand
+
+    state = automation
+    path = "/api/v1/servers/12/automation-operations"
+    for headers in ({}, {"X-API-Key": "invalid"}):
+        assert (
+            state.client.post(path, headers=headers, json={"action": "restart"}).status_code == 401
+        )
+    assert (
+        state.client.post(
+            path.replace("12", "13"), headers=state.key, json={"action": "restart"}
+        ).status_code
+        == 404
+    )
+    monkeypatch.setitem(
+        GAME_COMMANDS, "css_new", GameCommand("css_new", "An additional registered command.", ())
+    )
+    entries = state.client.get("/api/v1/automation/game-commands", headers=state.key).json()
+    assert "css_new" in {entry["name"] for entry in entries}
+    assert (
+        state.client.post(
+            path,
+            headers=state.key,
+            json={"action": "send_game_command", "command": "css_new", "args": []},
+        ).status_code
+        == 202
+    )
+    assert state.game_enqueue.await_args.kwargs["command"] == "css_new"

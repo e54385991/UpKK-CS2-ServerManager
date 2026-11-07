@@ -1,5 +1,7 @@
 """Action stages with their original progress, status and cleanup ordering."""
 
+from services.automation.commands import AutomationDenied
+from services.automation.guard import ensure_eligible
 from services.compat import LateBoundModule
 
 from .action_context import ActionContext
@@ -101,6 +103,15 @@ async def _action_restart(ctx: ActionContext) -> tuple[bool, str]:
     await host.send_deployment_update(server_id, "status", "Restarting server...")
 
     await clear_crash_protection()
+
+    if ctx.automation_guard:
+        # Recheck after all queue waits and preflight I/O, immediately before stopping.
+        try:
+            await ensure_eligible(server, ssh_manager, allow_stopped=True, requires_online=False)
+        except AutomationDenied as exc:
+            log.status = "failed"
+            log.error_message = str(exc)
+            return False, str(exc)
 
     success, message = await ssh_manager.stop_server(server)
 

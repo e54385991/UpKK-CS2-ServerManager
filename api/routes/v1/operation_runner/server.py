@@ -11,6 +11,8 @@ from modules.database import async_session_maker
 from modules.schemas.common import ALLOWED_SERVER_ACTIONS
 from modules.schemas.servers import ServerAction
 from services.ai_security import redact_sensitive_text
+from services.automation.commands import AutomationDenied, game_command
+from services.automation.guard import ensure_eligible
 from services.custom_command_service import execute_custom_commands
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.operations.types import OperationCommand
@@ -19,8 +21,29 @@ from services.server_operation_hub import (
     ServerOperationConflict,
     server_operation_hub,
 )
+from services.ssh_manager import SSHManager
 
 from .shared import _dispatch, logger
+
+
+async def _guarded_command(server: Server, record: dict, command: str) -> str:
+    if record.get("automation_guard") is None and "automation_command" not in record:
+        return command
+    metadata = record.get("automation_command")
+    if record.get("automation_guard") != "registered_command" or not isinstance(metadata, dict):
+        raise AutomationDenied("The queued automation policy is invalid.")
+    definition = game_command(metadata.get("name", ""))
+    arguments = metadata.get("args")
+    if not isinstance(arguments, list):
+        raise AutomationDenied("The queued game-command arguments are invalid.")
+    rendered = definition.render(arguments)
+    await ensure_eligible(
+        server,
+        SSHManager(),
+        requires_empty=definition.requires_empty,
+        requires_online=definition.requires_online,
+    )
+    return rendered
 
 
 async def enqueue_game_console_command(
@@ -28,6 +51,7 @@ async def enqueue_game_console_command(
     server_id: int,
     command: str,
     actor_user_id: int,
+    automation_command: dict | None = None,
 ) -> dict:
     """Queue one game-console command on the server's FIFO."""
     command_text = command.strip()
@@ -36,6 +60,9 @@ async def enqueue_game_console_command(
         action="send_game_command",
         actor_user_id=actor_user_id,
         command=f"game-console {redact_sensitive_text(command_text, limit=500)}",
+        extra={"automation_guard": "registered_command", "automation_command": automation_command}
+        if automation_command is not None
+        else None,
     )
     operation_id = str(record["operation_id"])
     return await _dispatch(
@@ -83,14 +110,19 @@ async def run_game_console_command(*, operation_id: str, command: str) -> None:
                     f"Executing game-console command: {redact_sensitive_text(command, limit=500)}"
                 ),
             )
+            command = await _guarded_command(server, record, command)
             result = await execute_custom_commands(server, "game_process", command)
 
         message = str(result.get("message") or "Game-console command finished")
+        if record.get("automation_guard") and result.get("success"):
+            message = "Game-console command sent. The game-side effect has not been verified."
         await server_operation_hub.finish(
             operation_id,
             success=bool(result.get("success")),
             message=message,
         )
+    except AutomationDenied as exc:
+        await server_operation_hub.finish(operation_id, success=False, message=str(exc))
     except ServerOperationConflict as exc:
         await server_operation_hub.finish(operation_id, success=False, message=str(exc))
     except OperationBusyError as exc:
@@ -164,6 +196,8 @@ async def run_server_operation(
     actor_user_id = int(record["actor_user_id"])
 
     try:
+        if record.get("automation_guard") not in {None, "empty_or_stopped"}:
+            raise AutomationDenied("The queued automation policy is invalid.")
         async with async_session_maker() as db:
             user = await db.get(User, actor_user_id)
             if user is None or not user.is_active:
@@ -191,6 +225,11 @@ async def run_server_operation(
                     if action == "restart" or action in EXECSTACK_FILE_ACTIONS
                     else False,
                     clear_execstack_targets=record.get("clear_execstack_targets"),
+                    **(
+                        {"automation_guard": True}
+                        if record.get("automation_guard") == "empty_or_stopped"
+                        else {}
+                    ),
                 )
             server_status = None
             if isinstance(result.data, dict):
@@ -201,6 +240,8 @@ async def run_server_operation(
                 message=result.message,
                 server_status=str(server_status) if server_status else None,
             )
+    except AutomationDenied as exc:
+        await server_operation_hub.finish(operation_id, success=False, message=str(exc))
     except ServerOperationConflict as exc:
         await server_operation_hub.finish(operation_id, success=False, message=str(exc))
     except OperationBusyError as exc:

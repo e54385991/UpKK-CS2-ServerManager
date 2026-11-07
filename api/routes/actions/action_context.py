@@ -23,3 +23,4 @@ class ActionContext:
     clear_execstack: bool
     clear_execstack_targets: object
     action: str
+    automation_guard: bool = False

@@ -10,6 +10,7 @@ from modules import (
     ServerAction,
     User,
 )
+from services.automation.guard import ensure_eligible
 from services.compat import LateBoundModule
 
 from .action_context import (
@@ -94,6 +95,7 @@ async def execute_server_action(
     *,
     clear_execstack: bool = False,
     clear_execstack_targets: object = None,
+    automation_guard: bool = False,
 ):
     """Execute a validated server action outside the HTTP request boundary."""
     server = (
@@ -103,6 +105,9 @@ async def execute_server_action(
     )
 
     action = action_data.action
+    if automation_guard:
+        await db.commit()
+        await ensure_eligible(server, host.SSHManager(), allow_stopped=True, requires_online=False)
     deployment_lock_key = await _prepare_action_lock(server_id, action)
 
     ssh_manager = host.SSHManager()
@@ -180,6 +185,7 @@ async def execute_server_action(
             clear_execstack=clear_execstack,
             clear_execstack_targets=clear_execstack_targets,
             action=action,
+            automation_guard=automation_guard,
         )
         handlers = {
             "deploy": _action_deploy,
