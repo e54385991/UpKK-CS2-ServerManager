@@ -156,6 +156,7 @@ test("unprefetched tab click feedback stays under 100ms with 3s network and back
   });
   await page.goto("/servers/1/config");
   await expect(page.getByTestId("game-config-form")).toBeVisible();
+  await expect(categoryLink(page, "config")).toHaveAttribute("aria-current", "page");
   // Chrome may not throttle loopback via CDP; delay the files RSC path.
   await delayPathnames(page, ["/servers/1/files"]);
   const elapsed = await clickShowsPending(page, 'a[data-workspace-category="files"]');
@@ -180,6 +181,7 @@ test("consecutive tab clicks move pending to the last target", async ({ page, co
   });
   await page.goto("/servers/1/config");
   await expect(page.getByTestId("game-config-form")).toBeVisible();
+  await expect(categoryLink(page, "config")).toHaveAttribute("aria-current", "page");
   // Chrome may not throttle loopback via CDP; delay the actual RSC paths.
   await delayPathnames(page, ["/servers/1/files", "/servers/1/console"]);
   await clickShowsPending(page, 'a[data-workspace-category="files"]');
@@ -424,6 +426,7 @@ test("consecutive sidebar clicks move pending to the last target", async ({
   await page.goto("/overview");
   await expect(page.getByTestId("console-sidebar")).toBeVisible();
   await waitForHydratedOverview(page);
+  await expect(sidebarLink(page, "overview")).toHaveAttribute("aria-current", "page");
   await clickShowsPending(page, '[data-testid="console-sidebar"] a[data-nav-key="plugins"]');
   await clickShowsPending(page, '[data-testid="console-sidebar"] a[data-nav-key="servers"]');
   await expect(sidebarLink(page, "servers").locator("[data-testid='link-pending-hint']")).toHaveAttribute(

@@ -41,6 +41,12 @@ def test_backend_runtime_configuration_targets_stable_python_315():
     steps = workflow["jobs"]["baseline"]["steps"]
     setup = next(step for step in steps if step.get("uses", "").startswith("astral-sh/setup-uv@"))
     assert setup["with"]["python-version-file"] == ".python-version"
+    runtime_check = next(
+        step["run"] for step in steps if step.get("name") == "Assert stable Python 3.15 runtime"
+    )
+    assert 'uv run --no-project --python "$(cat .python-version)" python -c' in runtime_check
+    assert 'sys.version_info == (3, 15, 2, "final", 0)' in runtime_check
+    assert 'sysconfig.get_config_var("Py_GIL_DISABLED")' in runtime_check
     for launcher in ("start.sh", "start.bat"):
         assert f"--python {pinned} --locked" in (PROJECT_ROOT / launcher).read_text()
 
