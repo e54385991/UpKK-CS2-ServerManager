@@ -8717,6 +8717,122 @@
         "title": "ForgotPasswordRequest",
         "type": "object"
       },
+      "GameArgumentSettingRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "choices": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_]+$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Choices",
+            "type": "array"
+          },
+          "description": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "default": "token",
+            "enum": [
+              "token",
+              "integer",
+              "choice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_length": {
+            "default": 128,
+            "maximum": 128.0,
+            "minimum": 1.0,
+            "title": "Max Length",
+            "type": "integer"
+          },
+          "maximum": {
+            "default": 86400,
+            "maximum": 999999999.0,
+            "minimum": 0.0,
+            "title": "Maximum",
+            "type": "integer"
+          },
+          "minimum": {
+            "default": 1,
+            "maximum": 999999999.0,
+            "minimum": 0.0,
+            "title": "Minimum",
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "GameArgumentSettingRequest",
+        "type": "object"
+      },
+      "GameArgumentSettingView": {
+        "additionalProperties": false,
+        "properties": {
+          "choices": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "token",
+              "integer",
+              "choice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_length": {
+            "title": "Max Length",
+            "type": "integer"
+          },
+          "maximum": {
+            "title": "Maximum",
+            "type": "integer"
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "kind",
+          "max_length",
+          "minimum",
+          "maximum",
+          "choices"
+        ],
+        "title": "GameArgumentSettingView",
+        "type": "object"
+      },
       "GameCommandArgumentView": {
         "additionalProperties": false,
         "properties": {
@@ -8744,6 +8860,128 @@
           "max_length"
         ],
         "title": "GameCommandArgumentView",
+        "type": "object"
+      },
+      "GameCommandSettingRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "items": {
+              "$ref": "#/components/schemas/GameArgumentSettingRequest"
+            },
+            "maxItems": 16,
+            "title": "Arguments",
+            "type": "array"
+          },
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "requires_empty": {
+            "default": true,
+            "title": "Requires Empty",
+            "type": "boolean"
+          },
+          "requires_online": {
+            "default": true,
+            "title": "Requires Online",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "GameCommandSettingRequest",
+        "type": "object"
+      },
+      "GameCommandSettingView": {
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "items": {
+              "$ref": "#/components/schemas/GameArgumentSettingView"
+            },
+            "title": "Arguments",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "requires_empty": {
+            "title": "Requires Empty",
+            "type": "boolean"
+          },
+          "requires_online": {
+            "title": "Requires Online",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "arguments",
+          "enabled",
+          "requires_empty",
+          "requires_online"
+        ],
+        "title": "GameCommandSettingView",
+        "type": "object"
+      },
+      "GameCommandSettingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/GameCommandSettingRequest"
+            },
+            "maxItems": 100,
+            "title": "Commands",
+            "type": "array"
+          }
+        },
+        "required": [
+          "commands"
+        ],
+        "title": "GameCommandSettingsRequest",
+        "type": "object"
+      },
+      "GameCommandSettingsView": {
+        "additionalProperties": false,
+        "properties": {
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/GameCommandSettingView"
+            },
+            "title": "Commands",
+            "type": "array"
+          }
+        },
+        "required": [
+          "commands"
+        ],
+        "title": "GameCommandSettingsView",
         "type": "object"
       },
       "GameCommandView": {
@@ -39935,6 +40173,76 @@
           }
         ],
         "summary": "Generate User Api Key",
+        "tags": [
+          "v1-profile"
+        ]
+      }
+    },
+    "/api/v1/profile/game-commands": {
+      "get": {
+        "operationId": "read_game_command_settings_api_v1_profile_game_commands_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameCommandSettingsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Game Command Settings",
+        "tags": [
+          "v1-profile"
+        ]
+      },
+      "put": {
+        "operationId": "save_game_command_settings_api_v1_profile_game_commands_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GameCommandSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameCommandSettingsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Save Game Command Settings",
         "tags": [
           "v1-profile"
         ]

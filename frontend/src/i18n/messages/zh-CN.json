@@ -2832,7 +2832,8 @@
       "security": "登录与访问",
       "backups": "备份",
       "ai": "AI 助手",
-      "operations": "SteamCMD 恢复"
+      "operations": "SteamCMD 恢复",
+      "gameCommands": "Game commands"
     },
     "sections": {
       "account": {
@@ -2858,6 +2859,10 @@
       "operations": {
         "title": "SteamCMD 恢复",
         "description": "SteamCMD 遇到网络问题、崩溃或意外退出时自动重试。"
+      },
+      "gameCommands": {
+        "title": "Game command registry",
+        "description": "Register and revoke personal API game commands without editing server code."
       }
     },
     "account": "账号",
@@ -3039,7 +3044,34 @@
     "saving": "保存中…",
     "saved": "已保存。",
     "failed": "保存失败。",
-    "fetchError": "暂时无法加载个人设置（{status}）。"
+    "fetchError": "暂时无法加载个人设置（{status}）。",
+    "gameCommands": {
+      "help": "Manage the game commands available to your personal API key. Save here, then refresh the command registry and enable the command in AstrBot. New custom commands use the administrator console entry; the bot controls ordinary-user access separately. Commands still require the game plugin that implements them. Changes also apply when queued operations execute.",
+      "name": "Name",
+      "description": "Description",
+      "enabled": "Enabled",
+      "empty": "Require zero human players",
+      "online": "Online server required",
+      "builtIn": "Built-in map and extension argument rules are fixed. Map changes always require zero human players. Disable a command to revoke it.",
+      "argument": "Argument {number}",
+      "kind": "Value type",
+      "token": "ASCII token (letters, digits, underscore)",
+      "integer": "Integer range",
+      "choice": "Fixed choices",
+      "length": "Maximum length",
+      "minimum": "Minimum",
+      "maximum": "Maximum",
+      "choices": "Allowed ASCII tokens, separated by commas",
+      "removeArgument": "Remove argument",
+      "addArgument": "Add argument",
+      "remove": "Remove command",
+      "add": "Add command",
+      "save": "Save game commands",
+      "saving": "Saving...",
+      "saved": "Game commands saved. Refresh the registry in AstrBot.",
+      "failed": "Game commands could not be saved. Your edits have been retained.",
+      "loadError": "Game commands could not be loaded. Update the Manager backend and reload this page before editing."
+    }
   },
   "tutorial": {
     "title": "如何使用本面板部署 CS2 游戏服务器",

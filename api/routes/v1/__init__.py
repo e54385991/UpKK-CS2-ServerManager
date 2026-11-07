@@ -39,6 +39,7 @@ from . import (
     plugin_updates,
     plugins,
     profile,
+    profile_game_commands,
     s3_backups,
     schedule,
     server_configs,
@@ -53,6 +54,7 @@ router.include_router(auth.router)
 router.include_router(announcements.router)
 router.include_router(passkeys.router)
 router.include_router(profile.router)
+router.include_router(profile_game_commands.router)
 router.include_router(batch.router)
 router.include_router(servers.router)
 router.include_router(github_plugins.market_router)

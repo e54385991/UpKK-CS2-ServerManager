@@ -166,3 +166,6 @@ export type GameModeCatalogViewDto = Schemas["GameModeCatalogView"];
 export type GameModePlanViewDto = Schemas["GameModePlanView"];
 export type GameModePreflightRequestDto = Schemas["GameModePreflightRequest"];
 export type GameModeInstallRequestDto = Schemas["GameModeInstallRequest"];
+
+export type GameCommandSettingsViewDto = Schemas["GameCommandSettingsView"];
+export type GameCommandSettingsRequestDto = Schemas["GameCommandSettingsRequest"];

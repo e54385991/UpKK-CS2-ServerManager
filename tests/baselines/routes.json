@@ -1978,6 +1978,22 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "GET"
+    ],
+    "name": "read_game_command_settings",
+    "path": "/api/v1/profile/game-commands"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "save_game_command_settings",
+    "path": "/api/v1/profile/game-commands"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "start_batch_actions",

@@ -19,6 +19,9 @@ class User(SQLModel, table=True):
     is_active: bool = Field(default=True)
     is_admin: bool = Field(default=False)
     api_key: Optional[str] = Field(default=None, max_length=64, unique=True, index=True)
+    automation_commands: Optional[list[dict]] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
     steam_api_key: Optional[str] = Field(default=None, max_length=64)
     github_token: Optional[str] = Field(
         default=None, max_length=255

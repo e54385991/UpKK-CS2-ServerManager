@@ -2518,6 +2518,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/automation/game-commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Game Commands
+         * @description Discover definitions, not proof that a game plugin is installed or running.
+         */
+        get: operations["list_game_commands_api_v1_automation_game_commands_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnostics": {
         parameters: {
             query?: never;
@@ -3377,6 +3397,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/profile/game-commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Game Command Settings */
+        get: operations["read_game_command_settings_api_v1_profile_game_commands_get"];
+        /** Save Game Command Settings */
+        put: operations["save_game_command_settings_api_v1_profile_game_commands_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/profile/google": {
         parameters: {
             query?: never;
@@ -3753,6 +3791,43 @@ export interface paths {
          * @description Persist the chosen apt mirror, rewrite host sources, and retry packages.
          */
         post: operations["apply_server_apt_mirror_api_v1_servers__server_id__apt_mirror_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/automation-operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Automation Operation */
+        post: operations["submit_automation_operation_api_v1_servers__server_id__automation_operations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/automation-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Automation Status
+         * @description Read live counts/version; eligibility is advisory, never authorization to execute.
+         */
+        get: operations["get_automation_status_api_v1_servers__server_id__automation_status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8694,6 +8769,56 @@ export interface components {
             /** Success */
             success: boolean;
         };
+        /** AutomationCommandRequest */
+        AutomationCommandRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "send_game_command";
+            /** Args */
+            args: string[];
+            /** Command */
+            command: string;
+        };
+        /** AutomationRestartRequest */
+        AutomationRestartRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "restart";
+        };
+        /** AutomationStatusView */
+        AutomationStatusView: {
+            /** Bot Count */
+            bot_count: number | null;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Human Count */
+            human_count: number | null;
+            /** Map Name */
+            map_name: string | null;
+            /** Max Players */
+            max_players: number | null;
+            /** Player Count */
+            player_count: number | null;
+            /** Query Ok */
+            query_ok: boolean;
+            /** Restart Allowed */
+            restart_allowed: boolean;
+            /** Restart Reason */
+            restart_reason: string;
+            /** Server Id */
+            server_id: number;
+            /** Status */
+            status: string;
+            /** Version */
+            version: string | null;
+        };
         /**
          * BatchActionResponse
          * @description Schema for batch action response
@@ -10467,6 +10592,129 @@ export interface components {
              * Format: email
              */
             email: string;
+        };
+        /** GameArgumentSettingRequest */
+        GameArgumentSettingRequest: {
+            /** Choices */
+            choices?: string[];
+            /** Description */
+            description: string;
+            /**
+             * Kind
+             * @default token
+             * @enum {string}
+             */
+            kind: "token" | "integer" | "choice";
+            /**
+             * Max Length
+             * @default 128
+             */
+            max_length: number;
+            /**
+             * Maximum
+             * @default 86400
+             */
+            maximum: number;
+            /**
+             * Minimum
+             * @default 1
+             */
+            minimum: number;
+            /** Name */
+            name: string;
+        };
+        /** GameArgumentSettingView */
+        GameArgumentSettingView: {
+            /** Choices */
+            choices: string[];
+            /** Description */
+            description: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "token" | "integer" | "choice";
+            /** Max Length */
+            max_length: number;
+            /** Maximum */
+            maximum: number;
+            /** Minimum */
+            minimum: number;
+            /** Name */
+            name: string;
+        };
+        /** GameCommandArgumentView */
+        GameCommandArgumentView: {
+            /** Description */
+            description: string;
+            /** Max Length */
+            max_length: number;
+            /** Name */
+            name: string;
+            /** Pattern */
+            pattern: string;
+        };
+        /** GameCommandSettingRequest */
+        GameCommandSettingRequest: {
+            /** Arguments */
+            arguments?: components["schemas"]["GameArgumentSettingRequest"][];
+            /** Description */
+            description: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Requires Empty
+             * @default true
+             */
+            requires_empty: boolean;
+            /**
+             * Requires Online
+             * @default true
+             */
+            requires_online: boolean;
+        };
+        /** GameCommandSettingView */
+        GameCommandSettingView: {
+            /** Arguments */
+            arguments: components["schemas"]["GameArgumentSettingView"][];
+            /** Description */
+            description: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /** Requires Empty */
+            requires_empty: boolean;
+            /** Requires Online */
+            requires_online: boolean;
+        };
+        /** GameCommandSettingsRequest */
+        GameCommandSettingsRequest: {
+            /** Commands */
+            commands: components["schemas"]["GameCommandSettingRequest"][];
+        };
+        /** GameCommandSettingsView */
+        GameCommandSettingsView: {
+            /** Commands */
+            commands: components["schemas"]["GameCommandSettingView"][];
+        };
+        /** GameCommandView */
+        GameCommandView: {
+            /** Arguments */
+            arguments: components["schemas"]["GameCommandArgumentView"][];
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /** Requires Empty */
+            requires_empty: boolean;
+            /** Requires Online */
+            requires_online: boolean;
         };
         /** GameModeCatalogView */
         GameModeCatalogView: {
@@ -22963,6 +23211,26 @@ export interface operations {
             };
         };
     };
+    list_game_commands_api_v1_automation_game_commands_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameCommandView"][];
+                };
+            };
+        };
+    };
     read_panel_performance_api_v1_diagnostics_get: {
         parameters: {
             query?: never;
@@ -24688,6 +24956,59 @@ export interface operations {
             };
         };
     };
+    read_game_command_settings_api_v1_profile_game_commands_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameCommandSettingsView"];
+                };
+            };
+        };
+    };
+    save_game_command_settings_api_v1_profile_game_commands_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GameCommandSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameCommandSettingsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     bind_google_api_v1_profile_google_post: {
         parameters: {
             query?: never;
@@ -25455,6 +25776,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_automation_operation_api_v1_servers__server_id__automation_operations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationRestartRequest"] | components["schemas"]["AutomationCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_automation_status_api_v1_servers__server_id__automation_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationStatusView"];
                 };
             };
             /** @description Validation Error */

@@ -11,8 +11,9 @@ from modules.database import async_session_maker
 from modules.schemas.common import ALLOWED_SERVER_ACTIONS
 from modules.schemas.servers import ServerAction
 from services.ai_security import redact_sensitive_text
-from services.automation.commands import AutomationDenied, game_command
+from services.automation.commands import AutomationDenied
 from services.automation.guard import ensure_eligible
+from services.automation.registry import resolve_command
 from services.custom_command_service import execute_custom_commands
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.operations.types import OperationCommand
@@ -26,13 +27,13 @@ from services.ssh_manager import SSHManager
 from .shared import _dispatch, logger
 
 
-async def _guarded_command(server: Server, record: dict, command: str) -> str:
+async def _guarded_command(server: Server, record: dict, command: str, user: User) -> str:
     if record.get("automation_guard") is None and "automation_command" not in record:
         return command
     metadata = record.get("automation_command")
     if record.get("automation_guard") != "registered_command" or not isinstance(metadata, dict):
         raise AutomationDenied("The queued automation policy is invalid.")
-    definition = game_command(metadata.get("name", ""))
+    definition = resolve_command(user, metadata.get("name", ""))
     arguments = metadata.get("args")
     if not isinstance(arguments, list):
         raise AutomationDenied("The queued game-command arguments are invalid.")
@@ -110,7 +111,11 @@ async def run_game_console_command(*, operation_id: str, command: str) -> None:
                     f"Executing game-console command: {redact_sensitive_text(command, limit=500)}"
                 ),
             )
-            command = await _guarded_command(server, record, command)
+            async with async_session_maker() as registry_db:
+                operator = await registry_db.get(User, actor_user_id)
+                if operator is None or not operator.is_active:
+                    raise AutomationDenied("The operator account is no longer available.")
+            command = await _guarded_command(server, record, command, operator)
             result = await execute_custom_commands(server, "game_process", command)
 
         message = str(result.get("message") or "Game-console command finished")

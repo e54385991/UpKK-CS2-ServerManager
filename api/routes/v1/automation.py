@@ -16,7 +16,8 @@ from api.dependencies import (
     close_request_session,
     require_server_access,
 )
-from services.automation.commands import GAME_COMMANDS, AutomationDenied, game_command
+from services.automation.commands import AutomationDenied
+from services.automation.registry import commands_for, resolve_command
 from services.automation.status import read_automation_status
 from services.server_compatibility import (
     execstack_cleanup_enabled_for_action,
@@ -34,7 +35,13 @@ router = APIRouter(tags=["v1-automation"])
 @router.get("/api/v1/automation/game-commands", response_model=list[GameCommandView])
 async def list_game_commands(current_user: AutomationUser) -> list[GameCommandView]:
     """Discover definitions, not proof that a game plugin is installed or running."""
-    return [GameCommandView.model_validate(asdict(command)) for command in GAME_COMMANDS.values()]
+    try:
+        return [
+            GameCommandView.model_validate(asdict(command))
+            for command in commands_for(current_user).values()
+        ]
+    except AutomationDenied as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/api/v1/servers/{server_id}/automation-status", response_model=AutomationStatusView)
@@ -61,7 +68,7 @@ async def submit_automation_operation(
     server = await require_server_access(db, server_id, current_user)
     try:
         if isinstance(body, AutomationCommandRequest):
-            definition = game_command(body.command)
+            definition = resolve_command(current_user, body.command)
             command = definition.render(body.args)
             record = await enqueue_game_console_command(
                 server_id=server_id,

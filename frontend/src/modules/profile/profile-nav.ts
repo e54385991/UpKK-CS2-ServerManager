@@ -5,6 +5,7 @@ export const PROFILE_SECTIONS = [
   { id: "profile-backups", key: "backups" },
   { id: "profile-ai", key: "ai" },
   { id: "profile-operations", key: "operations" },
+  { id: "profile-game-commands", key: "gameCommands" },
 ] as const;
 
 export type ProfileSectionKey = (typeof PROFILE_SECTIONS)[number]["key"];

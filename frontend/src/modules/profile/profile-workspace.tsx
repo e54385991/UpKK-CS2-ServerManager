@@ -7,6 +7,8 @@ import { GoogleLinkForm } from "@/modules/profile/google-link-form";
 import { PasskeyForm } from "@/modules/profile/passkey-form";
 import { PasswordForm } from "@/modules/profile/password-form";
 import { ProfileCredentialsForm } from "@/modules/profile/profile-credentials-form";
+import { GameCommandForm } from "@/modules/profile/game-command-form";
+import type { PersonalGameCommand } from "@/modules/profile/game-command-types";
 import {
   PROFILE_SECTIONS,
   profileSectionFromHash,
@@ -34,6 +36,7 @@ export function ProfileWorkspace({
   ai,
   passkeys,
   passkeysError,
+  gameCommands,
 }: {
   profile: ProfileSettings;
   joined: string;
@@ -42,6 +45,7 @@ export function ProfileWorkspace({
   ai: ProfileAiSettings | null;
   passkeys: readonly PasskeyItem[];
   passkeysError: boolean;
+  gameCommands: PersonalGameCommand[] | null;
 }) {
   const t = useTranslations("profile");
   const [active, setActive] = useState<ProfileSectionKey>("account");
@@ -196,6 +200,16 @@ export function ProfileWorkspace({
             testId="profile-section-operations"
           >
             <SteamcmdRetryForm initial={profile} />
+          </SettingsSection>
+        </div>
+        <div className={cn(active === "gameCommands" ? "" : "hidden")}>
+          <SettingsSection
+            id="profile-game-commands"
+            title={t("sections.gameCommands.title")}
+            description={t("sections.gameCommands.description")}
+            testId="profile-section-game-commands"
+          >
+            <GameCommandForm initial={gameCommands} />
           </SettingsSection>
         </div>
       </div>

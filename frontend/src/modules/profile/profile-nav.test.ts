@@ -12,6 +12,7 @@ test("profileSectionFromHash maps category hashes and credential field aliases",
   assert.equal(profileSectionFromHash("#profile-backups"), "backups");
   assert.equal(profileSectionFromHash("#profile-ai"), "ai");
   assert.equal(profileSectionFromHash("#profile-operations"), "operations");
+  assert.equal(profileSectionFromHash("#profile-game-commands"), "gameCommands");
   assert.equal(profileSectionFromHash("#unknown"), "account");
 });
 

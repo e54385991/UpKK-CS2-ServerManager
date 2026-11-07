@@ -2832,7 +2832,8 @@
       "security": "Sign-in & access",
       "backups": "Backups",
       "ai": "AI assistant",
-      "operations": "SteamCMD recovery"
+      "operations": "SteamCMD recovery",
+      "gameCommands": "Game commands"
     },
     "sections": {
       "account": {
@@ -2858,6 +2859,10 @@
       "operations": {
         "title": "SteamCMD recovery",
         "description": "Automatic retries after SteamCMD network issues, crashes, or an unexpected exit."
+      },
+      "gameCommands": {
+        "title": "Game command registry",
+        "description": "Register and revoke personal API game commands without editing server code."
       }
     },
     "account": "Account",
@@ -3039,7 +3044,34 @@
     "saving": "Saving…",
     "saved": "Saved.",
     "failed": "Could not save.",
-    "fetchError": "Could not load account settings ({status})."
+    "fetchError": "Could not load account settings ({status}).",
+    "gameCommands": {
+      "help": "Manage the game commands available to your personal API key. Save here, then refresh the command registry and enable the command in AstrBot. New custom commands use the administrator console entry; the bot controls ordinary-user access separately. Commands still require the game plugin that implements them. Changes also apply when queued operations execute.",
+      "name": "Name",
+      "description": "Description",
+      "enabled": "Enabled",
+      "empty": "Require zero human players",
+      "online": "Online server required",
+      "builtIn": "Built-in map and extension argument rules are fixed. Map changes always require zero human players. Disable a command to revoke it.",
+      "argument": "Argument {number}",
+      "kind": "Value type",
+      "token": "ASCII token (letters, digits, underscore)",
+      "integer": "Integer range",
+      "choice": "Fixed choices",
+      "length": "Maximum length",
+      "minimum": "Minimum",
+      "maximum": "Maximum",
+      "choices": "Allowed ASCII tokens, separated by commas",
+      "removeArgument": "Remove argument",
+      "addArgument": "Add argument",
+      "remove": "Remove command",
+      "add": "Add command",
+      "save": "Save game commands",
+      "saving": "Saving...",
+      "saved": "Game commands saved. Refresh the registry in AstrBot.",
+      "failed": "Game commands could not be saved. Your edits have been retained.",
+      "loadError": "Game commands could not be loaded. Update the Manager backend and reload this page before editing."
+    }
   },
   "tutorial": {
     "title": "How to deploy a CS2 game server with this panel",
