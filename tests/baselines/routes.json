@@ -2466,6 +2466,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "GET"
+    ],
+    "name": "get_automation_status",
+    "path": "/api/v1/servers/{server_id}/automation-status"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "submit_automation_operation",

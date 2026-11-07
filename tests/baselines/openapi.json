@@ -4347,6 +4347,118 @@
         "title": "AutomationRestartRequest",
         "type": "object"
       },
+      "AutomationStatusView": {
+        "additionalProperties": false,
+        "properties": {
+          "bot_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Count"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "human_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Count"
+          },
+          "map_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Map Name"
+          },
+          "max_players": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Players"
+          },
+          "player_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Player Count"
+          },
+          "query_ok": {
+            "title": "Query Ok",
+            "type": "boolean"
+          },
+          "restart_allowed": {
+            "title": "Restart Allowed",
+            "type": "boolean"
+          },
+          "restart_reason": {
+            "title": "Restart Reason",
+            "type": "string"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "server_id",
+          "status",
+          "query_ok",
+          "player_count",
+          "bot_count",
+          "human_count",
+          "max_players",
+          "version",
+          "map_name",
+          "checked_at",
+          "restart_allowed",
+          "restart_reason"
+        ],
+        "title": "AutomationStatusView",
+        "type": "object"
+      },
       "BatchActionResponse": {
         "description": "Schema for batch action response",
         "properties": {
@@ -41118,6 +41230,56 @@
         ]
       }
     },
+    "/api/v1/servers/{server_id}/automation-status": {
+      "get": {
+        "description": "Read live counts/version; eligibility is advisory, never authorization to execute.",
+        "operationId": "get_automation_status_api_v1_servers__server_id__automation_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationStatusView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
+          }
+        ],
+        "summary": "Get Automation Status",
+        "tags": [
+          "v1-automation"
+        ]
+      }
+    },
     "/api/v1/servers/{server_id}/cleanup/delete": {
       "post": {
         "operationId": "delete_server_cleanup_items_api_v1_servers__server_id__cleanup_delete_post",
@@ -45807,7 +45969,9 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
           }
         ],
         "summary": "Get Plugin Updates",
@@ -46142,7 +46306,9 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "OAuth2PasswordBearer": [
+              "personal_api_key"
+            ]
           }
         ],
         "summary": "Run Plugin Updates",

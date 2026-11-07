@@ -40,7 +40,9 @@ async def read_automation_status(server: Server) -> AutomationStatus:
     observed = get_current_time()
     info = info if success and isinstance(info, dict) else {}
     players, bots = _count(info.get("player_count")), _count(info.get("bot_count"))
-    humans = players - bots if players is not None and bots is not None and bots <= players else None
+    humans = (
+        players - bots if players is not None and bots is not None and bots <= players else None
+    )
     current = await server_operation_hub.get_current(int(server.id))
     busy = await maintenance_lock_service.is_locked(int(server.id))
     reason = "No human players; the Manager must recheck immediately before execution."
@@ -50,7 +52,10 @@ async def read_automation_status(server: Server) -> AutomationStatus:
     elif current or busy:
         allowed, reason = False, "A server operation or maintenance lock is active."
     elif humans is None:
-        allowed, reason = False, "Live occupancy is unavailable or invalid; emptiness is unverified."
+        allowed, reason = (
+            False,
+            "Live occupancy is unavailable or invalid; emptiness is unverified.",
+        )
     elif humans:
         allowed, reason = False, "Human players are connected."
     return AutomationStatus(

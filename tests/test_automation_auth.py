@@ -48,7 +48,7 @@ def automation(monkeypatch):
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
-    server = SimpleNamespace(**values)
+    server = SimpleNamespace(**values, manual_stop_requested=False)
     monkeypatch.setattr(
         Server,
         "get_by_id_and_user",
@@ -105,6 +105,7 @@ def automation(monkeypatch):
             client=client,
             app=app,
             user=user,
+            server=server,
             lookup=lookup,
             enqueue=enqueue,
             game_enqueue=game_enqueue,
@@ -155,6 +156,8 @@ def test_key_uses_existing_queue_and_operation_status(automation):
         "/api/v1/servers/12",
         "/api/v1/servers/12/operations/current",
         "/api/v1/automation/game-commands",
+        "/api/v1/servers/12/automation-status",
+        "/api/v1/servers/12/plugin-updates",
     ],
 )
 def test_missing_invalid_revoked_and_inactive_keys_fail(automation, path):
@@ -243,6 +246,9 @@ def test_only_documented_endpoints_opt_in_to_keys(automation):
         ("GET", "/api/v1/servers/{server_id}/operations/{operation_id}"),
         ("GET", "/api/v1/automation/game-commands"),
         ("POST", "/api/v1/servers/{server_id}/automation-operations"),
+        ("GET", "/api/v1/servers/{server_id}/automation-status"),
+        ("GET", "/api/v1/servers/{server_id}/plugin-updates"),
+        ("POST", "/api/v1/servers/{server_id}/plugin-updates/run"),
     }
 
 

@@ -37,9 +37,7 @@ async def list_game_commands(current_user: AutomationUser) -> list[GameCommandVi
     return [GameCommandView.model_validate(asdict(command)) for command in GAME_COMMANDS.values()]
 
 
-@router.get(
-    "/api/v1/servers/{server_id}/automation-status", response_model=AutomationStatusView
-)
+@router.get("/api/v1/servers/{server_id}/automation-status", response_model=AutomationStatusView)
 async def get_automation_status(
     server_id: int, db: DatabaseSession, current_user: AutomationUser
 ) -> AutomationStatusView:
