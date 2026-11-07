@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from api.dependencies import ActiveUser, DatabaseSession, require_server_access
+from api.dependencies import ActiveUser, AutomationUser, DatabaseSession, require_server_access
 from api.routes import plugin_auto_update as legacy
 from modules import ManagedPlugin
 from modules.schemas.plugins import (
@@ -79,7 +79,7 @@ def _view(payload) -> PluginUpdatesView:
 
 @router.get("/{server_id}/plugin-updates", response_model=PluginUpdatesView)
 async def get_plugin_updates(
-    server_id: int, db: DatabaseSession, current_user: ActiveUser
+    server_id: int, db: DatabaseSession, current_user: AutomationUser
 ) -> PluginUpdatesView:
     return _view(await legacy.get_configuration(server_id, db, current_user))
 
@@ -186,7 +186,7 @@ async def run_plugin_updates(
     server_id: int,
     request: Request,
     db: DatabaseSession,
-    current_user: ActiveUser,
+    current_user: AutomationUser,
 ) -> ServerOperationView:
     await require_server_access(db, server_id, current_user)
     await reject_stuck_lock_unless_active(server_id)
