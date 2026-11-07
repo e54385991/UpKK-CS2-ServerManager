@@ -403,6 +403,7 @@ test("unprefetched sidebar click feedback stays under 100ms with 3s delay", asyn
   await page.goto("/overview");
   await expect(page.getByTestId("console-sidebar")).toBeVisible();
   await waitForHydratedOverview(page);
+  await expect(sidebarLink(page, "overview")).toHaveAttribute("aria-current", "page");
   const elapsed = await clickShowsPending(
     page,
     '[data-testid="console-sidebar"] a[data-nav-key="plugins"]',
