@@ -50,6 +50,16 @@ The console uses JWT-only `GET` and `PUT /api/v1/profile/game-commands` with a `
 
 Existing accounts with no saved registry retain the original two defaults. Saving an empty list disables all registered automation commands for that account. The `users.automation_commands` JSONB column is added by the normal startup migration. In AstrBot, refresh the command registry and enable the new entry after saving. Custom commands use `/upkk_cs2 console SERVER_ID COMMAND [ARGS...] [confirm]`, which remains administrator-only. Built-in ordinary-user switches, cooldowns and the preview/manual-confirmation workflow remain enforced by the bot. Registration does not install the game plugin that implements the command.
 
+Run the repository baseline before starting the isolated browser regression:
+
+```bash
+uv run python scripts/check_baseline.py
+cd frontend
+npx playwright test --config=playwright.profile-commands.config.ts
+```
+
+The browser fixture uses loopback-only fake API state and real Next.js/Chromium. It covers adding, saving, reloading, disabling, and retaining failed edits at 390 and 1440 pixels. It does not use real credentials or contact a game server. Do not run this Next.js dev fixture concurrently with a production build in the same checkout. Backend regression coverage lives in `tests/test_personal_game_commands.py`; a configured PostgreSQL integration environment is still needed to verify the migration against a real database.
+
 Workers hold the existing maintenance lock and use a fresh, bounded A2S probe under the shared limiter, never stale Redis data. Only valid integer counts with `0 <= bot_count <= player_count <= 255` qualify; human count is the difference. `css_wsmap` requires an online server without humans. Public restart checks again immediately before stopping. A failed A2S query cannot prove emptiness: offline recovery requires SSH to confirm the target detached session is stopped, no related CS2/wrapper process runs, the game port is not listening, and the session remains stopped after the scans. Failed or ambiguous evidence refuses execution. Administrator-requested stop state blocks automation. Occupancy checks cannot be atomic with player connections.
 
 The AstrBot UPKK CS2 plugin v0.3.0 retains administrator management and adds live player counts, BOT/human separation, game version, restart eligibility, and guided help. `automation-status` authorizes the server before releasing the request database session, then performs one bounded live A2S query through the shared limiter. It returns only game observations and advisory restart eligibility; query failure or invalid counts never prove emptiness. Manual-stop requests, active operations and maintenance locks can deny eligibility. It neither starts SSH probes nor submits operations, and execution-time restart guards remain authoritative.
