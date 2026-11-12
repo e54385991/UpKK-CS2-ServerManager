@@ -9,21 +9,31 @@ Python 依赖约束由 `pyproject.toml` 声明，解析结果由 `uv.lock` 锁�
 | Python | 最低 3.15；开发 / CI / Docker 统一 3.15.2 正式版、普通 GIL | `.python-version`、Docker 精确版本及摘要、`pyproject.toml` 与带哈希生产导出同步 |
 | uv | Docker `0.13.7-alpine`（digest 钉死） | 只用于镜像构建，运行镜像不保留 uv |
 | FastAPI / Starlette | `>=0.162.0` / `>=1.10.0` | 保持上游兼容约束 |
-| SQLAlchemy / SQLModel | `>=2.1.8` / `>=0.0.48` | PostgreSQL 主路径，短事务 |
+| SQLAlchemy / SQLModel | `>=2.1.8` / `>=0.0.49` | PostgreSQL 主路径，短事务 |
 | PostgreSQL | Compose `18.6-alpine` | 健康检查后启动，Alembic 自动升级 |
 | Redis | Compose `8.10.3-alpine3.23` | 保持 Redis 7 协议兼容，pipeline/MGET |
-| Caddy | Compose `2.11.7-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
+| Caddy | Compose `2.11.9-alpine`（digest 钉死） | 仅 `--profile edge` / 1Panel 公网入口 |
 | HTTP | 生产 `httpx>=0.28.1` | 应用级共享 transport |
 | Starlette 测试客户端 | `httpx2>=2.16.0`（开发） | 仅用于测试兼容层 |
 | SSH | `asyncssh>=2.24.1` | 显式 lease 和连接池 |
-| Node.js | 26 LTS（Docker / CI `26.13.0`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
-| npm | `11.21.1` | `frontend/package.json#packageManager` 为 Docker / CI 共用版本来源；npm 12.2.1 仍无法正常生成锁文件 |
-| 前端控制台 | Next.js 16.4.5、React 19.3.1、next-intl 4.14.9 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
+| Node.js | 26 LTS（Docker / CI `26.13.1`） | 前端镜像固定 Alpine 3.24 多架构摘要 |
+| npm | `11.21.1` | `frontend/package.json#packageManager` 为 Docker / CI 共用版本来源；npm 12.2.2 在读取 Tailwind wasm tarball 时触发 `EALLOWREMOTE` |
+| 前端控制台 | Next.js 16.4.6、React 19.3.1、next-intl 4.15.1 | `frontend/package-lock.json`，TypeScript 6.0.3、ESLint 9.39.5 |
 
-关键安全包当前下限为 `boto3>=1.43.123`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
-uv、npm（`frontend/`）、两个 Dockerfile、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.18,<4.0.0` 与 `import-linter>=2.15,<3.0.0`。
+关键安全包当前下限为 `boto3>=1.44.1`、`cryptography>=50.0.2`、`webauthn>=3.0.1`。Dependabot 每周检查
+uv、npm（`frontend/`）、两个 Dockerfile、Docker Compose 和 GitHub Actions；补丁/次版本合并分组，主版本单独 PR。TypeScript 7 超出 `typescript-eslint` 当前支持范围；ESLint 10 超出 React、import 和 JSX accessibility 插件声明的 peer 支持范围，因此两项主版本仍保持忽略；架构检查使用 `grimp>=3.19,<4.0.0` 与 `import-linter>=2.16,<3.0.0`。
 
 SQLModel `0.0.45` 起默认把普通 `datetime` 映射为要求带时区的 `UTCDateTime`（`TIMESTAMP WITH TIME ZONE`）。现有 Alembic schema 把这些列存为 naive UTC 的 `TIMESTAMP WITHOUT TIME ZONE`，因此表模型里的普通 `datetime` 字段都显式声明 `sa_type=DateTime(timezone=False)`，需要带时区的列继续使用 `sa_column=Column(DateTime(timezone=True))` 并配套迁移；`tests/test_postgresql_migrations.py` 会拒绝任何隐式 `UTCDateTime` 列并锁定带时区列清单。SQLModel 0.0.48 已放宽到 `SQLAlchemy<2.2.0`，当前锁定 SQLAlchemy 2.1.8；保留现有时区映射与 Alembic schema。
+
+## 全仓库稳定依赖更新（2026-11-12）
+
+重新查询 PyPI、npm、Node.js 官方发布清单、GitHub Releases / tags 和官方容器 registry。Python 3.15.2 仍为最新稳定补丁版，`.python-version` 保持不变；uv 0.13.7 仍为最新稳定版。Python 运行镜像仍固定 `python:3.15.2-alpine3.24`，但官方索引已重建，摘要刷新为 `sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd`。Node 更新到官方 26.13.1 LTS，Docker 使用已核实的 amd64 / arm64 索引摘要 `sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5`。PostgreSQL 18.6 与 Redis 8.10.3 仍为当前稳定版，官方多架构摘要刷新为 `sha256:9ba53c7d41ea093baf5c1ba635ba5434c4f979880527d49bb7d9237d3193085b` 和 `sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3`；Caddy 更新到 2.11.9，摘要为 `sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee`。所有索引均确认包含 Linux amd64 / arm64，Compose、CI、Dockerfile 与 1Panel 模板同步。
+
+`uv lock --upgrade` 更新 26 个解析包，包括 SQLModel 0.0.49、Pydantic 2.14.3 / pydantic-core 2.50.4、psycopg 3.3.9、Boto3 / Botocore 1.44.1、google-auth 2.62.2、Google API client 2.202.0、Grimp 3.19、import-linter 2.16 和 Ruff 0.17.4。对应直接依赖下限、`uv.lock` 与 `scripts/export_requirements.py` 生成的带哈希生产导出同步；未启用预发布解析或独立覆盖 pydantic-core。pre-commit Ruff hook 同步到 0.17.4；pre-commit-hooks 6.0.0 和 pre-commit 4.7.0 重新核对后仍是最新稳定版。
+
+前端正常更新直接与传递依赖，Next.js、`@next/playwright`、`eslint-config-next` 更新到 16.4.6，Tailwind / PostCSS 插件到 4.3.5，Playwright 到 1.65.0，lucide-react 到 1.72.0，next-intl 到 4.15.1；React 19.3.1、PostCSS 8.5.32 和 Node 类型 26.6.6 仍为最新稳定版。TypeScript 6.0.3 保留，因为最新 typescript-eslint 8.72.2 的 peer 范围是 `>=4.8.4 <6.1.0`。ESLint 9.39.5 保留，因为最新 React 7.37.5、import 2.32.0 和 JSX accessibility 6.10.2 插件仍将 peer 上限定在 ESLint 9；不强制安装 ESLint 10。npm 12.2.2 的正常 `install --package-lock-only` 被本地依赖下载策略以 `EALLOWREMOTE` 拒绝，错误发生在 `@tailwindcss/oxide-wasm32-wasi@4.3.5` tarball；使用项目原有 npm 11.21.1 正常更新锁文件，不绕过策略。
+
+GitHub Actions 最新版本检查后只需把 checkout 更新到 v7.1.0 / `6d4fd22b20465ccc0f7354476588e8df7c9ca0e0`；setup-node、setup-uv、Docker Actions、Git hooks 其余已是最新稳定 tag 与完整 SHA。npm 完整审计当前仍报告 7 个 moderate 开发依赖告警；生产审计结果以完整基线为准，不把生产依赖通过描述为开发依赖全无告警。
 
 ## 全仓库稳定依赖更新（2026-11-04）
 
