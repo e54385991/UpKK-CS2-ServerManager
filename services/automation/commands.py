@@ -36,6 +36,7 @@ class GameCommand:
     arguments: tuple[CommandArgument, ...]
     requires_empty: bool = True
     requires_online: bool = True
+    max_human_players: int = 0
 
     def render(self, args: list[str]) -> str:
         if len(args) != len(self.arguments):
@@ -57,6 +58,7 @@ GAME_COMMANDS: dict[str, GameCommand] = {
             ),
         ),
         requires_empty=False,
+        max_human_players=255,
     ),
     "css_wsmap": GameCommand(
         name="css_wsmap",
@@ -68,6 +70,8 @@ GAME_COMMANDS: dict[str, GameCommand] = {
                 pattern=r"[A-Za-z0-9_]{1,128}",
             ),
         ),
+        requires_empty=False,
+        max_human_players=1,
     ),
 }
 

@@ -24,7 +24,7 @@ for (const width of [390, 1440]) {
     await form.getByRole("button", { name: "Save game commands", exact: true }).click();
     await expect(form.getByRole("status")).toContainText("Game commands saved");
     const saved = await (await request.get(`${mockUrl}/__test__/commands`)).json();
-    expect(saved[0]).toMatchObject({ name: "css_custom", requires_empty: false, requires_online: true, arguments: [{ kind: "integer", minimum: 1, maximum: 7200, max_length: 4 }] });
+    expect(saved[0]).toMatchObject({ name: "css_custom", requires_empty: false, requires_online: true, max_human_players: 255, arguments: [{ kind: "integer", minimum: 1, maximum: 7200, max_length: 4 }] });
     await page.reload();
     await expect(page.locator("#command-0-name")).toHaveValue("css_custom");
     await form.getByLabel("Enabled", { exact: true }).uncheck();

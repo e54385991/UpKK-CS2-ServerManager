@@ -257,8 +257,11 @@ def test_registered_automation_uses_structured_queue_and_existing_action(automat
     entries = state.client.get("/api/v1/automation/game-commands", headers=state.key).json()
     definitions = {entry["name"]: entry for entry in entries}
     assert definitions["css_wsmap"]["arguments"][0]["pattern"] == "[A-Za-z0-9_]{1,128}"
+    assert definitions["css_wsmap"]["requires_empty"] is False
+    assert definitions["css_wsmap"]["max_human_players"] == 1
     assert definitions["css_ext_maptime"]["requires_online"] is True
     assert definitions["css_ext_maptime"]["requires_empty"] is False
+    assert definitions["css_ext_maptime"]["max_human_players"] == 255
     body = {"action": "send_game_command", "command": "css_wsmap", "args": ["ze_example"]}
     response = state.client.post(
         "/api/v1/servers/12/automation-operations", headers=state.key, json=body

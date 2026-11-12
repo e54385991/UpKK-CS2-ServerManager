@@ -36,6 +36,7 @@ class GameCommandView(ApiResponse):
     arguments: list[GameCommandArgumentView]
     requires_empty: bool
     requires_online: bool
+    max_human_players: int
 
 
 class AutomationStatusView(ApiResponse):

@@ -8884,6 +8884,13 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "max_human_players": {
+            "default": 0,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Max Human Players",
+            "type": "integer"
+          },
           "name": {
             "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
             "title": "Name",
@@ -8925,6 +8932,10 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "max_human_players": {
+            "title": "Max Human Players",
+            "type": "integer"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -8944,7 +8955,8 @@
           "arguments",
           "enabled",
           "requires_empty",
-          "requires_online"
+          "requires_online",
+          "max_human_players"
         ],
         "title": "GameCommandSettingView",
         "type": "object"
@@ -8998,6 +9010,10 @@
             "title": "Description",
             "type": "string"
           },
+          "max_human_players": {
+            "title": "Max Human Players",
+            "type": "integer"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -9016,7 +9032,8 @@
           "description",
           "arguments",
           "requires_empty",
-          "requires_online"
+          "requires_online",
+          "max_human_players"
         ],
         "title": "GameCommandView",
         "type": "object"

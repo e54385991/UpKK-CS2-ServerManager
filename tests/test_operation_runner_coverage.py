@@ -203,7 +203,11 @@ async def test_map_time_extension_worker_rebuilds_command_with_online_only_polic
     monkeypatch.setattr(server, "ensure_eligible", eligible)
     monkeypatch.setattr(server, "execute_custom_commands", execute)
     await server.run_game_console_command(operation_id="op-1", command="quit; unsafe fallback")
-    assert eligible.await_args.kwargs == {"requires_empty": False, "requires_online": True}
+    assert eligible.await_args.kwargs == {
+        "requires_empty": False,
+        "requires_online": True,
+        "max_human_players": 255,
+    }
     assert execute.await_args.args[1:] == ("game_process", "css_ext_maptime 3600")
     assert hub.finished[-1][1]["success"] is True
 

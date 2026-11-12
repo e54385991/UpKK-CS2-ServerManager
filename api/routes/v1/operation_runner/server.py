@@ -43,6 +43,7 @@ async def _guarded_command(server: Server, record: dict, command: str, user: Use
         SSHManager(),
         requires_empty=definition.requires_empty,
         requires_online=definition.requires_online,
+        max_human_players=definition.max_human_players,
     )
     return rendered
 

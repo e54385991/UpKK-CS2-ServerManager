@@ -15,4 +15,5 @@ export type PersonalGameCommand = {
   enabled: boolean;
   requiresEmpty: boolean;
   requiresOnline: boolean;
+  maxHumanPlayers: number;
 };

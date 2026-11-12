@@ -54,7 +54,17 @@ export function GameCommandForm({ initial }: { initial: PersonalGameCommand[] | 
           </div>
           <div className="flex flex-wrap gap-4 text-sm text-fg-muted">
             <label className="flex items-center gap-2"><input type="checkbox" checked={item.enabled} onChange={(event) => update(index, { enabled: event.target.checked })} />{t("enabled")}</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={item.requiresEmpty} disabled={item.name === "css_wsmap"} onChange={(event) => update(index, { requiresEmpty: event.target.checked })} />{t("empty")}</label>
+            {item.name === "css_wsmap" ? (
+              <div className="min-w-40">
+                <Label htmlFor={`${key}-occupancy`}>{t("occupancy")}</Label>
+                <Input id={`${key}-occupancy`} type="number" min={0} max={255} required value={item.maxHumanPlayers} onChange={(event) => {
+                  const maxHumanPlayers = Number(event.target.value);
+                  update(index, { maxHumanPlayers, requiresEmpty: maxHumanPlayers === 0 });
+                }} />
+              </div>
+            ) : (
+              <label className="flex items-center gap-2"><input type="checkbox" checked={item.requiresEmpty} onChange={(event) => update(index, { requiresEmpty: event.target.checked, maxHumanPlayers: event.target.checked ? 0 : 255 })} />{t("empty")}</label>
+            )}
             <span>{t("online")}</span>
           </div>
           {builtIn ? <p className="text-xs text-fg-subtle">{t("builtIn")}</p> : null}
@@ -83,7 +93,7 @@ export function GameCommandForm({ initial }: { initial: PersonalGameCommand[] | 
         </CardContent></Card>;
       })}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" disabled={commands.length >= 100} onClick={() => setCommands([...commands, { name: "", description: "", arguments: [], enabled: true, requiresEmpty: true, requiresOnline: true }])}>{t("add")}</Button>
+        <Button type="button" variant="secondary" disabled={commands.length >= 100} onClick={() => setCommands([...commands, { name: "", description: "", arguments: [], enabled: true, requiresEmpty: true, requiresOnline: true, maxHumanPlayers: 0 }])}>{t("add")}</Button>
         <Button type="submit">{saving ? t("saving") : t("save")}</Button>
       </div>
     </fieldset>

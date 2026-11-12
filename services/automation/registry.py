@@ -63,16 +63,20 @@ class CommandSetting(BaseModel):
     enabled: bool = True
     requires_empty: bool = True
     requires_online: bool = True
+    max_human_players: int = Field(default=0, ge=0, le=255)
 
     @model_validator(mode="after")
     def validate_policy(self) -> CommandSetting:
         if not self.requires_online:
             raise ValueError("Registered game commands require an online server.")
+        if self.requires_empty:
+            self.max_human_players = 0
+        elif self.max_human_players == 0:
+            self.max_human_players = 1 if self.name == "css_wsmap" else 255
+        self.requires_empty = self.max_human_players == 0
         names = [rule.name for rule in self.arguments]
         if len(names) != len(set(names)):
             raise ValueError("Argument names must be unique within a command.")
-        if self.name == "css_wsmap" and not self.requires_empty:
-            raise ValueError("Map changes must require zero human players.")
         if (
             self.name in {"css_wsmap", "css_ext_maptime"}
             and self.arguments != default_setting(self.name).arguments
@@ -87,6 +91,7 @@ class CommandSetting(BaseModel):
             tuple(rule.contract() for rule in self.arguments),
             self.requires_empty,
             self.requires_online,
+            self.max_human_players,
         )
 
 
@@ -128,6 +133,7 @@ def default_setting(name: str) -> CommandSetting:
         enabled=True,
         requires_empty=definition.requires_empty,
         requires_online=True,
+        max_human_players=definition.max_human_players,
         arguments=[
             ArgumentSetting(
                 name=argument.name,

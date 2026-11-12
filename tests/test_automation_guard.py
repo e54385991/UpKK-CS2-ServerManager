@@ -100,6 +100,16 @@ async def test_map_time_extension_allows_online_players_but_rejects_failed_queri
     ssh.connect.assert_not_awaited()
 
 
+async def test_map_changes_allow_the_configured_human_occupancy(monkeypatch, target, ssh):
+    probe = AsyncMock(return_value=(True, {"player_count": 1, "bot_count": 0}))
+    monkeypatch.setattr(guard.a2s_cache_service, "query_live_info", probe)
+    await guard.ensure_eligible(target, ssh, requires_empty=False, max_human_players=1)
+    probe.return_value = (True, {"player_count": 2, "bot_count": 0})
+    with pytest.raises(AutomationDenied, match="too many human players"):
+        await guard.ensure_eligible(target, ssh, requires_empty=False, max_human_players=1)
+    ssh.connect.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     "args",
     [

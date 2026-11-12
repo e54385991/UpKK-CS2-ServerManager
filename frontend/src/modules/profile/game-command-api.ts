@@ -7,6 +7,7 @@ function fromWire(data: GameCommandSettingsViewDto): PersonalGameCommand[] {
   return data.commands.map((item) => ({
     name: item.name, description: item.description, enabled: item.enabled,
     requiresEmpty: item.requires_empty, requiresOnline: item.requires_online,
+    maxHumanPlayers: item.max_human_players ?? (item.requires_empty ? 0 : 255),
     arguments: item.arguments.map((arg) => ({
       name: arg.name, description: arg.description, kind: arg.kind,
       maxLength: arg.max_length, minimum: arg.minimum, maximum: arg.maximum,
@@ -24,6 +25,7 @@ export async function putGameCommands(commands: PersonalGameCommand[]): Promise<
   const body: GameCommandSettingsRequestDto = { commands: commands.map((item) => ({
     name: item.name, description: item.description, enabled: item.enabled,
     requires_empty: item.requiresEmpty, requires_online: item.requiresOnline,
+    max_human_players: item.maxHumanPlayers,
     arguments: item.arguments.map((arg) => ({
       name: arg.name, description: arg.description, kind: arg.kind,
       max_length: arg.maxLength, minimum: arg.minimum, maximum: arg.maximum, choices: arg.choices,

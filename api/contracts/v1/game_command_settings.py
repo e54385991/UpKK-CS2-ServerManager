@@ -27,6 +27,7 @@ class GameCommandSettingRequest(ApiRequest):
     enabled: StrictBool = True
     requires_empty: StrictBool = True
     requires_online: StrictBool = True
+    max_human_players: StrictInt = Field(default=0, ge=0, le=255)
 
     @model_validator(mode="after")
     def validate_definition(self) -> GameCommandSettingRequest:
@@ -61,6 +62,7 @@ class GameCommandSettingView(ApiResponse):
     enabled: bool
     requires_empty: bool
     requires_online: bool
+    max_human_players: int
 
 
 class GameCommandSettingsView(ApiResponse):

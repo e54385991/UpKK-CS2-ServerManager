@@ -10665,6 +10665,11 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /**
+             * Max Human Players
+             * @default 0
+             */
+            max_human_players: number;
             /** Name */
             name: string;
             /**
@@ -10686,6 +10691,8 @@ export interface components {
             description: string;
             /** Enabled */
             enabled: boolean;
+            /** Max Human Players */
+            max_human_players: number;
             /** Name */
             name: string;
             /** Requires Empty */
@@ -10709,6 +10716,8 @@ export interface components {
             arguments: components["schemas"]["GameCommandArgumentView"][];
             /** Description */
             description: string;
+            /** Max Human Players */
+            max_human_players: number;
             /** Name */
             name: string;
             /** Requires Empty */

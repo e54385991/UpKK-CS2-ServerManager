@@ -73,10 +73,17 @@ async def ensure_eligible(
     allow_stopped: bool = False,
     requires_empty: bool = True,
     requires_online: bool = True,
+    max_human_players: int | None = None,
 ) -> None:
     """Use this probe's response, never the cached snapshot left by another probe."""
     if server.manual_stop_requested:
         raise AutomationDenied("An administrator requested that this server remain stopped.")
+    if max_human_players is None:
+        max_human_players = 0 if requires_empty else 255
+    if type(max_human_players) is not int or not 0 <= max_human_players <= 255:
+        raise AutomationDenied("The occupancy limit is invalid.")
+    if requires_empty:
+        max_human_players = 0
     success, info = await a2s_cache_service.query_live_info(server)
     if success:
         if not isinstance(info, dict):
@@ -84,8 +91,13 @@ async def ensure_eligible(
         players, bots = info.get("player_count"), info.get("bot_count")
         if type(players) is not int or type(bots) is not int or not 0 <= bots <= players <= 255:
             raise AutomationDenied("The live player count is invalid.")
-        if requires_empty and players != bots:
-            raise AutomationDenied("The server has human players. Automation was not executed.")
+        humans = players - bots
+        if humans > max_human_players:
+            raise AutomationDenied(
+                "The server has human players. Automation was not executed."
+                if max_human_players == 0
+                else "The server has too many human players. Automation was not executed."
+            )
         return
     if allow_stopped and not requires_online:
         await _confirm_stopped(server, manager)

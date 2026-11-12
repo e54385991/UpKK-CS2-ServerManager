@@ -48,11 +48,51 @@ def test_registry_preserves_defaults_and_explicit_empty_or_disabled_registries()
     user = SimpleNamespace(automation_commands=None)
     assert set(commands_for(user)) == {"css_wsmap", "css_ext_maptime"}
     assert len(settings_for(user)) == 2
+    defaults = {item.name: item for item in settings_for(user)}
+    assert defaults["css_wsmap"].max_human_players == 1
+    assert defaults["css_wsmap"].requires_empty is False
+    assert defaults["css_ext_maptime"].max_human_players == 255
     user.automation_commands = []
     assert commands_for(user) == {}
     user.automation_commands = [custom(enabled=False)]
     assert not commands_for(user)
     assert settings_for(user)[0].enabled is False
+
+
+def test_map_changes_accept_a_human_occupancy_limit_and_keep_saved_empty_rules():
+    spec = CommandSetting.model_validate(
+        custom(
+            name="css_wsmap",
+            requires_empty=False,
+            max_human_players=1,
+            arguments=[
+                dict(
+                    name="map_name",
+                    description="Use 1-128 ASCII letters, digits, or underscores.",
+                    kind="token",
+                    max_length=128,
+                )
+            ],
+        )
+    )
+    assert spec.max_human_players == 1
+    assert spec.requires_empty is False
+    saved = custom(
+        name="css_wsmap",
+        requires_empty=True,
+        arguments=[
+            dict(
+                name="map_name",
+                description="Use 1-128 ASCII letters, digits, or underscores.",
+                kind="token",
+                max_length=128,
+            )
+        ],
+    )
+    saved.pop("max_human_players", None)
+    empty = CommandSetting.model_validate(saved)
+    assert empty.max_human_players == 0
+    assert empty.requires_empty is True
 
 
 @pytest.mark.parametrize(
@@ -116,7 +156,7 @@ def test_argument_definition_rejects_invalid_and_unbounded_rules(changes):
         {"requires_online": False},
         {"enabled": "true"},
         {"arguments": [custom()["arguments"][0]] * 2},
-        {"name": "css_wsmap", "requires_empty": False},
+        {"name": "css_wsmap", "max_human_players": 256},
         {"name": "css_ext_maptime", "arguments": []},
     ],
 )
