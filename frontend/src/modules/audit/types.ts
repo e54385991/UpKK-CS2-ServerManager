@@ -22,6 +22,7 @@ export const AUDIT_CATEGORY_VALUES = [
   "files",
   "config",
   "plugin",
+  "scheduled",
 ] as const;
 
 export type AuditCategory = (typeof AUDIT_CATEGORY_VALUES)[number];

@@ -10,6 +10,7 @@ from modules import (
     ServerAction,
     User,
 )
+from services.audit_log_service import SCHEDULED_AUDIT_CATEGORY
 from services.automation.guard import ensure_eligible
 from services.compat import LateBoundModule
 
@@ -96,6 +97,7 @@ async def execute_server_action(
     clear_execstack: bool = False,
     clear_execstack_targets: object = None,
     automation_guard: bool = False,
+    scheduled_task_id: int | None = None,
 ):
     """Execute a validated server action outside the HTTP request boundary."""
     server = (
@@ -115,14 +117,19 @@ async def execute_server_action(
     log = host.DeploymentLog(server_id=server_id, action=action, status="in_progress")
     db.add(log)
     await db.commit()
+    scheduled = scheduled_task_id is not None
+    details: dict[str, str | int] = {"server_name": server.name}
+    if scheduled_task_id is not None:
+        details["task_id"] = scheduled_task_id
     await host.record_audit_event(
-        category="server",
+        category=SCHEDULED_AUDIT_CATEGORY if scheduled else "server",
+        source="system" if scheduled else "web",
         action=f"server.{action}",
         status="requested",
-        user=current_user,
+        user=None if scheduled else current_user,
         request=request,
         server_id=server_id,
-        details={"server_name": server.name},
+        details=details,
     )
 
     if action in {"start", "stop", "restart"}:

@@ -16,6 +16,7 @@ from sqlmodel import update as sql_update
 from modules.database import async_session_maker
 from modules.models import ScheduledTask, Server, User
 from modules.utils import get_current_time
+from services.audit_log_service import SCHEDULED_AUDIT_CATEGORY, record_audit_event
 from services.discord_notification_service import (
     EVENT_MANUAL_UPDATE,
     EVENT_PLUGIN_UPDATE,
@@ -54,6 +55,7 @@ async def _execute_queued_scheduled_task(
             server_id=server.id,
             action=task.action,
             actor_user_id=server.user_id,
+            scheduled_task_id=task.id,
         )
     except ServerOperationConflict as exc:
         logger.info("Skipping scheduled task %s: %s", task.id, exc)
@@ -423,6 +425,7 @@ class ScheduledTaskService:
 
                 if not task:
                     return
+                server_id, action, task_name = task.server_id, task.action, task.name
 
                 # Calculate next run time
                 next_run = self._calculate_next_run(task)
@@ -441,7 +444,16 @@ class ScheduledTaskService:
                 )
                 await db.commit()
 
-                logger.info(f"Task {task_id} status updated: {status}, next run: {next_run}")
+            logger.info(f"Task {task_id} status updated: {status}, next run: {next_run}")
+            if status in {"success", "failed"}:
+                await record_audit_event(
+                    category=SCHEDULED_AUDIT_CATEGORY,
+                    source="system",
+                    action=f"server.{action}",
+                    status="success" if status == "success" else "failure",
+                    server_id=server_id,
+                    details={"task_id": task_id, "task_name": task_name, "error": error},
+                )
 
         except Exception as e:
             logger.error(f"Error updating task status: {e}")

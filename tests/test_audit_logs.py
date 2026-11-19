@@ -214,7 +214,13 @@ def test_audit_search_clause_matches_user_action_and_details():
 
 
 @pytest.mark.asyncio
-async def test_list_audit_logs_applies_search_and_configured_retention():
+@pytest.mark.parametrize(
+    ("category", "category_condition"),
+    [(None, "!= 'scheduled'"), ("scheduled", "= 'scheduled'"), ("server", "= 'server'")],
+)
+async def test_list_audit_logs_applies_search_and_configured_retention(
+    category, category_condition
+):
     session = _RecordingSession(retention_days=14)
     calls = {"count": 0}
 
@@ -224,13 +230,13 @@ async def test_list_audit_logs_applies_search_and_configured_retention():
         return 14 if calls["count"] == 1 else 0
 
     session.scalar = scalar
-    result = await list_audit_logs(session, q="alice", limit=25, offset=0)
+    result = await list_audit_logs(session, category=category, q="alice", limit=25, offset=0)
     assert result.retention_days == 14
     assert result.total == 0
-    compiled = " ".join(
-        str(item.compile(compile_kwargs={"literal_binds": True})) for item in session.statements
-    )
-    assert "alice" in compiled
+    for statement in session.statements[1:]:
+        compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+        assert "alice" in compiled
+        assert f"audit_logs.category {category_condition}" in compiled
 
 
 @pytest.mark.asyncio
@@ -313,7 +319,8 @@ def test_audit_categories_include_files_config_plugin():
     assert "partial" in AUDIT_STATUSES
 
 
-def test_v1_audit_filters_new_category_and_partial_status(monkeypatch):
+@pytest.mark.parametrize("category", ["files", "scheduled"])
+def test_v1_audit_filters_category_and_partial_status(monkeypatch, category):
     from modules import get_current_active_user, get_current_admin_user, get_current_user, get_db
 
     listed = AsyncMock(
@@ -333,9 +340,9 @@ def test_v1_audit_filters_new_category_and_partial_status(monkeypatch):
     client = TestClient(app)
     assert client.get("/api/v1/audit", params={"category": "nope"}).status_code == 400
     assert client.get("/api/v1/audit", params={"status": "bogus"}).status_code == 400
-    response = client.get("/api/v1/audit", params={"category": "files", "status": "partial"})
+    response = client.get("/api/v1/audit", params={"category": category, "status": "partial"})
     assert response.status_code == 200
-    assert listed.await_args.kwargs["category"] == "files"
+    assert listed.await_args.kwargs["category"] == category
     assert listed.await_args.kwargs["status"] == "partial"
 
 

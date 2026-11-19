@@ -151,6 +151,7 @@ async def enqueue_server_operation(
     action: str,
     actor_user_id: int,
     extra: dict | None = None,
+    scheduled_task_id: int | None = None,
 ) -> dict:
     """Create an operation record and run the action in the background."""
     command = OperationCommand(
@@ -169,6 +170,9 @@ async def enqueue_server_operation(
             if server and getattr(server, "game_directory", None)
             else None
         )
+
+    if scheduled_task_id is not None:
+        extra = {**(extra or {}), "scheduled_task_id": scheduled_task_id}
 
     command_summary = f"server {command.action}"
     if extra and extra.get("clear_execstack"):
@@ -231,6 +235,7 @@ async def run_server_operation(
                     if action == "restart" or action in EXECSTACK_FILE_ACTIONS
                     else False,
                     clear_execstack_targets=record.get("clear_execstack_targets"),
+                    scheduled_task_id=record.get("scheduled_task_id"),
                     **(
                         {"automation_guard": True}
                         if record.get("automation_guard") == "empty_or_stopped"

@@ -1,5 +1,6 @@
 """Focused tests for managed plugin release selection and safe defaults."""
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,6 +12,7 @@ from services.plugin_auto_update_service import (
     canonical_repo_url,
     derive_asset_glob,
 )
+from services.plugins.client_cvar_value import retire_legacy_loader
 
 
 @pytest.fixture(autouse=True)
@@ -115,6 +117,86 @@ async def test_latest_release_requires_exactly_one_matching_asset(monkeypatch):
     assert ok is False
     assert latest is None
     assert "exactly one" in error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_type", ["github", "market"])
+async def test_client_cvar_value_upgrades_from_unversioned_linux_zip(monkeypatch, source_type):
+    repo = "https://github.com/komashchenko/ClientCvarValue"
+    tag = "v1.1.0"
+    release_asset = f"ClientCvarValue-{tag}-linux.tar.gz"
+    assets = [
+        {"name": name, "browser_download_url": f"{repo}/releases/download/{tag}/{name}"}
+        for name in (
+            f"ClientCvarValue-{tag}-linux-relwithdebinfo.tar.gz",
+            release_asset,
+            f"ClientCvarValue-{tag}-windows-relwithdebinfo.zip",
+            f"ClientCvarValue-{tag}-windows.zip",
+        )
+    ]
+    latest = AsyncMock(return_value=(True, {"tag_name": tag, "id": 45, "assets": assets}, ""))
+    monkeypatch.setattr("services.plugin_auto_update_service.http_helper.get", latest)
+    item = ManagedPlugin(
+        server_id=1,
+        source_type=source_type,
+        source_key=repo,
+        display_name="ClientCvarValue",
+        repo_url=repo,
+        installed_asset_name="linux.zip",
+        asset_glob="linux.zip",
+    )
+    user = User(username="u", email="u@example.com", hashed_password="x")
+    service = PluginAutoUpdateService()
+
+    success, release, error = await service._latest_github_release(item, user, {})
+
+    assert success and release is not None, error
+    assert release["asset"]["name"] == release_asset
+    assert derive_asset_glob(release_asset, tag) == "ClientCvarValue-*-linux.tar.gz"
+
+
+@pytest.mark.asyncio
+async def test_client_cvar_value_disables_legacy_loader_only_after_new_files_are_installed(
+    tmp_path,
+):
+    url = (
+        "https://github.com/komashchenko/ClientCvarValue/releases/download/v1.1.0/"
+        "ClientCvarValue-v1.1.0-linux.tar.gz"
+    )
+    source = tmp_path / "extracted archive"
+    csgo = tmp_path / "game directory"
+    legacy = csgo / "addons/metamod/client_cvar_value.vdf"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("old loader")
+
+    async def execute(command, *, timeout):
+        process = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
+        return process.returncode == 0, stdout.decode(), stderr.decode()
+
+    success, _ = await retire_legacy_loader(execute, url, str(source), str(csgo))
+    assert not success
+    assert legacy.exists()
+
+    for path in (
+        "addons/metamod/clientcvarvalue.vdf",
+        "addons/clientcvarvalue/bin/linuxsteamrt64/clientcvarvalue.so",
+    ):
+        for root in (source, csgo):
+            file = root / path
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(path)
+
+    for _ in range(2):
+        assert await retire_legacy_loader(execute, url, str(source), str(csgo)) == (True, "")
+    assert not legacy.exists()
+    assert [path.read_text() for path in legacy.parent.glob(f"{legacy.name}.*.disabled")] == [
+        "old loader"
+    ]
 
 
 @pytest.mark.asyncio

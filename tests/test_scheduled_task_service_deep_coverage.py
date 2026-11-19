@@ -198,7 +198,9 @@ async def test_execute_task_hub_success_failure_conflict_and_cleanup(monkeypatch
         return_value={"success": True, "message": "done"}
     )
     _session_patch(monkeypatch, _Db(server=server))
-    await service._execute_task(_task(action="update"))
+    task = _task(action="update")
+    await service._execute_task(task)
+    assert enqueue_module.enqueue_server_operation.await_args.kwargs["scheduled_task_id"] == task.id
     assert statuses.await_args_list[-1].args[1:] == ("success", None)
 
     hub_module.server_operation_hub.wait_until_terminal.return_value = {
@@ -398,9 +400,19 @@ async def test_status_and_next_run_database_error_paths(monkeypatch):
     await service._update_task_status(task.id, "failed", "missing")
     assert db.commits == 0
     db.task = task
+    audit = AsyncMock()
+    monkeypatch.setattr(scheduled, "record_audit_event", audit)
     monkeypatch.setattr(service, "_calculate_next_run", lambda _task: None)
     await service._update_task_status(task.id, "success", None)
     assert db.commits == 1
+    audit.assert_awaited_once_with(
+        category="scheduled",
+        source="system",
+        action=f"server.{task.action}",
+        status="success",
+        server_id=task.server_id,
+        details={"task_id": task.id, "task_name": task.name, "error": None},
+    )
     db.fail_execute = True
     await service._update_task_status(task.id, "failed", "db error")
     await service.recalculate_next_run(task.id)

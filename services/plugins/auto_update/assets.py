@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from modules.models import ManagedPlugin, Server, User
 from services.compat import LateBoundModule
 from services.plugins.ai_install_policy import managed_asset_candidates
+from services.plugins.client_cvar_value import matches_legacy_linux_asset
 from services.plugins.tracking import repo_api_url
 
 logger = logging.getLogger("services.plugin_auto_update_service")
@@ -171,6 +172,12 @@ class AutoUpdateAssetsMixin:
         matches = [
             asset for asset in assets if fnmatch.fnmatchcase(str(asset.get("name") or ""), pattern)
         ]
+        if not matches:
+            matches = [
+                asset
+                for asset in assets
+                if matches_legacy_linux_asset(item.repo_url, pattern, str(asset.get("name") or ""))
+            ]
         fallback_matches: List[Dict[str, Any]] = []
         if not matches:
             fallback_matches = self._fallback_release_assets(item, assets, pattern)

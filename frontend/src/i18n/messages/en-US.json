@@ -1951,7 +1951,7 @@
     "empty": "No matching audit events.",
     "search": "Search",
     "searchPlaceholder": "User, action, IP, or details",
-    "allCategories": "All categories",
+    "allCategories": "All regular categories",
     "allStatuses": "All statuses",
     "filterCategory": "Filter by category",
     "filterStatus": "Filter by status",
@@ -1977,7 +1977,8 @@
       "settings": "Settings",
       "files": "Files",
       "config": "Config",
-      "plugin": "Plugin"
+      "plugin": "Plugin",
+      "scheduled": "Scheduled system tasks"
     },
     "statuses": {
       "success": "Success",

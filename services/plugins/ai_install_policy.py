@@ -6,6 +6,7 @@ from modules.models import ManagedPlugin, MarketPlugin
 from modules.plugin_ai import PluginAIInfo
 from modules.schemas.plugins import GitHubPluginInstallRequest
 from services.plugins.archive_mapping import detect_mapping, validate_mapping
+from services.plugins.client_cvar_value import matches_legacy_linux_asset
 from services.plugins.common import PluginPlanError, framework_value
 
 
@@ -57,10 +58,11 @@ def select_assets(plugin: MarketPlugin, candidates: list[dict]) -> list[dict]:
     info = metadata(plugin)
     if not info or not info.installation:
         return candidates
-    return [
+    pattern = info.installation.asset_glob
+    return [asset for asset in candidates if fnmatchcase(str(asset["name"]), pattern)] or [
         asset
         for asset in candidates
-        if fnmatchcase(str(asset["name"]), info.installation.asset_glob)
+        if matches_legacy_linux_asset(plugin.github_url, pattern, str(asset["name"]))
     ]
 
 

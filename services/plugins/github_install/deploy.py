@@ -7,6 +7,7 @@ import shlex
 import uuid
 
 from modules import GitHubPluginInstallRequest, GitHubPluginInstallResponse
+from services.plugins.client_cvar_value import retire_legacy_loader
 from services.plugins.github_install.context import GithubInstallContext, host
 from services.plugins.install_mapping import stage_mapping
 
@@ -376,6 +377,12 @@ async def deploy_plugin_archive(
 
     logger.info(f"Copy command: {copy_cmd}")
     success, copy_output, stderr = await ssh_manager.execute_command(copy_cmd, timeout=120)
+    failure_message = f"Failed to copy files: {stderr}"
+    if success:
+        success, migration_error = await retire_legacy_loader(
+            ssh_manager.execute_command, request.download_url, source_dir, csgo_dir
+        )
+        failure_message = f"Failed to disable the legacy ClientCvarValue loader: {migration_error}"
 
     # Count files after copy
     count_after_cmd = f"find {csgo_dir}/addons -type f 2>/dev/null | wc -l"
@@ -386,7 +393,6 @@ async def deploy_plugin_archive(
 
     if not success:
         rollback_message = await _rollback_install(ctx, csgo_dir, backup_root)
-        failure_message = f"Failed to copy files: {stderr}"
         if rollback_message:
             failure_message = f"{failure_message}. {rollback_message}"
         await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")

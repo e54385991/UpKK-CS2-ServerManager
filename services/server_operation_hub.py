@@ -181,6 +181,7 @@ class ServerOperationHub(ServerOperationHistoryMixin):
                     "clear_execstack_targets",
                     "automation_guard",
                     "automation_command",
+                    "scheduled_task_id",
                 ):
                     value = extra.get(key)
                     if value is not None:

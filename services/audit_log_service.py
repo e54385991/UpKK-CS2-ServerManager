@@ -31,7 +31,10 @@ AUDIT_SEARCH_MAX_LENGTH = 100
 INVALID_CREDENTIALS_DETAILS = {"reason": "invalid_credentials"}
 _USER_AGENT_LIMIT = 500
 
-AUDIT_CATEGORIES = frozenset({"auth", "discord", "server", "settings", "files", "config", "plugin"})
+SCHEDULED_AUDIT_CATEGORY = "scheduled"
+AUDIT_CATEGORIES = frozenset(
+    {"auth", "discord", "server", "settings", "files", "config", "plugin", SCHEDULED_AUDIT_CATEGORY}
+)
 AUDIT_STATUSES = frozenset({"success", "failure", "cancelled", "expired", "requested", "partial"})
 
 
@@ -106,6 +109,8 @@ def _audit_list_filters(
     filters = [col(AuditLog.created_at) >= cutoff]
     if category:
         filters.append(col(AuditLog.category) == category)
+    else:
+        filters.append(col(AuditLog.category) != SCHEDULED_AUDIT_CATEGORY)
     if status:
         filters.append(col(AuditLog.status) == status)
     if username:

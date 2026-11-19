@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from api.dependencies import require_server_access
 from modules import User
 from modules.database import async_session_maker
+from services.audit_log_service import SCHEDULED_AUDIT_CATEGORY
 from services.maintenance_lock import OperationBusyError
 from services.server_operation_hub import (
     ServerOperationConflict,
@@ -68,6 +69,7 @@ async def run_plugin_auto_update(
     actor_user_id = int(record["actor_user_id"])
     progress = _progress_emitter(operation_id)
     audit_action = "plugin.auto_update.test" if plugin_id is not None else "plugin.auto_update.run"
+    audit_category = SCHEDULED_AUDIT_CATEGORY if not force and plugin_id is None else "plugin"
     from services.plugin_auto_update_service import plugin_auto_update_service
 
     try:
@@ -78,7 +80,7 @@ async def run_plugin_auto_update(
                 await server_operation_hub.finish(operation_id, success=False, message=message)
                 await _audit_terminal(
                     record,
-                    category="plugin",
+                    category=audit_category,
                     action=audit_action,
                     success=False,
                     message=message,
@@ -99,7 +101,7 @@ async def run_plugin_auto_update(
         await server_operation_hub.finish(operation_id, success=success, message=message)
         await _audit_terminal(
             record,
-            category="plugin",
+            category=audit_category,
             action=audit_action,
             success=success,
             message=message,
@@ -108,23 +110,23 @@ async def run_plugin_auto_update(
     except ServerOperationConflict as exc:
         await server_operation_hub.finish(operation_id, success=False, message=str(exc))
         await _audit_terminal(
-            record, category="plugin", action=audit_action, success=False, message=str(exc)
+            record, category=audit_category, action=audit_action, success=False, message=str(exc)
         )
     except OperationBusyError as exc:
         await server_operation_hub.finish(operation_id, success=False, message=str(exc))
         await _audit_terminal(
-            record, category="plugin", action=audit_action, success=False, message=str(exc)
+            record, category=audit_category, action=audit_action, success=False, message=str(exc)
         )
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
         await server_operation_hub.finish(operation_id, success=False, message=detail)
         await _audit_terminal(
-            record, category="plugin", action=audit_action, success=False, message=detail
+            record, category=audit_category, action=audit_action, success=False, message=detail
         )
     except Exception:
         logger.exception("Background plugin auto-update %s failed", operation_id)
         message = "The plugin update failed unexpectedly"
         await server_operation_hub.finish(operation_id, success=False, message=message)
         await _audit_terminal(
-            record, category="plugin", action=audit_action, success=False, message=message
+            record, category=audit_category, action=audit_action, success=False, message=message
         )

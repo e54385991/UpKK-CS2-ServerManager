@@ -1951,7 +1951,7 @@
     "empty": "没有匹配的审计事件。",
     "search": "搜索",
     "searchPlaceholder": "用户、动作、IP 或详情",
-    "allCategories": "全部分类",
+    "allCategories": "全部常规分类",
     "allStatuses": "全部状态",
     "filterCategory": "按分类筛选",
     "filterStatus": "按状态筛选",
@@ -1977,7 +1977,8 @@
       "settings": "设置",
       "files": "文件",
       "config": "配置",
-      "plugin": "插件"
+      "plugin": "插件",
+      "scheduled": "系统计划任务"
     },
     "statuses": {
       "success": "成功",

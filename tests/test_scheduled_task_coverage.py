@@ -154,6 +154,7 @@ async def test_scheduled_check_update_and_non_hub_task(monkeypatch):
     task = _task(action="log_cleanup")
     session = _Session(server=server, task=task, rows=[task])
     monkeypatch.setattr(scheduled, "async_session_maker", lambda: session)
+    monkeypatch.setattr(scheduled, "record_audit_event", AsyncMock())
     monkeypatch.setattr(service, "_execute_task", AsyncMock())
     await service._check_and_execute_tasks()
     await asyncio.sleep(0)

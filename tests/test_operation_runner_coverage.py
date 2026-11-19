@@ -290,6 +290,10 @@ async def test_maintenance_runner_covers_enqueue_variants_and_disabled_result(mo
     await maintenance.run_plugin_auto_update(operation_id="op-1", plugin_id=None, force=True)
     assert hub.finished[-1][1]["success"] is True
     assert service.check_server.await_count == 1
+    assert maintenance._audit_terminal.await_args.kwargs["category"] == "plugin"
+
+    await maintenance.run_plugin_auto_update(operation_id="op-1", plugin_id=None, force=False)
+    assert maintenance._audit_terminal.await_args.kwargs["category"] == "scheduled"
 
 
 @pytest.mark.asyncio
