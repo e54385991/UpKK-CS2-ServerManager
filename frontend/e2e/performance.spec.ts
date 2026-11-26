@@ -113,6 +113,7 @@ for (const locale of ['zh-CN', 'en-US']) for (const status of [200, 503]) {
     await expect(page.getByTestId('workspace-status')).toBeVisible();
     await expect(page.getByTestId('workspace-status-loading')).toHaveCount(0);
     await expect(page.getByTestId('workspace-action-stop')).toBeVisible();
+    await expect(page.getByTestId('workspace-status').getByTestId('ssh-health-badge')).toBeVisible();
     console.log('status geometry', locale, loadingBox, await page.getByTestId('workspace-ssh-card').boundingBox());
   });
 }

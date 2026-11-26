@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -15,7 +15,6 @@ import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { LiveConsolePopups } from "@/modules/console/open-live-terminal";
 import { ForceStopButton } from "@/modules/servers/force-stop-button";
 import { startServerOperationFromBrowser } from "@/modules/servers/operation-client";
-import { SshHealthBlock, type SshHealthFields } from "@/modules/servers/ssh-health-block";
 import {
   requiresOperationConfirmation,
   type ServerOperationAction,
@@ -48,7 +47,7 @@ export function SshReconnectCard({
   sshIdleSeconds: number | null;
   canForceStop: boolean;
   showDeploy?: boolean;
-  health?: SshHealthFields;
+  health?: ReactNode;
 }) {
   const t = useTranslations("serverDetail");
   const router = useRouter();
@@ -145,7 +144,7 @@ export function SshReconnectCard({
           ) : (
             <p className="text-xs text-fg-subtle">{poolLabel}</p>
           )}
-          {health ? <SshHealthBlock server={health} showReconnect={false} /> : null}
+          {health}
           {message ? (
             <p
               className={failed ? "text-sm text-danger" : "text-sm text-ok"}

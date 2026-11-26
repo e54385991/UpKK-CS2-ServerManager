@@ -1,4 +1,5 @@
 import { isDeployProgressVisible } from "@/modules/console/live-console";
+import { SshHealthDetails } from "@/modules/servers/ssh-health-details";
 import { SshReconnectCard } from "@/modules/servers/ssh-reconnect-card";
 import type { ServerDetail } from "@/modules/servers/api";
 import type { getCurrentServerOperation, getDeploymentLock } from "@/modules/servers/render-queries";
@@ -37,15 +38,7 @@ export async function WorkspaceStatus({ server, operationPromise, lockPromise }:
         sshIdleSeconds={server.sshIdleSeconds}
         canForceStop={canForceStop}
         showDeploy={showDeploy}
-        health={{
-          id: server.id,
-          isSshDown: server.isSshDown,
-          sshHealthStatus: server.sshHealthStatus,
-          consecutiveSshFailures: server.consecutiveSshFailures,
-          sshHealthFailureThreshold: server.sshHealthFailureThreshold,
-          sshHealthCheckIntervalHours: server.sshHealthCheckIntervalHours,
-          lastSshHealthCheck: server.lastSshHealthCheck,
-        }}
+        health={<SshHealthDetails server={server} />}
       />
     </div>
   );
