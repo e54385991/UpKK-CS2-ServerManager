@@ -4,14 +4,23 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
-from api.dependencies import ActiveUser, DatabaseSession, require_server_access
+from api.dependencies import (
+    ActiveUser,
+    DatabaseSession,
+    close_request_session,
+    require_server_access,
+)
 from api.routes.github_plugins import _safe_github_error
 from api.routes.github_plugins import analyze_archive as analyze_legacy
 from api.routes.github_plugins import get_github_releases as list_legacy_releases
-from modules import GitHubPluginInstallPlanRequest
+from modules import GitHubPluginInstallPlanRequest, MarketPlugin, Server, User
 from services.ai_access import AgentAccessDenied, enforce_agent_rate_limit
 from services.audit_log_service import record_audit_event
+from services.github_credentials import get_effective_github_token
 from services.github_plugin_plan_service import GitHubPlanError, build_github_install_plan
+from services.linux_runtime_service import detect_linux_runtime_profile
+from services.plugins.market_release_choices import market_release_choices
+from services.plugins.tracking import canonical_repo_url
 from services.server_operation_hub import ServerOperationConflict
 
 from .operation_locks import reject_stuck_lock_unless_active
@@ -144,18 +153,56 @@ def _to_legacy_plan_request(body: GitHubInstallPlanBody) -> GitHubPluginInstallP
     )
 
 
+async def _list_market_releases(
+    plugin_id: int,
+    repo_url: str,
+    count: int,
+    server: Server | None,
+    db: DatabaseSession,
+    user: User,
+) -> GitHubReleasesView:
+    listing = await db.get(MarketPlugin, plugin_id)
+    try:
+        repository = canonical_repo_url(repo_url)
+        listing_repo = canonical_repo_url(listing.github_url) if listing else None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if listing is None or listing_repo is None or listing_repo.casefold() != repository.casefold():
+        raise HTTPException(404, "Marketplace plugin not found")
+    token = await get_effective_github_token(db, user)
+    await close_request_session(db)
+    profile = await detect_linux_runtime_profile(server) if server is not None else None
+    try:
+        choices = await market_release_choices(listing, token, profile, count=count)
+    except GitHubPlanError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    owner, repo = repository.removeprefix("https://github.com/").split("/", 1)
+    return GitHubReleasesView(
+        repo_owner=owner,
+        repo_name=repo,
+        releases=[GitHubReleaseView.model_validate(choice) for choice in choices],
+        linux_runtime_profile=_runtime_view(profile),
+    )
+
+
 @market_router.get("/releases", response_model=GitHubReleasesView)
 async def list_github_releases(
     repo_url: str = Query(min_length=1, max_length=500),
     count: int = Query(default=5, ge=1, le=10),
     server_id: int | None = Query(default=None),
+    market_plugin_id: int | None = Query(default=None),
     *,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> GitHubReleasesView:
     """Fetch public GitHub release archives. Optional server_id adds runtime hints."""
-    if server_id is not None:
-        await require_server_access(db, server_id, current_user)
+    server = (
+        await require_server_access(db, server_id, current_user) if server_id is not None else None
+    )
+    if isinstance(market_plugin_id, int):
+        return await _list_market_releases(
+            market_plugin_id, repo_url, count, server, db, current_user
+        )
     raw = await list_legacy_releases(
         repo_url=repo_url,
         count=count,

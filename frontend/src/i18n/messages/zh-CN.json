@@ -746,6 +746,27 @@
     }
   },
   "plugins": {
+    "releaseSync": {
+      "open": "同步发行",
+      "title": "同步 {title} 的发行",
+      "close": "关闭发行同步",
+      "working": "正在检查发行信息…",
+      "saved": "已同步发行 {tag}",
+      "queued": "已为 {count} 台服务器提交更新",
+      "servers": "已安装此插件的服务器",
+      "backup": "更新前备份",
+      "restart": "更新后重启",
+      "noTargets": "没有可更新的托管安装。",
+      "preview": "预览发行",
+      "deploy": "提交更新（{count}）",
+      "previousAssets": "上次同步的包",
+      "assets": "上游发行包",
+      "choose": "选择发行包",
+      "auxiliary": "仅限手动安装",
+      "rule": "发行包文件名匹配规则",
+      "reopen": "打开上次同步的发行",
+      "save": "保存发行"
+    },
     "title": "插件中心",
     "description": "浏览插件市场，卡片上可直接安装；安装过程会实时显示在当前窗口。",
     "search": "搜索",

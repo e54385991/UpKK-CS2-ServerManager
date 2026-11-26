@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { InstallFormFields } from "@/modules/plugins/install-form-fields";
 import { InstallOperationLog } from "@/modules/plugins/install-operation-log";
 import { InstallUninstallPanel } from "@/modules/plugins/install-uninstall-panel";
-import { pickDefaultAssetIndex, toggleExclusion } from "@/modules/plugins/market-install-options";
+import { pickMarketReleaseAsset, toggleExclusion } from "@/modules/plugins/market-install-options";
 import { PlanSummary } from "@/modules/plugins/plan-summary";
 import type { MarketInstallServer } from "@/modules/plugins/types";
 import { useInstallForm } from "@/modules/plugins/use-install-form";
@@ -84,7 +84,7 @@ export function InstallForm({
         }}
         onReleaseIndex={(index, release) => {
           form.setReleaseIndex(index);
-          form.setAssetIndex(release ? pickDefaultAssetIndex(release.assets) : null);
+          form.setAssetIndex(pickMarketReleaseAsset(release));
           form.setArchive(null);
           form.setPlan(null);
         }}

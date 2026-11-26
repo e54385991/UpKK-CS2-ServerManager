@@ -3310,6 +3310,74 @@ export interface paths {
         patch: operations["update_market_plugin_api_v1_plugins_market__plugin_id__patch"];
         trace?: never;
     };
+    "/api/v1/plugins/market/{plugin_id}/release-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync */
+        post: operations["sync_api_v1_plugins_market__plugin_id__release_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/{plugin_id}/release-sync/deploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deploy */
+        post: operations["deploy_api_v1_plugins_market__plugin_id__release_sync_deploy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/{plugin_id}/release-sync/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_api_v1_plugins_market__plugin_id__release_sync_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/{plugin_id}/release-sync/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Targets */
+        get: operations["targets_api_v1_plugins_market__plugin_id__release_sync_targets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/profile": {
         parameters: {
             query?: never;
@@ -11496,6 +11564,8 @@ export interface components {
         GitHubReleaseView: {
             /** Assets */
             assets?: components["schemas"]["GitHubReleaseAssetView"][];
+            /** Default Asset Name */
+            default_asset_name?: string | null;
             /** Id */
             id?: string | null;
             /** Name */
@@ -13109,6 +13179,95 @@ export interface components {
             /** Version */
             version?: string | null;
         };
+        /** MarketReleaseAssetView */
+        MarketReleaseAssetView: {
+            /** Name */
+            name: string;
+            /** Ordinary */
+            ordinary: boolean;
+        };
+        /** MarketReleaseDeployItemView */
+        MarketReleaseDeployItemView: {
+            /** Error */
+            error?: string | null;
+            operation?: components["schemas"]["ServerOperationView"] | null;
+            /** Server Id */
+            server_id: number;
+            /** Server Name */
+            server_name?: string | null;
+        };
+        /** MarketReleaseDeployRequest */
+        MarketReleaseDeployRequest: {
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Revision */
+            revision: string;
+            /** Server Ids */
+            server_ids: number[];
+        };
+        /** MarketReleaseDeployView */
+        MarketReleaseDeployView: {
+            /** Items */
+            items: components["schemas"]["MarketReleaseDeployItemView"][];
+        };
+        /** MarketReleasePreviewRequest */
+        MarketReleasePreviewRequest: {
+            /** Asset Name */
+            asset_name?: string | null;
+            /** Rule */
+            rule?: string | null;
+        };
+        /** MarketReleasePreviewView */
+        MarketReleasePreviewView: {
+            /** Assets */
+            assets: components["schemas"]["MarketReleaseAssetView"][];
+            /** Preview Id */
+            preview_id: string | null;
+            /** Previous Assets */
+            previous_assets: string[];
+            /** Previous Tag */
+            previous_tag: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Rule */
+            rule: string | null;
+            /** Selected Assets */
+            selected_assets: string[];
+            /** Tag */
+            tag: string;
+        };
+        /** MarketReleaseSyncRequest */
+        MarketReleaseSyncRequest: {
+            /** Preview Id */
+            preview_id: string;
+        };
+        /** MarketReleaseTargetView */
+        MarketReleaseTargetView: {
+            /** Backup Before Update */
+            backup_before_update: boolean;
+            /** Installed Asset Name */
+            installed_asset_name: string | null;
+            /** Installed Version */
+            installed_version: string;
+            /** Restart After Update */
+            restart_after_update: boolean;
+            /** Server Id */
+            server_id: number;
+            /** Server Name */
+            server_name: string;
+        };
+        /** MarketReleaseTargetsView */
+        MarketReleaseTargetsView: {
+            /** Revision */
+            revision: string;
+            /** Tag */
+            tag: string;
+            /** Targets */
+            targets: components["schemas"]["MarketReleaseTargetView"][];
+        };
         /** MonitorAlertView */
         MonitorAlertView: {
             /** Detail */
@@ -14104,6 +14263,8 @@ export interface components {
              * @default false
              */
             is_recommended: boolean;
+            /** Release Asset Glob */
+            release_asset_glob?: string | null;
             /** Tags */
             tags?: string | null;
             /** Title */
@@ -23941,6 +24102,7 @@ export interface operations {
                 repo_url: string;
                 count?: number;
                 server_id?: number | null;
+                market_plugin_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -24740,6 +24902,142 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_api_v1_plugins_market__plugin_id__release_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketReleaseSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketReleaseTargetsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deploy_api_v1_plugins_market__plugin_id__release_sync_deploy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketReleaseDeployRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketReleaseDeployView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_v1_plugins_market__plugin_id__release_sync_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketReleasePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketReleasePreviewView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    targets_api_v1_plugins_market__plugin_id__release_sync_targets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketReleaseTargetsView"];
                 };
             };
             /** @description Validation Error */

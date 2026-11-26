@@ -746,6 +746,27 @@
     }
   },
   "plugins": {
+    "releaseSync": {
+      "open": "Sync release",
+      "title": "Sync release for {title}",
+      "close": "Close release sync",
+      "working": "Checking release information…",
+      "saved": "Synchronized release {tag}",
+      "queued": "{count, plural, one {# server update queued} other {# server updates queued}}",
+      "servers": "Servers with this plugin installed",
+      "backup": "Backup before updating",
+      "restart": "Restart after updating",
+      "noTargets": "No tracked installations are available.",
+      "preview": "Preview release",
+      "deploy": "Queue updates ({count})",
+      "previousAssets": "Previously synchronized",
+      "assets": "Upstream packages",
+      "choose": "Choose a package",
+      "auxiliary": "Manual install only",
+      "rule": "Asset filename pattern",
+      "reopen": "Open last synchronized release",
+      "save": "Save release"
+    },
     "title": "Plugins",
     "description": "Browse the marketplace and install from a card. Live status stays in this window.",
     "search": "Search",

@@ -13,6 +13,7 @@ from services.custom_command_service import CustomCommandError
 from services.maintenance_lock import OperationBusyError
 from services.plugins.ai_install_policy import managed_install_request
 from services.plugins.auto_update.types import AutoUpdateServiceProtocol
+from services.plugins.release_selection import MarketReleaseSync
 
 logger = logging.getLogger("services.plugin_auto_update_service")
 host = LateBoundModule("services.plugin_auto_update_service")
@@ -37,8 +38,14 @@ class AutoUpdateApplyMixin:
         server_id: int,
         force: bool = False,
         plugin_id: Optional[int] = None,
+        *,
+        pinned: MarketReleaseSync | None = None,
     ) -> Dict[str, Any]:
         try:
+            if pinned is not None:
+                return await self._check_server(
+                    server_id, force=force, plugin_id=plugin_id, pinned=pinned
+                )
             return await self._check_server(server_id, force=force, plugin_id=plugin_id)
         except OperationBusyError:
             return {
@@ -115,7 +122,7 @@ class AutoUpdateApplyMixin:
             "config_policy": item.config_policy or "preserve",
             "config_exclusions": list(host.CONFIG_EXCLUSIONS),
             "restart_after_update": bool(item.restart_after_update),
-            "no_op": same_release and same_asset,
+            "no_op": latest.get("no_op", False) or (same_release and same_asset),
         }
 
     @staticmethod

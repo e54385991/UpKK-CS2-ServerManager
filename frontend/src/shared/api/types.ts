@@ -6,6 +6,11 @@
 import type { components, paths } from "@/shared/api/schema";
 
 export type Schemas = components["schemas"];
+export type MarketReleasePreviewRequestDto = Schemas["MarketReleasePreviewRequest"];
+export type MarketReleasePreviewViewDto = Schemas["MarketReleasePreviewView"];
+export type MarketReleaseTargetsViewDto = Schemas["MarketReleaseTargetsView"];
+export type MarketReleaseDeployRequestDto = Schemas["MarketReleaseDeployRequest"];
+export type MarketReleaseDeployViewDto = Schemas["MarketReleaseDeployView"];
 export type Paths = paths;
 
 export type HealthResponseDto = Schemas["HealthResponse"];

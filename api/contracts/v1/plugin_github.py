@@ -39,6 +39,7 @@ class GitHubReleaseView(V1Model):
     name: str | None = None
     published_at: str | None = None
     prerelease: bool = False
+    default_asset_name: str | None = None
     assets: list[GitHubReleaseAssetView] = Field(default_factory=list)
 
 

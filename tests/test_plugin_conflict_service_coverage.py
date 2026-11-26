@@ -319,7 +319,7 @@ async def test_release_assets_latest_and_install_one_paths(monkeypatch):
     )
     monkeypatch.setattr(runtime_selection, "select_unique_runtime_asset", lambda *_args: None)
     monkeypatch.setattr(runtime_selection, "has_paired_runtime_assets", lambda _values: True)
-    with pytest.raises(module.PluginPlanError, match="multiple Steam"):
+    with pytest.raises(module.PluginPlanError, match="Multiple compatible packages"):
         await latest_asset(_Db(), plugin, _server(), SimpleNamespace(id=3))
 
     monkeypatch.setattr(
@@ -459,6 +459,23 @@ async def test_prepare_execution_and_lock_progress_error_paths(monkeypatch):
             return_value={"download_url": "https://github.com/a/b/releases/download/v1/p.zip"}
         ),
     )
+    from services.plugins.conflict import execute
+
+    manual_url = plugin.github_url + "/releases/download/v2/p.zip"
+    monkeypatch.setattr(
+        execute,
+        "fetch_release",
+        AsyncMock(
+            return_value={
+                "id": 2,
+                "tag_name": "v2",
+                "assets": [{"name": "p.zip", "browser_download_url": manual_url}],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        execute, "inspect_market_package", AsyncMock(return_value={"release_tag": "v2"})
+    )
     prepared = await module._prepare_plugin_execution(
         _Db(),
         server,
@@ -467,7 +484,7 @@ async def test_prepare_execution_and_lock_progress_error_paths(monkeypatch):
         set(),
         "h" * 64,
         True,
-        "https://github.com/a/b/releases/download/v2/p.zip",
+        manual_url,
     )
     assert prepared[4] == {"reason": "x"} and prepared[3][1]["release_tag"] == "v2"
 
@@ -489,7 +506,7 @@ async def test_prepare_execution_and_lock_progress_error_paths(monkeypatch):
         set(),
         "h" * 64,
         True,
-        "https://github.com/a/b/releases/download/v2/p.zip",
+        manual_url,
         force_reinstall=True,
     )
     assert forced[1] == set() and set(forced[3]) == {1, 2}
@@ -583,6 +600,20 @@ async def test_ai_import_metadata_flows_into_preflight_and_selected_install_asse
     assert changed["plan_hash"] != plan["plan_hash"]
     info.installation.source_prefix = "dist"
     plugin.ai_metadata = info.model_dump()
+    from services.plugins.conflict import execute
+
+    manual_url = plugin.github_url + "/releases/download/v1/plugin.zip"
+    monkeypatch.setattr(
+        execute,
+        "fetch_release",
+        AsyncMock(
+            return_value={
+                "id": 1,
+                "tag_name": "v1",
+                "assets": [{"name": "plugin.zip", "browser_download_url": manual_url}],
+            }
+        ),
+    )
     _, _, _, assets, _ = await module._prepare_plugin_execution(
         _Db(),
         _server(),
@@ -591,7 +622,7 @@ async def test_ai_import_metadata_flows_into_preflight_and_selected_install_asse
         [],
         plan["plan_hash"],
         True,
-        plugin.github_url + "/releases/download/v1/plugin.zip",
+        manual_url,
         acknowledge_ai_unreviewed=True,
     )
     assert assets[1]["source_prefix"] == "dist"

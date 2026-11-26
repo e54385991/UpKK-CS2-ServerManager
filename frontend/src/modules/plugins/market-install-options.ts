@@ -1,3 +1,5 @@
+import type { GitHubRelease } from "@/modules/plugins/types";
+
 export function pluginTrackedOnServer(
   installedMarketPluginIds: readonly number[],
   pluginId: number,
@@ -34,6 +36,13 @@ export function pickDefaultAssetIndex(
   if (recommended.length === 1) return recommended[0] ?? null;
   if (!hasPairedRuntime && assets.length > 0) return 0;
   return null;
+}
+
+export function pickMarketReleaseAsset(release: GitHubRelease | null): number | null {
+  if (!release) return null;
+  if (release.defaultAssetName === undefined) return pickDefaultAssetIndex(release.assets);
+  const index = release.assets.findIndex((asset) => asset.name === release.defaultAssetName);
+  return index >= 0 ? index : null;
 }
 
 export function formatArchiveSize(bytes: number): string {

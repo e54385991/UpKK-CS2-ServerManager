@@ -54,10 +54,7 @@ def test_market_asset_filter_prefers_runtime_linux_archives():
 
     candidates = _release_asset_candidates(release)
 
-    assert [item["name"] for item in candidates] == [
-        "plugin-linux.zip",
-        "plugin-upgrade-linux.zip",
-    ]
+    assert [item["name"] for item in candidates] == ["plugin-linux.zip"]
 
 
 def test_plugin_approval_hash_payload_ignores_live_inventory_evidence():

@@ -33,6 +33,7 @@ from services.plugin_catalog import delete_market_plugin as remove_catalog_plugi
 from services.plugin_conflict_service import PluginPlanError
 from services.plugins import description_sync_store
 from services.plugins.common import framework_value, parse_dependency_ids, parse_framework
+from services.plugins.release_selection import market_release_sync
 from services.plugins.tracking import forget_managed_plugin, forget_server_managed_plugins
 
 from .plugin_install import to_plan_view as to_plan_view
@@ -164,6 +165,7 @@ def to_market_view(
         # Lightweight test doubles and older integrations may not expose the
         # optional column yet; the canonical description remains sufficient.
         description_i18n = None
+    release = market_release_sync(plugin) if isinstance(plugin, MarketPlugin) else None
     return MarketPluginView(
         id=int(plugin.id),
         title=plugin.title,
@@ -172,7 +174,7 @@ def to_market_view(
             PluginDescriptionI18n.model_validate(description_i18n) if description_i18n else None
         ),
         author=plugin.author,
-        version=plugin.version,
+        version=release.tag if release else plugin.version,
         category=_category_value(plugin.category),
         framework=framework_value(plugin.framework),
         tags=plugin.tags,

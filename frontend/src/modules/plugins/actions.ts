@@ -202,8 +202,9 @@ export async function forgetAllServerPluginsAction(
 export async function listGitHubReleasesAction(
   repoUrl: string,
   serverId?: number,
+  marketPluginId?: number,
 ): Promise<ApiResult<GitHubReleases>> {
-  return listGitHubReleases(repoUrl, serverId);
+  return listGitHubReleases(repoUrl, serverId, marketPluginId);
 }
 
 export async function analyzeGitHubArchiveAction(

@@ -373,12 +373,14 @@ function githubPlanBody(input: {
 export async function listGitHubReleases(
   repoUrl: string,
   serverId?: number,
+  marketPluginId?: number,
 ): Promise<ApiResult<GitHubReleases>> {
   const params = new URLSearchParams({
     repo_url: repoUrl,
     count: "10",
   });
   if (serverId != null) params.set("server_id", String(serverId));
+  if (marketPluginId != null) params.set("market_plugin_id", String(marketPluginId));
   const result = await apiFetch<{
     repo_owner?: string | null;
     repo_name?: string | null;
@@ -388,6 +390,7 @@ export async function listGitHubReleases(
       name?: string | null;
       published_at?: string | null;
       prerelease: boolean;
+      default_asset_name?: string | null;
       assets: Array<{
         name: string;
         browser_download_url: string;
@@ -409,6 +412,7 @@ export async function listGitHubReleases(
         name: release.name ?? null,
         publishedAt: release.published_at ?? null,
         prerelease: release.prerelease,
+        defaultAssetName: release.default_asset_name,
         assets: release.assets.map((asset) => ({
           name: asset.name,
           browserDownloadUrl: asset.browser_download_url,

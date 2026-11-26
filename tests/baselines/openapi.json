@@ -11207,6 +11207,17 @@
             "title": "Assets",
             "type": "array"
           },
+          "default_asset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Asset Name"
+          },
           "id": {
             "anyOf": [
               {
@@ -15810,6 +15821,324 @@
         "title": "MarketPluginView",
         "type": "object"
       },
+      "MarketReleaseAssetView": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ordinary": {
+            "title": "Ordinary",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "ordinary"
+        ],
+        "title": "MarketReleaseAssetView",
+        "type": "object"
+      },
+      "MarketReleaseDeployItemView": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServerOperationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "server_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Name"
+          }
+        },
+        "required": [
+          "server_id"
+        ],
+        "title": "MarketReleaseDeployItemView",
+        "type": "object"
+      },
+      "MarketReleaseDeployRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "revision": {
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Revision",
+            "type": "string"
+          },
+          "server_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Server Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision",
+          "request_id",
+          "server_ids"
+        ],
+        "title": "MarketReleaseDeployRequest",
+        "type": "object"
+      },
+      "MarketReleaseDeployView": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MarketReleaseDeployItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MarketReleaseDeployView",
+        "type": "object"
+      },
+      "MarketReleasePreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_name": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Name"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule"
+          }
+        },
+        "title": "MarketReleasePreviewRequest",
+        "type": "object"
+      },
+      "MarketReleasePreviewView": {
+        "additionalProperties": false,
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/MarketReleaseAssetView"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "preview_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Id"
+          },
+          "previous_assets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Previous Assets",
+            "type": "array"
+          },
+          "previous_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Tag"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule"
+          },
+          "selected_assets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Assets",
+            "type": "array"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "previous_tag",
+          "previous_assets",
+          "tag",
+          "assets",
+          "selected_assets",
+          "rule",
+          "preview_id",
+          "reason"
+        ],
+        "title": "MarketReleasePreviewView",
+        "type": "object"
+      },
+      "MarketReleaseSyncRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "preview_id": {
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Preview Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preview_id"
+        ],
+        "title": "MarketReleaseSyncRequest",
+        "type": "object"
+      },
+      "MarketReleaseTargetView": {
+        "additionalProperties": false,
+        "properties": {
+          "backup_before_update": {
+            "title": "Backup Before Update",
+            "type": "boolean"
+          },
+          "installed_asset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed Asset Name"
+          },
+          "installed_version": {
+            "title": "Installed Version",
+            "type": "string"
+          },
+          "restart_after_update": {
+            "title": "Restart After Update",
+            "type": "boolean"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "server_name": {
+            "title": "Server Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_id",
+          "server_name",
+          "installed_version",
+          "installed_asset_name",
+          "backup_before_update",
+          "restart_after_update"
+        ],
+        "title": "MarketReleaseTargetView",
+        "type": "object"
+      },
+      "MarketReleaseTargetsView": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/MarketReleaseTargetView"
+            },
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision",
+          "tag",
+          "targets"
+        ],
+        "title": "MarketReleaseTargetsView",
+        "type": "object"
+      },
       "MonitorAlertView": {
         "additionalProperties": false,
         "properties": {
@@ -18270,6 +18599,18 @@
             "default": false,
             "title": "Is Recommended",
             "type": "boolean"
+          },
+          "release_asset_glob": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Asset Glob"
           },
           "tags": {
             "anyOf": [
@@ -38649,6 +38990,22 @@
               ],
               "title": "Server Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "market_plugin_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Market Plugin Id"
+            }
           }
         ],
         "responses": {
@@ -39905,6 +40262,224 @@
           }
         ],
         "summary": "Update Market Plugin",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/{plugin_id}/release-sync": {
+      "post": {
+        "operationId": "sync_api_v1_plugins_market__plugin_id__release_sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketReleaseSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketReleaseTargetsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Sync",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/{plugin_id}/release-sync/deploy": {
+      "post": {
+        "operationId": "deploy_api_v1_plugins_market__plugin_id__release_sync_deploy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketReleaseDeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketReleaseDeployView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Deploy",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/{plugin_id}/release-sync/preview": {
+      "post": {
+        "operationId": "preview_api_v1_plugins_market__plugin_id__release_sync_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketReleasePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketReleasePreviewView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Preview",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/{plugin_id}/release-sync/targets": {
+      "get": {
+        "operationId": "targets_api_v1_plugins_market__plugin_id__release_sync_targets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketReleaseTargetsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Targets",
         "tags": [
           "v1-plugins"
         ]

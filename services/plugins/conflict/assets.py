@@ -8,65 +8,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules import MarketPlugin, Server, User
 from services.compat import LateBoundModule
-from services.plugins.ai_install_policy import apply_layout, metadata, select_assets
+from services.plugins.ai_install_policy import select_assets
 from services.plugins.common import PluginPlanError
+from services.plugins.github_assets import GitHubPlanError
+from services.plugins.market_release_package import inspect_market_package
+from services.plugins.release_selection import (
+    ARCHIVE_EXTENSIONS,
+    match_archives,
+    release_assets,
+    release_family,
+    select_release_asset,
+)
 
 host = LateBoundModule("services.plugin_conflict_service")
 
-_ARCHIVE_EXTENSIONS = (".zip", ".tar.gz", ".tgz", ".tar", ".7z")
-_BLOCKED_ASSET_MARKERS = (
-    "windows",
-    "win32",
-    "win64",
-    "-win-",
-    "_win_",
-    "macos",
-    "osx",
-    "source code",
-    "source-code",
-    "symbols",
-    "debug",
-)
+# Kept for the original service facade's exports.
+_ARCHIVE_EXTENSIONS = ARCHIVE_EXTENSIONS
+_BLOCKED_ASSET_MARKERS = ("windows", "macos", "source-code", "symbols", "debug", "relwithdebinfo")
 
 
 def _release_asset_candidates(release: dict[str, Any]) -> list[dict[str, Any]]:
-    candidates: list[dict[str, Any]] = []
-    for asset in release.get("assets", []):
-        name = str(asset.get("name") or "")
-        lowered = name.casefold()
-        download_url = str(asset.get("browser_download_url") or "")
-        if (
-            not lowered.endswith(_ARCHIVE_EXTENSIONS)
-            or not download_url
-            or any(marker in lowered for marker in _BLOCKED_ASSET_MARKERS)
-        ):
-            continue
-        candidates.append(
-            {
-                "id": str(asset.get("id") or ""),
-                "name": name,
-                "url": download_url,
-                "size": int(asset.get("size") or 0),
-                "digest": asset.get("digest"),
-                "content_type": asset.get("content_type"),
-            }
-        )
-
-    def rank(asset: dict[str, Any]) -> tuple[int, int, int, str]:
-        lowered = asset["name"].casefold()
-        upgrade_only = any(marker in lowered for marker in ("upgrade", "update-only"))
-        linux_named = "linux" in lowered
-        runtime_named = any(
-            marker in lowered for marker in ("runtime", "release", "server", "plugin")
-        )
-        return (
-            1 if upgrade_only else 0,
-            0 if linux_named else 1,
-            0 if runtime_named else 1,
-            lowered,
-        )
-
-    return sorted(candidates, key=rank)
+    return release_assets(release)
 
 
 async def _latest_release_asset(
@@ -93,82 +55,37 @@ async def _latest_release_asset(
     )
     if not success or not isinstance(data, dict):
         raise PluginPlanError(f"Failed to fetch {plugin.title} release: {error}")
-    candidates = select_assets(plugin, host._release_asset_candidates(data))
+    if data.get("draft") or data.get("prerelease"):
+        raise PluginPlanError(f"No stable release found for {plugin.title}")
+    candidates = host._release_asset_candidates(data)
+    pattern = getattr(plugin, "release_asset_glob", None)
+    candidates = (
+        match_archives(plugin.github_url, candidates, pattern)
+        if pattern
+        else select_assets(plugin, candidates)
+    )
     if not candidates:
         raise PluginPlanError(f"No suitable Linux release asset found for {plugin.title}")
+    if release_family(candidates):
+        try:
+            candidates = [select_release_asset(candidates, linux_runtime_profile)]
+        except GitHubPlanError as exc:
+            raise PluginPlanError(str(exc)) from exc
 
-    from services.linux_runtime_service import (
-        RuntimeSelectionRequired,
-        has_paired_runtime_assets,
-        select_unique_runtime_asset,
-        steam_runtime_for_asset,
-    )
-
-    try:
-        selected_runtime_asset = select_unique_runtime_asset(candidates, linux_runtime_profile)
-    except RuntimeSelectionRequired as exc:
-        raise PluginPlanError(f"{plugin.title}: {exc}") from exc
-    if has_paired_runtime_assets(candidates):
-        if selected_runtime_asset is None:
-            raise PluginPlanError(
-                f"{plugin.title}: multiple Steam Runtime package families are available; "
-                "select a release asset explicitly"
-            )
-        candidates = [selected_runtime_asset]
-
-    from services.github_plugin_plan_service import (
-        GitHubPlanError,
-        inspect_release_asset_layout,
-    )
-
+    valid: list[dict[str, Any]] = []
     rejected: list[str] = []
     for asset in candidates:
         try:
-            layout = apply_layout(plugin, await inspect_release_asset_layout(asset, repository))
+            valid.append(await inspect_market_package(plugin, data, asset))
         except (GitHubPlanError, PluginPlanError) as exc:
             rejected.append(f"{asset['name']}: {exc}")
-            continue
-        mapping = layout["mapping"]
-        if layout["mapping_required"] and not plugin.custom_install_path:
-            rejected.append(f"{asset['name']}: archive layout is not a recognized CS2 plugin")
-            continue
-
-        target_prefixes = sorted({item["target"].split("/", 1)[0] for item in mapping})
-        inferred_custom_target = None
-        if len(mapping) == 1 and (
-            mapping[0]["target"] not in {"addons", "cfg"}
-            or mapping[0].get("source", ".") == (layout["source_prefix"] or ".")
-        ):
-            inferred_custom_target = mapping[0]["target"]
-        info = metadata(plugin)
-        custom_target = (
-            inferred_custom_target
-            if (info and info.installation)
-            or (not layout["mapping_required"] and inferred_custom_target is None)
-            else plugin.custom_install_path or inferred_custom_target
-        )
-        if layout.get("archive_mappings"):
-            custom_target = None
-        return {
-            "archive_mappings": layout.get("archive_mappings", []),
-            "download_url": asset["url"],
-            "release_id": str(data.get("id") or ""),
-            "release_tag": str(data.get("tag_name") or "unknown"),
-            "asset_name": asset["name"],
-            "steam_runtime": steam_runtime_for_asset(asset["name"]),
-            "archive_sha256": layout["archive_sha256"],
-            "source_prefix": layout["source_prefix"],
-            "custom_install_path": custom_target,
-            "allowed_roots": (
-                []
-                if custom_target is not None
-                else [root for root in target_prefixes if root in {"addons", "cfg"}]
-            ),
-        }
-    detail = "; ".join(rejected[:3])
+        if len(valid) > 1:
+            names = ", ".join(item["asset_name"] for item in valid)
+            raise PluginPlanError(f"Multiple compatible packages for {plugin.title}: {names}")
+    if valid:
+        return valid[0]
     raise PluginPlanError(
-        f"No installable CS2 release asset found for {plugin.title}"
-        + (f": {detail}" if detail else "")
+        f"No installable CS2 release asset found for {plugin.title}: " + "; ".join(rejected[:3])
     )
 
 

@@ -31,6 +31,7 @@ class PluginCatalogEntry(SQLModel):
     description_i18n: PluginDescriptionI18n | None = None
     author: Optional[str] = Field(None, max_length=255)
     version: Optional[str] = Field(None, max_length=50)
+    release_asset_glob: str | None = Field(default=None, max_length=500)
     category: str = Field(default="other")
     framework: str = Field(default="counterstrikesharp")
     tags: Optional[str] = None

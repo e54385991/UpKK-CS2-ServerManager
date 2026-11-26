@@ -13,6 +13,7 @@ from modules.models import ManagedPlugin, Server, User
 from services.compat import LateBoundModule
 from services.discord_notification_service import EVENT_PLUGIN_UPDATE
 from services.plugins.auto_update.types import AutoUpdateServiceProtocol
+from services.plugins.release_selection import MarketReleaseSync
 
 logger = logging.getLogger("services.plugin_auto_update_service")
 
@@ -83,6 +84,8 @@ async def _resolve_update_candidates(
     user: User,
     items: list[ManagedPlugin],
     linux_runtime_profile: Dict[str, Any],
+    *,
+    pinned: MarketReleaseSync | None = None,
 ) -> tuple[List[Tuple[ManagedPlugin, Dict[str, Any]]], List[Tuple[ManagedPlugin, str]]]:
     candidates: List[Tuple[ManagedPlugin, Dict[str, Any]]] = []
     resolve_failures: List[Tuple[ManagedPlugin, str]] = []
@@ -104,7 +107,13 @@ async def _resolve_update_candidates(
             log=f"Requesting release metadata: {item.display_name}",
         )
         try:
-            if item.framework_key == "metamod":
+            if pinned is not None:
+                if item.source_type != "market" or item.framework_key:
+                    raise ValueError("Tracked marketplace installation changed")
+                ok, latest, error = await self._latest_github_release(
+                    item, user, linux_runtime_profile, pinned=pinned
+                )
+            elif item.framework_key == "metamod":
                 ok, latest, error = await self._latest_metamod(server)
             else:
                 ok, latest, error = await self._latest_github_release(
@@ -129,7 +138,7 @@ async def _resolve_update_candidates(
         )
         if not item.installed_asset_name and item.asset_glob:
             same_asset = fnmatch.fnmatchcase(selected_asset_name, item.asset_glob)
-        is_current = same_release and same_asset
+        is_current = bool(latest and latest.get("no_op")) or (same_release and same_asset)
         async with host.async_session_maker() as db:
             saved = await db.get(ManagedPlugin, item.id)
             if saved:

@@ -148,6 +148,7 @@ def plugin_to_catalog_entry(
         ),
         author=plugin.author,
         version=plugin.version,
+        release_asset_glob=plugin.release_asset_glob,
         category=_category_value(plugin.category),
         framework=framework_value(plugin.framework),
         tags=plugin.tags,
@@ -251,6 +252,12 @@ def _apply_entry_fields(
     )
     plugin.author = entry.author
     plugin.version = entry.version
+    if (
+        entry.release_asset_glob is not None
+        and entry.release_asset_glob != plugin.release_asset_glob
+    ):
+        plugin.release_asset_glob = entry.release_asset_glob
+        plugin.release_sync = None
     plugin.category = category
     plugin.framework = framework
     plugin.tags = entry.tags
@@ -361,6 +368,7 @@ async def _import_plugin_entries(
                 ),
                 author=entry.author,
                 version=entry.version,
+                release_asset_glob=entry.release_asset_glob,
                 category=category,
                 framework=framework,
                 tags=entry.tags,

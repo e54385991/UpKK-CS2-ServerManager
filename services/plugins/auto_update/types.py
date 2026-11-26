@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from modules.models import ManagedPlugin, Server, User
+from services.plugins.release_selection import MarketReleaseSync
 
 
 class AutoUpdateServiceProtocol(Protocol):
@@ -23,11 +24,21 @@ class AutoUpdateServiceProtocol(Protocol):
     ) -> dict[str, Any]: ...
 
     async def _check_server(
-        self, server_id: int, force: bool = False, plugin_id: int | None = None
+        self,
+        server_id: int,
+        force: bool = False,
+        plugin_id: int | None = None,
+        *,
+        pinned: MarketReleaseSync | None = None,
     ) -> dict[str, Any]: ...
 
     async def check_server(
-        self, server_id: int, force: bool = False, plugin_id: int | None = None
+        self,
+        server_id: int,
+        force: bool = False,
+        plugin_id: int | None = None,
+        *,
+        pinned: MarketReleaseSync | None = None,
     ) -> dict[str, Any]: ...
 
     async def _latest_metamod(self, server: Server) -> tuple[bool, dict[str, Any] | None, str]: ...
@@ -37,6 +48,8 @@ class AutoUpdateServiceProtocol(Protocol):
         item: ManagedPlugin,
         user: User,
         linux_runtime_profile: dict[str, Any] | None = None,
+        *,
+        pinned: MarketReleaseSync | None = None,
     ) -> tuple[bool, dict[str, Any] | None, str]: ...
 
     async def _install_item(

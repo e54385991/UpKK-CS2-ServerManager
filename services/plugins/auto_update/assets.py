@@ -10,7 +10,10 @@ from modules.models import ManagedPlugin, Server, User
 from services.compat import LateBoundModule
 from services.plugins.ai_install_policy import managed_asset_candidates
 from services.plugins.client_cvar_value import matches_legacy_linux_asset
-from services.plugins.tracking import repo_api_url
+from services.plugins.github_assets import GitHubPlanError
+from services.plugins.market_release_update import resolve_market_update
+from services.plugins.release_selection import MarketReleaseSync, fetch_release, market_release_sync
+from services.plugins.tracking import canonical_repo_url, repo_api_url
 
 logger = logging.getLogger("services.plugin_auto_update_service")
 host = LateBoundModule("services.plugin_auto_update_service")
@@ -154,19 +157,66 @@ class AutoUpdateAssetsMixin:
         item: ManagedPlugin,
         user: User,
         linux_runtime_profile: Optional[Dict[str, Any]] = None,
+        *,
+        pinned: MarketReleaseSync | None = None,
     ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
         if not item.repo_url:
             return False, None, "GitHub repository is not configured"
+        token = user.github_token if user.has_github_token else None
+        from services.plugins.ai_install_policy import managed_market_plugin
+
+        market = await managed_market_plugin(item.market_plugin_id)
+        if market is not None:
+            if (
+                canonical_repo_url(market.github_url).casefold()
+                != canonical_repo_url(item.repo_url).casefold()
+            ):
+                return False, None, "Marketplace repository no longer matches the installed plugin"
+            from services.github_credentials import get_effective_github_token
+
+            async with host.async_session_maker() as db:
+                token = await get_effective_github_token(db, user)
+        if pinned is not None:
+            if market is None or market_release_sync(market) != pinned:
+                return False, None, "Marketplace release changed; review the synchronized release"
+            try:
+                data = await fetch_release(item.repo_url, token, release_id=pinned.release_id)
+                return (
+                    True,
+                    await resolve_market_update(
+                        market, item, data, token, linux_runtime_profile, pinned=pinned
+                    ),
+                    "",
+                )
+            except (GitHubPlanError, ValueError) as exc:
+                return False, None, str(exc)
         success, data, error = await host.http_helper.get(
             repo_api_url(item.repo_url),
             headers={"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"},
             timeout=30,
-            github_token=user.github_token if user.has_github_token else None,
+            github_token=token,
         )
         if not success or not isinstance(data, dict):
             return False, None, error or "Failed to fetch latest stable release"
         if data.get("draft") or data.get("prerelease"):
             return False, None, "GitHub latest release is not a stable release"
+        if market is not None:
+            try:
+                return (
+                    True,
+                    await resolve_market_update(market, item, data, token, linux_runtime_profile),
+                    "",
+                )
+            except (GitHubPlanError, ValueError) as exc:
+                return False, None, str(exc)
+        return await self._resolve_registered_asset(item, data, linux_runtime_profile)
+
+    async def _resolve_registered_asset(
+        self,
+        item: ManagedPlugin,
+        data: dict[str, Any],
+        linux_runtime_profile: dict[str, Any] | None,
+    ) -> tuple[bool, dict[str, Any] | None, str]:
         assets = data.get("assets") or []
         assets, pattern = await managed_asset_candidates(item, assets)
         matches = [

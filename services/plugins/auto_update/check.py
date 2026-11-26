@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from services.compat import LateBoundModule
 from services.discord_notification_service import EVENT_PLUGIN_UPDATE
 from services.plugins.auto_update.types import AutoUpdateServiceProtocol
+from services.plugins.release_selection import MarketReleaseSync
 
 from .batch_apply import _apply_update_candidates as _apply_update_candidates
 from .batch_apply import _backup_update_candidates as _backup_update_candidates
@@ -26,6 +27,8 @@ class AutoUpdateCheckMixin:
         server_id: int,
         force: bool = False,
         plugin_id: Optional[int] = None,
+        *,
+        pinned: MarketReleaseSync | None = None,
     ) -> Dict[str, Any]:
         lock = host.maintenance_lock_service.get(
             server_id,
@@ -74,7 +77,7 @@ class AutoUpdateCheckMixin:
                 return {"success": False, "message": "Server owner not found"}
 
             candidates, resolve_failures = await _resolve_update_candidates(
-                self, server_id, server, user, items, linux_runtime_profile
+                self, server_id, server, user, items, linux_runtime_profile, pinned=pinned
             )
 
             if not candidates:

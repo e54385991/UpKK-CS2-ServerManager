@@ -2,6 +2,7 @@
 import { createServer } from "node:http";
 
 const tasks = [];
+const queuedUpdates = [];
 const aiSettings = { enabled: false, base_url: "https://provider.example/v1", model: "test-model", api_protocol: "chat_completions", api_key_configured: true, private_endpoint_allowlist: [], max_completion_tokens: 2048, token_limit_parameter: "max_completion_tokens", context_window_tokens: 262144, requests_per_minute: 60, request_timeout_seconds: 60, history_retention_days: 7, max_provider_rounds: 200, max_tool_calls_per_round: 200, provider_tested: true, tool_calling_tested: true, streaming_tested: true };
 const verification = { valid: true, account: "test-admin", checked_at: new Date().toISOString(), core_remaining: 4900, search_remaining: 29, core_reset: 2000000000, search_reset: 2000000000, message: "GitHub token verified" };
 const plugin = { id: 1, title: "AI Test Plugin", description: "Test installation documentation", author: "example", version: "1.0", category: "utility", framework: "counterstrikesharp", tags: null, is_recommended: false, icon_url: null, github_url: "https://github.com/example/plugin", custom_install_path: null, download_count: 0, install_count: 0, dependencies: [], ai_metadata: { model: "test-model", reviewed: false, installation: { asset_glob: "*.zip", source_prefix: "", target_path: null, automatic: true, mappings: [{ source: "publish/Plugin", target: "addons/counterstrikesharp/plugins/Plugin" }] }, requirements: [], sources: [{ path: "README.md", commit: "a".repeat(40) }] } };
@@ -12,7 +13,7 @@ createServer(async (req, res) => {
   for await (const chunk of req) body += chunk;
   const input = body ? JSON.parse(body) : {};
   const json = (value, status = 200) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(value)); };
-  const inbox = () => ({ items: [], failed_items: [], market_import_items: tasks, active_count: 0, running_count: 0, failed_count: 0, failed_retention_days: 7 });
+  const inbox = () => ({ items: queuedUpdates, failed_items: [], market_import_items: tasks, active_count: queuedUpdates.length, running_count: 0, failed_count: 0, failed_retention_days: 7 });
   if (path.endsWith("/events")) {
     res.writeHead(200, { "content-type": "text/event-stream" });
     const send = () => {
@@ -69,6 +70,50 @@ createServer(async (req, res) => {
       return json({ success: true, message: "Import task deleted" });
     }
     return json(task ?? {}, task ? 200 : 404);
+  }
+  if (path.startsWith("/api/v1/plugins/market/1/release-sync")) {
+    const archive = "ClientCvarValue-v1.1.0-linux.tar.gz";
+    const snapshot = {
+      revision: "a".repeat(32), tag: "v1.1.0",
+      targets: [
+        { server_id: 81, server_name: "Classic", installed_version: "v1.0.10", installed_asset_name: "linux.zip", backup_before_update: true, restart_after_update: false },
+        { server_id: 82, server_name: "Competitive", installed_version: "v1.0.10", installed_asset_name: "linux.zip", backup_before_update: false, restart_after_update: true },
+      ],
+    };
+    if (path.endsWith("/preview")) {
+      const rule = input.rule ?? (input.asset_name === archive ? "ClientCvarValue-*-linux.tar.gz" : "linux.zip");
+      const matched = rule === "ClientCvarValue-*-linux.tar.gz";
+      return json({
+        previous_tag: plugin.version, previous_assets: ["linux.zip"], tag: snapshot.tag,
+        assets: [
+          { name: archive, ordinary: true },
+          { name: "ClientCvarValue-v1.1.0-linux-relwithdebinfo.tar.gz", ordinary: false },
+        ],
+        selected_assets: matched ? [archive] : [], rule,
+        preview_id: matched ? snapshot.revision : null,
+        reason: matched ? null : "Choose one ordinary Linux package",
+      });
+    }
+    if (path.endsWith("/deploy")) {
+      if (input.revision !== snapshot.revision || !input.request_id) return json({ detail: "Invalid deployment request" }, 409);
+      return json({
+        items: input.server_ids.map(id => {
+          if (id !== 81) return { server_id: id, server_name: "Competitive", error: "Server queue is full" };
+          const operation = {
+            server_id: id, operation_id: "market-sync-operation", action: "plugin_auto_update",
+            status: "queued", actor_user_id: 1, started_at: new Date().toISOString(),
+            stream_url: "/api/v1/servers/81/operations/market-sync-operation/events",
+            command: "plugin-auto-update market ClientCvarValue v1.1.0",
+          };
+          if (!queuedUpdates.length) {
+            queuedUpdates.push({ ...operation, server_name: "Classic", latest_message: "Queued" });
+          }
+          return { server_id: id, server_name: "Classic", operation };
+        }),
+      }, 202);
+    }
+    if (req.method === "POST") plugin.version = snapshot.tag;
+    return json(snapshot);
   }
   if (path === "/api/v1/plugins/market/categories") return json({ items: [] });
   if (path === "/api/v1/plugins/market/1") return json(plugin);

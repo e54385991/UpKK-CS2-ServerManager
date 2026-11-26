@@ -202,6 +202,23 @@ async def managed_install_request(
         record_installation=False,
         suppress_notification=True,
     )
+    package = latest.get("market_package")
+    if package is not None:
+        return GitHubPluginInstallRequest.model_validate(
+            {
+                **request.model_dump(),
+                **{
+                    key: package[key]
+                    for key in (
+                        "archive_mappings",
+                        "source_prefix",
+                        "custom_install_path",
+                        "allowed_roots",
+                    )
+                },
+                "expected_archive_sha256": package["archive_sha256"],
+            }
+        )
     market = await managed_market_plugin(item.market_plugin_id)
     if market and metadata(market):
         rules = await selected_asset_rules(market, request.download_url)

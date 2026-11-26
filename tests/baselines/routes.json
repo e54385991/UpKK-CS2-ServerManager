@@ -2730,6 +2730,38 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "POST"
+    ],
+    "name": "preview",
+    "path": "/api/v1/plugins/market/{plugin_id}/release-sync/preview"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "targets",
+    "path": "/api/v1/plugins/market/{plugin_id}/release-sync/targets"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "sync",
+    "path": "/api/v1/plugins/market/{plugin_id}/release-sync"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "deploy",
+    "path": "/api/v1/plugins/market/{plugin_id}/release-sync/deploy"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "GET"
     ],
     "name": "export_plugin_catalog",

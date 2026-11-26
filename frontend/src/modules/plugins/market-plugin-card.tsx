@@ -6,6 +6,7 @@ import type { PublicRoute as Route } from "@/i18n/public-route";
 import { useFormatter, useTranslations } from "next-intl";
 import { CalendarClock, Download, Puzzle } from "lucide-react";
 import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin-button";
+import { MarketReleaseSyncButton } from "@/modules/plugins/market-release-sync";
 import { MarketPluginEditButton } from "@/modules/plugins/market-edit-button";
 import { MarketInstallDialog } from "@/modules/plugins/market-install-dialog";
 import {
@@ -144,6 +145,7 @@ export function MarketPluginCard({
               </a>
             </Button>
           ) : null}
+          {canEdit ? <MarketReleaseSyncButton pluginId={plugin.id} pluginTitle={plugin.title} /> : null}
           {canEdit ? <MarketPluginEditButton plugin={plugin} /> : null}
           {canDelete ? (
             <DeleteMarketPluginButton

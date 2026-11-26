@@ -9,6 +9,7 @@ from modules import User
 from modules.database import async_session_maker
 from services.audit_log_service import SCHEDULED_AUDIT_CATEGORY
 from services.maintenance_lock import OperationBusyError
+from services.plugins.release_selection import MarketReleaseSync
 from services.server_operation_hub import (
     ServerOperationConflict,
     server_operation_hub,
@@ -25,9 +26,13 @@ async def enqueue_plugin_auto_update(
     actor_user_id: int,
     plugin_id: int | None = None,
     force: bool = True,
+    pinned: MarketReleaseSync | None = None,
 ) -> dict:
     """Queue a managed-plugin update check on the per-server FIFO."""
-    if plugin_id is not None:
+    if pinned is not None:
+        action = "plugin_auto_update"
+        command = f"plugin-auto-update market {pinned.repository} {pinned.tag}"
+    elif plugin_id is not None:
         action = "plugin_auto_update_test"
         command = f"plugin-auto-update test {plugin_id}"
     elif force:
@@ -49,6 +54,7 @@ async def enqueue_plugin_auto_update(
             operation_id=operation_id,
             plugin_id=plugin_id,
             force=force,
+            pinned=pinned,
         ),
     )
 
@@ -58,6 +64,7 @@ async def run_plugin_auto_update(
     operation_id: str,
     plugin_id: int | None,
     force: bool,
+    pinned: MarketReleaseSync | None = None,
 ) -> None:
     """Run one queued plugin auto-update or single-plugin test."""
     record = await server_operation_hub.get(operation_id)
@@ -69,6 +76,8 @@ async def run_plugin_auto_update(
     actor_user_id = int(record["actor_user_id"])
     progress = _progress_emitter(operation_id)
     audit_action = "plugin.auto_update.test" if plugin_id is not None else "plugin.auto_update.run"
+    if pinned is not None:
+        audit_action = "plugin.catalog.release.deploy"
     audit_category = SCHEDULED_AUDIT_CATEGORY if not force and plugin_id is None else "plugin"
     from services.plugin_auto_update_service import plugin_auto_update_service
 
@@ -86,12 +95,15 @@ async def run_plugin_auto_update(
                     message=message,
                 )
                 return
+            if pinned is not None and not user.is_admin:
+                raise HTTPException(403, "Marketplace administrator access is required")
             await require_server_access(db, server_id, user)
 
         plugin_auto_update_service.set_progress_sink(server_id, progress)
         try:
+            options = {"pinned": pinned} if pinned is not None else {}
             result = await plugin_auto_update_service.check_server(
-                server_id, force=force, plugin_id=plugin_id
+                server_id, force=force, plugin_id=plugin_id, **options
             )
         finally:
             plugin_auto_update_service.clear_progress_sink(server_id)

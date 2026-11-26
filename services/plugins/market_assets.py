@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,8 @@ from modules.models import MarketPlugin, Server, User
 from services.github_credentials import get_effective_github_token
 from services.github_url import parse_github_url
 from services.linux_runtime_service import RuntimeSelectionRequired
+from services.plugins.github_assets import GitHubPlanError
+from services.plugins.release_selection import match_archives, release_assets, select_release_asset
 
 WINDOWS_ASSET_MARKERS = ("windows", "-win-", "_win_")
 
@@ -41,20 +43,6 @@ def is_windows_release_asset(asset_name: str) -> bool:
     )
 
 
-def _archive_candidates(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    candidates: list[dict[str, Any]] = []
-    for asset in assets:
-        asset_name = str(asset.get("name") or "")
-        if is_windows_release_asset(asset_name):
-            continue
-        lowered = asset_name.casefold()
-        if any(
-            lowered.endswith(extension) for extension in (".zip", ".tar.gz", ".tgz", ".tar", ".7z")
-        ):
-            candidates.append(asset)
-    return candidates
-
-
 async def resolve_latest_market_asset(
     plugin: MarketPlugin,
     server: Server,
@@ -79,25 +67,24 @@ async def resolve_latest_market_asset(
     if not success or not isinstance(data, dict):
         return None, f"Failed to fetch latest release: {error}"
 
-    candidates = _archive_candidates(data.get("assets", []))
-    if not candidates:
-        return None, "No suitable release asset found for installation"
-    from services.linux_runtime_service import (
-        has_paired_runtime_assets,
-        select_unique_runtime_asset,
+    if data.get("draft") or data.get("prerelease"):
+        return None, "No suitable stable release found for installation"
+    candidates = match_archives(
+        plugin.github_url, release_assets(data), getattr(plugin, "release_asset_glob", None)
     )
-
-    if has_paired_runtime_assets(candidates):
-        selected = select_unique_runtime_asset(candidates, linux_runtime_profile)
-        if selected is None:
-            raise RuntimeSelectionRequired(
-                "Multiple Steam Runtime package families are available; select an asset explicitly"
-            )
-    else:
-        selected = candidates[0]
-    download_url = str(selected.get("browser_download_url") or "")
-    if not download_url:
-        return None, "Selected release asset does not include a download URL"
+    if not candidates:
+        empty_url = any(
+            isinstance(asset, dict) and not asset.get("browser_download_url")
+            for asset in data.get("assets") or []
+        )
+        if empty_url:
+            return None, "Selected release asset does not include a download URL"
+        return None, "No suitable release asset found for installation"
+    try:
+        selected = select_release_asset(candidates, linux_runtime_profile)
+    except GitHubPlanError as exc:
+        raise RuntimeSelectionRequired(str(exc)) from exc
+    download_url = selected["url"]
     return (
         {
             "download_url": download_url,

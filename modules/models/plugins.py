@@ -116,6 +116,8 @@ class MarketPlugin(SQLModel, table=True):
     )
     author: Optional[str] = Field(default=None, max_length=255)
     version: Optional[str] = Field(default=None, max_length=50)
+    release_asset_glob: str | None = Field(default=None, max_length=500)
+    release_sync: dict[str, object] | None = Field(default=None, sa_column=Column(JSONB))
     category: PluginCategory = Field(
         default=PluginCategory.OTHER,
         sa_column=Column(portable_enum(PluginCategory, name="plugin_category"), nullable=False),

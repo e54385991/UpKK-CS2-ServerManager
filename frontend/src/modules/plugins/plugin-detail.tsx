@@ -5,6 +5,7 @@ import { ExternalLink, TriangleAlert } from "lucide-react";
 import type { getMarketPlugin } from "@/modules/plugins/api";
 import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin-button";
 import { InstallForm } from "@/modules/plugins/install-form";
+import { MarketReleaseSyncButton } from "@/modules/plugins/market-release-sync";
 import { MarketPluginEditButton } from "@/modules/plugins/market-edit-button";
 import type { MarketInstallServer } from "@/modules/plugins/types";
 import { safeUrl } from "@/shared/lib/url";
@@ -79,6 +80,7 @@ export async function PluginDetail({
             ) : null}
             <Badge tone="info">{t(`frameworks.${plugin.framework}`)}</Badge>
             <Badge tone="neutral">{categoryLabel}</Badge>
+            {canDelete ? <MarketReleaseSyncButton pluginId={plugin.id} pluginTitle={plugin.title} /> : null}
             {canDelete ? <MarketPluginEditButton plugin={plugin} /> : null}
             {canDelete ? (
               <DeleteMarketPluginButton

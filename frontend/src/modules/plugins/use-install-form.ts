@@ -13,7 +13,7 @@ import {
 } from "@/modules/plugins/actions";
 import {
   installOptionDefaults,
-  pickDefaultAssetIndex,
+  pickMarketReleaseAsset,
   pluginTrackedOnServer,
   shouldRefreshInstallDefaults,
 } from "@/modules/plugins/market-install-options";
@@ -131,7 +131,7 @@ export function useInstallForm({
     if (serverId == null || !githubUrl) return;
     const key = `${serverId}:${githubUrl}`;
     let cancelled = false;
-    void listGitHubReleasesAction(githubUrl, serverId).then((result) => {
+    void listGitHubReleasesAction(githubUrl, serverId, pluginId).then((result) => {
       if (cancelled) return;
       if (!result.ok) {
         setReleaseQuery({ key, releases: [], error: result.error });
@@ -153,13 +153,13 @@ export function useInstallForm({
         error: null,
       });
       setReleaseIndex(0);
-      setAssetIndex(pickDefaultAssetIndex(result.data.releases[0]?.assets ?? []));
+      setAssetIndex(pickMarketReleaseAsset(result.data.releases[0] ?? null));
       setArchive(null);
     });
     return () => {
       cancelled = true;
     };
-  }, [githubUrl, serverId, t]);
+  }, [githubUrl, pluginId, serverId, t]);
 
   async function checkPlan() {
     if (serverId == null) {

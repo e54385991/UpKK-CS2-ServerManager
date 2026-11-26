@@ -80,16 +80,17 @@ async def test_market_asset_resolution_covers_filtering_and_runtime_selection(mo
     )
     assert result is None and "download URL" in error
 
-    monkeypatch.setattr("services.linux_runtime_service.has_paired_runtime_assets", lambda _: True)
-    monkeypatch.setattr(
-        "services.linux_runtime_service.select_unique_runtime_asset", lambda *_a: None
-    )
     get.return_value = (
         True,
-        {"assets": [{"name": "demo.zip", "browser_download_url": "https://x/a.zip"}]},
+        {
+            "assets": [
+                {"name": "demo-steamrt3.zip", "browser_download_url": "https://x/a.zip"},
+                {"name": "demo-steamrt4.zip", "browser_download_url": "https://x/b.zip"},
+            ]
+        },
         None,
     )
-    with pytest.raises(Exception, match="Multiple Steam Runtime"):
+    with pytest.raises(Exception, match="SteamRT3 and SteamRT4"):
         await plugin_market.resolve_latest_market_asset(plugin, server, object(), user, None)
 
 

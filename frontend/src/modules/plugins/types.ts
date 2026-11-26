@@ -306,6 +306,7 @@ export type GitHubRelease = {
   readonly name: string | null;
   readonly publishedAt: string | null;
   readonly prerelease: boolean;
+  readonly defaultAssetName?: string | null;
   readonly assets: readonly GitHubReleaseAsset[];
 };
 

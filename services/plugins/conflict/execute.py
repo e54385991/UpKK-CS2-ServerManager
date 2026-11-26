@@ -10,8 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules import GitHubPluginInstallRequest, MarketPlugin, Server, User
 from services.compat import LateBoundModule
-from services.plugins.ai_install_policy import metadata, selected_asset_rules
 from services.plugins.common import PluginPlanError
+from services.plugins.market_release_package import inspect_market_package
+from services.plugins.release_selection import (
+    fetch_release,
+    release_assets,
+    url_tag,
+    validate_repository_asset,
+)
 from services.plugins.tracking import derive_asset_glob
 from services.plugins.upgrade_exclusions import apply_upgrade_mode_exclusions
 
@@ -58,7 +64,7 @@ async def _install_one(
         try:
             asset = (
                 resolved_asset
-                if attempt == 1 and resolved_asset is not None
+                if resolved_asset is not None
                 else await host._latest_release_asset(
                     db,
                     plugin,
@@ -242,9 +248,20 @@ async def _prepare_plugin_execution(
         if plugin is None:
             raise PluginPlanError(f"Plugin {current_id} disappeared before execution")
         if current_id == plugin_id and download_url:
-            resolved_assets[current_id] = host._asset_from_download_url(plugin, download_url)
-            if metadata(plugin):
-                resolved_assets[current_id].update(await selected_asset_rules(plugin, download_url))
+            validate_repository_asset(plugin.github_url, download_url)
+            token = await host.get_effective_github_token(db, user)
+            release = await fetch_release(plugin.github_url, token, tag=url_tag(download_url))
+            selected = next(
+                (
+                    asset
+                    for asset in release_assets(release, manual=True)
+                    if asset["url"] == download_url
+                ),
+                None,
+            )
+            if selected is None:
+                raise PluginPlanError("Selected archive is no longer published by the repository")
+            resolved_assets[current_id] = await inspect_market_package(plugin, release, selected)
         elif current_id in ordinary_plugin_ids:
             resolved_assets[current_id] = await host._latest_release_asset(
                 db, plugin, refreshed_server, user, linux_runtime_profile
