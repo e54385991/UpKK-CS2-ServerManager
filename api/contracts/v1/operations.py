@@ -9,7 +9,11 @@ from pydantic import Field, field_validator
 
 from api.contracts.base import ApiRequest
 from api.contracts.v1.identity import V1Model
-from api.contracts.v1.plugins import MarketPluginDescriptionSyncView, PluginAIImportView
+from api.contracts.v1.plugins import (
+    MarketPluginDescriptionSyncView,
+    MarketPluginReleaseSyncView,
+    PluginAIImportView,
+)
 from modules.models.servers import ServerStatus
 from services.apt_mirrors import normalize_apt_mirror
 from services.server_directory import normalize_game_directory
@@ -242,6 +246,7 @@ class OperationInboxItem(ServerOperationView):
 class OperationInboxView(V1Model):
     market_import_items: list[PluginAIImportView] = Field(default_factory=list)
     market_description_items: list[MarketPluginDescriptionSyncView] = Field(default_factory=list)
+    market_release_items: list[MarketPluginReleaseSyncView] = Field(default_factory=list)
     items: list[OperationInboxItem] = Field(default_factory=list)
     completed_items: list[OperationInboxItem] = Field(default_factory=list)
     failed_items: list[OperationInboxItem] = Field(default_factory=list)

@@ -29,6 +29,7 @@ from .identity import (
 from .legacy import GlobalSettings, InstalledPlugin, Plugin, UserSettings
 from .plugin_description_syncs import PluginDescriptionSyncJob
 from .plugin_imports import PluginImportJob
+from .plugin_release_syncs import PluginReleaseSyncJob
 from .plugins import (
     GitHubInstallRecipe,
     ManagedPlugin,

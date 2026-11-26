@@ -88,6 +88,12 @@ export type MarketPluginDescriptionSyncRequestDto =
   Schemas["MarketPluginDescriptionSyncRequest"];
 export type MarketPluginDescriptionSyncViewDto =
   Schemas["MarketPluginDescriptionSyncView"];
+export type MarketPluginReleaseSyncRequestDto =
+  Schemas["MarketPluginReleaseSyncRequest"];
+export type MarketPluginReleaseSyncViewDto =
+  Schemas["MarketPluginReleaseSyncView"];
+export type MarketPluginReleaseSyncItemViewDto =
+  Schemas["MarketPluginReleaseSyncItemView"];
 export type MarketPluginPageDto = Schemas["Page_MarketPluginView_"];
 export type PluginCategoryListDto = Schemas["PluginCategoryList"];
 export type PluginDependencyOptionsDto = Schemas["PluginDependencyOptionsView"];

@@ -39,6 +39,7 @@ type InboxItemDto = {
 export type InboxSnapshotDto = {
   market_import_items?: OperationInbox["marketImportItems"];
   market_description_items?: OperationInbox["marketDescriptionItems"];
+  market_release_items?: OperationInbox["marketReleaseItems"];
   items: InboxItemDto[];
   completed_items?: InboxItemDto[];
   failed_items?: InboxItemDto[];
@@ -111,6 +112,7 @@ export function mapOperationInbox(raw: InboxSnapshotDto): OperationInbox {
     completedItems,
     marketImportItems: raw.market_import_items ?? [],
     marketDescriptionItems: raw.market_description_items ?? [],
+    marketReleaseItems: raw.market_release_items ?? [],
     failedItems,
     activeCount: raw.active_count,
     runningCount: raw.running_count,

@@ -3262,6 +3262,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugins/market/releases/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Market Release Syncs
+         * @description List retained bulk release sync and invalid-listing scan tasks.
+         */
+        get: operations["list_market_release_syncs_api_v1_plugins_market_releases_sync_get"];
+        put?: never;
+        /**
+         * Enqueue Market Release Sync
+         * @description Queue a throttled bulk release sync or invalid-listing scan.
+         */
+        post: operations["enqueue_market_release_sync_api_v1_plugins_market_releases_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/releases/sync/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Market Release Sync */
+        get: operations["get_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Market Release Sync */
+        delete: operations["delete_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/releases/sync/{operation_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Market Release Sync */
+        post: operations["cancel_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/releases/sync/{operation_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Market Release Sync */
+        get: operations["stream_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plugins/market/repo-info": {
         parameters: {
             query?: never;
@@ -13020,6 +13096,123 @@ export interface components {
             total_pages: number;
         };
         /**
+         * MarketPluginReleaseSyncItemView
+         * @description What happened to one listing during a bulk release sync or scan.
+         */
+        MarketPluginReleaseSyncItemView: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "updated" | "unchanged" | "skipped" | "failed";
+            /**
+             * Cleanable
+             * @default false
+             */
+            cleanable: boolean;
+            /** Github Url */
+            github_url: string;
+            /** Issue Code */
+            issue_code?: ("invalid_url" | "repository_missing" | "release_missing" | "no_linux_asset" | "manual_selection_required" | "archive_invalid" | "upstream_error") | null;
+            /** Message */
+            message?: string | null;
+            /** Plugin Id */
+            plugin_id: number;
+            /** Rule */
+            rule?: string | null;
+            /** Selected Assets */
+            selected_assets?: string[];
+            /** Tag */
+            tag?: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * MarketPluginReleaseSyncRequest
+         * @description Administrator request to bulk-sync releases or scan invalid listings.
+         */
+        MarketPluginReleaseSyncRequest: {
+            /** Framework */
+            framework?: ("counterstrikesharp" | "swiftly" | "other") | null;
+            /**
+             * Mode
+             * @default sync
+             * @enum {string}
+             */
+            mode: "sync" | "scan";
+            /** Plugin Ids */
+            plugin_ids?: number[];
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /**
+         * MarketPluginReleaseSyncView
+         * @description Persistent job snapshot for one bulk release sync or invalid-listing scan.
+         */
+        MarketPluginReleaseSyncView: {
+            /** Cancel Requested */
+            cancel_requested: boolean;
+            /** Cleanable */
+            cleanable: number;
+            /** Command */
+            command: string;
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current Github Url */
+            current_github_url?: string | null;
+            /** Current Plugin Id */
+            current_plugin_id?: number | null;
+            /** Current Plugin Title */
+            current_plugin_title?: string | null;
+            /** Failed */
+            failed: number;
+            /** Framework */
+            framework?: ("counterstrikesharp" | "swiftly" | "other") | null;
+            /** Items */
+            items?: components["schemas"]["MarketPluginReleaseSyncItemView"][];
+            /** Message */
+            message: string;
+            /**
+             * Mode
+             * @default sync
+             * @enum {string}
+             */
+            mode: "sync" | "scan";
+            /** Operation Id */
+            operation_id: string;
+            /** Phase */
+            phase: string;
+            /** Processed */
+            processed: number;
+            /** Retry At */
+            retry_at?: number | null;
+            /** Skipped */
+            skipped: number;
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled";
+            /** Stop Reason */
+            stop_reason?: string | null;
+            /** Total */
+            total: number;
+            /** Unchanged */
+            unchanged: number;
+            /** Updated */
+            updated: number;
+        };
+        /**
          * MarketPluginResponse
          * @description Schema for market plugin response
          */
@@ -13663,6 +13856,8 @@ export interface components {
             market_description_items?: components["schemas"]["MarketPluginDescriptionSyncView"][];
             /** Market Import Items */
             market_import_items?: components["schemas"]["PluginAIImportView"][];
+            /** Market Release Items */
+            market_release_items?: components["schemas"]["MarketPluginReleaseSyncView"][];
             /**
              * Running Count
              * @default 0
@@ -24719,6 +24914,221 @@ export interface operations {
         };
     };
     stream_market_description_sync_api_v1_plugins_market_descriptions_sync__operation_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_market_release_syncs_api_v1_plugins_market_releases_sync_get: {
+        parameters: {
+            query?: {
+                mode?: ("sync" | "scan") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginReleaseSyncView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enqueue_market_release_sync_api_v1_plugins_market_releases_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketPluginReleaseSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginReleaseSyncView"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginReleaseSyncView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginReleaseSyncView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__events_get: {
         parameters: {
             query?: never;
             header?: never;

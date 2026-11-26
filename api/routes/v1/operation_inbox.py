@@ -21,10 +21,14 @@ from services.plugins.ai_import_store import check_administrator, clear_failed_j
 from services.plugins.description_sync_store import (
     clear_failed_jobs as clear_failed_description_jobs,
 )
+from services.plugins.release_sync_store import (
+    clear_failed_jobs as clear_failed_release_jobs,
+)
 from services.server_operation_hub import server_operation_hub
 
 from .operations import to_view
 from .plugin_ai_imports import to_view as import_view
+from .plugin_release_sync_jobs import to_release_sync_view as release_sync_view
 from .plugins import _description_sync_view as description_sync_view
 from .schemas import ActionResult, OperationInboxItem, OperationInboxView
 
@@ -49,6 +53,7 @@ def to_inbox_view(payload: InboxPayload) -> OperationInboxView:
     return OperationInboxView(
         market_import_items=[import_view(job) for job in payload.import_jobs],
         market_description_items=[description_sync_view(job) for job in payload.description_jobs],
+        market_release_items=[release_sync_view(job) for job in payload.release_jobs],
         items=items,
         completed_items=completed_items,
         failed_items=failed_items,
@@ -144,6 +149,10 @@ async def clear_failed_operations(
             pass
         try:
             cleared += await clear_failed_description_jobs(current_user.id)
+        except PermissionError:
+            pass
+        try:
+            cleared += await clear_failed_release_jobs(current_user.id)
         except PermissionError:
             pass
     return ActionResult(

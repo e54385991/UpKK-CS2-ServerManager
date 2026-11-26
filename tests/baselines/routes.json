@@ -2732,6 +2732,54 @@
     "methods": [
       "POST"
     ],
+    "name": "enqueue_market_release_sync",
+    "path": "/api/v1/plugins/market/releases/sync"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_market_release_syncs",
+    "path": "/api/v1/plugins/market/releases/sync"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_market_release_sync",
+    "path": "/api/v1/plugins/market/releases/sync/{operation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "cancel_market_release_sync",
+    "path": "/api/v1/plugins/market/releases/sync/{operation_id}/cancel"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_market_release_sync",
+    "path": "/api/v1/plugins/market/releases/sync/{operation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "stream_market_release_sync",
+    "path": "/api/v1/plugins/market/releases/sync/{operation_id}/events"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
     "name": "preview",
     "path": "/api/v1/plugins/market/{plugin_id}/release-sync/preview"
   },

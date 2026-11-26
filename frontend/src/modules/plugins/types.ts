@@ -165,6 +165,23 @@ export type DescriptionSyncInput = {
   readonly pluginIds?: readonly number[];
 };
 
+export type ReleaseSyncJob =
+  components["schemas"]["MarketPluginReleaseSyncView"];
+
+export type ReleaseSyncItem =
+  components["schemas"]["MarketPluginReleaseSyncItemView"];
+
+export type ReleaseSyncMode = NonNullable<ReleaseSyncJob["mode"]>;
+
+export type ReleaseIssueCode = NonNullable<ReleaseSyncItem["issue_code"]>;
+
+export type ReleaseSyncInput = {
+  readonly requestId: string;
+  readonly mode?: ReleaseSyncMode;
+  readonly framework?: PluginFrameworkSection | null;
+  readonly pluginIds?: readonly number[];
+};
+
 export type GitHubRepoInfo = {
   readonly success: boolean;
   readonly repoName: string | null;

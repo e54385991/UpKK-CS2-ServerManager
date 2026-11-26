@@ -25,6 +25,7 @@ import {
   fetchMarketRepoInfo,
   listPluginDependencyOptions,
   syncMarketPluginDescriptions,
+  syncMarketPluginReleases,
   deleteMarketPlugins,
   updateMarketPlugin,
 } from "@/modules/plugins/market-admin-api";
@@ -43,6 +44,8 @@ import type {
   PluginCatalogImportSummary,
   PluginDependencyOptions,
   PluginInstallPlan,
+  ReleaseSyncInput,
+  ReleaseSyncJob,
 } from "@/modules/plugins/types";
 import type { ServerOperation } from "@/modules/servers/types";
 
@@ -154,6 +157,18 @@ export async function syncMarketPluginDescriptionsAction(
   }
   const result = await syncMarketPluginDescriptions(input);
   if (result.ok) revalidatePath("/plugins");
+  return result;
+}
+
+export async function syncMarketPluginReleasesAction(
+  input: ReleaseSyncInput,
+): Promise<ApiResult<ReleaseSyncJob>> {
+  const session = await getSession();
+  if (!session?.isAdmin) {
+    return { ok: false, status: 403, error: "Not enough permissions" };
+  }
+  const result = await syncMarketPluginReleases(input);
+  if (result.ok && input.mode !== "scan") revalidatePath("/plugins");
   return result;
 }
 

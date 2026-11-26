@@ -1,14 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import { Eraser, LoaderCircle, Trash2 } from "lucide-react";
-import { deleteMarketPluginsAction } from "@/modules/plugins/actions";
+import { Eraser, LoaderCircle, PackageCheck, Trash2 } from "lucide-react";
+import {
+  deleteMarketPluginsAction,
+  syncMarketPluginReleasesAction,
+} from "@/modules/plugins/actions";
 import { MarketPluginCard } from "@/modules/plugins/market-plugin-card";
+import { trackReleaseSync } from "@/modules/plugins/release-sync-activity";
 import type { MarketInstallServer, MarketPlugin } from "@/modules/plugins/types";
 import { randomDeleteCode } from "@/modules/servers/delete-challenge";
 import { confirm, notify } from "@/shared/feedback";
+import { randomId } from "@/shared/lib/random-id";
 import { Button } from "@/shared/ui/button";
 
 export function MarketCatalogItems({
@@ -30,6 +35,7 @@ export function MarketCatalogItems({
   const router = useRouter();
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [pending, setPending] = useState(false);
+  const syncRequestId = useRef<string | null>(null);
   const selectedCount = selected.size;
   const allSelected = items.length > 0 && items.every((plugin) => selected.has(plugin.id));
   const selectedIds = useMemo(() => [...selected], [selected]);
@@ -86,6 +92,25 @@ export function MarketCatalogItems({
     router.refresh();
   }
 
+  async function syncSelectedReleases() {
+    if (selectedCount === 0) return;
+    setPending(true);
+    const id = (syncRequestId.current ??= randomId());
+    const result = await syncMarketPluginReleasesAction({
+      requestId: id,
+      mode: "sync",
+      pluginIds: selectedIds,
+    });
+    setPending(false);
+    if (!result.ok) {
+      notify.error(result.error || t("bulkReleaseSync.failed"));
+      return;
+    }
+    syncRequestId.current = null;
+    trackReleaseSync(result.data);
+    notify.success(t("bulkReleaseSync.submitted", { count: result.data.total }));
+  }
+
   if (!canDelete) {
     return (
       <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -124,6 +149,17 @@ export function MarketCatalogItems({
           <span>{t("bulkSelected", { count: selectedCount })}</span>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="market-bulk-sync-selected"
+            disabled={pending || selectedCount === 0}
+            onClick={() => void syncSelectedReleases()}
+          >
+            {pending ? <LoaderCircle className="animate-spin" /> : <PackageCheck />}
+            {t("bulkSyncSelectedReleases")}
+          </Button>
           <Button
             type="button"
             variant="outline"

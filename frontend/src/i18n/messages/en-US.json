@@ -1189,6 +1189,91 @@
       "sortHelp": "Candidates are ranked by the first key, and ties are broken by the second and third.",
       "expandSearch": "Let AI plan precise keyword groups and synonyms first, with built-in search fallbacks",
       "requireDependencies": "Skip a plugin whose prerequisites cannot be imported automatically"
+    },
+    "bulkSyncSelectedReleases": "Sync selected releases",
+    "bulkReleaseSync": {
+      "open": "Sync releases",
+      "hint": "Admin: fetch latest stable GitHub releases and verify archives across listings.",
+      "title": "Bulk sync plugin releases",
+      "description": "Serially inspect each listing’s latest stable GitHub release and Linux archive, updating only marketplace release snapshots and filename rules without deploying updates to game servers.",
+      "scopeLabel": "Scope",
+      "scopeCurrent": "Current section ({framework})",
+      "scopeAll": "All sections",
+      "start": "Start sync",
+      "close": "Close",
+      "submitting": "Submitting…",
+      "submitted": "Release sync queued for {count} plugin(s).",
+      "failed": "Could not start bulk release sync.",
+      "forbidden": "Only administrators can bulk-sync plugin releases.",
+      "taskList": "Release sync & scan tasks",
+      "allFrameworks": "All sections",
+      "clearTerminal": "Clear finished tasks",
+      "noTasks": "No release sync or scan tasks.",
+      "progress": "Processed {processed}/{total}",
+      "current": "Current: {name}",
+      "retryAt": "GitHub rate limited; resuming around {time}.",
+      "results": "{updated} updated, {unchanged} unchanged, {skipped} skipped, {failed} failed, {cleanable} cleanable",
+      "cancel": "Cancel task",
+      "cancelling": "Cancelling…",
+      "deleteTask": "Delete task",
+      "requestFailed": "The release sync task operation failed.",
+      "cleanInvalid": "Clean invalid ({count})",
+      "cleanInvalidTitle": "Clean up invalid plugins",
+      "cleanInvalidConfirm": "Remove these {count} plugins with missing repositories, missing stable releases, or uninstallable archives from the marketplace? Files already on game servers are not deleted.",
+      "cleanInvalidSuccess": "Removed {count} invalid plugin listing(s) from the marketplace.",
+      "mode": {
+        "sync": "Release sync",
+        "scan": "Invalid scan"
+      },
+      "taskStatus": {
+        "queued": "Queued",
+        "running": "Running",
+        "waiting": "Waiting for rate limit",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "action": {
+        "updated": "Updated",
+        "unchanged": "Valid / unchanged",
+        "skipped": "Skipped",
+        "failed": "Failed"
+      },
+      "issue": {
+        "invalid_url": "Invalid repo URL",
+        "repository_missing": "Repo missing / private",
+        "release_missing": "No stable release",
+        "no_linux_asset": "No Linux package",
+        "manual_selection_required": "Manual rule needed",
+        "archive_invalid": "Uninstallable archive",
+        "upstream_error": "Upstream error"
+      }
+    },
+    "cleanupInvalid": {
+      "open": "Clean invalid",
+      "hint": "Admin: scan for missing repositories, missing releases, or uninstallable archives and remove them in bulk.",
+      "title": "Scan & clean invalid plugins",
+      "description": "Check each listing in the background for missing/private repositories, missing stable releases, missing Linux archives, or broken package layouts. Built-in frameworks are skipped; listings needing manual multi-package rules are shown as hints and never selected by default.",
+      "scopeLabel": "Scan scope",
+      "scopeCurrent": "Current section ({framework})",
+      "scopeAll": "All sections",
+      "startScan": "Start scan",
+      "recentTasks": "Recent scan & sync results",
+      "summary": "Checked {checked} · Cleanable {cleanable} · Manual / retry {advisory}",
+      "selectAllInvalid": "Select all invalid listings ({count})",
+      "selectedCount": "{count} selected",
+      "noneFound": "No invalid plugins requiring cleanup were found in this scope.",
+      "advisoryTitle": "Needs manual rule or retry ({count})",
+      "advisoryHelp": "These listings either publish multiple Linux packages requiring a manual pattern or hit a transient upstream error, so they are excluded from deletion.",
+      "emptyPrompt": "Choose a scope and click “Start scan” to inspect listings and review invalid plugins before deleting.",
+      "confirmTitle": "Delete selected invalid plugins",
+      "confirmDescription": "Remove the {count} selected invalid plugin listing(s) from the marketplace? Files already installed on game servers are not deleted.",
+      "deleteSelected": "Delete invalid ({count})",
+      "deleteSuccess": "Removed {count} invalid plugin listing(s).",
+      "deleteFailed": "Could not delete the selected invalid plugins.",
+      "scanFailed": "Could not start the invalid plugin scan.",
+      "forbidden": "Only administrators can clean up invalid plugins.",
+      "close": "Close"
     }
   },
   "assistant": {
@@ -1275,89 +1360,89 @@
     "title": "Settings",
     "description": "Panel-level configuration: download proxy, the global GitHub credential, outbound email, system AI, and system monitoring.",
     "forbidden": "Only administrators can view or change system settings.",
-  "fetchError": "Unable to load system settings ({status}).",
-  "announcements": {
-    "listTitle": "Announcement management",
-    "listHelp": "Manage drafts and published notices. Published announcements appear in every user's console top bar.",
-    "title": "Announcements",
-    "description": "Write Markdown announcements and save drafts or publish them immediately.",
-    "createTitle": "New announcement",
-    "editTitle": "Edit announcement",
-    "titleLabel": "Title",
-    "contentLabel": "Body (Markdown)",
-    "markdownPlaceholder": "Markdown headings, lists, links, code blocks, and tables are supported.",
-    "markdownHelp": "Up to 20,000 characters. HTML is sanitized before display.",
-    "preview": "Preview",
-    "publishNow": "Publish now (visible to all signed-in users)",
-    "new": "New",
-    "save": "Save announcement",
-    "saving": "Saving…",
-    "saved": "Announcement saved.",
-    "saveFailed": "Could not save the announcement.",
-    "loadFailed": "Could not load announcements.",
-    "delete": "Delete announcement “{title}”",
-    "edit": "Edit announcement “{title}”",
-    "deleteConfirm": "Delete announcement “{title}”? This cannot be undone.",
-    "deleteFailed": "Could not delete the announcement.",
-    "deleted": "Announcement deleted.",
-    "cancelEdit": "Cancel editing",
-    "published": "Published",
-    "draft": "Draft",
-    "empty": "There are no announcements yet.",
-    "listLimit": "Only the 200 most recently updated announcements are shown."
-  },
-  "adminOnly": "Admin only",
-  "categoryNavLabel": "System settings categories",
-  "categories": {
-    "downloads": "Resources & downloads",
-    "downloadCache": "Download cache",
-    "notifications": "Email notifications",
-    "security": "Security & access",
-    "logging": "Logging",
-    "performance": "System monitoring",
-    "announcements": "Announcements",
-    "ai": "AI assistant",
-    "transfer": "Migration"
-  },
-  "sections": {
+    "fetchError": "Unable to load system settings ({status}).",
     "announcements": {
-      "title": "Announcement management",
-      "description": "Create and publish Markdown announcements that signed-in users can open from the console top bar."
+      "listTitle": "Announcement management",
+      "listHelp": "Manage drafts and published notices. Published announcements appear in every user's console top bar.",
+      "title": "Announcements",
+      "description": "Write Markdown announcements and save drafts or publish them immediately.",
+      "createTitle": "New announcement",
+      "editTitle": "Edit announcement",
+      "titleLabel": "Title",
+      "contentLabel": "Body (Markdown)",
+      "markdownPlaceholder": "Markdown headings, lists, links, code blocks, and tables are supported.",
+      "markdownHelp": "Up to 20,000 characters. HTML is sanitized before display.",
+      "preview": "Preview",
+      "publishNow": "Publish now (visible to all signed-in users)",
+      "new": "New",
+      "save": "Save announcement",
+      "saving": "Saving…",
+      "saved": "Announcement saved.",
+      "saveFailed": "Could not save the announcement.",
+      "loadFailed": "Could not load announcements.",
+      "delete": "Delete announcement “{title}”",
+      "edit": "Edit announcement “{title}”",
+      "deleteConfirm": "Delete announcement “{title}”? This cannot be undone.",
+      "deleteFailed": "Could not delete the announcement.",
+      "deleted": "Announcement deleted.",
+      "cancelEdit": "Cancel editing",
+      "published": "Published",
+      "draft": "Draft",
+      "empty": "There are no announcements yet.",
+      "listLimit": "Only the 200 most recently updated announcements are shown."
     },
-    "downloads": {
-      "title": "Resources & downloads",
-      "description": "Configure GitHub access, global credentials, and download behavior."
+    "adminOnly": "Admin only",
+    "categoryNavLabel": "System settings categories",
+    "categories": {
+      "downloads": "Resources & downloads",
+      "downloadCache": "Download cache",
+      "notifications": "Email notifications",
+      "security": "Security & access",
+      "logging": "Logging",
+      "performance": "System monitoring",
+      "announcements": "Announcements",
+      "ai": "AI assistant",
+      "transfer": "Migration"
     },
-    "notifications": {
-      "title": "Email notifications",
-      "description": "Configure delivery for password resets and operational notices."
+    "sections": {
+      "announcements": {
+        "title": "Announcement management",
+        "description": "Create and publish Markdown announcements that signed-in users can open from the console top bar."
+      },
+      "downloads": {
+        "title": "Resources & downloads",
+        "description": "Configure GitHub access, global credentials, and download behavior."
+      },
+      "notifications": {
+        "title": "Email notifications",
+        "description": "Configure delivery for password resets and operational notices."
+      },
+      "security": {
+        "title": "Security & access",
+        "description": "Control visitor identification, public registration, Google sign-in, and CAPTCHA."
+      },
+      "logging": {
+        "title": "Logging",
+        "description": "Control console verbosity and how long audit events are kept."
+      },
+      "performance": {
+        "title": "System monitoring",
+        "description": "Live charts for this panel worker: request latency, errors, resources, and the 24-hour history."
+      },
+      "downloadCache": {
+        "title": "Download cache",
+        "description": "Manage downloaded plugin and runtime archives to reduce repeat downloads."
+      },
+      "ai": {
+        "title": "AI assistant",
+        "description": "Configure the system AI provider, context, and tool-calling capabilities."
+      },
+      "transfer": {
+        "title": "Settings migration",
+        "description": "Export or import system and AI settings between panel instances; Discord data is not included."
+      }
     },
-    "security": {
-      "title": "Security & access",
-      "description": "Control visitor identification, public registration, Google sign-in, and CAPTCHA."
-    },
-    "logging": {
-      "title": "Logging",
-      "description": "Control console verbosity and how long audit events are kept."
-    },
-    "performance": {
-      "title": "System monitoring",
-      "description": "Live charts for this panel worker: request latency, errors, resources, and the 24-hour history."
-    },
-    "downloadCache": {
-      "title": "Download cache",
-      "description": "Manage downloaded plugin and runtime archives to reduce repeat downloads."
-    },
-    "ai": {
-      "title": "AI assistant",
-      "description": "Configure the system AI provider, context, and tool-calling capabilities."
-    },
-    "transfer": {
-      "title": "Settings migration",
-      "description": "Export or import system and AI settings between panel instances; Discord data is not included."
-    }
-  },
-  "save": "Save settings",
+    "save": "Save settings",
     "unsaved": "Unsaved changes",
     "saving": "Saving…",
     "saved": "System settings saved.",

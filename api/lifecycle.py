@@ -230,6 +230,13 @@ class ApplicationLifecycle:
                 description_sync_worker.start,
                 description_sync_worker.stop,
             )
+            from services.plugins.release_sync_worker import release_sync_worker
+
+            await self._start_service(
+                "plugin release syncs",
+                release_sync_worker.start,
+                release_sync_worker.stop,
+            )
             from services.panel_monitor import start_panel_monitor, stop_panel_monitor
 
             await self._start_service(

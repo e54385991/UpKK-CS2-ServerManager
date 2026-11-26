@@ -41,6 +41,7 @@ export function useActivityInbox() {
     };
     window.addEventListener("plugin-ai-import-submitted", onImport);
     window.addEventListener("plugin-description-sync-submitted", onImport);
+    window.addEventListener("plugin-release-sync-submitted", onImport);
     const stop = subscribeVisibleEventSource({
       url: OPERATION_INBOX_EVENTS_URL,
       eventTypes: ["inbox"],
@@ -57,6 +58,7 @@ export function useActivityInbox() {
       cancelled = true;
       window.removeEventListener("plugin-ai-import-submitted", onImport);
       window.removeEventListener("plugin-description-sync-submitted", onImport);
+      window.removeEventListener("plugin-release-sync-submitted", onImport);
       stopPoll();
       stop();
     };

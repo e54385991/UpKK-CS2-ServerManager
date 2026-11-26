@@ -143,6 +143,11 @@ def test_operation_inbox_lists_and_clears_failures(monkeypatch):
         "api.routes.v1.operation_inbox.clear_failed_description_jobs",
         description_jobs,
     )
+    release_jobs = AsyncMock(return_value=0)
+    monkeypatch.setattr(
+        "api.routes.v1.operation_inbox.clear_failed_release_jobs",
+        release_jobs,
+    )
     wipe = client.delete("/api/v1/operations/inbox/failed")
     assert wipe.status_code == 200
     assert wipe.json()["success"] is True
@@ -150,6 +155,7 @@ def test_operation_inbox_lists_and_clears_failures(monkeypatch):
     # A member sees no AI import jobs, so none are cleared on their behalf.
     import_jobs.assert_not_awaited()
     description_jobs.assert_not_awaited()
+    release_jobs.assert_not_awaited()
 
     monkeypatch.setattr(
         "api.routes.v1.operation_inbox.server_operation_hub.get",
@@ -224,23 +230,32 @@ def test_clear_failed_also_clears_admin_visible_ai_imports(monkeypatch):
         "api.routes.v1.operation_inbox.clear_failed_description_jobs",
         description_jobs,
     )
+    release_jobs = AsyncMock(return_value=1)
+    monkeypatch.setattr(
+        "api.routes.v1.operation_inbox.clear_failed_release_jobs",
+        release_jobs,
+    )
 
     response = client.delete("/api/v1/operations/inbox/failed")
 
     assert response.status_code == 200
-    assert "4" in response.json()["message"]
+    assert "5" in response.json()["message"]
     import_jobs.assert_awaited_once_with(1)
     description_jobs.assert_awaited_once_with(1)
+    release_jobs.assert_awaited_once_with(1)
 
     # Losing administrator rights mid-request must not fail the whole clear.
     import_jobs.reset_mock()
     import_jobs.side_effect = PermissionError("no longer an administrator")
     description_jobs.reset_mock()
     description_jobs.side_effect = PermissionError("no longer an administrator")
+    release_jobs.reset_mock()
+    release_jobs.side_effect = PermissionError("no longer an administrator")
     revoked = client.delete("/api/v1/operations/inbox/failed")
     assert revoked.status_code == 200
     assert "1" in revoked.json()["message"]
     description_jobs.assert_awaited_once_with(1)
+    release_jobs.assert_awaited_once_with(1)
 
 
 def test_operation_inbox_events_requires_authentication():
@@ -315,6 +330,10 @@ async def test_build_inbox_includes_admin_description_sync_jobs(monkeypatch):
     monkeypatch.setattr(
         "services.operations.inbox.list_description_jobs",
         AsyncMock(return_value=[job]),
+    )
+    monkeypatch.setattr(
+        "services.operations.inbox.list_release_jobs",
+        AsyncMock(return_value=[]),
     )
 
     view = await _build_inbox([(1, "alpha")], include_imports=True)

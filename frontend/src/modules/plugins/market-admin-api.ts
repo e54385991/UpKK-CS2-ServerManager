@@ -11,6 +11,8 @@ import type {
   MarketPluginCreateRequestDto,
   MarketPluginDescriptionSyncRequestDto,
   MarketPluginDescriptionSyncViewDto,
+  MarketPluginReleaseSyncRequestDto,
+  MarketPluginReleaseSyncViewDto,
   MarketPluginUpdateRequestDto,
   MarketPluginViewDto,
   PluginDependencyOptionsDto,
@@ -24,6 +26,8 @@ import type {
   MarketPluginCreateInput,
   MarketPluginUpdateInput,
   PluginDependencyOptions,
+  ReleaseSyncInput,
+  ReleaseSyncJob,
 } from "@/modules/plugins/types";
 
 export async function listPluginDependencyOptions(
@@ -150,6 +154,27 @@ export async function syncMarketPluginDescriptions(
   };
   const result = await apiFetch<MarketPluginDescriptionSyncViewDto>(
     "/api/v1/plugins/market/descriptions/sync",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: result.data };
+}
+
+export async function syncMarketPluginReleases(
+  input: ReleaseSyncInput,
+): Promise<ApiResult<ReleaseSyncJob>> {
+  const body: MarketPluginReleaseSyncRequestDto = {
+    request_id: input.requestId,
+    mode: input.mode ?? "sync",
+    framework: input.framework ?? null,
+    plugin_ids: input.pluginIds ? [...input.pluginIds] : [],
+  };
+  const result = await apiFetch<MarketPluginReleaseSyncViewDto>(
+    "/api/v1/plugins/market/releases/sync",
     {
       method: "POST",
       headers: { "content-type": "application/json" },

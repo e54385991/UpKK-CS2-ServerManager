@@ -19,6 +19,8 @@ test("operation inbox and activity tray expose completed history", () => {
 
   assert.match(inbox, /completed_items/);
   assert.match(inbox, /completedItems/);
+  assert.match(inbox, /market_release_items/);
+  assert.match(inbox, /marketReleaseItems/);
   assert.match(inbox, /completedRetentionDays/);
   assert.match(panel, /activityTabCompleted/);
   assert.match(commands, /clearCompletedOperationsFromBrowser/);

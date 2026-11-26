@@ -39,8 +39,17 @@ from .plugin_market import (
 )
 from .plugin_market import MarketPluginDescriptionSyncRequest as MarketPluginDescriptionSyncRequest
 from .plugin_market import MarketPluginDescriptionSyncView as MarketPluginDescriptionSyncView
+from .plugin_market import (
+    MarketPluginReleaseSyncItemView as MarketPluginReleaseSyncItemView,
+)
+from .plugin_market import (
+    MarketPluginReleaseSyncModeLiteral as MarketPluginReleaseSyncModeLiteral,
+)
+from .plugin_market import MarketPluginReleaseSyncRequest as MarketPluginReleaseSyncRequest
+from .plugin_market import MarketPluginReleaseSyncView as MarketPluginReleaseSyncView
 from .plugin_market import MarketPluginUpdateRequest as MarketPluginUpdateRequest
 from .plugin_market import MarketPluginView as MarketPluginView
+from .plugin_market import MarketReleaseIssueCodeLiteral as MarketReleaseIssueCodeLiteral
 from .plugin_market import MarketSort as MarketSort
 from .plugin_market import PluginAIImportRequest as PluginAIImportRequest
 from .plugin_market import PluginAIImportView as PluginAIImportView
@@ -148,6 +157,11 @@ __all__ = [
     "MarketPluginDescriptionSyncRequest",
     "MarketPluginDescriptionSyncItemView",
     "MarketPluginDescriptionSyncView",
+    "MarketPluginReleaseSyncModeLiteral",
+    "MarketReleaseIssueCodeLiteral",
+    "MarketPluginReleaseSyncRequest",
+    "MarketPluginReleaseSyncItemView",
+    "MarketPluginReleaseSyncView",
     "GitHubRepoInfoRequest",
     "MarketPluginView",
     "PluginCategoryView",

@@ -1189,6 +1189,91 @@
       "sortHelp": "候选先按第一项排序，相同再依次按第二、第三项比较。",
       "expandSearch": "由 AI 优先规划精准多词查询与同义表达，保留内置检索兜底",
       "requireDependencies": "依赖无法自动导入时放弃该插件"
+    },
+    "bulkSyncSelectedReleases": "同步所选发行",
+    "bulkReleaseSync": {
+      "open": "批量同步发行",
+      "hint": "管理员：批量拉取 GitHub 最新稳定 Release 并校验安装归档，更新插件市场发行快照。",
+      "title": "批量同步插件发行",
+      "description": "串行检查所选范围内各插件的最新稳定 GitHub Release 与 Linux 安装包，仅更新插件市场目录中的发行快照与文件名规则，不会自动向游戏服务器下发更新。",
+      "scopeLabel": "同步范围",
+      "scopeCurrent": "当前分区（{framework}）",
+      "scopeAll": "全部分区",
+      "start": "开始同步",
+      "close": "关闭",
+      "submitting": "正在提交…",
+      "submitted": "已提交批量发行同步任务：共 {count} 个插件。",
+      "failed": "批量同步插件发行失败。",
+      "forbidden": "只有管理员可以批量同步插件发行。",
+      "taskList": "发行同步与检测任务",
+      "allFrameworks": "全部分区",
+      "clearTerminal": "清理已结束任务",
+      "noTasks": "没有发行同步或检测任务。",
+      "progress": "已处理 {processed}/{total}",
+      "current": "当前：{name}",
+      "retryAt": "GitHub 限流，预计 {time} 自动继续。",
+      "results": "更新 {updated}，无变化 {unchanged}，跳过 {skipped}，失败 {failed}，可清理 {cleanable}",
+      "cancel": "取消任务",
+      "cancelling": "正在取消…",
+      "deleteTask": "删除任务",
+      "requestFailed": "发行同步任务操作失败。",
+      "cleanInvalid": "清理无效插件（{count}）",
+      "cleanInvalidTitle": "批量清理无效插件",
+      "cleanInvalidConfirm": "确定从插件市场移除这 {count} 个仓库缺失、找不到稳定发行版或归档无法安装的插件吗？已安装到游戏服务器的文件不会被删除。",
+      "cleanInvalidSuccess": "已从插件市场清理 {count} 个无效插件。",
+      "mode": {
+        "sync": "发行同步",
+        "scan": "无效检测"
+      },
+      "taskStatus": {
+        "queued": "排队中",
+        "running": "运行中",
+        "waiting": "等待限流恢复",
+        "completed": "已完成",
+        "failed": "失败",
+        "cancelled": "已取消"
+      },
+      "action": {
+        "updated": "已更新",
+        "unchanged": "有效/无变化",
+        "skipped": "已跳过",
+        "failed": "异常"
+      },
+      "issue": {
+        "invalid_url": "仓库地址无效",
+        "repository_missing": "仓库不存在/私有",
+        "release_missing": "找不到稳定发行",
+        "no_linux_asset": "无 Linux 发行包",
+        "manual_selection_required": "多包需人工选规则",
+        "archive_invalid": "归档无法安装",
+        "upstream_error": "上游请求失败"
+      }
+    },
+    "cleanupInvalid": {
+      "open": "清理无效插件",
+      "hint": "管理员：扫描检测仓库缺失、无稳定发行版或归档无法安装的插件，勾选确认后批量清理。",
+      "title": "扫描并清理无效插件",
+      "description": "后台串行检测插件仓库是否存在、是否发布稳定 Release、是否包含可用 Linux 压缩包以及归档结构是否可安装。面板内置框架会自动跳过；多包歧义需人工选规则的条目仅提示、默认不删除。",
+      "scopeLabel": "扫描范围",
+      "scopeCurrent": "当前分区（{framework}）",
+      "scopeAll": "全部分区",
+      "startScan": "开始扫描",
+      "recentTasks": "最近检测/同步结果",
+      "summary": "已检查 {checked} 项 · 可清理异常 {cleanable} 项 · 需人工处理/重试 {advisory} 项",
+      "selectAllInvalid": "全选无效插件（共 {count} 项）",
+      "selectedCount": "已选 {count} 项",
+      "noneFound": "当前检测范围内未发现需要清理的无效插件。",
+      "advisoryTitle": "需人工确认或暂不清理（{count}）",
+      "advisoryHelp": "以下插件存在多个可用 Linux 发行包尚未配置匹配规则，或遇到临时上游网络错误，默认不纳入删除。",
+      "emptyPrompt": "选择范围后点击「开始扫描」，检测完成后可预览具体原因并勾选批量清理。",
+      "confirmTitle": "确认删除所选无效插件",
+      "confirmDescription": "确定从插件市场永久移除所选的 {count} 个无效插件吗？游戏服务器上已安装的文件不会被删除。",
+      "deleteSelected": "删除所选无效插件（{count}）",
+      "deleteSuccess": "已清理 {count} 个无效插件。",
+      "deleteFailed": "批量清理无效插件失败。",
+      "scanFailed": "启动无效插件扫描失败。",
+      "forbidden": "只有管理员可以清理无效插件。",
+      "close": "关闭"
     }
   },
   "assistant": {
@@ -1275,89 +1360,89 @@
     "title": "系统设置",
     "description": "面板级配置：下载代理、全局 GitHub 凭据、邮件投递、系统 AI 与系统监控。",
     "forbidden": "仅管理员可以查看或修改系统设置。",
-  "fetchError": "暂时无法获取系统设置（{status}）。",
-  "announcements": {
-    "listTitle": "公告管理",
-    "listHelp": "管理草稿和已发布公告；已发布内容会显示在所有用户的控制台顶部。",
-    "title": "公告",
-    "description": "撰写 Markdown 公告，保存为草稿或立即发布。",
-    "createTitle": "新建公告",
-    "editTitle": "编辑公告",
-    "titleLabel": "标题",
-    "contentLabel": "正文（Markdown）",
-    "markdownPlaceholder": "支持标题、列表、链接、代码块和表格等 Markdown 语法。",
-    "markdownHelp": "最多 20,000 个字符；HTML 会经过安全净化后再展示。",
-    "preview": "预览",
-    "publishNow": "立即发布（对所有登录用户可见）",
-    "new": "新建",
-    "save": "保存公告",
-    "saving": "保存中…",
-    "saved": "公告已保存。",
-    "saveFailed": "保存公告失败。",
-    "loadFailed": "无法加载公告列表。",
-    "delete": "删除公告「{title}」",
-    "edit": "编辑公告「{title}」",
-    "deleteConfirm": "确定删除公告「{title}」？此操作无法撤销。",
-    "deleteFailed": "删除公告失败。",
-    "deleted": "公告已删除。",
-    "cancelEdit": "取消编辑",
-    "published": "已发布",
-    "draft": "草稿",
-    "empty": "还没有公告。",
-    "listLimit": "这里只显示最近更新的 200 条公告。"
-  },
-  "adminOnly": "仅管理员",
-  "categoryNavLabel": "系统设置分类",
-  "categories": {
-    "downloads": "资源下载",
-    "downloadCache": "下载缓存",
-    "notifications": "邮件通知",
-    "security": "安全与访问",
-    "logging": "日志",
-    "performance": "系统监控",
-    "announcements": "公告管理",
-    "ai": "AI 助手",
-    "transfer": "迁移"
-  },
-  "sections": {
+    "fetchError": "暂时无法获取系统设置（{status}）。",
     "announcements": {
-      "title": "公告管理",
-      "description": "创建并发布 Markdown 公告，登录用户可在控制台顶部打开阅读。"
+      "listTitle": "公告管理",
+      "listHelp": "管理草稿和已发布公告；已发布内容会显示在所有用户的控制台顶部。",
+      "title": "公告",
+      "description": "撰写 Markdown 公告，保存为草稿或立即发布。",
+      "createTitle": "新建公告",
+      "editTitle": "编辑公告",
+      "titleLabel": "标题",
+      "contentLabel": "正文（Markdown）",
+      "markdownPlaceholder": "支持标题、列表、链接、代码块和表格等 Markdown 语法。",
+      "markdownHelp": "最多 20,000 个字符；HTML 会经过安全净化后再展示。",
+      "preview": "预览",
+      "publishNow": "立即发布（对所有登录用户可见）",
+      "new": "新建",
+      "save": "保存公告",
+      "saving": "保存中…",
+      "saved": "公告已保存。",
+      "saveFailed": "保存公告失败。",
+      "loadFailed": "无法加载公告列表。",
+      "delete": "删除公告「{title}」",
+      "edit": "编辑公告「{title}」",
+      "deleteConfirm": "确定删除公告「{title}」？此操作无法撤销。",
+      "deleteFailed": "删除公告失败。",
+      "deleted": "公告已删除。",
+      "cancelEdit": "取消编辑",
+      "published": "已发布",
+      "draft": "草稿",
+      "empty": "还没有公告。",
+      "listLimit": "这里只显示最近更新的 200 条公告。"
     },
-    "downloads": {
-      "title": "资源下载",
-      "description": "配置 GitHub 资源的访问方式、全局凭据和下载行为。"
+    "adminOnly": "仅管理员",
+    "categoryNavLabel": "系统设置分类",
+    "categories": {
+      "downloads": "资源下载",
+      "downloadCache": "下载缓存",
+      "notifications": "邮件通知",
+      "security": "安全与访问",
+      "logging": "日志",
+      "performance": "系统监控",
+      "announcements": "公告管理",
+      "ai": "AI 助手",
+      "transfer": "迁移"
     },
-    "notifications": {
-      "title": "邮件通知",
-      "description": "配置密码重置和运维通知的发信通道。"
+    "sections": {
+      "announcements": {
+        "title": "公告管理",
+        "description": "创建并发布 Markdown 公告，登录用户可在控制台顶部打开阅读。"
+      },
+      "downloads": {
+        "title": "资源下载",
+        "description": "配置 GitHub 资源的访问方式、全局凭据和下载行为。"
+      },
+      "notifications": {
+        "title": "邮件通知",
+        "description": "配置密码重置和运维通知的发信通道。"
+      },
+      "security": {
+        "title": "安全与访问",
+        "description": "控制访问者识别、公开注册、Google 登录和验证码。"
+      },
+      "logging": {
+        "title": "日志",
+        "description": "控制控制台输出详细程度，以及审计日志的保留时长。"
+      },
+      "performance": {
+        "title": "系统监控",
+        "description": "当前面板进程的实时图表：请求延迟、错误、资源占用与最近 24 小时趋势。"
+      },
+      "downloadCache": {
+        "title": "下载缓存",
+        "description": "管理已下载的插件和运行时压缩包，减少重复下载。"
+      },
+      "ai": {
+        "title": "AI 助手",
+        "description": "配置系统 AI 提供商、上下文和工具调用能力。"
+      },
+      "transfer": {
+        "title": "设置迁移",
+        "description": "导出或导入系统与 AI 设置，方便在面板实例之间迁移；此文件不包含 Discord 数据。"
+      }
     },
-    "security": {
-      "title": "安全与访问",
-      "description": "控制访问者识别、公开注册、Google 登录和验证码。"
-    },
-    "logging": {
-      "title": "日志",
-      "description": "控制控制台输出详细程度，以及审计日志的保留时长。"
-    },
-    "performance": {
-      "title": "系统监控",
-      "description": "当前面板进程的实时图表：请求延迟、错误、资源占用与最近 24 小时趋势。"
-    },
-    "downloadCache": {
-      "title": "下载缓存",
-      "description": "管理已下载的插件和运行时压缩包，减少重复下载。"
-    },
-    "ai": {
-      "title": "AI 助手",
-      "description": "配置系统 AI 提供商、上下文和工具调用能力。"
-    },
-    "transfer": {
-      "title": "设置迁移",
-      "description": "导出或导入系统与 AI 设置，方便在面板实例之间迁移；此文件不包含 Discord 数据。"
-    }
-  },
-  "save": "保存设置",
+    "save": "保存设置",
     "unsaved": "有未保存修改",
     "saving": "保存中…",
     "saved": "系统设置已保存。",

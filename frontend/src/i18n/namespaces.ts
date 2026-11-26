@@ -30,6 +30,7 @@ export const CONSOLE_NAMESPACES = [
   "serverDetail",
   "plugins.aiImport",
   "plugins.sync",
+  "plugins.bulkReleaseSync",
 ] as const satisfies readonly MessageNamespace[];
 
 export const LIVE_CONSOLE_NAMESPACES = [

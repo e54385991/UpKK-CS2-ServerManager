@@ -14580,7 +14580,7 @@
             "items": {
               "type": "integer"
             },
-            "maxItems": 200,
+            "maxItems": 500,
             "title": "Plugin Ids",
             "type": "array"
           }
@@ -15187,6 +15187,356 @@
           "total_pages"
         ],
         "title": "MarketPluginListResponse",
+        "type": "object"
+      },
+      "MarketPluginReleaseSyncItemView": {
+        "additionalProperties": false,
+        "description": "What happened to one listing during a bulk release sync or scan.",
+        "properties": {
+          "action": {
+            "enum": [
+              "updated",
+              "unchanged",
+              "skipped",
+              "failed"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "cleanable": {
+            "default": false,
+            "title": "Cleanable",
+            "type": "boolean"
+          },
+          "github_url": {
+            "title": "Github Url",
+            "type": "string"
+          },
+          "issue_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "invalid_url",
+                  "repository_missing",
+                  "release_missing",
+                  "no_linux_asset",
+                  "manual_selection_required",
+                  "archive_invalid",
+                  "upstream_error"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Code"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "plugin_id": {
+            "title": "Plugin Id",
+            "type": "integer"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule"
+          },
+          "selected_assets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Assets",
+            "type": "array"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "title",
+          "github_url",
+          "action"
+        ],
+        "title": "MarketPluginReleaseSyncItemView",
+        "type": "object"
+      },
+      "MarketPluginReleaseSyncRequest": {
+        "additionalProperties": false,
+        "description": "Administrator request to bulk-sync releases or scan invalid listings.",
+        "properties": {
+          "framework": {
+            "anyOf": [
+              {
+                "enum": [
+                  "counterstrikesharp",
+                  "swiftly",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "mode": {
+            "default": "sync",
+            "enum": [
+              "sync",
+              "scan"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "plugin_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 500,
+            "title": "Plugin Ids",
+            "type": "array"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "MarketPluginReleaseSyncRequest",
+        "type": "object"
+      },
+      "MarketPluginReleaseSyncView": {
+        "additionalProperties": false,
+        "description": "Persistent job snapshot for one bulk release sync or invalid-listing scan.",
+        "properties": {
+          "cancel_requested": {
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "cleanable": {
+            "title": "Cleanable",
+            "type": "integer"
+          },
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_github_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Github Url"
+          },
+          "current_plugin_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Plugin Id"
+          },
+          "current_plugin_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Plugin Title"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "enum": [
+                  "counterstrikesharp",
+                  "swiftly",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MarketPluginReleaseSyncItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "mode": {
+            "default": "sync",
+            "enum": [
+              "sync",
+              "scan"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "processed": {
+            "title": "Processed",
+            "type": "integer"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Reason"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "operation_id",
+          "status",
+          "command",
+          "created_at",
+          "phase",
+          "message",
+          "cancel_requested",
+          "total",
+          "processed",
+          "updated",
+          "unchanged",
+          "skipped",
+          "failed",
+          "cleanable"
+        ],
+        "title": "MarketPluginReleaseSyncView",
         "type": "object"
       },
       "MarketPluginResponse": {
@@ -17167,6 +17517,13 @@
               "$ref": "#/components/schemas/PluginAIImportView"
             },
             "title": "Market Import Items",
+            "type": "array"
+          },
+          "market_release_items": {
+            "items": {
+              "$ref": "#/components/schemas/MarketPluginReleaseSyncView"
+            },
+            "title": "Market Release Items",
             "type": "array"
           },
           "running_count": {
@@ -40025,6 +40382,332 @@
           }
         ],
         "summary": "Stream Market Description Sync",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/releases/sync": {
+      "get": {
+        "description": "List retained bulk release sync and invalid-listing scan tasks.",
+        "operationId": "list_market_release_syncs_api_v1_plugins_market_releases_sync_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "sync",
+                    "scan"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MarketPluginReleaseSyncView"
+                  },
+                  "title": "Response List Market Release Syncs Api V1 Plugins Market Releases Sync Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Market Release Syncs",
+        "tags": [
+          "v1-plugins"
+        ]
+      },
+      "post": {
+        "description": "Queue a throttled bulk release sync or invalid-listing scan.",
+        "operationId": "enqueue_market_release_sync_api_v1_plugins_market_releases_sync_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketPluginReleaseSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketPluginReleaseSyncView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Enqueue Market Release Sync",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/releases/sync/{operation_id}": {
+      "delete": {
+        "operationId": "delete_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Market Release Sync",
+        "tags": [
+          "v1-plugins"
+        ]
+      },
+      "get": {
+        "operationId": "get_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketPluginReleaseSyncView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Market Release Sync",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/releases/sync/{operation_id}/cancel": {
+      "post": {
+        "operationId": "cancel_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketPluginReleaseSyncView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Cancel Market Release Sync",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/releases/sync/{operation_id}/events": {
+      "get": {
+        "operationId": "stream_market_release_sync_api_v1_plugins_market_releases_sync__operation_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stream Market Release Sync",
         "tags": [
           "v1-plugins"
         ]

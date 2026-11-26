@@ -36,6 +36,7 @@ export function ActivityTray({ isAdmin = false }: { isAdmin?: boolean }) {
   const marketTasks = [
     ...(inbox?.marketImportItems ?? []),
     ...(inbox?.marketDescriptionItems ?? []),
+    ...(inbox?.marketReleaseItems ?? []),
   ];
   const hasVisibleMarketTasks = marketTasks.length > 0;
   const remaining = queue.length + countActiveMarketTasks(marketTasks);

@@ -35,6 +35,7 @@ type ActivityTrayPanelProps = {
   readonly marketTasks: readonly (
     | NonNullable<OperationInbox["marketImportItems"]>[number]
     | NonNullable<OperationInbox["marketDescriptionItems"]>[number]
+    | NonNullable<OperationInbox["marketReleaseItems"]>[number]
   )[];
   readonly activeTab: TrayTab;
   readonly remaining: number;

@@ -189,7 +189,7 @@ class MarketPluginUpdateRequest(ApiRequest):
 class MarketPluginBulkDeleteRequest(ApiRequest):
     """Delete selected marketplace listings or empty the entire catalogue."""
 
-    plugin_ids: list[int] = Field(default_factory=list, max_length=200)
+    plugin_ids: list[int] = Field(default_factory=list, max_length=500)
     clear_all: bool = False
 
     @field_validator("plugin_ids")
@@ -261,6 +261,78 @@ class MarketPluginDescriptionSyncView(V1Model):
     skipped: int
     failed: int
     items: list[MarketPluginDescriptionSyncItemView] = Field(default_factory=list)
+
+
+MarketPluginReleaseSyncModeLiteral = Literal["sync", "scan"]
+MarketReleaseIssueCodeLiteral = Literal[
+    "invalid_url",
+    "repository_missing",
+    "release_missing",
+    "no_linux_asset",
+    "manual_selection_required",
+    "archive_invalid",
+    "upstream_error",
+]
+
+
+class MarketPluginReleaseSyncRequest(ApiRequest):
+    """Administrator request to bulk-sync releases or scan invalid listings."""
+
+    request_id: UUID
+    mode: MarketPluginReleaseSyncModeLiteral = "sync"
+    plugin_ids: list[int] = Field(default_factory=list, max_length=500)
+    framework: PluginFrameworkLiteral | None = None
+
+    @field_validator("plugin_ids")
+    @classmethod
+    def validate_plugin_ids(cls, values: list[int]) -> list[int]:
+        if any(item <= 0 for item in values):
+            raise ValueError("plugin_ids must contain positive plugin IDs")
+        return list(dict.fromkeys(values))
+
+
+class MarketPluginReleaseSyncItemView(V1Model):
+    """What happened to one listing during a bulk release sync or scan."""
+
+    plugin_id: int
+    title: str
+    github_url: str
+    action: Literal["updated", "unchanged", "skipped", "failed"]
+    tag: str | None = None
+    rule: str | None = None
+    selected_assets: list[str] = Field(default_factory=list)
+    issue_code: MarketReleaseIssueCodeLiteral | None = None
+    cleanable: bool = False
+    message: str | None = None
+
+
+class MarketPluginReleaseSyncView(V1Model):
+    """Persistent job snapshot for one bulk release sync or invalid-listing scan."""
+
+    operation_id: str
+    mode: MarketPluginReleaseSyncModeLiteral = "sync"
+    status: Literal["queued", "running", "waiting", "completed", "failed", "cancelled"]
+    command: str
+    framework: PluginFrameworkLiteral | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    phase: str
+    message: str
+    current_plugin_id: int | None = None
+    current_plugin_title: str | None = None
+    current_github_url: str | None = None
+    stop_reason: str | None = None
+    retry_at: int | None = None
+    cancel_requested: bool
+    total: int
+    processed: int
+    updated: int
+    unchanged: int
+    skipped: int
+    failed: int
+    cleanable: int
+    items: list[MarketPluginReleaseSyncItemView] = Field(default_factory=list)
 
 
 class GitHubRepoInfoRequest(ApiRequest):

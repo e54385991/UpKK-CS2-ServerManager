@@ -37,6 +37,7 @@ from . import (
     plugin_install,
     plugin_market_admin,
     plugin_release_sync,
+    plugin_release_sync_jobs,
     plugin_updates,
     plugins,
     profile,
@@ -72,6 +73,7 @@ router.include_router(plugins.market_router)
 router.include_router(plugins.server_router)
 router.include_router(plugin_install.install_router)
 router.include_router(plugin_market_admin.router)
+router.include_router(plugin_release_sync_jobs.router)
 router.include_router(plugin_release_sync.router)
 router.include_router(plugin_catalog.router)
 router.include_router(plugin_configs.router)

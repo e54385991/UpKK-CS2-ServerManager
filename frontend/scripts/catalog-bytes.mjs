@@ -11,6 +11,8 @@ export const OVERVIEW_NAMESPACES = [
   "shell",
   "serverDetail",
   "plugins.aiImport",
+  "plugins.sync",
+  "plugins.bulkReleaseSync",
 ];
 
 const here = dirname(fileURLToPath(import.meta.url));

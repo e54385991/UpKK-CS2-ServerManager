@@ -37,8 +37,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_postgresql_models_and_static_baseline_are_the_schema_authority():
-    assert len(SQLModel.metadata.tables) == 35
-    assert code_heads() == ("0038_market_release_sync",)
+    assert len(SQLModel.metadata.tables) == 36
+    assert code_heads() == ("0039_plugin_release_sync_jobs",)
     assert "create_all" not in (PROJECT_ROOT / "modules/database.py").read_text()
 
     revision = PROJECT_ROOT / "alembic/versions/0001_postgresql_baseline.py"
@@ -148,6 +148,10 @@ TIMEZONE_AWARE_DATETIME_COLUMNS = {
     "plugin_import_jobs.created_at",
     "plugin_import_jobs.heartbeat_at",
     "plugin_import_jobs.started_at",
+    "plugin_release_sync_jobs.completed_at",
+    "plugin_release_sync_jobs.created_at",
+    "plugin_release_sync_jobs.heartbeat_at",
+    "plugin_release_sync_jobs.started_at",
     "webauthn_credentials.created_at",
     "webauthn_credentials.last_used_at",
 }

@@ -15,7 +15,9 @@ import {
   MarketCatalog,
   MarketCatalogSkeleton,
 } from "@/modules/plugins/market-catalog";
+import { CleanupInvalidPluginsButton } from "@/modules/plugins/cleanup-invalid-button";
 import { SyncDescriptionsButton } from "@/modules/plugins/sync-descriptions-button";
+import { SyncReleasesButton } from "@/modules/plugins/sync-releases-button";
 import { toMarketSort, toPluginFrameworkSection } from "@/modules/plugins/types";
 import { listInstallServers as listServers } from "@/modules/plugins/render-queries";
 import { PageHeader } from "@/shared/ui/page-header";
@@ -65,6 +67,8 @@ async function MarketControls({ searchParams }: { searchParams: Promise<SearchPa
     {session.isAdmin ? <MarketPluginCreateButton /> : null}
     {session.isAdmin ? <AIImportButton /> : null}
     {session.isAdmin ? <SyncDescriptionsButton framework={queryFrom(sp).framework} /> : null}
+    {session.isAdmin ? <SyncReleasesButton framework={queryFrom(sp).framework} /> : null}
+    {session.isAdmin ? <CleanupInvalidPluginsButton framework={queryFrom(sp).framework} /> : null}
     <PluginCatalogButton canImport={session.isAdmin} />
     <MarketFilters />
   </>;

@@ -32,4 +32,5 @@ def inbox_payloads_equal(left: InboxPayload, right: InboxPayload) -> bool:
         and inbox_item_lists_equal(left.failed_items, right.failed_items)
         and left.import_jobs == right.import_jobs
         and left.description_jobs == right.description_jobs
+        and left.release_jobs == right.release_jobs
     )

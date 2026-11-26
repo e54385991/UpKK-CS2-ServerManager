@@ -13,7 +13,8 @@ import {
 import { AIImportUsage } from "@/modules/plugins/ai-import-usage";
 import { latestSubmittedAIImport } from "@/modules/plugins/ai-import-activity";
 import { DescriptionSyncTasks } from "@/modules/plugins/description-sync-tasks";
-import type { DescriptionSyncJob } from "@/modules/plugins/types";
+import { ReleaseSyncTasks } from "@/modules/plugins/release-sync-tasks";
+import type { DescriptionSyncJob, ReleaseSyncJob } from "@/modules/plugins/types";
 import { Button } from "@/shared/ui/button";
 import { confirm, notify } from "@/shared/feedback";
 import { subscribeVisibleEventSource } from "@/shared/lib/visible-event-source";
@@ -21,7 +22,7 @@ import { subscribeVisiblePoll } from "@/shared/lib/visible-poll";
 import { Eraser, LoaderCircle } from "lucide-react";
 
 type Task = components["schemas"]["PluginAIImportView"];
-type MarketTask = Task | DescriptionSyncJob;
+type MarketTask = Task | DescriptionSyncJob | ReleaseSyncJob;
 const active = (task: Task) => task.status === "queued" || task.status === "running";
 const completed = (task: Task) => task.status === "completed" || task.status === "cancelled";
 const queueVisible = (task: Task) => active(task) || task.status === "failed";
@@ -33,7 +34,10 @@ export function AIImportTasks({
 }) {
   const initialAiTasks = initialTasks.filter((task): task is Task => "options" in task);
   const initialDescriptionTasks = initialTasks.filter(
-    (task): task is DescriptionSyncJob => "processed" in task,
+    (task): task is DescriptionSyncJob => "overwrite" in task,
+  );
+  const initialReleaseTasks = initialTasks.filter(
+    (task): task is ReleaseSyncJob => "cleanable" in task,
   );
   const t = useTranslations("plugins.aiImport");
   const statusLabel = (value: string) => {
@@ -182,6 +186,9 @@ export function AIImportTasks({
   </section> : null}
   {initialDescriptionTasks.length > 0 ? (
     <DescriptionSyncTasks initialTasks={initialDescriptionTasks} />
+  ) : null}
+  {initialReleaseTasks.length > 0 ? (
+    <ReleaseSyncTasks initialTasks={initialReleaseTasks} />
   ) : null}
   </>;
 }
